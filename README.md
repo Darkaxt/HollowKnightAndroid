@@ -11,6 +11,7 @@ Steam integration for game files and cloud saves.
 - **Fully open source and legal**: Supply your own game files either manually or through Steam sign-in (the app downloads them for you)
 - **Compilation on device**: Just download the APK and supply the game files, porting happens on device (20–30 min on a Snapdragon 8 Gen 2)
 - **QoL settings**: Skip intro, set resolution, auto upload/download cloud saves etc.
+- **Any device**: Any Android device works, single screen as well.
 
 ## Getting started
 
