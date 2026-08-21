@@ -279,22 +279,14 @@ jobs:
             gh release delete "$tag" --yes --cleanup-tag
           fi
 
+          # One line, and deliberately no --generate-notes: that appends the
+          # commit and contributor list, which is neither short nor stable
+          # across a history rewrite.
           notes="$RUNNER_TEMP/notes.md"
-          {
-            echo "Install the APK, open it, sign in to Steam and press the button."
-            echo "It downloads what it needs and builds the game on the device."
-            echo ""
-            echo "This APK contains no game content and nothing Unity-made — it"
-            echo "builds from the copy of Silksong you own, on your own device."
-            echo ""
-            echo '```'
-            echo "sha256  ${{ steps.apk.outputs.sha256 }}"
-            echo '```'
-          } > "$notes"
+          echo "Hollow Knight: Silksong Android ${{ steps.version.outputs.version }}" > "$notes"
 
           args=(--title "$tag"
-                --notes-file "$notes"
-                --generate-notes)
+                --notes-file "$notes")
           [[ "$PRERELEASE" == "true" ]] && args+=(--prerelease)
 
           gh release create "$tag" "${{ steps.apk.outputs.asset }}" "${args[@]}"
