@@ -1,7 +1,9 @@
 # Silksong Android
 
-**Hollow Knight: Silksong** Android port. Play it with a dual-screen menu and optional
+**Hollow Knight: Silksong** Android port with dual-screen capabilites and optional
 Steam integration for game files and cloud saves.
+
+<img width="2048" height="1536" alt="IMG_1639" src="https://github.com/user-attachments/assets/c9ddb25d-37a8-4e7e-877c-0f13eb13efed" />
 
 ## Features
 
