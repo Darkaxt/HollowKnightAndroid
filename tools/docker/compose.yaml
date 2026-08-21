@@ -1,0 +1,88 @@
+# Silksong Android port — containerised APK build.
+#
+#   docker compose -f tools/docker/compose.yaml run --rm apk
+#
+# No Unity, no licence, no editor: the APK contains no game content and
+# nothing Unity-made, and builds the game on the device.
+#
+# See README.md in this directory for host requirements.
+
+services:
+  # The APK build. Produces the APK that builds the game on the device.
+  #
+  #   docker compose -f tools/docker/compose.yaml run --rm apk
+  #
+  # The APK lands on the host in build/; install it with `make install`,
+  # since the container has no USB.
+  apk:
+    <<: &apk-runtime
+      image: silksong-apk:latest
+      # Google ships no Linux arm64 build-tools; aapt2 and zipalign are x86-64
+      # whatever the host is. Stated so an arm64 host fails at pull time rather
+      # than part-way through a build.
+      platform: linux/amd64
+
+      volumes:
+        # The checkout: sources in, APK out. Nothing under build/ is read as
+        # input -- the container fetches its own copy of everything it needs.
+        - ../..:/workspace
+        # The Unity Android player module, container-owned so the build does not
+        # depend on what the host happens to have fetched.
+        - silksong-unity-player:/opt/unity-player
+        # Gradle's caches. Without this every run re-resolves AGP, Kotlin and
+        # the launcher's dependencies over the network.
+        - silksong-gradle:/gradle
+        # The build's own staging tree and dex cache. build.sh addresses the
+        # expensive dex steps by input hash, so keeping this across runs turns
+        # a repeat build's ~10 minutes of D8 into a cache hit -- which is the
+        # difference between a container build being usable and being something
+        # you start and walk away from. Same directory a host build uses.
+        - silksong-build:/root/.cache/silksong
+        # The host's NuGet cache. bundle-surgery pins both of its packages, so
+        # with them already extracted here the restore needs no network at all
+        # -- which matters on a machine whose policy blocks api.nuget.org.
+        - ${NUGET_PACKAGES:-~/.nuget/packages}:/root/.nuget/packages
+
+      working_dir: /workspace
+      # Gradle is configured for a 4 GB heap and the NDK link is not small.
+      mem_limit: "${SILKSONG_MEM_LIMIT:-8g}"
+      tty: true
+    build:
+      # tools/docker only. The image needs nothing from the checkout but the
+      # entrypoint -- the sources arrive at run time through the bind mount --
+      # and a repo-root context would ship build/ (the player module, the
+      # depot) to the daemon on every build.
+      context: .
+      dockerfile: apk.Dockerfile
+
+    environment:
+      # Skip the Gradle build when only shell/ or build.sh changed.
+      LAUNCHER: "${LAUNCHER:-1}"
+      # This service is one build per container, so a daemon is never reused --
+      # it just gets killed holding locks in the cache volume, and the next
+      # run times out waiting for them. The devbox service below is the
+      # opposite case and does want one.
+      GRADLE_DAEMON: "0"
+
+  # The same image, kept alive, so builds are incremental.
+  #
+  #   make docker-up      once
+  #   make docker-dev     per change
+  #
+  # `run --rm` throws away everything warm: the Gradle daemon, its
+  # configuration cache, Kotlin's incremental state and the JVM itself. Here
+  # the container outlives the build, so the daemon survives between execs and
+  # a rebuild does the work that actually changed.
+  devbox:
+    <<: *apk-runtime
+    entrypoint: ["sleep", "infinity"]
+    environment:
+      LAUNCHER: "${LAUNCHER:-1}"
+      # Long-lived container: the daemon is reused rather than orphaned, which
+      # is the whole point of this service.
+      GRADLE_DAEMON: "1"
+
+volumes:
+  silksong-gradle:
+  silksong-unity-player:
+  silksong-build:

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The adaptive icon, used from Android 8 onwards.
+
+  The art is the BACKGROUND layer rather than the foreground. An adaptive icon
+  is composed at 108dp with only the middle 72dp guaranteed visible, so a
+  foreground is inset by a third and would show the mask a long way inside the
+  artwork; a background is drawn full-bleed and cropped to whatever shape the
+  launcher uses. For a square image that fills its frame, cropped is what is
+  wanted.
+
+  The foreground is required and is deliberately empty.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@mipmap/ic_launcher_bg" />
+    <foreground android:drawable="@android:color/transparent" />
+</adaptive-icon>

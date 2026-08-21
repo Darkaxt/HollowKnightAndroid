@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Game Mode config — referenced from the launcher AAR's
+  AndroidManifest.xml via:
+    <meta-data android:name="android.game_mode_config"
+               android:resource="@xml/game_mode_config" />
+
+  Android 12+ ships a Game Dashboard with Performance / Standard /
+  Battery Saver modes. By declaring our preferences here we tell the
+  OS which modes we actually support and let it pre-apply the OEM-
+  tuned governor profiles (CPU / GPU / thermal headroom) for that
+  mode the moment our process is foregrounded — no GameManager API
+  calls needed on our side; the OS does the work.
+
+  - supportsBatteryGameMode=true: we can run at a frame-rate cap to
+    save power. Silksong renders to a fixed 60Hz internal sim so
+    OEMs can throttle GPU freq when in this mode.
+  - supportsPerformanceGameMode=true: we want max FPS / lowest
+    latency. OEMs bump CPU/GPU governors, give us more memory
+    bandwidth, etc.
+  - allowGameDownscaling=false: don't let the OS render the game
+    at sub-native resolution on our behalf. Silksong is a 2D
+    pixel-art game; downscaling looks terrible and the CPU is
+    usually the bottleneck anyway.
+  - allowGameFpsOverride=false: same rationale — Silksong's logic
+    runs at 60Hz, capping below that desyncs animations + input.
+
+  See https://developer.android.com/games/develop/optimize-with-game-mode
+-->
+<game-mode-config
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:supportsBatteryGameMode="true"
+    android:supportsPerformanceGameMode="true"
+    android:allowGameDownscaling="false"
+    android:allowGameFpsOverride="false" />

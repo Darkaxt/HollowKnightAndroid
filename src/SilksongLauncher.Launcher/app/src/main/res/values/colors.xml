@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Red, white and black.
+
+  The page is near-black and the controls are a light warm grey, so the red is
+  spent on one thing only: the button that starts the game. A red page made
+  every control fight it for attention and left the accent nowhere to go.
+-->
+<resources>
+    <!-- The accent, and the only place it appears. -->
+    <color name="hornet_red">#7D3341</color>
+    <color name="hornet_red_dim">#5A252F</color>
+
+    <!-- Surfaces. -->
+    <color name="surface">#0D0A0B</color>
+    <color name="surface_panel">#000000</color>
+    <color name="surface_control">#B4AEB2</color>
+
+    <!-- Text. on_control is for the light buttons; the rest sit on the dark. -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_on_control">#0D0A0B</color>
+    <color name="text_muted">#B5A9AC</color>
+    <color name="text_dim">#7A6E71</color>
+</resources>

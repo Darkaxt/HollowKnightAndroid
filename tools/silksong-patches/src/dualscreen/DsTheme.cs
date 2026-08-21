@@ -1,0 +1,232 @@
+// DsTheme — the game's own look, borrowed rather than imitated.
+//
+// Nothing here is authored by us and nothing is committed to the repo. Fonts,
+// icons and strings are taken from the running game, which is the only way the
+// second screen can look like part of Silksong rather than like a mod of it,
+// and the only way it stays correct when the game is patched. The repo
+// continues to contain no game content.
+//
+// The one trap, and it is a silent one: the game does NOT use stock
+// TextMeshPro. Team Cherry vendored an older copy into Assembly-CSharp under
+// the namespace TMProOld, so the font assets are TMProOld.TMP_FontAsset and a
+// stock TMPro.TextMeshProUGUI simply cannot be given one. The two type sets
+// have identical names, so the mistake compiles and then produces blank text.
+// The alias below is deliberate: everything in this project that touches text
+// goes through it.
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+using System.Collections.Generic;
+using UnityEngine;
+using TMP = TMProOld.TMP_Text;
+using TmpFont = TMProOld.TMP_FontAsset;
+
+public static class DsTheme
+{
+    // ── colour ──────────────────────────────────────────────────────────────
+    // Sampled to sit beside the game's inventory rather than compete with it:
+    // a near-black ground, bone-white text, and the pale gold the menus use to
+    // mark what is selected.
+    public static readonly Color Ground      = new Color(0.055f, 0.05f, 0.075f, 1f);
+    public static readonly Color Panel       = new Color(0.10f, 0.09f, 0.13f, 1f);
+    public static readonly Color PanelEdge   = new Color(0.32f, 0.29f, 0.36f, 1f);
+    // Sections are divided, not enclosed. A rule is drawn in the gutter BETWEEN
+    // two things and belongs to neither, so it is bone-white and full strength:
+    // there is only ever one of them per boundary, and it is the only structure
+    // on the panel that is not content.
+    public static readonly Color Rule        = new Color(0.93f, 0.91f, 0.86f, 1f);
+    public static readonly Color Ink         = new Color(0.93f, 0.91f, 0.86f, 1f);
+    public static readonly Color InkDim      = new Color(0.62f, 0.60f, 0.58f, 1f);
+    public static readonly Color InkFaint    = new Color(0.38f, 0.37f, 0.40f, 1f);
+    public static readonly Color Accent      = new Color(0.96f, 0.85f, 0.55f, 1f);
+    public static readonly Color Locked      = new Color(0.20f, 0.19f, 0.23f, 1f);
+
+    // Tool types have colours in the game's own HUD; matching them means a
+    // red tool reads as a red tool here too.
+    public static Color ToolTypeColor(ToolItemType type)
+    {
+        switch (type)
+        {
+            case ToolItemType.Red:    return new Color(0.85f, 0.35f, 0.32f, 1f);
+            case ToolItemType.Blue:   return new Color(0.42f, 0.62f, 0.88f, 1f);
+            case ToolItemType.Yellow: return new Color(0.92f, 0.80f, 0.38f, 1f);
+            default:                  return new Color(0.75f, 0.72f, 0.80f, 1f);   // Skill
+        }
+    }
+
+    // ── metrics ─────────────────────────────────────────────────────────────
+    // Authored against the panel's 1240x1080. These are the numbers the whole
+    // layout is built from, so they live in one place.
+    //
+    // The panel is ~9 cm across and held at arm's length on a handheld, so
+    // everything is larger than a desktop UI would be: a 200 px cell is about
+    // 14 mm, which is comfortably above the ~9 mm minimum for a touch target.
+    public const float TabBarHeight = 88f;
+    public const float FooterHeight = 200f;
+    public const float Pad          = 20f;
+    public const float RuleThickness = 2f;
+    public const float TitleSize    = 42f;
+    public const float BodySize     = 30f;
+    // List rows are read at a glance and at arm's length, so they are larger
+    // than body prose rather than smaller, which is the usual instinct.
+    public const float RowSize      = 34f;
+    public const float SmallSize    = 24f;
+
+    // ── fonts ───────────────────────────────────────────────────────────────
+    //
+    // The game uses two typefaces, and using the wrong one for body text is
+    // very visible: trajan_bold_tmpro is a CAPS display face whose lowercase
+    // glyphs are broken (an "l" renders as a stub with a black foot), while
+    // perpetua_tmpro is the serif text face with real lowercase. The game's own
+    // menus do exactly this -- Trajan for headings, Perpetua for prose -- so
+    // matching it is both correct and free.
+
+    static TmpFont _display, _body;
+    static bool _searched;
+    static float _nextSearch;
+
+    /// <summary>Caps display face, for tabs and titles.</summary>
+    public static TmpFont Display { get { Search(); return _display ?? _body; } }
+
+    /// <summary>Text face with real lowercase, for descriptions.</summary>
+    public static TmpFont Body { get { Search(); return _body ?? _display; } }
+
+    /// <summary>Anything usable at all yet?</summary>
+    public static bool HasFont { get { Search(); return _display != null || _body != null; } }
+
+    static void Search()
+    {
+        if (_searched) return;
+
+        // The scan walks every loaded font asset, so a miss must not repeat per
+        // label: before the game's UI exists there can be dozens of Label calls
+        // in a single build pass.
+        if (Time.unscaledTime < _nextSearch) return;
+        _nextSearch = Time.unscaledTime + 1f;
+
+        try
+        {
+            var fonts = Resources.FindObjectsOfTypeAll<TmpFont>();
+            for (int i = 0; i < fonts.Length; i++)
+            {
+                var f = fonts[i];
+                if (f == null || string.IsNullOrEmpty(f.name)) continue;
+                string n = f.name.ToLowerInvariant();
+
+                // TMP ships its own default and will happily hand it out;
+                // adopting it is how this screen ended up in Arial once.
+                if (n.Contains("arial") || n.Contains("liberation")) continue;
+
+                if (_display == null && n.Contains("trajan")) _display = f;
+                else if (_body == null && (n.Contains("perpetua") || n.Contains("amor"))) _body = f;
+
+                if (_display != null && _body != null) break;
+            }
+
+            if (_display != null || _body != null)
+            {
+                _searched = true;
+                Debug.Log("[DsTheme] fonts: display='" + (_display != null ? _display.name : "-") +
+                          "' body='" + (_body != null ? _body.name : "-") + "'");
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[DsTheme] font lookup failed: " + e.Message);
+        }
+    }
+
+    /// <summary>Fonts appear once the game has loaded its UI; allow a retry.</summary>
+    public static void ForgetFont()
+    {
+        _display = null; _body = null; _searched = false; _nextSearch = 0f;
+    }
+
+    // ── sprites ─────────────────────────────────────────────────────────────
+
+    static Sprite _white;
+
+    /// <summary>
+    /// A 1x1 opaque sprite, so a plain rect can be drawn without relying on
+    /// Unity's built-in UI sprite being present in a stripped player.
+    /// </summary>
+    public static Sprite White
+    {
+        get
+        {
+            if (_white != null) return _white;
+            var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false) { name = "DsWhite" };
+            tex.SetPixel(0, 0, Color.white);
+            tex.Apply();
+            tex.hideFlags = HideFlags.HideAndDontSave;
+            _white = Sprite.Create(tex, new UnityEngine.Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
+            _white.hideFlags = HideFlags.HideAndDontSave;
+            return _white;
+        }
+    }
+
+    // Sprites pulled off the game's prefabs, cached by name so the search
+    // happens once. Every lookup may legitimately return null -- the game uses
+    // Addressables and an icon may not be resident before its pane has been
+    // opened -- so callers must draw a placeholder rather than assume.
+    static readonly Dictionary<string, Sprite> _cache = new Dictionary<string, Sprite>();
+
+    static Sprite _disc;
+
+    /// <summary>
+    /// A filled circle, generated once.
+    ///
+    /// Slots are round in the game, and a square slot around a round icon
+    /// reads as a different thing entirely. Generating it is preferable to
+    /// hunting for a circular sprite in the game's atlases: it is eight lines,
+    /// it cannot go missing, and it scales to any slot size.
+    /// </summary>
+    public static Sprite Disc
+    {
+        get
+        {
+            if (_disc != null) return _disc;
+            const int size = 128;
+            const float r = size * 0.5f;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { name = "DsDisc" };
+            var px = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = x + 0.5f - r, dy = y + 0.5f - r;
+                    float d = Mathf.Sqrt(dx * dx + dy * dy);
+                    // One pixel of feather, so the edge is not stair-stepped
+                    // when the disc is drawn smaller than its texture.
+                    float a = Mathf.Clamp01(r - d);
+                    px[y * size + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+                }
+            }
+            tex.SetPixels32(px);
+            tex.Apply();
+            tex.wrapMode = TextureWrapMode.Clamp;
+            tex.hideFlags = HideFlags.HideAndDontSave;
+            _disc = Sprite.Create(tex, new UnityEngine.Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+            _disc.hideFlags = HideFlags.HideAndDontSave;
+            return _disc;
+        }
+    }
+
+    public static Sprite FindSprite(string name)
+    {
+        Sprite found;
+        if (_cache.TryGetValue(name, out found)) return found;
+        try
+        {
+            var all = Resources.FindObjectsOfTypeAll<Sprite>();
+            for (int i = 0; i < all.Length; i++)
+                if (all[i] != null && all[i].name == name) { found = all[i]; break; }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[DsTheme] sprite lookup failed for '" + name + "': " + e.Message);
+        }
+        _cache[name] = found;
+        return found;
+    }
+}
+#endif

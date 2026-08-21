@@ -1,0 +1,302 @@
+# Release APK
+#
+# Manual only, deliberately. A release is a decision, not a consequence of
+# pushing code: the APK is ~40 MB, every publish is visible to users, and the
+# version it carries comes from a file someone has to bump on purpose.
+#
+# The version is VERSION at the repo root. Bump it in a commit, then run this
+# workflow. Re-running a version that already has a release REPLACES it, tag
+# included, so iterating on an unreleased version does not need a version bump
+# for every attempt -- but anything anyone already downloaded is discarded, so
+# bump VERSION once a build has been handed out.
+#
+# A version with a -suffix (0.2.0-rc.1) is published as a prerelease.
+name: Release APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and verify, but publish nothing"
+        type: boolean
+        default: false
+      prerelease:
+        description: "Mark as prerelease (auto = any version with a -suffix)"
+        type: choice
+        options: [auto, "true", "false"]
+        default: auto
+
+permissions:
+  contents: write        # create a release, upload the APK
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── What are we releasing, and is it new? ─────────────────────────────
+      #
+      # Both answered before anything is built, so an already-published version
+      # costs seconds rather than a full build.
+      - name: Resolve version
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(tr -d ' \t\r\n' < VERSION)"
+          [[ -n "$version" ]] || { echo "::error::VERSION is empty"; exit 1; }
+          # major.minor.patch with an optional -prerelease: the same shape
+          # build.sh accepts when it derives versionCode.
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::VERSION '$version' is not major.minor.patch[-prerelease]"
+            exit 1
+          fi
+
+          case "${{ inputs.prerelease }}" in
+            "true")  pre=true ;;
+            "false") pre=false ;;
+            *)       if [[ "$version" == *-* ]]; then pre=true; else pre=false; fi ;;
+          esac
+
+          {
+            echo "version=$version"
+            echo "tag=v$version"
+            echo "prerelease=$pre"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Release \`v$version\`"
+            echo ""
+            echo "- prerelease: \`$pre\`"
+            echo "- dry run: \`${{ inputs.dry_run }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check for an existing release
+        id: existing
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.version.outputs.tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::$tag already exists and will be REPLACED -- its release notes, download count and asset are discarded."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "$tag is new."
+          fi
+
+      # ── Signing key ───────────────────────────────────────────────────────
+      #
+      # The signing key IS the app's identity: Android refuses an update signed
+      # by a different one, so a key that changes between releases strands
+      # everyone who installed the last. Ephemeral is fine for a dry run and
+      # unacceptable for a publish, which is how it is treated here.
+      #
+      # One-time setup:
+      #   keytool -genkeypair -v -keystore release.jks -alias silksong \
+      #     -keyalg RSA -keysize 4096 -validity 10000
+      #   base64 -w0 release.jks    -> secret ANDROID_KEYSTORE_BASE64
+      # plus ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_PASSWORD, ANDROID_KEY_ALIAS.
+      # Back release.jks up somewhere safe: losing it means never being able to
+      # ship an update to anyone who installed this app.
+      - name: Prepare signing key
+        id: signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${KEYSTORE_B64:-}" ]]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "Using the configured release keystore."
+          elif [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            keytool -genkeypair -v -keystore "$RUNNER_TEMP/release.jks" \
+              -storepass android -keypass android -alias silksong \
+              -keyalg RSA -keysize 2048 -validity 30 \
+              -dname "CN=SilksongAndroid dry run, OU=CI, O=SilksongAndroid, C=US" >/dev/null
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret; generated a throwaway key. Fine for a dry run, never for a release."
+          else
+            echo "::error::No ANDROID_KEYSTORE_BASE64 secret. A published APK needs a stable signing key or nobody can update in place. See the comment in this workflow."
+            exit 1
+          fi
+
+      # ── Build ─────────────────────────────────────────────────────────────
+      #
+      # The same image used locally, so a release is not built by a second,
+      # subtly different environment. It is linux/amd64 (Google ships no arm64
+      # Linux build-tools), which is native on this runner.
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: tools/docker
+          file: tools/docker/apk.Dockerfile
+          platforms: linux/amd64
+          tags: silksong-apk:latest
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ~642 MB, and identical for a given Unity version, so it is cached on
+      # the script that pins that version rather than re-fetched every run.
+      - name: Cache Unity's Android player module
+        uses: actions/cache@v4
+        with:
+          path: .ci-cache/unity-player
+          key: unity-player-${{ hashFiles('tools/ondevice-il2cpp/fetch-unity.sh') }}
+
+      # The dex cache. build.sh addresses the expensive D8 steps by input hash,
+      # and those inputs are the launcher's dependency JARs, which change only
+      # when its Gradle files do. Restoring this turns ten minutes of dexing
+      # into a cache hit on any release that did not touch dependencies.
+      - name: Cache the dex output
+        uses: actions/cache@v4
+        with:
+          path: .ci-cache/build
+          key: dex-${{ hashFiles('src/SilksongLauncher.Launcher/app/build.gradle.kts') }}-${{ github.sha }}
+          restore-keys: |
+            dex-${{ hashFiles('src/SilksongLauncher.Launcher/app/build.gradle.kts') }}-
+            dex-
+
+      - name: Build the APK
+        env:
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || 'android' }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD || 'android' }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'silksong' }}
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-cache/unity-player .ci-cache/nuget .ci-cache/build
+          cp "$RUNNER_TEMP/release.jks" .ci-cache/release.jks
+
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -v "$PWD/.ci-cache/unity-player:/opt/unity-player" \
+            -v "$PWD/.ci-cache/nuget:/root/.nuget/packages" \
+            -v "$PWD/.ci-cache/build:/root/.cache/silksong" \
+            -e GRADLE_DAEMON=0 \
+            -e DEBUGGABLE=0 \
+            -e KEYSTORE=/workspace/.ci-cache/release.jks \
+            -e KS_PASS -e KEY_PASS -e KEY_ALIAS \
+            silksong-apk:latest apk
+
+          rm -f .ci-cache/release.jks
+
+          # The container runs as root, so everything it wrote into the bind
+          # mounts is root-owned -- including the caches actions/cache has to
+          # read back as the runner user, and the APK later steps copy. Handing
+          # it over here keeps that from failing at the end of a long build.
+          sudo chown -R "$(id -u):$(id -g)" .ci-cache build
+
+      # ── Prove the artefact is what the tag says ───────────────────────────
+      #
+      # A release whose APK carries a different version than its tag is a
+      # miserable bug to hit later, and the manifest is authoritative, so it is
+      # read back rather than trusted.
+      - name: Verify the APK
+        id: apk
+        run: |
+          set -euo pipefail
+          # Found rather than named: the APK is called after the application id,
+          # so hardcoding it here means a rename breaks the release job long
+          # after the change that caused it.
+          apk="$(find build -maxdepth 1 -name '*.apk' | head -1)"
+          [[ -n "$apk" && -f "$apk" ]] || { echo "::error::no APK in build/"; exit 1; }
+
+          # aapt rather than aapt2: `dump badging` is the one that reports
+          # versionName/Code and the debuggable flag. Searched for rather than
+          # assumed at a fixed path, because which build-tools the runner has
+          # is not ours to pin -- and failing here would waste the whole build.
+          aapt="$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" \
+                    -maxdepth 2 -name aapt -type f 2>/dev/null | sort -V | tail -1)"
+          [[ -x "$aapt" ]] || { echo "::error::no aapt under $ANDROID_HOME/build-tools"; exit 1; }
+          badging="$("$aapt" dump badging "$apk")"
+          name="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<< "$badging" | head -1)"
+          code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$badging" | head -1)"
+
+          echo "manifest: versionName=$name versionCode=$code"
+          if [[ "$name" != "${{ steps.version.outputs.version }}" ]]; then
+            echo "::error::APK says '$name', VERSION says '${{ steps.version.outputs.version }}'"
+            exit 1
+          fi
+          if grep -q "application-debuggable" <<< "$badging"; then
+            echo "::error::APK is debuggable; a release must not be"
+            exit 1
+          fi
+
+          out="SilksongAndroid-${{ steps.version.outputs.version }}.apk"
+          # The build already names it this, but not if APK_NAME was overridden
+          # somewhere; copying only when they differ keeps both cases working
+          # and avoids cp refusing to copy a file onto itself.
+          [[ "$apk" == "$out" ]] || cp "$apk" "$out"
+          sha="$(sha256sum "$out" | cut -d' ' -f1)"
+          {
+            echo "asset=$out"
+            echo "sha256=$sha"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "- versionCode: \`$code\`"
+            echo "- size: \`$(du -h "$out" | cut -f1)\`"
+            echo "- sha256: \`$sha\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the build artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.asset }}
+          path: ${{ steps.apk.outputs.asset }}
+          retention-days: 14
+
+      # ── Publish ───────────────────────────────────────────────────────────
+      - name: Create the release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          EXISTS: ${{ steps.existing.outputs.exists }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.version.outputs.tag }}"
+
+          # Replacing rather than refusing, so re-running a version while it is
+          # being iterated on just works. The tag is deleted with the release --
+          # otherwise it would keep pointing at the commit the first attempt was
+          # built from, and the release would describe code that is not in it.
+          #
+          # This does discard the old release: its notes, its asset and its
+          # download count. That is the right trade while a version is still
+          # being shaped, and the wrong one once anybody is relying on a
+          # download link -- bump VERSION for those.
+          if [[ "$EXISTS" == "true" ]]; then
+            echo "Replacing the existing $tag"
+            gh release delete "$tag" --yes --cleanup-tag
+          fi
+
+          notes="$RUNNER_TEMP/notes.md"
+          {
+            echo "Install the APK, open it, sign in to Steam and press the button."
+            echo "It downloads what it needs and builds the game on the device."
+            echo ""
+            echo "This APK contains no game content and nothing Unity-made — it"
+            echo "builds from the copy of Silksong you own, on your own device."
+            echo ""
+            echo '```'
+            echo "sha256  ${{ steps.apk.outputs.sha256 }}"
+            echo '```'
+          } > "$notes"
+
+          args=(--title "$tag"
+                --notes-file "$notes"
+                --generate-notes)
+          [[ "$PRERELEASE" == "true" ]] && args+=(--prerelease)
+
+          gh release create "$tag" "${{ steps.apk.outputs.asset }}" "${args[@]}"
+
+          echo "Published $tag" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,41 @@
+{
+  "_comment": [
+    "What Unity is told to call, and when.",
+    "",
+    "A [RuntimeInitializeOnLoadMethod] attribute is not enough on its own: in a",
+    "player, Unity does not scan assemblies for it. The Editor does that at build",
+    "time and writes the result into RuntimeInitializeOnLoads.json, which the",
+    "player reads. There is no Editor here, so the list is written by hand and",
+    "PlayerImage appends it to the depot's own.",
+    "",
+    "Keeping it beside the source is the point: an entry point that is added to",
+    "a .cs file and not to this list is silently never called, which is the",
+    "single most confusing way for a patch to fail. The reverse is worse -- an",
+    "entry listed here whose patch is wrong runs anyway. Both Addressables",
+    "redirects from the old port were deleted for that reason: they pointed the",
+    "catalog at persistentDataPath, which is external storage, while PlayerImage",
+    "had already rewritten its content root to internal storage at build time.",
+    "Registering one black-screened the game.",
+    "",
+    "nameSpace is optional and defaults to none. The ported patches sit in the",
+    "global namespace, as the game's own classes do.",
+    "",
+    "loadTypes matches UnityEngine.RuntimeInitializeLoadType:",
+    "  0 AfterSceneLoad  1 BeforeSceneLoad  2 AfterAssembliesLoaded",
+    "  3 BeforeSplashScreen  4 SubsystemRegistration"
+  ],
+  "entryPoints": [
+    { "nameSpace": "SilksongPatches", "className": "InjectionProbe", "methodName": "AfterSceneLoad", "loadTypes": 0 },
+
+    { "className": "ResolutionConfigurator", "methodName": "Apply", "loadTypes": 1 },
+    { "className": "IntroSkipper", "methodName": "Boot", "loadTypes": 0 },
+    { "className": "PerfOverlay", "methodName": "Bootstrap", "loadTypes": 2 },
+    { "className": "DualScreenV2", "methodName": "Bootstrap", "loadTypes": 0 },
+    { "className": "InventoryTouchInput", "methodName": "Bootstrap", "loadTypes": 0 },
+
+    { "className": "AnimatorRebindFix", "methodName": "Bootstrap", "loadTypes": 2 },
+    { "className": "WormAnimatorFix", "methodName": "Bootstrap", "loadTypes": 2 },
+    { "className": "ShaderWarmup", "methodName": "Bootstrap", "loadTypes": 0 },
+    { "className": "ProfilerTopMarkers", "methodName": "Bootstrap", "loadTypes": 2 }
+  ]
+}

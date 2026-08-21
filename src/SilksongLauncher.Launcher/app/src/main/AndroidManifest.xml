@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      JavaSteam talks to the Steam CM over WebSocket. Need the standard
+      Android internet permission; we don't need ACCESS_NETWORK_STATE
+      because JavaSteam doesn't query connectivity, just opens sockets.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      Library AAR manifest. AGP merges this into the host (Silksong)
+      manifest when Unity packages the APK. By declaring LauncherActivity
+      with MAIN+LAUNCHER here, our Activity wins the "user clicks the
+      app icon" slot.
+
+      A separate overlay manifest at
+      tools/silksong-launcher-build/overlay/Assets/Plugins/Android/AndroidManifest.xml
+      handles demoting Unity's launcher activity so we don't get two
+      icons in the app drawer.
+
+      android:appCategory="game" + the game_mode_config meta-data
+      together opt the app into Android 12+'s Game Mode API. The OS
+      reads the category to surface the game in the Game Dashboard
+      and route to its game-aware scheduler; the meta-data tells the
+      OS how to interpret per-mode requests we may make via
+      GameManager.setGameMode(). Without these two declarations the
+      Game Mode picker doesn't appear at all and the OEM-tuned
+      governor profiles for Performance / Battery Saver simply aren't
+      available to us.
+    -->
+    <!--
+      android:name on <application> — point the Silksong app at our
+      custom Application class so we run process-startup code (Adrenotools
+      Vulkan-driver injection) in the Unity process before any Activity
+      boots. Without this attribute Android instantiates the default
+      framework.Application and the hook never runs.
+
+      Important: the attribute MUST be `tools:replace` because Unity's
+      generated manifest already sets android:name (typically empty or
+      to its own class). Without tools:replace the manifest merger
+      errors with "Attribute ... is also present at ... value=(<empty>).
+      Suggestion: add 'tools:replace=...'".
+    -->
+    <application
+        android:name="dev.silksong.launcher.SilksongApp"
+        android:appCategory="game"
+        tools:replace="android:name">
+        <meta-data
+            android:name="android.game_mode_config"
+            android:resource="@xml/game_mode_config" />
+        <!--
+          LauncherActivity runs in a dedicated ":launcher" process so
+          that when the Unity-side game calls `System.exit(0)` on quit
+          (the default behaviour of UnityPlayerActivity → finish()
+          → process exit when it's the only activity left in its
+          process), the launcher process survives. Without this, the
+          user is dropped back to the home screen on every game exit
+          instead of returning to the launcher.
+
+          Both processes still share the same package (and therefore
+          the same app data dir + the same external files dir), so
+          SharedPreferences / save files / extracted bundles remain
+          accessible from both. They just can't share live in-memory
+          state — which we don't need.
+        -->
+        <activity
+            android:name="dev.silksong.launcher.LauncherActivity"
+            android:exported="true"
+            android:label="@string/launcher_app_name"
+            android:process=":launcher"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name="dev.silksong.launcher.LoginActivity"
+            android:exported="false"
+            android:label="@string/login_title"
+            android:process=":launcher"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+
+        <activity
+            android:name="dev.silksong.launcher.SettingsActivity"
+            android:exported="false"
+            android:label="@string/settings_title"
+            android:process=":launcher"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+    </application>
+
+</manifest>

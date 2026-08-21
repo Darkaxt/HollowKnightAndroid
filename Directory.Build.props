@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    Repo-wide MSBuild defaults. The Android SDK + JDK locations are pinned here
+    so `dotnet build` works without needing ANDROID_HOME / JAVA_HOME set in
+    every developer's environment. CI can override either property on the
+    command line.
+  -->
+  <PropertyGroup>
+    <AndroidSdkDirectory Condition=" '$(AndroidSdkDirectory)' == '' ">$(LOCALAPPDATA)\Android\Sdk\</AndroidSdkDirectory>
+    <JavaSdkDirectory Condition=" '$(JavaSdkDirectory)' == '' ">C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot\</JavaSdkDirectory>
+  </PropertyGroup>
+</Project>

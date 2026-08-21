@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sized for the Ayn Thor's effective landscape area (~832dp x 420dp after
+  status/nav bars). Left = the menu, right = the log.
+
+  Launch sits at the bottom of the left column, separated from the rest by the
+  space between them: it is the thing this screen exists for, and everything
+  above it is housekeeping. It is the only white button, which is what makes it
+  findable on a red page without reading.
+
+  Download and upload share a row. They are two halves of one idea, they are
+  the only actions here that can be waiting on a network, and pairing them
+  buys the height that the rest of the buttons spend on padding.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/surface">
+
+    <LinearLayout
+        android:id="@+id/launch_panel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="14dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/txt_login_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="@color/text_muted"
+            android:textSize="13sp"
+            android:layout_marginBottom="10dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal">
+
+            <!-- ── Left: the menu ──────────────────────────────────── -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="0.58"
+                android:orientation="vertical"
+                android:paddingEnd="14dp">
+
+                <Button
+                    android:id="@+id/btn_login"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_log_in"
+                    android:textSize="16sp"
+                    android:textColor="@color/text_on_control"
+                    android:backgroundTint="@color/surface_control"
+                    android:paddingTop="18dp"
+                    android:paddingBottom="18dp"
+                    android:minHeight="0dp"
+                    android:layout_marginBottom="10dp" />
+
+                <!-- Download / upload, paired. The spinner replaces the arrow
+                     while the operation runs; the button keeps its label. -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="10dp">
+
+                    <FrameLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="10dp">
+
+                        <Button
+                            android:id="@+id/btn_pull"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/action_pull_saves"
+                            android:textSize="16sp"
+                            android:textColor="@color/text_on_control"
+                            android:backgroundTint="@color/surface_control"
+                            android:paddingTop="18dp"
+                            android:paddingBottom="18dp"
+                            android:minHeight="0dp"
+                            android:enabled="false" />
+
+                        <ProgressBar
+                            android:id="@+id/spin_pull"
+                            style="?android:attr/progressBarStyleSmall"
+                            android:layout_width="18dp"
+                            android:layout_height="18dp"
+                            android:layout_gravity="center_vertical|start"
+                            android:layout_marginStart="16dp"
+                            android:indeterminateTint="@color/text_on_control"
+                            android:visibility="gone" />
+                    </FrameLayout>
+
+                    <FrameLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1">
+
+                        <Button
+                            android:id="@+id/btn_push"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/action_push_saves"
+                            android:textSize="16sp"
+                            android:textColor="@color/text_on_control"
+                            android:backgroundTint="@color/surface_control"
+                            android:paddingTop="18dp"
+                            android:paddingBottom="18dp"
+                            android:minHeight="0dp"
+                            android:enabled="false" />
+
+                        <ProgressBar
+                            android:id="@+id/spin_push"
+                            style="?android:attr/progressBarStyleSmall"
+                            android:layout_width="18dp"
+                            android:layout_height="18dp"
+                            android:layout_gravity="center_vertical|start"
+                            android:layout_marginStart="16dp"
+                            android:indeterminateTint="@color/text_on_control"
+                            android:visibility="gone" />
+                    </FrameLayout>
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_settings"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_settings"
+                    android:textSize="16sp"
+                    android:textColor="@color/text_on_control"
+                    android:backgroundTint="@color/surface_control"
+                    android:paddingTop="18dp"
+                    android:paddingBottom="18dp"
+                    android:minHeight="0dp" />
+
+                <Space
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+
+                <Button
+                    android:id="@+id/btn_launch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_launch"
+                    android:textSize="19sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:backgroundTint="@color/hornet_red"
+                    android:paddingTop="18dp"
+                    android:paddingBottom="18dp"
+                    android:minHeight="0dp" />
+            </LinearLayout>
+
+            <!-- ── Right: the log ──────────────────────────────────── -->
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="0.42"
+                android:background="@color/surface_panel"
+                android:padding="8dp">
+
+                <ScrollView
+                    android:id="@+id/log_scroll"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:fillViewport="true"
+                    android:scrollbars="vertical">
+
+                    <TextView
+                        android:id="@+id/txt_log"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/launcher_status_idle"
+                        android:textColor="@color/text_dim"
+                        android:textSize="10sp"
+                        android:fontFamily="monospace"
+                        android:textIsSelectable="true" />
+                </ScrollView>
+            </FrameLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+</FrameLayout>

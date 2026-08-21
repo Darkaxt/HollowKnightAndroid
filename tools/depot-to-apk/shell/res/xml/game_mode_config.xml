@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Opting into Android 12+'s Game Mode. appCategory="game" on <application>
+  plus this file let the OS apply its game-aware governor profiles the moment
+  the process is foregrounded, and surface the game in the Game Dashboard.
+  Without both declarations the mode picker does not appear at all.
+
+  Downscaling and FPS override are refused: the game runs a fixed-rate
+  simulation, and letting the OS render it below native or cap its frame rate
+  costs more than it saves here.
+-->
+<game-mode-config
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:supportsBatteryGameMode="true"
+    android:supportsPerformanceGameMode="true"
+    android:allowGameDownscaling="false"
+    android:allowGameFpsOverride="false" />

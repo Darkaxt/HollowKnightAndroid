@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Visible in the app drawer. Overrides the Unity-set label. -->
+    <string name="launcher_app_name">Silksong Launcher</string>
+
+    <string name="launcher_title">Silksong</string>
+    <string name="launcher_status_idle">Ready.</string>
+    <string name="launcher_status_starting">Starting game…</string>
+    <string name="launcher_status_error">Couldn\'t start the game: %1$s</string>
+
+    <!-- First-run extraction screen. -->
+
+    <!-- Main launcher action buttons. -->
+    <string name="action_log_in">Log in</string>
+    <string name="action_log_in_as">Steam · Log out</string>
+    <string name="action_pull_saves">&#8595;  Download saves</string>
+    <string name="action_pull_saves_busy">Download saves</string>
+    <string name="action_push_saves">&#8593;  Upload saves</string>
+    <string name="action_push_saves_busy">Upload saves</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_launch">Launch game</string>
+
+    <!-- Settings screen. -->
+    <string name="settings_title">Launcher settings</string>
+    <string name="settings_auto_pull">Download cloud saves before launching</string>
+    <string name="settings_auto_pull_subtitle">Download newer cloud saves right before the game starts.</string>
+    <string name="settings_auto_push">Upload cloud saves after playing</string>
+    <string name="settings_auto_push_subtitle">Upload changed local saves when you return from the game.</string>
+    <string name="settings_perf_overlay">Show in-game perf overlay</string>
+    <string name="settings_perf_overlay_subtitle">Top-right overlay with FPS, CPU and GPU load, RAM, and battery level and drain.</string>
+
+    <string name="settings_skip_intro">Skip intro on startup</string>
+    <string name="settings_skip_intro_subtitle">Skip the studio logos and opening quote and go straight to the main menu.</string>
+
+    <!-- Render resolution scale: render at lower res, scale up to display in hardware. -->
+    <string name="settings_render_resolution_header">Render resolution</string>
+    <string name="settings_render_resolution_native">Native</string>
+    <string name="settings_render_resolution_1080p">1080p</string>
+    <string name="settings_render_resolution_900p">900p</string>
+    <string name="settings_render_resolution_720p">720p (default)</string>
+    <string name="settings_render_resolution_subtitle">Render below native and let the display scale it up. Cuts GPU load and battery drain.</string>
+
+    <string name="settings_back">Back</string>
+    <string name="settings_dual_screen">Dual screen</string>
+    <string name="settings_dual_screen_subtitle">Show the inventory, map, tasks, journal and crest on a second screen, with touch. Only does anything on a device that has two screens, such as the Ayn Thor.</string>
+
+    <!-- Login screen. -->
+    <string name="login_title">Sign in to Steam</string>
+    <string name="login_subtitle">Scan with the Steam mobile app · Settings → Mobile Authenticator → QR Code</string>
+    <string name="login_password_hint">Or sign in with your account name and password.</string>
+    <string name="login_username">Account name</string>
+    <string name="login_password">Password</string>
+    <string name="login_sign_in">Sign in</string>
+    <string name="login_guard_hint">Steam Guard code</string>
+    <string name="login_guard_submit">OK</string>
+    <string name="login_guard_approve">Waiting for you to approve the sign-in in your Steam mobile app…</string>
+    <string name="login_guard_device">Enter the code from your Steam mobile authenticator.</string>
+    <string name="login_guard_email">Enter the code Steam emailed to %1$s.</string>
+    <string name="login_guard_email_no_address">Enter the code Steam emailed you.</string>
+    <string name="login_guard_retry">That code was not accepted. Try again.</string>
+    <string name="login_status_connecting">Connecting to Steam…</string>
+    <string name="login_status_waiting">Waiting for scan…</string>
+    <string name="login_status_signing_in">Signing in…</string>
+    <string name="login_status_need_credentials">Enter an account name and password.</string>
+    <string name="login_status_polling">Confirmed on phone — finalising…</string>
+    <string name="login_status_done">Signed in as %1$s</string>
+    <string name="login_status_error">Login failed: %1$s</string>
+    <string name="login_cancel">Cancel</string>
+</resources>

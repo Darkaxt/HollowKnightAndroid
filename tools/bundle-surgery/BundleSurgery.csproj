@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>BundleSurgery</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    AssetsTools.NET parses Unity asset bundles; AssetRipper.Primitives is its
+    UnityVersion dependency. Both are pinned to the versions originally vendored
+    via USCSandbox so bundle round-trip semantics (read -> rewrite -> read) stay
+    byte-identical to what we have battle-tested against the Linux depot.
+
+    classdata.tpk (next to this csproj) is the Unity type-tree database that
+    AssetsTools.NET needs to deserialize release bundles (Silksong's bundles
+    are type-tree-stripped). Copied into the build output via Content/CopyToOutputDirectory.
+  -->
+  <ItemGroup>
+    <PackageReference Include="AssetsTools.NET" Version="3.0.0" />
+    <PackageReference Include="AssetRipper.Primitives" Version="2.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="classdata.tpk">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

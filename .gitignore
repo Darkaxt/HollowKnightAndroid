@@ -1,0 +1,30 @@
+bin/
+obj/
+*.user
+.vs/
+
+# The built APK. Nothing else lands here -- the staging tree and the fetched
+# player module live under ~/.cache/silksong, outside the checkout.
+/build/
+
+PLAN.md
+
+# Claude Code per-user settings (paths + bash allowlist)
+.claude/
+
+# Gradle build intermediates. Per-machine paths; never commit.
+src/SilksongLauncher.Launcher/app/build/
+
+# Machine-specific paths for the depot-to-apk dev loop.
+tools/depot-to-apk/dev.env
+
+# Staged into the APK by Gradle from tools/ at build time: the on-device build
+# script, bundle-surgery's build output, and the patch sources. Committing them
+# would mean two copies of the same file with nothing keeping them in step --
+# and a stale one has already shipped in an APK once, which cost an afternoon.
+src/SilksongLauncher.Launcher/app/src/main/assets/ondevice/
+
+# Caches the release workflow bind-mounts into the build container: Unity's
+# Android player module, NuGet packages, and the keystore it materialises from
+# a secret for the length of one build.
+/.ci-cache/

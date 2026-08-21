@@ -1,0 +1,20 @@
+# Force binary handling for type-tree data (auto-detected today, but
+# pinning it prevents future CRLF mangling if anyone sets core.autocrlf=true).
+*.tpk binary
+
+# Force LF on everything the Linux build container executes or parses.
+#
+# core.autocrlf=true is the Windows Git default, and it rewrites these files
+# with CRLF on checkout. A shell script with CRLF endings cannot run on Linux
+# at all — the kernel reads the shebang as "/usr/bin/env bash\r" and fails with
+# a bare "no such file or directory" — and tools/docker/ bind-mounts this very
+# working tree into the container. Pinning eol=lf keeps a Windows checkout
+# directly runnable by Docker, WSL and CI.
+*.sh          text eol=lf
+Dockerfile    text eol=lf
+*.Dockerfile  text eol=lf
+Makefile      text eol=lf
+*.gradle      text eol=lf
+*.yaml        text eol=lf
+*.yml         text eol=lf
+gradlew       text eol=lf

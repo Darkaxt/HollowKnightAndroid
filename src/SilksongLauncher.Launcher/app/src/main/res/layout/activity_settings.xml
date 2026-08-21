@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Settings screen, same dark palette as the launcher. Vertical stack of rows,
+  each a control with a one-line note under it, and a Back button at the
+  bottom. Sized for the Ayn Thor's landscape display; wrapped in a ScrollView
+  so the lower rows and the Back button cannot be pushed off-screen.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/surface"
+    android:fillViewport="true">
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_title"
+        android:textColor="@color/text_primary"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="20dp" />
+
+    <Switch
+        android:id="@+id/sw_auto_pull"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_auto_pull"
+        android:textColor="@color/text_primary"
+        android:textSize="15sp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="2dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_auto_pull_subtitle"
+        android:textColor="@color/text_dim"
+        android:textSize="12sp"
+        android:layout_marginBottom="16dp"
+        android:layout_marginStart="4dp" />
+
+    <Switch
+        android:id="@+id/sw_auto_push"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_auto_push"
+        android:textColor="@color/text_primary"
+        android:textSize="15sp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="2dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_auto_push_subtitle"
+        android:textColor="@color/text_dim"
+        android:textSize="12sp"
+        android:layout_marginBottom="16dp"
+        android:layout_marginStart="4dp" />
+
+    <Switch
+        android:id="@+id/sw_skip_intro"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_skip_intro"
+        android:textColor="@color/text_primary"
+        android:textSize="15sp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="2dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_skip_intro_subtitle"
+        android:textColor="@color/text_dim"
+        android:textSize="12sp"
+        android:layout_marginBottom="16dp"
+        android:layout_marginStart="4dp" />
+
+    <Switch
+        android:id="@+id/sw_perf_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_perf_overlay"
+        android:textColor="@color/text_primary"
+        android:textSize="15sp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="2dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_perf_overlay_subtitle"
+        android:textColor="@color/text_dim"
+        android:textSize="12sp"
+        android:layout_marginBottom="16dp"
+        android:layout_marginStart="4dp" />
+
+    <!-- ───── Render resolution picker ─────
+         Label and dropdown on one line, so the row reads like the Switch rows
+         above it: what it is on the left, what it is set to on the right. -->
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="2dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/settings_render_resolution_header"
+            android:textColor="@color/text_primary"
+            android:textSize="15sp" />
+
+        <Spinner
+            android:id="@+id/sp_render_resolution"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="150dp"
+            android:popupBackground="@color/surface_control" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_render_resolution_subtitle"
+        android:textColor="@color/text_dim"
+        android:textSize="12sp"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="24dp"
+        android:layout_marginStart="4dp" />
+
+    <!-- ───── Dual screen ───── -->
+
+    <Switch
+        android:id="@+id/sw_dual_screen"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_dual_screen"
+        android:textColor="@color/text_primary"
+        android:textSize="15sp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="2dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_dual_screen_subtitle"
+        android:textColor="@color/text_dim"
+        android:textSize="12sp"
+        android:layout_marginBottom="24dp"
+        android:layout_marginStart="4dp" />
+
+    <Button
+        android:id="@+id/btn_settings_back"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:text="@string/settings_back"
+        android:textSize="14sp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:minHeight="0dp" />
+</LinearLayout>
+</ScrollView>
