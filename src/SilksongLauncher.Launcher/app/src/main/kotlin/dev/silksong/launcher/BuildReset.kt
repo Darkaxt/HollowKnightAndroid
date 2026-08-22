@@ -16,17 +16,27 @@
 //           aa              the symlink to the content tree, remade every run
 //           staging/        transient, and only ever holds a partial copy
 //           depot-staging/
+//           the game's settings   volumes, language, brightness, resolution,
+//                           frame cap -- and the marker that says the
+//                           first-run resolution has been decided
+//           the launcher's settings
 //
 //   kept    depot/          the game, ~8 GB, and the user's own property
 //           unity/          Unity's Android player module, ~640 MB
 //           toolchain/      clang and .NET, several hundred MB
 //           default/        THE SAVES
-//           game-settings.txt, launcher.log
+//           the Steam sign-in
 //
 // The kept list is the point. Everything in it is either expensive to fetch
 // again or impossible to replace, and none of it is what a bad port is made
 // of -- the depot is verified against Steam's manifest, and the toolchain
 // against a marker written only after a real compile and link succeeded.
+//
+// The sign-in is kept for the same reason: it is a QR scan on a phone, it has
+// nothing to do with how the game was built, and losing it is a worse
+// interruption than the one being fixed. It also lives in its own file, is
+// encrypted with a key from the Android Keystore, and is the only thing here
+// that cannot be reconstructed from what is on disk.
 //
 // Anything not named here is left alone. Directories from older layouts of
 // this app are still on some devices, and deleting a directory because it is
@@ -63,8 +73,49 @@ object BuildReset {
 
         for (name in INTERNAL) freed += remove(File(context.filesDir, name))
 
+        clearPreferences(context)
+
         LauncherLog.log("clear: freed ${freed / 1024 / 1024} MB; the game will be built again")
         return freed
+    }
+
+    /**
+     * Resets the game's settings and the launcher's, but not the sign-in.
+     *
+     * Through the SharedPreferences API rather than by deleting the files, and
+     * that is not a stylistic choice. Android keeps a crash-recovery journal
+     * beside each preferences file, "<name>.xml.bak", and restores it over the
+     * real one on the next load -- so a file deleted behind the API's back can
+     * simply come back, with the values that were being reset. (Learned the
+     * hard way: a copy made as a "backup" was restored over the edit it was
+     * meant to protect.) The API also updates the in-memory copy, so nothing
+     * writes the old values out again at process exit.
+     *
+     * The game's file is Unity's PlayerPrefs, which it names after the package.
+     * It holds volumes, language, brightness, the video settings and the marker
+     * that says the first-run resolution has been chosen -- so clearing it is
+     * what makes a re-port feel like a first one. It does NOT hold saves; those
+     * are files under the external files dir and are not touched by any of this.
+     */
+    private fun clearPreferences(context: Context) {
+        // Unity's own naming. Matches the file seen on device:
+        // shared_prefs/<package>.v2.playerprefs.xml
+        clear(context, "${context.packageName}.v2.playerprefs", "the game's settings")
+        clear(context, "launcher_settings", "the launcher's settings")
+    }
+
+    private fun clear(context: Context, name: String, what: String) {
+        try {
+            val prefs = context.applicationContext
+                .getSharedPreferences(name, Context.MODE_PRIVATE)
+            // commit, not apply: this is followed by starting the port, and an
+            // asynchronous write racing a process restart is how a reset that
+            // reported success comes back.
+            val ok = prefs.edit().clear().commit()
+            LauncherLog.log("clear: ${if (ok) "reset" else "could not reset"} $what")
+        } catch (t: Throwable) {
+            LauncherLog.log("clear: could not reset $what: ${t.message}")
+        }
     }
 
     /** True once there is something worth clearing. */
