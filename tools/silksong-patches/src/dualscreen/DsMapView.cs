@@ -1463,7 +1463,7 @@ public class DsMapView
         // allowed to occupy, which is the whole panel less the border on both
         // sides -- worked out per axis, because the panel is not square and a
         // fixed pixel border is a different fraction of each.
-        int px = Mathf.Clamp(DsConfig.Int("map_pad_px", 5), 0, 200);
+        int px = Mathf.Clamp(DsConfig.Int("map_pad_px", 15), 0, 200);
         float usableH = Mathf.Max(_rtH - 2 * px, 1) / (float)Mathf.Max(_rtH, 1);
         float usableW = Mathf.Max(_rtW - 2 * px, 1) / (float)Mathf.Max(_rtW, 1);
 
