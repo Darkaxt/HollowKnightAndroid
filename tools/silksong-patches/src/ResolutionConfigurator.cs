@@ -277,6 +277,7 @@ public class ResolutionMenuOptions : MonoBehaviour
     static bool _warned;
 
     float _next;
+    UnityEngine.UI.MenuResolutionSetting _opt;
 
     public static void Install()
     {
@@ -293,9 +294,24 @@ public class ResolutionMenuOptions : MonoBehaviour
 
         try
         {
-            var ui = UIManager.instance;
-            if (ui == null) return;
-            var opt = ui.resolutionOption;
+            // Deliberately NOT UIManager.instance. That property logs an error
+            // of its own -- "Couldn't find a UIManager, make sure one exists in
+            // the scene" -- every time it is read before the UI exists, which
+            // is most of a session and, at four times a second, several hundred
+            // lines of somebody else's error in the log we ask users to send.
+            // The setting is found directly instead, and cached until the scene
+            // that owns it goes away.
+            if (_opt == null)
+            {
+                var found = Resources.FindObjectsOfTypeAll<UnityEngine.UI.MenuResolutionSetting>();
+                for (int i = 0; i < found.Length; i++)
+                {
+                    if (found[i] == null || !found[i].gameObject.scene.IsValid()) continue;
+                    _opt = found[i];
+                    break;
+                }
+            }
+            var opt = _opt;
             if (opt == null || !opt.isActiveAndEnabled) return;
 
             var field = Field();
@@ -316,6 +332,7 @@ public class ResolutionMenuOptions : MonoBehaviour
             // Public, and the only route to the protected UpdateText that makes
             // the new label actually appear.
             opt.SetOptionTo(opt.selectedOptionIndex);
+            Debug.Log("[ResolutionMenuOptions] offering " + wanted.Length + " resolutions");
         }
         catch (System.Exception e)
         {
