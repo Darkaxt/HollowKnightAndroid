@@ -141,6 +141,20 @@
                     android:paddingBottom="18dp"
                     android:minHeight="0dp" />
 
+                <!-- Quiet, because it is for the rare day something has gone
+                     wrong and somebody has asked for the log. -->
+                <Button
+                    android:id="@+id/btn_logs"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_logs"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_dim"
+                    android:backgroundTint="@android:color/transparent"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:minHeight="0dp" />
+
                 <Space
                     android:layout_width="match_parent"
                     android:layout_height="0dp"

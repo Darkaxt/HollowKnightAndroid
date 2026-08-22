@@ -170,7 +170,24 @@ object DotnetFetcher {
         if (!verified.isFile) {
             send(Progress("Checking .NET", -1f, "listing runtimes"))
             val problem = verify(root)
-            if (problem != null) throw IOException("the fetched .NET does not run: $problem")
+            if (problem != null) {
+                // Discard the runtime, so retrying is worth something.
+                //
+                // Everything above is skipped when its output is already on
+                // disk, and the runtime is the one piece with no integrity
+                // check -- the Debian packages are checked against the sha256
+                // in the index, but Microsoft's tarball is streamed straight
+                // into files. A truncated download therefore unpacks happily
+                // and fails right here, and without this the next attempt saw
+                // dotnet.real present, skipped the fetch, and failed in exactly
+                // the same way for ever.
+                //
+                // The libraries are kept: they are verified, so they are not
+                // what is in doubt.
+                dotnetDir(root).deleteRecursively()
+                LauncherLog.log("discarded the .NET runtime; it will be fetched again next time")
+                throw IOException("the fetched .NET does not run: $problem")
+            }
             verified.writeText("$VERSION\n")
         }
         send(Progress(".NET ready", 1f, ""))
@@ -349,6 +366,11 @@ object DotnetFetcher {
      * check, hostfxr -- without needing an assembly to run, and its output
      * names the framework version, so a bundle that starts but carries the
      * wrong runtime is caught here too.
+     *
+     * Note what a failure here does NOT mean. If Android refuses the exec at
+     * all, Toolchain.exec throws before this returns, with its own message. So
+     * reaching a non-null return means the process really did start and then
+     * failed -- the loader, a shared library, or hostfxr.
      */
     private suspend fun verify(root: File): String? {
         val result = Toolchain.exec(
@@ -361,11 +383,91 @@ object DotnetFetcher {
             cwd = root,
             env = environment(root),
         )
-        if (!result.ok) return result.output.trim().lines().lastOrNull() ?: "exited ${result.code}"
-        if (!result.output.contains("Microsoft.NETCore.App")) {
-            return "no shared framework: ${result.output.trim().take(200)}"
+        if (!result.ok || !result.output.contains("Microsoft.NETCore.App")) {
+            // Everything, to the log, before anything is summarised for the
+            // dialog. A failure here is almost always reported from a device
+            // nobody working on this owns, so the log is the only evidence
+            // there will ever be -- and it used to be thrown away.
+            describeHost()
+            LauncherLog.log("dotnet check failed: exit ${result.code}")
+            val output = result.output.trim()
+            if (output.isEmpty()) LauncherLog.log("dotnet check printed nothing")
+            else for (line in output.lines()) LauncherLog.log("  dotnet: $line")
+
+            // The exit status is always included, because it is the part that
+            // survives when there is no output at all: 127 is a library that
+            // could not be loaded, and 128+N is death by signal N -- 132, 134
+            // and 139 being SIGILL, SIGABRT and SIGSEGV.
+            //
+            // And an empty message here is not hypothetical. This used to
+            // report `output.lines().lastOrNull() ?: "exited ${result.code}"`,
+            // but "".lines() is listOf(""), not an empty list -- so the
+            // fallback never ran, and a process killed by a signal produced
+            // "the fetched .NET does not run:" followed by nothing at all.
+            // Which is exactly how it was reported from the field.
+            val detail = when {
+                output.isNotEmpty() -> output.lines().takeLast(3).joinToString(" / ")
+                result.code > 128 -> "no output; killed by ${signalName(result.code - 128)}"
+                else -> "no output"
+            }
+            return "exit ${result.code}: $detail"
         }
         LauncherLog.log("dotnet: ${result.output.trim().lines().firstOrNull()}")
         return null
+    }
+
+    /**
+     * Names the signal a process died from, and says what it means here.
+     *
+     * SIGSYS is the one worth spelling out. Android confines every app with a
+     * seccomp filter, and Android 15 tightened it: syscalls that modern glibc
+     * makes at startup and for thread creation -- clone3 in particular -- are
+     * refused in a way that kills the process rather than returning ENOSYS.
+     * glibc only falls back to the old clone() when it gets ENOSYS, so a trap
+     * leaves it no way to recover and the process dies before printing a word.
+     *
+     * That is the difference between a device this works on and one it does
+     * not: the bundle carries Debian bookworm's glibc 2.36, which uses clone3.
+     * glibc 2.33 and earlier never call it.
+     */
+    private fun signalName(signal: Int): String = when (signal) {
+        4 -> "SIGILL (illegal instruction -- built for a CPU this is not)"
+        6 -> "SIGABRT (the runtime gave up; usually a missing or wrong library)"
+        7 -> "SIGBUS (bad memory access -- often a page-size or alignment mismatch)"
+        11 -> "SIGSEGV"
+        31 -> "SIGSYS (Android refused a system call the C library needs; this is " +
+            "the seccomp restriction that stops glibc binaries on Android 15)"
+        else -> "signal $signal"
+    }
+
+    /**
+     * The facts about this device that decide whether the bundle can work.
+     *
+     * Written to the log when the check fails, because the answer is usually
+     * one of these and none of them are visible from the error:
+     *
+     *   Page size. The bundle is ordinary linux-arm64 ELF, and a kernel with
+     *   16 KB pages cannot map segments aligned for 4 KB. Android 15 allows
+     *   16 KB page devices, which is new, and would break these devices while
+     *   leaving every 4 KB device working.
+     *
+     *   Android version. Android 15 tightened the seccomp filter every app
+     *   runs under, and the syscalls it now refuses include ones glibc makes.
+     *   See signalName.
+     *
+     *   ABI. A 32-bit-only process cannot run an arm64 runtime; if the app
+     *   ever ends up in one, everything else here is a red herring.
+     */
+    private fun describeHost() {
+        LauncherLog.log(LauncherLog.deviceSummary())
+        try {
+            if (android.system.Os.sysconf(android.system.OsConstants._SC_PAGESIZE) != 4096L) {
+                LauncherLog.log(
+                    "NOTE: this device does not use 4 KB pages. The .NET bundle is " +
+                        "stock linux-arm64 and expects 4 KB; that alone can be the reason.",
+                )
+            }
+        } catch (_: Throwable) {
+        }
     }
 }

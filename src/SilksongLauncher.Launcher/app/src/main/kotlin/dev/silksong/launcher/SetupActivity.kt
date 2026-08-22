@@ -261,6 +261,28 @@ class SetupActivity : Activity() {
         })
         buttons.addView(secondary, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         root.addView(buttons)
+
+        // Below the actions, small and quiet, but on THIS screen rather than
+        // only in the launcher: setup is where the failures that need
+        // reporting happen, and a user who never gets past it would otherwise
+        // never reach a log screen at all.
+        root.addView(Button(this).apply {
+            text = "View logs"
+            setOnClickListener {
+                try {
+                    startActivity(Intent(this@SetupActivity, LogActivity::class.java))
+                } catch (t: Throwable) {
+                    say("Could not open the logs: ${t.message}")
+                }
+            }
+            backgroundTintList = android.content.res.ColorStateList.valueOf(Color.TRANSPARENT)
+            setTextColor(Color.parseColor("#7A6E71"))
+            textSize = 13f
+            setPadding(0, dp(10), 0, 0)
+        }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            gravity = android.view.Gravity.END
+        })
         return root
     }
 

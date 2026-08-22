@@ -27,6 +27,11 @@ class SilksongApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // First, so that everything below is recorded too. The log is written
+        // to a file from here on, which is what makes it survivable enough to
+        // be worth asking a user for.
+        LauncherLog.attach(this)
+
         // Before anything else, and in every process: JavaSteam's crypto
         // registers itself the first time it is touched, and on Android it
         // registers the wrong thing unless this has run first. See SteamCrypto.
