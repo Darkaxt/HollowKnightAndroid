@@ -138,23 +138,49 @@ object UnityFetcher {
         // Putting it where GameActivity looks for arriving libraries means
         // this and a hand-staged copy take exactly the same route in.
         send(Progress("Unity", -1f, "staging the engine"))
-        stageEngine(android, File(root.parentFile, "staging"))
+        stageEngine(root, File(root.parentFile, "staging"))
 
         send(Progress("Unity", 1f, "ready"))
     }.flowOn(Dispatchers.IO)
 
     /**
+     * Puts Unity's two engine libraries back in the queue if they are missing.
+     *
+     * Called on every setup run, not only when the module is downloaded, and
+     * that distinction is the whole point. fetch() is skipped once isPresent()
+     * is true -- the module is 640 MB and there is no reason to fetch it twice
+     * -- but staging used to happen only INSIDE fetch. So anything that
+     * removed the installed copies (libmain.so, libunity.so under pkg/lib)
+     * without also removing the downloaded module left them gone for good, and
+     * the game died at startup with
+     *
+     *     dlopen failed: library "libmain.so" not found
+     *     Your hardware does not support this application.
+     *
+     * which names neither the file that is missing nor the reason. The reset in
+     * BuildReset does exactly that removal, by design: it keeps the expensive
+     * download and throws away everything built from it.
+     *
+     * Cheap to call: it copies only what is absent or the wrong size, and the
+     * install step downstream skips files that already match.
+     */
+    fun ensureEngineStaged(root: File, staging: File) {
+        stageEngine(root, staging)
+    }
+
+    /**
      * libil2cpp.so is not here: it is the game's own code and is compiled on
      * the device from the depot's assemblies. Only Unity's own two go with it.
      */
-    private fun stageEngine(android: File, staging: File) {
-        val libs = engineLibsIn(android) ?: return
+    private fun stageEngine(root: File, staging: File) {
+        val libs = engineLibsIn(File(root, "android")) ?: return
         staging.mkdirs()
         for (name in listOf("libunity.so", "libmain.so")) {
             val src = File(libs, name)
             val dst = File(staging, name)
             if (!src.isFile || dst.length() == src.length()) continue
             src.copyTo(dst, overwrite = true)
+            LauncherLog.log("staged $name for install (${src.length()} bytes)")
         }
     }
 

@@ -600,6 +600,16 @@ class SetupActivity : Activity() {
                     setBusy(true, "preparing the engine", -1f, "")
                     withContext(Dispatchers.IO) { UnityDex.build(this@SetupActivity, unity) }
                 }
+                // Unconditionally, because the fetch above is skipped once the
+                // module is on disk -- and the engine libraries are installed
+                // from it rather than being part of it. Anything that removes
+                // the installed copies without removing the 640 MB module (the
+                // reset in BuildReset, by design) would otherwise leave them
+                // gone for good, and the game dies at startup saying only that
+                // the hardware is unsupported. No-op when they are current.
+                stagingDir?.let { staging ->
+                    withContext(Dispatchers.IO) { UnityFetcher.ensureEngineStaged(unity, staging) }
+                }
                 if (stagingDir?.listFiles()?.isNotEmpty() == true) {
                     setBusy(true, "installing the engine", -1f, "")
                     withContext(Dispatchers.IO) { moveStaged() }
