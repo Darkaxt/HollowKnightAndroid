@@ -2,14 +2,25 @@
 <!--
   The adaptive icon, used from Android 8 onwards.
 
-  The art is the BACKGROUND layer rather than the foreground. An adaptive icon
-  is composed at 108dp with only the middle 72dp guaranteed visible, so a
-  foreground is inset by a third and would show the mask a long way inside the
-  artwork; a background is drawn full-bleed and cropped to whatever shape the
-  launcher uses. For a square image that fills its frame, cropped is what is
-  wanted.
+  The art is the BACKGROUND layer rather than the foreground, and it is baked
+  with its own margin rather than relying on the foreground's automatic inset.
+
+  An adaptive icon is composed at 108dp and only the middle 72dp is guaranteed
+  to survive the launcher's mask. The artwork is a self-contained badge with a
+  border running right around it, so anything that crops it eats the border
+  first: dropped in full-bleed it would lose its outline entirely. Instead
+  ic_launcher_bg.png is the badge scaled into that middle 72dp with the
+  reserved border filled in its own edge colour, so the whole badge survives
+  every mask shape and the fill is invisible against the badge's dark edge.
+
+  Which is also why the art is not the foreground: the foreground would inset
+  it a second time, on top of the inset already baked in.
 
   The foreground is required and is deliberately empty.
+
+  ic_launcher.png, used by pre-Android 8 launchers and as the round icon, is
+  the badge exactly as drawn: rounded corners, transparent outside, no mask to
+  survive.
 -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@mipmap/ic_launcher_bg" />
