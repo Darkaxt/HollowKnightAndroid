@@ -318,8 +318,38 @@ public class DsMapView
 
         _cleared = false;
         Aim();
+        Diagnose();
         return true;
     }
+
+    /// <summary>
+    /// One line whenever the panel's state changes, and not one otherwise.
+    ///
+    /// Everything that can freeze or unstick this map is a boolean that flips
+    /// somewhere else: the areas going dark, the game opening its own map, the
+    /// dark-detector's back-off. A frozen panel and a working one look
+    /// identical in a log that only reports events, so this reports the STATE,
+    /// deduplicated -- which turns "it stops after a second" into a line saying
+    /// which of them changed a second in.
+    /// </summary>
+    void Diagnose()
+    {
+        if (!DsConfig.Bool("map_diag", false)) return;
+
+        string sig = (Mode == Frame.World ? "world" : "area") +
+                     " dark=" + (_contentDark ? 1 : 0) +
+                     " ok=" + (_contentOk ? 1 : 0) +
+                     " gameMap=" + (GameMapShowing ? 1 : 0) +
+                     " areas=" + CountActiveAreas() +
+                     " backoff=" + (_backedOff ? 1 : 0) +
+                     " render=" + ((_rooms != null && _rooms.enabled) ? 1 : 0) +
+                     " settling=" + (Time.unscaledTime < _settleUntil ? 1 : 0);
+        if (sig == _lastDiag) return;
+        _lastDiag = sig;
+        Debug.Log("[DsMap] state: " + sig + " pan=" + _pan);
+    }
+
+    string _lastDiag;
 
     /// <summary>
     /// Has the player mapped anything at all, anywhere?
@@ -1589,6 +1619,11 @@ public class DsMapView
     /// </summary>
     public void ResetView()
     {
+        // Logged because this zeroes the player's pan, and every time it has
+        // fired when they did not ask for it the symptom has been "dragging
+        // stopped working". A long press used to do it by accident.
+        if (DsConfig.Bool("map_diag", false))
+            Debug.Log("[DsMap] ResetView (pan was " + _pan + ", zoom " + _zoom.ToString("F2") + ")");
         _pan = Vector2.zero;
         _zoom = 1f;
         _worldLatched = false;

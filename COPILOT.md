@@ -176,6 +176,7 @@ F=/sdcard/Android/data/com.jakobkhansen.silksong/files/dualscreen_v2
 
 adb shell "echo 'probe=1'    > $F"   # dump the inventory hierarchy to logcat
 adb shell "echo 'testcard=1' > $F"   # draw the second screen's test card
+adb shell "echo 'map_diag=1' > $F"   # log the map panel's state as it changes
 adb shell "rm -f $F"                 # back to normal
 
 adb shell am force-stop com.jakobkhansen.silksong   # settings are read once per process

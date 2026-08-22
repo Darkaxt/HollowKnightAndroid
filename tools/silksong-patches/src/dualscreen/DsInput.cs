@@ -19,7 +19,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public enum DsGestureType { Down, Drag, Up, Tap, Fling, LongPress, Pinch }
+public enum DsGestureType { Down, Drag, Up, Tap, Fling, Pinch }
 
 public struct DsGesture
 {
@@ -40,7 +40,6 @@ public class DsInput
     // ~10 mm at this panel's density: below it a finger is holding still, above
     // it the user meant to drag.
     const float TapSlop = 34f;
-    const float LongPressSeconds = 0.55f;
     const float FlingMinSpeed = 900f;      // panel px/s
 
     readonly List<Touch> _touches = new List<Touch>();
@@ -52,7 +51,6 @@ public class DsInput
     float _startTime;
     Vector2 _velocity;
     bool _moved;
-    bool _longFired;
 
     bool _pinching;
     float _pinchDist;
@@ -94,7 +92,7 @@ public class DsInput
                 _start = _last = t.position;
                 _startTime = Time.unscaledTime;
                 _velocity = Vector2.zero;
-                _moved = false; _longFired = false;
+                _moved = false;
                 Emit(DsGestureType.Down, t.position, Vector2.zero);
             }
             return;
@@ -124,11 +122,6 @@ public class DsInput
                     _last = cur.position;
                     if ((cur.position - _start).sqrMagnitude > TapSlop * TapSlop) _moved = true;
                     Emit(DsGestureType.Drag, cur.position, delta);
-                }
-                if (!_moved && !_longFired && Time.unscaledTime - _startTime >= LongPressSeconds)
-                {
-                    _longFired = true;
-                    Emit(DsGestureType.LongPress, cur.position, Vector2.zero);
                 }
                 break;
 
@@ -161,7 +154,7 @@ public class DsInput
             if (_down)
             {
                 Emit(DsGestureType.Up, _last, Vector2.zero);
-                _down = false; _finger = -1; _moved = false; _longFired = false;
+                _down = false; _finger = -1; _moved = false;
                 _velocity = Vector2.zero;
             }
             _pinching = true;
@@ -189,12 +182,11 @@ public class DsInput
     {
         Emit(DsGestureType.Up, pos, Vector2.zero);
 
-        // A tap is a release that never travelled far and was not already
-        // claimed by a long press.
-        if (!_moved && !_longFired) Emit(DsGestureType.Tap, pos, Vector2.zero);
+        // A tap is a release that never travelled far.
+        if (!_moved) Emit(DsGestureType.Tap, pos, Vector2.zero);
         else if (_moved && _velocity.magnitude >= FlingMinSpeed) Emit(DsGestureType.Fling, pos, _velocity);
 
-        _down = false; _finger = -1; _moved = false; _longFired = false;
+        _down = false; _finger = -1; _moved = false;
         _velocity = Vector2.zero;
     }
 

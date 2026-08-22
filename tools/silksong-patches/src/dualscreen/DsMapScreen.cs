@@ -423,12 +423,6 @@ public class DsMapScreen : IDsScreen
             case DsGestureType.Pinch:
                 if (_mapRect.Contains(p)) _view.Zoom(g.Scale);
                 break;
-
-            // The button is the discoverable way back; a long press on the map
-            // itself is the one you find without looking for it.
-            case DsGestureType.LongPress:
-                if (_mapRect.Contains(p)) _view.ResetView();
-                break;
         }
     }
 
