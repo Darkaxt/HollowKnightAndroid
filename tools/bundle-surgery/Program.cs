@@ -72,6 +72,7 @@ internal static class Program
             "patch-catalog-path" when args.Length >= 4 => PatchCatalogPath(args[1], args[2], args[3]),
             "retarget-tree" when args.Length >= 3 => RetargetTree(args[1], args[2]),
             "extract-vulkan-android" when args.Length >= 3 => ExtractVulkanAndroid(args[1], args[2]),
+            "shader-report" when args.Length >= 2 => ShaderReport(args[1]),
             _ => Usage(),
         };
     }
@@ -657,6 +658,84 @@ internal static class Program
         MetalVS = 23, MetalFS = 24, SPIRV = 25,
     }
 
+
+    /// <summary>
+    /// Reports how each shader's compressed blob is divided up.
+    ///
+    /// The question it exists to answer: does a platform ever have more than
+    /// ONE entry in offsets/compressedLengths? Unity's newer shader format
+    /// nests those arrays per platform -- offsets[platform][chunk] -- and
+    /// StripToVulkanOnly only ever read and rewrote chunk 0. A shader with
+    /// more than one chunk therefore kept stale offsets pointing past the end
+    /// of the blob it was given, which is not a load failure and not a magenta
+    /// error shader: it is a variant that silently renders wrong.
+    /// </summary>
+    static int ShaderReport(string path)
+    {
+        var manager = new AssetsManager();
+        manager.LoadClassPackage(ClassDataPath);
+
+        var bundle = manager.LoadBundleFile(path, true);
+        manager.LoadClassDatabaseFromPackage(bundle.file.Header.EngineVersion);
+
+        int shaders = 0, multi = 0, noVulkan = 0;
+        var mixes = new Dictionary<string, int>();
+        foreach (var dirInfo in bundle.file.BlockAndDirInfo.DirectoryInfos)
+        {
+            if ((dirInfo.Flags & 4) == 0) continue;
+            var afile = manager.LoadAssetsFileFromBundle(bundle, dirInfo.Name);
+            foreach (var asset in afile.file.GetAssetsOfType(AssetClassID.Shader))
+            {
+                var bf = manager.GetBaseField(afile, asset);
+                if (bf == null) continue;
+                var platforms = bf["platforms.Array"];
+                if (platforms == null || platforms.AsArray.size == 0) continue;
+                shaders++;
+
+                var offsets = bf["offsets.Array"];
+                var name = bf["m_ParsedForm"]?["m_Name"]?.AsString ?? "?";
+
+                var counts = new List<string>();
+                var platformIds = new List<int>();
+                bool any = false;
+                bool hasVulkan = false;
+                for (int i = 0; i < platforms.AsArray.size; i++)
+                {
+                    int id = platforms[i].AsInt;
+                    platformIds.Add(id);
+                    if (id == 18) hasVulkan = true;
+                    var inner = offsets[i];
+                    int n = (inner.Children.Count > 0 && inner.Children[0].FieldName == "Array")
+                        ? inner["Array"].AsArray.size
+                        : 1;
+                    counts.Add($"{id}:{n}");
+                    if (n > 1) any = true;
+                }
+                if (any)
+                {
+                    multi++;
+                    Console.WriteLine($"  MULTI     {name}  [{string.Join(" ", counts)}]");
+                }
+                if (!hasVulkan)
+                {
+                    noVulkan++;
+                    Console.WriteLine($"  NO-VULKAN {name}  [{string.Join(" ", counts)}]");
+                }
+
+                // The platform set, tallied rather than printed per shader:
+                // the question is what a Linux build ships, and 122 identical
+                // lines is a worse answer than one line saying "all of them".
+                var key = string.Join("+", platformIds);
+                mixes.TryGetValue(key, out int seen);
+                mixes[key] = seen + 1;
+            }
+        }
+        manager.UnloadAll();
+        foreach (var kv in mixes)
+            Console.WriteLine($"  platforms [{kv.Key}]: {kv.Value} shader(s)");
+        Console.WriteLine($"{shaders} shader(s), {multi} with more than one chunk, {noVulkan} with no Vulkan slice");
+        return 0;
+    }
 
     static int Usage()
     {
