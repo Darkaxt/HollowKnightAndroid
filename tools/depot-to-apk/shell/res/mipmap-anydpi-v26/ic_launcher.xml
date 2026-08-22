@@ -5,16 +5,23 @@
   The art is the BACKGROUND layer rather than the foreground, and it is baked
   with its own margin rather than relying on the foreground's automatic inset.
 
-  An adaptive icon is composed at 108dp and only the middle 72dp is guaranteed
-  to survive the launcher's mask. The artwork is a self-contained badge with a
-  border running right around it, so anything that crops it eats the border
-  first: dropped in full-bleed it would lose its outline entirely. Instead
-  ic_launcher_bg.png is the badge scaled into that middle 72dp with the
-  reserved border filled in its own edge colour, so the whole badge survives
-  every mask shape and the fill is invisible against the badge's dark edge.
+  An adaptive icon is composed at 108dp and the launcher then masks it to a
+  shape of its choosing. The artwork is a self-contained badge with a border
+  running right around it, so anything that crops it eats the border first.
 
-  Which is also why the art is not the foreground: the foreground would inset
-  it a second time, on top of the inset already baked in.
+  The size is set by the CIRCLE, because that is the tightest mask in use and
+  the one Android's own Settings applies. The badge is a rounded square, so its
+  corners reach 1.296 times its half-width from the centre; the circular mask
+  cuts at 36dp. Sized to the 72dp viewport the corners landed at 46.7dp, 30%
+  outside the circle, and Settings duly showed the border sliced off. 56dp is
+  the largest side whose corners stay inside 36dp, so it is what ships: at that
+  size no mask shape crops the badge at all.
+
+  The reserved border is filled with the art's own edge colour, which is black
+  and therefore invisible against the badge's dark outline.
+
+  It stays the background layer rather than becoming the foreground because the
+  foreground would inset it a second time, on top of the inset baked in here.
 
   The foreground is required and is deliberately empty.
 
