@@ -40,14 +40,26 @@ DepotDownloader -app 1030300 -depot 1030303 -username <your account> -password <
 ```
 
 Open the app once first, so that it creates its folder on the device, then copy what you
-downloaded into:
+downloaded into `Android/data/com.jakobkhansen.silksong/files/depot/`, so that the device
+ends up looking like this:
 
 ```
-Android/data/com.jakobkhansen.silksong/files/depot/
+Android/data/com.jakobkhansen.silksong/files/
+└── depot/
+    ├── Hollow Knight Silksong.x86_64
+    ├── UnityPlayer.so
+    └── Hollow Knight Silksong_Data/
+        ├── Managed/
+        ├── MonoBleedingEdge/
+        ├── Plugins/
+        ├── Resources/
+        ├── StreamingAssets/
+        ├── globalgamemanagers
+        ├── resources.assets
+        └── ...
 ```
 
-`Hollow Knight Silksong_Data` has to sit directly inside `depot`. Press "I have the files"
-in the app once it is there.
+Press "I have the files" in the app once it is there.
 
 ## Steam Cloud Saves
 
