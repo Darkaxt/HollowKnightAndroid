@@ -1,59 +1,43 @@
-// ResolutionConfigurator — applies the launcher's "Render
-// resolution" Settings choice at Unity boot, before any scene
-// loads. Lets the user pick a sub-native render-target size via
-// the launcher Settings UI; the display engine scales the output
-// up to the panel's native resolution in hardware on present.
+// ResolutionConfigurator — the frame cap, and a sensible starting resolution.
 //
-// Why we do it from the launcher's setting (not from Silksong's
-// own in-game resolution menu):
+// ── the resolution ──────────────────────────────────────────────────────────
 //
-//   - On Android, `Screen.resolutions` only returns the display
-//     panel's physical modes (typically one native entry +
-//     refresh-rate variants). There's no Unity setting that adds
-//     downscaled entries to that array. Silksong's in-game menu
-//     reads from `Screen.resolutions`, so it shows only the
-//     native entry on Android. We could patch the menu via
-//     reflection from a sibling MonoBehaviour, but it's simpler
-//     and more robust to drive it from the launcher Settings UI
-//     directly.
+// This used to be a launcher setting: pick 720p/900p/1080p/native in Settings,
+// and every boot would force it with Screen.SetResolution. That is gone, and
+// the reason it could go is worth writing down, because it was not obvious.
 //
-//   - The launcher (and Silksong) share package data, including
-//     SharedPreferences. The launcher process writes to
-//     `launcher_settings`; this script reads the same file via
-//     JNI at boot. Same cross-process pattern we already use for
-//     the in-game perf overlay toggle (PerfOverlay.cs).
+// Unity persists the resolution ON ANDROID. After a Screen.SetResolution the
+// player prefs carry
 //
-// Implementation:
+//     Screenmanager Resolution Width  = 1280
+//     Screenmanager Resolution Height = 720
+//     Screenmanager Fullscreen mode   = 1
 //
-//   - [RuntimeInitializeOnLoadMethod(BeforeSceneLoad)] runs before
-//     the first scene loads, so the first frame is rendered at
-//     the target resolution (no flash of native-res frames).
+// and the engine restores them on the next launch. So there is nothing to
+// re-apply: forcing it every boot was not making it stick, it was overwriting
+// whatever the player had chosen since.
 //
-//   - We resolve a target SHORT dimension (height in landscape)
-//     from the user's pick, derive the LONG dimension by holding
-//     the panel's aspect ratio, then call Screen.SetResolution.
+// What is left is a default. 720p, applied exactly once, on a device that has
+// never run this before -- roughly half the pixels of a 1080p panel, which is
+// most of a battery saving on art that tolerates the downscale. After that the
+// game owns it, including through its own resolution menu, and nothing here
+// touches it again.
 //
-//   - If the user picked "native" (or the panel's short dim is
-//     already at-or-below our target — e.g. Thor's 1080-tall
-//     display when user picks 1080p), we leave the resolution at
-//     the default and do nothing.
+// Nothing is clamped any more either. The old code refused to set anything at
+// or above the panel's short dimension, which meant the highest modes were
+// unreachable by design; the panel's own modes are exactly what the game's
+// menu offers, and they should work.
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 using UnityEngine;
 
 public static class ResolutionConfigurator
 {
-    // Cross-process pref protocol. Keep in lock-step with the Kotlin
-    // SettingsStore.PREFS_NAME / KEY_RENDER_RESOLUTION constants
-    // and with the RenderResolution enum's `key` strings.
-    const string PREFS_NAME = "launcher_settings";
-    const string KEY_RENDER_RESOLUTION = "render_resolution";
-
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     static void Apply()
     {
         ApplyFrameRate();
-        ApplyResolution();
+        ApplyDefaultResolution();
     }
 
     /**
@@ -162,71 +146,67 @@ public static class ResolutionConfigurator
         }
     }
 
-    static void ApplyResolution()
+    /**
+     * 720p, once, on a device that has never run this before.
+     *
+     * The marker is ours rather than Unity's. Unity writes its own
+     * "Screenmanager Resolution Width" on first run too -- with the panel's
+     * native size -- so its presence says nothing about whether anybody has
+     * chosen anything. A key only this code writes is the only way to tell
+     * "never been here" from "been here, and the player picked native".
+     *
+     * After this has run once it never runs again, and the resolution belongs
+     * to the game: its own menu writes Screenmanager Resolution Width/Height,
+     * Unity restores them at boot, and nothing here interferes.
+     */
+    const string PREF_DEFAULT_APPLIED = "SilksongAndroidDefaultRes";
+    const int DEFAULT_SHORT_SIDE = 720;
+
+    static void ApplyDefaultResolution()
     {
-        string pickKey;
         try
         {
-            pickKey = ReadSharedPref(KEY_RENDER_RESOLUTION) ?? "720p";
+            if (PlayerPrefs.GetInt(PREF_DEFAULT_APPLIED, 0) != 0)
+            {
+                Debug.Log($"[ResolutionConfigurator] resolution is the game's: {Screen.width}x{Screen.height}");
+                return;
+            }
+
+            var native = Screen.currentResolution;
+            int shortNative = Mathf.Min(native.width, native.height);
+            int longNative = Mathf.Max(native.width, native.height);
+
+            // A panel already at or below the default is left alone: there is
+            // nothing to save and scaling UP would be worse than doing nothing.
+            if (shortNative > DEFAULT_SHORT_SIDE)
+            {
+                float ratio = (float)DEFAULT_SHORT_SIDE / shortNative;
+                int targetLong = Mathf.RoundToInt(longNative * ratio);
+                bool landscape = native.width >= native.height;
+                int width = landscape ? targetLong : DEFAULT_SHORT_SIDE;
+                int height = landscape ? DEFAULT_SHORT_SIDE : targetLong;
+
+                Screen.SetResolution(width, height, true);
+                Debug.Log(
+                    $"[ResolutionConfigurator] first run: defaulting to {width}x{height} " +
+                    $"(panel {native.width}x{native.height}). Change it in the game's video options.");
+            }
+            else
+            {
+                Debug.Log(
+                    $"[ResolutionConfigurator] first run: panel is {native.width}x{native.height}, " +
+                    "already at or below the default; leaving it alone");
+            }
+
+            // Written whether or not the resolution was changed. The question
+            // it answers is "has the default been decided", and it has been.
+            PlayerPrefs.SetInt(PREF_DEFAULT_APPLIED, 1);
+            PlayerPrefs.Save();
         }
         catch (System.Exception ex)
         {
-            Debug.LogWarning("[ResolutionConfigurator] couldn't read prefs: " + ex.Message);
-            return;
+            Debug.LogWarning("[ResolutionConfigurator] couldn't set the resolution: " + ex.Message);
         }
-
-        // Mapping must match SettingsStore.kt's RenderResolution enum.
-        int targetShort = pickKey switch
-        {
-            "1080p" => 1080,
-            "900p"  => 900,
-            "720p"  => 720,
-            _ => -1,
-        };
-        if (targetShort < 0)
-        {
-            Debug.Log("[ResolutionConfigurator] native (no resolution override)");
-            return;
-        }
-
-        var native = Screen.currentResolution;
-        int shortNative = Mathf.Min(native.width, native.height);
-        if (targetShort >= shortNative)
-        {
-            Debug.Log(
-                $"[ResolutionConfigurator] target {targetShort}p ≥ native short dim " +
-                $"{shortNative} — leaving at native");
-            return;
-        }
-
-        // Preserve aspect ratio by scaling the long dim by the
-        // same ratio. Map back to width/height keeping the
-        // display's orientation (on Thor in landscape,
-        // native.width > native.height so the long value goes to
-        // width).
-        float ratio = (float)targetShort / shortNative;
-        int longNative = Mathf.Max(native.width, native.height);
-        int targetLong = Mathf.RoundToInt(longNative * ratio);
-
-        bool landscape = native.width >= native.height;
-        int width  = landscape ? targetLong  : targetShort;
-        int height = landscape ? targetShort : targetLong;
-
-        Screen.SetResolution(width, height, /*fullscreen=*/true);
-        Debug.Log(
-            $"[ResolutionConfigurator] render target {width}×{height} " +
-            $"(panel {native.width}×{native.height}, scale {ratio:F2}, pick={pickKey})");
-    }
-
-    // SharedPreferences read via JNI from the Unity process.
-    // Same pattern as PerfOverlay — Android merges per-app data
-    // across processes, so a value written by the launcher
-    // process (`:launcher`) is readable from the Unity (default)
-    // process. MODE_PRIVATE = 0.
-    static string ReadSharedPref(string key)
-    {
-        // See Settings.cs.
-        return SilksongPatches.Settings.GetString(key, null);
     }
 }
 

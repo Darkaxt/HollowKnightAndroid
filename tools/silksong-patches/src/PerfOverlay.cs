@@ -776,7 +776,6 @@ public class PerfOverlay : MonoBehaviour
                     " antiAliasing=" + QualitySettings.antiAliasing +
                     " gpuMaxMHz=" + (_gpuMaxHz > 0 ? (_gpuMaxHz / 1_000_000).ToString() : "?"));
         c.WriteLine("# driver=" + (ReadPref("vulkan_driver_source") ?? "system") +
-                    " renderRes=" + (ReadPref("render_resolution") ?? "720p") +
                     " overlay=" + s_drawOverlay + " log=" + s_logToFile);
         c.WriteLine("# pct_at_cap = % of frames with frame_ms <= " +
                     (_targetMs * 1.05f).ToString("F2") + "ms (target " +

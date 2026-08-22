@@ -34,13 +34,6 @@
     <string name="settings_skip_intro_subtitle">Skip the studio logos and opening quote and go straight to the main menu.</string>
 
     <!-- Render resolution scale: render at lower res, scale up to display in hardware. -->
-    <string name="settings_render_resolution_header">Render resolution</string>
-    <string name="settings_render_resolution_native">Native</string>
-    <string name="settings_render_resolution_1080p">1080p</string>
-    <string name="settings_render_resolution_900p">900p</string>
-    <string name="settings_render_resolution_720p">720p (default)</string>
-    <string name="settings_render_resolution_subtitle">Render below native and let the display scale it up. Cuts GPU load and battery drain.</string>
-
     <string name="settings_back">Back</string>
     <string name="settings_dual_screen">Dual screen</string>
     <string name="settings_dual_screen_subtitle">Show the inventory, map, tasks, journal and crest on a second screen, with touch. Only does anything on a device that has two screens, such as the Ayn Thor.</string>

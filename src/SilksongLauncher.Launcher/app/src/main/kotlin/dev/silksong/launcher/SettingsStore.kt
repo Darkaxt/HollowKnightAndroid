@@ -59,27 +59,6 @@ class SettingsStore(context: Context) {
         set(value) { prefs.edit().putBoolean(KEY_SKIP_INTRO, value).apply() }
 
     /**
-     * Render resolution scale. Silksong's render target is created
-     * at this resolution (when not [RenderResolution.NATIVE]) and
-     * the display engine scales it up to the panel size in
-     * hardware. Lower = less fragment shader work, lower GPU
-     * power, easier to sustain target framerate. Pixel art / 2D
-     * games like Silksong tolerate downscale well — typical user
-     * won't notice 900p vs native on a 1080p-class display, and
-     * 720p only slightly softens edges.
-     *
-     * Applied on the Unity side by ResolutionConfigurator.cs which
-     * reads the same prefs file via JNI at boot and calls
-     * Screen.SetResolution before any scene loads. Setting takes
-     * effect on next game launch. Defaults to 720p — the measured
-     * battery/thermal sweet spot (~18% lower power vs native at a
-     * locked 120fps, with only mild softening on 2D art).
-     */
-    var renderResolution: RenderResolution
-        get() = RenderResolution.fromKey(prefs.getString(KEY_RENDER_RESOLUTION, RenderResolution.P720.key))
-        set(value) { prefs.edit().putString(KEY_RENDER_RESOLUTION, value.key).apply() }
-
-    /**
      * Dual-screen support. When enabled, the Unity side (DualScreenV2, one of
      * the patches compiled on the device) activates a secondary display and
      * draws its own inventory / crest / tasks / journal / map screens on it,
@@ -115,7 +94,6 @@ class SettingsStore(context: Context) {
             append(KEY_PERF_OVERLAY).append('=').append(perfOverlay).append('\n')
             append(KEY_SKIP_INTRO).append('=').append(skipIntro).append('\n')
             append(KEY_DUAL_SCREEN).append('=').append(dualScreen).append('\n')
-            append(KEY_RENDER_RESOLUTION).append('=').append(renderResolution.key).append('\n')
         }
         try {
             val out = File(dir, "game-settings.txt")
@@ -139,34 +117,6 @@ class SettingsStore(context: Context) {
         const val KEY_AUTO_PUSH = "auto_push"
         const val KEY_PERF_OVERLAY = "perf_overlay"
         const val KEY_SKIP_INTRO = "skip_intro"
-        const val KEY_RENDER_RESOLUTION = "render_resolution"
         const val KEY_DUAL_SCREEN = "dualscreen_enabled"
-    }
-}
-
-/**
- * Target render resolution. The display panel always shows full
- * native resolution; this controls what resolution Unity's render
- * target is created at. Smaller = fewer pixels to shade per frame,
- * which is roughly a quadratic perf win (and a similar battery
- * saving) at the cost of edge sharpness.
- *
- * The string [key] values double as the cross-process protocol the
- * Unity-side ResolutionConfigurator.cs reads via JNI — keep in
- * lock-step with the constant strings in that file.
- */
-enum class RenderResolution(val key: String) {
-    /** Don't override — use the device's full native resolution. */
-    NATIVE("native"),
-    /** ~1080p (1080-pixel short dim; long dim scales by display aspect). */
-    P1080("1080p"),
-    /** ~900p — ~30%-fewer pixels than native 1080-class displays. */
-    P900("900p"),
-    /** ~720p — ~55%-fewer pixels; big GPU/battery saving, mild softness. */
-    P720("720p");
-
-    companion object {
-        fun fromKey(key: String?): RenderResolution =
-            entries.firstOrNull { it.key == key } ?: NATIVE
     }
 }
