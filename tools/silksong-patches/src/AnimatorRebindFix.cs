@@ -8,34 +8,63 @@
 // it only "snaps" to its saved end-state on the next room reload. Calling
 // Animator.Rebind() rebuilds those bindings and the animation plays correctly.
 //
-// The committed PlayMaker `SetAnimator` patch fixes this for animators driven
-// through that one PlayMaker action, but ~160 of the game's own classes (Gate,
-// BellBench, ...) enable+play their animators DIRECTLY in C#, bypassing it. Rather
-// than patch every call site, we fix it once, generically, here:
+// This is fixed by rebinding every animator exactly once, but HOW depends on what
+// the animator is doing at the time, because the props divide into two populations
+// and only one of them was ever covered.
 //
-//   At every scene load we find all Animators that are NOT currently displaying
-//   (component disabled, or sitting on an inactive GameObject) — exactly the
-//   disabled-at-load bug population — and Rebind() them while they are still idle,
-//   so their bindings are ready BEFORE any prop enables + plays them.
+//   IDLE animators — component disabled, or on an inactive GameObject. A plain
+//   Rebind() is safe here: nothing is being displayed, so rebuilding the binding
+//   has no visible effect, and the prop plays correctly whenever the game gets
+//   round to enabling it.
 //
-//   We ALSO re-run after a hazard respawn. A hazard respawn does NOT reload the
-//   scene (no sceneLoaded), but it routes through the scene-entry flow
-//   (GameManager.OnFinishedEnteringScene) which re-activates scene objects. Props
-//   that gate their own one-time init on a flag (e.g. SandCentipede's `warmup`)
-//   skip it on re-enable and come back up UNBOUND — the "Blasted Steps sand
-//   centipedes freeze after you get hit and respawn" bug. Re-binding the idle
-//   animators on OnFinishedEnteringScene restores them (the centipede disables
-//   its animator between pop-ups, so an idle pass catches it). We clear the
-//   per-instance dedupe first because, unlike a real scene load, the objects keep
-//   their instance ids across a respawn.
+//   LIVE animators — enabled AND on an active GameObject, from the moment the room
+//   loads, forever. The bellway toll machine is one of these, and it is why this
+//   bug kept coming back: the sweep below used to skip live animators entirely, so
+//   the machine was never rebound, and an "enable edge" watcher never fires for it
+//   either because there is no edge to see. Measured on device:
 //
-// Safety: we deliberately SKIP animators that are already enabled AND active
-// (i.e. currently on screen), so we never reset a running animation to its default
-// pose. Rebinding an idle / hidden animator has no visible effect. There is no
-// per-frame cost: the only work is a short scan on each sceneLoaded / scene-entry,
-// plus a few delayed re-scans to catch props that disable their animator in
-// Start() (which runs after sceneLoaded) or that spawn a moment after the room
-// loads.
+//       found Bellway Toll Machine  enabled=True active=True
+//       Bellway Toll Machine  state -1->1292283929  t=1.00  everIdle=False
+//
+//   That t=1.00 is the game putting an already-paid machine into its final,
+//   retracted pose. The Play lands, but with no curve bindings nothing moves, so
+//   the machine renders in its authored pose and is still standing there after you
+//   have paid for it. bellway_floor_gate shows the same signature. The bench's own
+//   bell_toll_machine comes up enabled=False, which is why THAT one always worked.
+//
+//   A live animator cannot simply be Rebind()ed — that resets it to its entry
+//   state, which on a machine you have already paid for replays the whole toll
+//   sequence. So its state is captured first, restored after the rebind, and
+//   sampled once (RebindPreservingState). A healthy animator is left visually
+//   untouched; only a decayed binding is repaired. This is the same treatment
+//   WormAnimatorFix already applies to the sand centipedes, where it is proven.
+//   Animators mid-transition are skipped and picked up by a later sweep, since a
+//   blend between two states cannot be captured faithfully.
+//
+// The sweeps also have to KEEP running rather than stop shortly after scene entry:
+// props stream in later, and a bench or bellway is enabled by player interaction
+// long after the room settles.
+//
+// This replaces a sed patch in port.sh step 5 that spliced an Animator.Rebind()
+// into PlayMaker's SetAnimator action (backup commit 0814fba). That patch was
+// deleted along with the whole AssetRipper-era decompile-and-patch pipeline, which
+// is why the bug returned. Rebinding here covers more ground than it did:
+// SetAnimator was only one of the ways a prop gets enabled, while ~160 of the
+// game's own classes (Gate, BellBench, ...) enable+play their animators DIRECTLY
+// in C#, bypassing PlayMaker entirely.
+//
+// The sweeps ALSO re-run after a hazard respawn. A hazard respawn does NOT reload
+// the scene (no sceneLoaded), but it routes through the scene-entry flow
+// (GameManager.OnFinishedEnteringScene) which re-activates scene objects. Props
+// that gate their own one-time init on a flag (e.g. SandCentipede's `warmup`)
+// skip it on re-enable and come back up UNBOUND — the "Blasted Steps sand
+// centipedes freeze after you get hit and respawn" bug. Re-binding on
+// OnFinishedEnteringScene restores them. We clear the per-instance dedupe first
+// because, unlike a real scene load, the objects keep their instance ids across a
+// respawn.
+//
+// Cost: one FindObjectsByType every couple of seconds, and the rebinds themselves
+// are deduped per instance id, so a settled room does no work at all.
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System.Collections;
@@ -53,6 +82,13 @@ public class AnimatorRebindFix : MonoBehaviour
     // The GameManager whose OnFinishedEnteringScene we're currently subscribed to
     // (re-subscribed if the singleton is ever recreated, e.g. after a menu trip).
     GameManager _subscribedGm;
+
+    // --- idle sweep state -----------------------------------------------------
+    //
+    // How often to re-sweep for idle animators once the scene-entry burst is over.
+    // Props stream in, and a bench sits disabled until the player interacts with
+    // it, so the sweep has to keep running rather than stop a few seconds in.
+    const float SweepInterval = 2f;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]
     static void Bootstrap()
@@ -77,10 +113,14 @@ public class AnimatorRebindFix : MonoBehaviour
     void Start()
     {
         StartCoroutine(RebindPasses());
+        StartCoroutine(IdleSweep());
         StartCoroutine(KeepSceneEntrySubscription());
     }
 
-    void OnSceneLoaded(Scene scene, LoadSceneMode mode) { StartCoroutine(RebindPasses()); }
+    void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        StartCoroutine(RebindPasses());
+    }
 
     // Keep ourselves subscribed to the current GameManager's scene-entry event.
     // GameManager is a DontDestroyOnLoad singleton, but can be recreated across a
@@ -114,7 +154,9 @@ public class AnimatorRebindFix : MonoBehaviour
 
     // A burst of passes: immediately, next frame (after scene objects' Start() has
     // run, in case a prop disables its animator there), then a couple of delayed
-    // ones to catch animators spawned just after the room loads.
+    // ones to catch animators spawned just after the room loads. The sweep started
+    // in Start() keeps going afterwards, so nothing is left uncovered once this
+    // burst finishes.
     IEnumerator RebindPasses()
     {
         RebindIdleAnimators();
@@ -124,6 +166,22 @@ public class AnimatorRebindFix : MonoBehaviour
         RebindIdleAnimators();
         yield return new WaitForSeconds(1.5f);
         RebindIdleAnimators();
+    }
+
+    // The steady-state sweep. Runs for the lifetime of the game, because the
+    // animator that matters most — a bench, a bellway toll machine, a door — sits
+    // disabled and untouched until the player walks up to it, which can be minutes
+    // after the room loaded. Rebinding it at some idle moment beforehand is what
+    // makes the eventual enable+Play work, and doing it while idle is what keeps us
+    // from ever fighting the game over the animator's state.
+    IEnumerator IdleSweep()
+    {
+        var wait = new WaitForSeconds(SweepInterval);
+        while (true)
+        {
+            yield return wait;
+            RebindIdleAnimators();
+        }
     }
 
     // Longer-tailed burst for scene entry / hazard respawn: props like the sand
@@ -146,19 +204,69 @@ public class AnimatorRebindFix : MonoBehaviour
     static void RebindIdleAnimators()
     {
         var anims = Object.FindObjectsByType<Animator>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        int n = 0;
+        int idle = 0, live = 0;
         for (int i = 0; i < anims.Length; i++)
         {
             var a = anims[i];
             if (a == null || a.runtimeAnimatorController == null) continue;
-            // Only touch animators that are NOT currently displaying — the
-            // disabled-at-load bug population. Never reset a running animation.
-            if (a.enabled && a.gameObject.activeInHierarchy) continue;
-            if (!_rebound.Add(a.GetInstanceID())) continue;   // once per animator
-            a.Rebind();
-            n++;
+
+            bool isLive = a.enabled && a.gameObject.activeInHierarchy;
+
+            // A live animator mid-transition cannot be captured faithfully (a
+            // transition blends two states and only one survives a replay), so
+            // leave it and let a later sweep take it once it has settled.
+            if (isLive && IsTransitioning(a)) continue;
+
+            int id = a.GetInstanceID();
+            if (!_rebound.Add(id)) continue;   // once per animator
+
+            if (isLive)
+            {
+                RebindPreservingState(a);
+                live++;
+            }
+            else
+            {
+                a.Rebind();
+                idle++;
+            }
         }
-        if (n > 0) Debug.Log("[AnimatorRebindFix] rebound " + n + " idle bundle animators");
+        if (idle > 0 || live > 0)
+            Debug.Log("[AnimatorRebindFix] rebound " + idle + " idle + " + live + " live bundle animators");
+    }
+
+    static bool IsTransitioning(Animator a)
+    {
+        for (int l = 0; l < a.layerCount; l++)
+            if (a.IsInTransition(l)) return true;
+        return false;
+    }
+
+    // Rebind() rebuilds the generic curve bindings but resets the animator to its
+    // default/entry state. For an animator that is live, capture the state on every
+    // layer first, Rebind, then restore that state at its captured time and sample
+    // once, so the pose the game asked for is applied immediately and no frame of
+    // the entry state is ever shown.
+    static void RebindPreservingState(Animator a)
+    {
+        int layers = a.layerCount;
+        var stateHash = new int[layers];
+        var normTime = new float[layers];
+        for (int l = 0; l < layers; l++)
+        {
+            AnimatorStateInfo st = a.GetCurrentAnimatorStateInfo(l);
+            stateHash[l] = st.fullPathHash;
+            normTime[l] = st.normalizedTime;
+        }
+
+        a.Rebind();
+
+        for (int l = 0; l < layers; l++)
+        {
+            if (stateHash[l] != 0)
+                a.Play(stateHash[l], l, normTime[l]);
+        }
+        a.Update(0f);
     }
 }
 #endif
