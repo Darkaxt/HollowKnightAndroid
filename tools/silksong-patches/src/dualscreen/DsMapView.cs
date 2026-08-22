@@ -311,7 +311,10 @@ public class DsMapView
         // outside this code -- a bench FSM calling the TryOpenQuickMap PlayMaker
         // action -- and the full map has no use for any of them. The frame in
         // which that happens is handled by LateTick; this is the steady state.
-        if (Mode == Frame.World) HideNextAreaArrows();
+        //
+        // Not while the game is showing its own map, though: those arrows belong
+        // to the quick map on the main screen, where they are wanted.
+        if (Mode == Frame.World && !GameMapShowing) HideNextAreaArrows();
 
         _cleared = false;
         Aim();
@@ -536,9 +539,13 @@ public class DsMapView
     /// The sting is in EnableUnlockedAreas' tail, which both paths share. It
     /// ends with CameraRenderToMesh.SetActive(GameMap, TRUE), switching the
     /// game's OWN display quads on -- and those quads are on screen, over
-    /// gameplay, on the MAIN display. The finally below is the only thing that
-    /// undoes it, and it is a finally rather than a following statement because
-    /// asking for a map on the second screen must never leave one on the first.
+    /// gameplay, on the MAIN display. The finally below is what undoes it, and
+    /// it is a finally rather than a following statement because asking for a
+    /// map on the second screen must never leave one on the first.
+    ///
+    /// It restores rather than forces, and none of this runs at all while the
+    /// game has a map up of its own: the player pressing L1 is the one case
+    /// where the quads being on is not our doing and not ours to undo.
     /// </summary>
     void EnsureContent()
     {
@@ -565,11 +572,32 @@ public class DsMapView
 
         if (!_contentDark && !_forceAssert) return;
         if (Time.unscaledTime < _nextAssert) return;
+
+        // The player pressed L1. Stand down.
+        //
+        // Everything below drives the game's own map machinery -- moving the
+        // map to a zone anchor, narrowing or widening the active areas -- and
+        // all of it is visible on the MAIN screen when the game is showing a
+        // map there. Asserting over the top of that is how the quick map came
+        // to flicker and vanish: in the area view the finally below switched
+        // the game's display off the moment it came on, and in the full map
+        // WorldMap re-widened what TryOpenQuickMap had just narrowed, so L1
+        // showed the whole of Pharloom or nothing at all.
+        //
+        // While the game has a map up it owns the map. This panel keeps
+        // rendering, because its cameras and its framing are its own and the
+        // content is right there; it simply stops rearranging the furniture.
+        // When the game closes its map, CloseQuickMap darkens the areas and the
+        // dark-detector above brings us straight back.
+        if (GameMapShowing) return;
+
         _nextAssert = Time.unscaledTime + DsConfig.Int("map_assert_ms", 100) / 1000f;
         _forceAssert = false;
 
         try
         {
+            // Captured before anything below can change it. See the finally.
+            bool wasShowing = GameMapShowing;
             try
             {
                 // Both modes start by framing the current zone, because
@@ -607,7 +635,20 @@ public class DsMapView
             }
             finally
             {
-                CameraRenderToMesh.SetActive(CameraRenderToMesh.ActiveSources.GameMap, false);
+                // Restore, do not force.
+                //
+                // EnableUnlockedAreas ends by switching the game's own display
+                // quads ON, and those quads are on the MAIN screen. Undoing that
+                // is the whole reason this is a finally: asking for a map on the
+                // second screen must never leave one on the first.
+                //
+                // But "undo" is not the same as "off". The game can turn them on
+                // for its own reasons in the same frame -- the player pressing
+                // L1 -- and a blind SetActive(false) here took the quick map
+                // away as fast as the game put it up. So the state is captured
+                // above and put back, which leaves the game's map alone in the
+                // one case where forcing it off was wrong.
+                CameraRenderToMesh.SetActive(CameraRenderToMesh.ActiveSources.GameMap, wasShowing);
             }
 
             _asserts++;
@@ -656,6 +697,21 @@ public class DsMapView
     public string ZoneName { get { return _zoneName; } }
 
     string _zoneName;
+
+    /// <summary>
+    /// Is the game showing its own map, on the main screen, right now?
+    ///
+    /// CameraRenderToMesh.SetActive drives `targetCamera.enabled`, and that
+    /// component's targetCamera is the very camera FindSourceCameras hands us.
+    /// So the flag is already in our hand and needs no reflection: if the game's
+    /// map camera is enabled, the game is drawing a map somewhere we do not
+    /// own, and the polite thing is to keep our hands off the map until it is
+    /// finished.
+    /// </summary>
+    bool GameMapShowing
+    {
+        get { return _srcRooms != null && _srcRooms.enabled; }
+    }
 
     /// <summary>
     /// Turn off the "there is more this way" arrows, which the full map has no
@@ -739,6 +795,8 @@ public class DsMapView
     void LateTick()
     {
         if (Mode != Frame.World || _map == null || !_visible) return;
+        // The game's own quick map wants its arrows. See Drive.
+        if (GameMapShowing) return;
         HideNextAreaArrows();
     }
 
