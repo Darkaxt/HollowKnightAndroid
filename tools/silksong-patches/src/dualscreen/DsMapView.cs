@@ -40,6 +40,9 @@
 using System;
 using UnityEngine;
 using GlobalEnums;
+// Team Cherry ship a forked TextMeshPro under the namespace TMProOld, so the
+// label on a next-area arrow is a TMProOld.TMP_Text and not a TMPro one.
+using Tmp = TMProOld.TMP_Text;
 
 public class DsMapView
 {
@@ -112,6 +115,7 @@ public class DsMapView
         _rt.antiAliasing = 1;
         _rt.Create();
         _rig.AddComponent<DsMapRigLifetime>().Texture = _rt;
+        _rig.AddComponent<DsMapLateTick>().Tick = LateTick;
 
         // Depths 90 and 91 keep the game's own relative order between the two
         // passes; the absolute values are irrelevant to a camera that renders
@@ -270,6 +274,8 @@ public class DsMapView
             _forceAssert = true;
             _nextAssert = 0f;
             _cleared = false;
+            _lastDropped = 0;
+            _loggedArrows = false;
             // Area only. The full map is a place the player has deliberately
             // put the camera -- resetting it on a border wipes their pinch and
             // yanks the view back to Hornet, which reads as the map rezooming
@@ -300,6 +306,12 @@ public class DsMapView
             if (!HasAnyMap) { ClearContent(); return false; }
             EnsureContent();
         }
+
+        // Every frame, not just on a content refresh: the arrows come back from
+        // outside this code -- a bench FSM calling the TryOpenQuickMap PlayMaker
+        // action -- and the full map has no use for any of them. The frame in
+        // which that happens is handled by LateTick; this is the steady state.
+        if (Mode == Frame.World) HideNextAreaArrows();
 
         _cleared = false;
         Aim();
@@ -370,6 +382,8 @@ public class DsMapView
             _zoom = 1f;
             _forceAssert = true;
             _zoneBoundsOk = false;
+            _lastDropped = 0;
+            _arrows = null;
         }
 
         // The SCENE is the thing that changes on a room transition, not the map.
@@ -664,15 +678,29 @@ public class DsMapView
     ///
     /// So the state is set rather than requested. Only in World mode -- the area
     /// view wants its arrows, and TryOpenQuickMap turns them back on there.
+    ///
+    /// Asserted every frame rather than once per content refresh, because the
+    /// game turns them back on from outside this code entirely: TryOpenQuickMap
+    /// is a PlayMaker action, and resting at a bench runs an FSM that calls it.
+    /// That broadcasts isQuickMap=true to every MapNextAreaDisplay at once, and
+    /// on the full map every zone is drawn, so every arrow in Pharloom appears
+    /// and they pile up on each other. Toggling to the area map and back used to
+    /// be the only way out -- which is exactly the shape of a state that is set
+    /// once and then hoped for.
+    ///
+    /// The array is cached because this now runs per frame: there are ~128 of
+    /// these on the map, and a GetComponentsInChildren per frame is an
+    /// allocation per frame on a phone. Rebind drops the cache when the map
+    /// instance changes, which is the only thing that can invalidate it.
     /// </summary>
     void HideNextAreaArrows()
     {
         try
         {
-            var arrows = _map.GetComponentsInChildren<MapNextAreaDisplay>(true);
-            for (int i = 0; i < arrows.Length; i++)
+            if (_arrows == null) _arrows = _map.GetComponentsInChildren<MapNextAreaDisplay>(true);
+            for (int i = 0; i < _arrows.Length; i++)
             {
-                var a = arrows[i];
+                var a = _arrows[i];
                 if (a != null && a.gameObject.activeSelf) a.gameObject.SetActive(false);
             }
         }
@@ -680,6 +708,38 @@ public class DsMapView
         {
             Debug.LogWarning("[DsMap] could not hide the next-area arrows: " + e.Message);
         }
+    }
+
+    MapNextAreaDisplay[] _arrows;
+    bool _loggedArrows;
+    readonly Vector3[] _corners = new Vector3[4];
+
+    /// <summary>
+    /// Is this world-space point inside the game's own quick-map window?
+    ///
+    /// Shared by the room crop and the arrow crop so the two cannot drift
+    /// apart: an arrow is kept on exactly the rule that keeps its room.
+    /// </summary>
+    bool InWindow(Vector3 world, Vector3 winCentre, Vector2 winHalf, float slack)
+    {
+        Vector3 c = _map.transform.InverseTransformPoint(world);
+        return Mathf.Abs(c.x - winCentre.x) <= winHalf.x + slack
+            && Mathf.Abs(c.y - winCentre.y) <= winHalf.y + slack;
+    }
+
+    /// <summary>
+    /// The last thing this panel does in a frame, after every FSM has had its
+    /// Update and before the cameras draw. See DsMapLateTick.
+    ///
+    /// Deliberately not a general second tick: it does the one job that has to
+    /// happen this late, and asks nothing of the game that could fail. Guarded
+    /// on the map still being bound, because a scene load can take it away
+    /// between our Update and this.
+    /// </summary>
+    void LateTick()
+    {
+        if (Mode != Frame.World || _map == null || !_visible) return;
+        HideNextAreaArrows();
     }
 
     /// <summary>
@@ -734,6 +794,13 @@ public class DsMapView
 
         if (Mode == Frame.World)
         {
+            // The area view's floor is a legibility limit for ONE zone, and the
+            // full map is not one zone: opening the whole of Pharloom at the
+            // Cradle's zoom shows almost none of it. So the full map keeps the
+            // game's own quick-map height as its floor, which is what the area
+            // view used before the fit was tightened -- this branch behaves
+            // exactly as it always did.
+            float worldFloor = Mathf.Max(areaHalf, GameHalfHeight(scale));
             // Latched on entry -- BOTH the height and the centre -- and then left
             // alone. The full map is a place the player has put the camera, so it
             // must not drift under them:
@@ -751,7 +818,7 @@ public class DsMapView
             // because the current zone has no map.
             if (!_worldLatched && (_zoneBoundsOk || !_contentOk))
             {
-                _worldHalf = areaHalf * (DsConfig.Int("map_world_zoom", 100) / 100f);
+                _worldHalf = worldFloor * (DsConfig.Int("map_world_zoom", 100) / 100f);
                 _worldCentreLocal = WorldCentreLocal();
                 _worldLatched = true;
             }
@@ -766,7 +833,7 @@ public class DsMapView
                 // Before the first measurement there is nothing worth latching;
                 // fall back to the map's own camera rather than re-deriving (and
                 // re-logging) the centre every frame.
-                halfHeight = areaHalf * (DsConfig.Int("map_world_zoom", 100) / 100f);
+                halfHeight = worldFloor * (DsConfig.Int("map_world_zoom", 100) / 100f);
                 centre = _srcRooms.transform.position;
             }
         }
@@ -927,10 +994,80 @@ public class DsMapView
     /// rescaling the map underneath us cannot invalidate the measurement --
     /// which is the same reason everything else here is relative to that
     /// transform.
+    ///
+    /// **Measured twice.** A zone's parent object is not the same thing as the
+    /// zone: `Abyss_09`, the shaft between the Deep Docks and the Abyss, has its
+    /// top cap filed under the Docks and its shaft under the Abyss, so each of
+    /// those two zones owns one room some eight units outside the rest of its
+    /// map. Fitting to it drags the centre 3.5 units off and zooms out until the
+    /// zone proper covers a third of the panel -- the reported symptom, and
+    /// across all 30 mapped zones the only two that have it.
+    ///
+    /// The game does not have the problem because it does not fit: it frames
+    /// each zone at an authored anchor and lets the stray room fall off the
+    /// edge. So the crop is Team Cherry's own answer, read back off the live
+    /// camera -- a room the game's quick map does not show is not part of the
+    /// zone's framing. The uncropped extent is kept too, because "where does
+    /// this zone's map exist" is a different question with a different answer.
     /// </summary>
     void MeasureZone()
     {
-        _zoneBoundsOk = MeasureRooms(out _zoneCentreLocal, out _zoneExtents);
+        // Raw first: the extent of everything filed under this zone, which is
+        // what "somewhere the map exists" means for the compass check below.
+        _zoneBoundsOk = MeasureRooms(false, out _zoneCentreRawLocal, out _zoneExtentsRaw);
+
+        // Assigned even on failure, where MeasureRooms zeroes its outputs: the
+        // area view reads the centre without consulting _zoneBoundsOk, and last
+        // zone's centre is a worse answer there than the map's origin.
+        _zoneCentreLocal = _zoneCentreRawLocal;
+        _zoneExtents = _zoneExtentsRaw;
+        if (!_zoneBoundsOk || !DsConfig.Bool("map_crop", true)) return;
+
+        // Then the same measurement minus the rooms the game itself crops. A
+        // failure here is not fatal: the raw fit is what this code did before
+        // the crop existed, and it is wrong by degree rather than in kind.
+        Vector3 centre; Vector2 extents;
+        if (MeasureRooms(true, out centre, out extents))
+        {
+            _zoneCentreLocal = centre;
+            _zoneExtents = extents;
+        }
+    }
+
+    /// <summary>
+    /// The window the game's own quick map is showing, in map-local units.
+    ///
+    /// TryOpenQuickMap frames a zone by moving the MAP to that zone's authored
+    /// anchor; the camera never moves. So the map-local point under the source
+    /// camera is exactly the centre Team Cherry chose for this zone, and it is
+    /// read from the live game rather than from a table -- which matters,
+    /// because the anchor is conditional (the Deep Docks has three, and picks
+    /// between them on progress).
+    /// </summary>
+    bool TryQuickMapWindow(out Vector3 centreLocal, out Vector2 half)
+    {
+        centreLocal = Vector3.zero;
+        half = Vector2.zero;
+        if (_map == null || _srcRooms == null) return false;
+
+        float scale = Mathf.Abs(_map.transform.lossyScale.y);
+        if (scale < 1e-4f || float.IsNaN(scale)) return false;
+
+        centreLocal = _map.transform.InverseTransformPoint(_srcRooms.transform.position);
+
+        float h = _srcRooms.orthographicSize / scale;
+        if (h < 1e-4f || float.IsNaN(h)) return false;
+
+        // The source camera's own aspect, but never narrower than the 16:9 the
+        // game authors its quick maps for. A camera reporting some other shape
+        // -- a render texture resized, an aspect read before the target was
+        // attached -- would narrow this window, and a narrow window crops rooms
+        // that belong. Erring wide only ever crops less.
+        float aspect = _srcRooms.aspect;
+        if (float.IsNaN(aspect) || aspect < 16f / 9f) aspect = 16f / 9f;
+
+        half = new Vector2(h * aspect, h);
+        return true;
     }
 
     /// <summary>
@@ -939,11 +1076,14 @@ public class DsMapView
     /// Taken after WorldMap has enabled every unlocked zone, so it is the extent
     /// of the whole known world rather than of one area. Only used to centre the
     /// full map when there is nothing better to centre on.
+    ///
+    /// Never cropped: the crop asks "does the game's quick map show this room",
+    /// and on the full map the honest answer for nearly every room is no.
     /// </summary>
     void MeasureAll()
     {
         Vector2 ignored;
-        _allBoundsOk = MeasureRooms(out _allCentreLocal, out ignored);
+        _allBoundsOk = MeasureRooms(false, out _allCentreLocal, out ignored);
     }
 
     Vector3 _allCentreLocal;
@@ -958,11 +1098,11 @@ public class DsMapView
     /// camera clipped the wider zones. The fix is not a different constant, it
     /// is to stop using a constant: measure what is actually there and fit it.
     ///
-    /// **Rooms only.** Pins, markers, next-area arrows and the compass are not
-    /// the map, and letting them into the bounds inflates it -- badly, because
-    /// "Compass Icon", "Shade Pos", "Map Markers" and "Flea Tracker Markers"
-    /// survive DisableAllAreas and are therefore active during this measurement
-    /// even when they belong somewhere else entirely. A corpse marker left in
+    /// **Rooms only.** Pins, markers and the compass are not the map, and
+    /// letting them into the bounds inflates it -- badly, because "Compass
+    /// Icon", "Shade Pos", "Map Markers" and "Flea Tracker Markers" survive
+    /// DisableAllAreas and are therefore active during this measurement even
+    /// when they belong somewhere else entirely. A corpse marker left in
     /// another zone would stretch the fit across half of Pharloom.
     ///
     /// They are excluded by the game's own separation rather than by a blacklist
@@ -970,12 +1110,20 @@ public class DsMapView
     /// ~2.5 units nearer in the Decorator Camera's [30,42]. Anything the rooms
     /// camera would not draw is not part of the map's extent.
     ///
+    /// With ONE exception, added back explicitly at the bottom of this method:
+    /// the next-area arrows, which are the one decoration that cannot wander
+    /// and are authored to stick out past the rooms.
+    ///
     /// Stored in MAP-LOCAL units, not world ones, so that the game moving or
     /// rescaling the map underneath us cannot invalidate the measurement --
     /// which is the same reason everything else here is relative to that
     /// transform.
+    ///
+    /// `crop` drops the rooms the game's own quick map does not show. See
+    /// MeasureZone: it is only ever set for a single zone, and it is how the
+    /// Deep Docks stops being framed around a room in the Abyss.
     /// </summary>
-    bool MeasureRooms(out Vector3 centreLocal, out Vector2 extents)
+    bool MeasureRooms(bool crop, out Vector3 centreLocal, out Vector2 extents)
     {
         centreLocal = Vector3.zero;
         extents = Vector2.zero;
@@ -985,8 +1133,26 @@ public class DsMapView
             var cam = _srcRooms.transform;
             float near = _srcRooms.nearClipPlane, far = _srcRooms.farClipPlane;
 
+            float scale = Mathf.Abs(_map.transform.lossyScale.y);
+            if (scale < 1e-4f || float.IsNaN(scale)) scale = 1f;
+
+            Vector3 winCentre = Vector3.zero;
+            Vector2 winHalf = Vector2.zero;
+            bool cropping = crop && TryQuickMapWindow(out winCentre, out winHalf);
+            // Enough slack that a room merely clipped by the game's frame stays
+            // in. What this rejects is a room the game's frame misses entirely,
+            // which in practice means one filed under the wrong zone. The exact
+            // value barely matters: measured across all 30 mapped zones,
+            // anything from 0.5 to 2.0 rejects the same four rooms, because the
+            // strays are ~9.5 units out and the nearest room that belongs is
+            // 2.8 units in.
+            float slack = DsConfig.Int("map_crop_slack", 100) / 100f;
+            int dropped = 0;
+            string first = null;
+
             Bounds b = default(Bounds);
             bool any = false;
+            int kept = 0;
             for (int i = 0; i < renderers.Length; i++)
             {
                 var r = renderers[i];
@@ -997,13 +1163,174 @@ public class DsMapView
                 float depth = cam.InverseTransformPoint(r.bounds.center).z;
                 if (depth < near || depth > far) continue;
 
+                if (cropping)
+                {
+                    // The room's ANCHOR, not its bounds.
+                    //
+                    // This started as a bounds test with the room's own extents
+                    // added to the window -- "keep anything that touches the
+                    // frame" -- and it rejected nothing at all, because the one
+                    // room it was written for is Abyss_09, the shaft between the
+                    // Deep Docks and the Abyss. That is a single sprite some 16
+                    // units tall, so the leniency it was granted was eight units
+                    // of it, and a room big enough to overlap everything can
+                    // never be found to be somewhere else. Sizing a tolerance by
+                    // the thing being tested exempts exactly the outliers.
+                    //
+                    // The anchor has no such problem: it is where the map says
+                    // the room is, which is the question being asked.
+                    Vector3 c = _map.transform.InverseTransformPoint(r.transform.position);
+                    if (!InWindow(r.transform.position, winCentre, winHalf, slack))
+                    {
+                        dropped++;
+                        if (first == null)
+                            first = r.name + " at " + c.x.ToString("F1") + "," + c.y.ToString("F1");
+                        continue;
+                    }
+                }
+
+                kept++;
                 if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds);
             }
 
             if (!any) return false;
 
-            float scale = Mathf.Abs(_map.transform.lossyScale.y);
-            if (scale < 1e-4f || float.IsNaN(scale)) scale = 1f;
+            // Logged only when the count changes, because this runs on every
+            // re-assert and the answer is the same every time.
+            bool report = dropped > 0 && dropped != _lastDropped;
+            if (dropped > 0) _lastDropped = dropped;
+
+            // A crop that takes a third of the zone is not finding a stray, it
+            // is missing the zone. The only way that happens is the window being
+            // wrong -- a camera moved, an anchor not yet applied -- and in that
+            // case the uncropped measurement is the trustworthy one. Refusing is
+            // cheap: MeasureZone keeps what it already has.
+            if (dropped * 2 > kept)
+            {
+                if (report)
+                    Debug.LogWarning("[DsMap] crop rejected " + dropped + " of " + (dropped + kept) +
+                                     " rooms; ignoring it and fitting to all of them");
+                return false;
+            }
+
+            // The next-area arrows are part of the frame.
+            //
+            // They are not rooms -- they sit in the decorator's depth slice, so
+            // the loop above filters them out with the pins and the compass --
+            // but unlike a pin they cannot wander: MapNextAreaDisplay.Refresh
+            // reads the GameMapScene it hangs under, so every arrow is a child
+            // of a room in this very zone. They are also the one decoration
+            // that is authored to stick OUT past the rooms, by around 0.7 to
+            // 1.0 units, which is what makes them the thing a tight fit clips
+            // first -- and an arrow saying "the map continues this way" is
+            // useless with its head cut off.
+            //
+            // Renderer, not SpriteRenderer. An arrow is TWO objects: "Map_Arrow"
+            // carries the sprite and "Area Name" is world-space TextMeshPro,
+            // which draws through a MeshRenderer and is invisible to a sprite
+            // query. Fitting only the sprites left the label -- the wider half
+            // of the pair, and the half that says WHICH way -- hanging over the
+            // edge.
+            //
+            // Cropped on the same rule as the rooms, so an arrow belonging to a
+            // room the game does not show cannot smuggle that room's position
+            // back into the fit.
+            if (crop && DsConfig.Bool("map_fit_arrows", true))
+            {
+                Vector2 roomsOnly = new Vector2(b.extents.x / scale, b.extents.y / scale);
+                int fitted = 0;
+                var arrows = _map.GetComponentsInChildren<MapNextAreaDisplay>(false);
+                for (int i = 0; i < arrows.Length; i++)
+                {
+                    if (arrows[i] == null) continue;
+
+                    // Measure the label by its GLYPHS, not by its layout box.
+                    //
+                    // TryOpenQuickMap switched these arrows on a few statements
+                    // ago, and TMP does not build a mesh when a label is
+                    // activated -- it does it in its own update, which for this
+                    // frame has not happened yet. So the MeshRenderer is sitting
+                    // on an empty mesh and the label measures as nothing, which
+                    // is why fitting the arrows first moved the frame by exactly
+                    // the width of the arrowheads.
+                    //
+                    // The obvious repair -- fall back to the RectTransform --
+                    // was much worse than the disease. Every one of these labels
+                    // is authored 8.33 x 4.11 at scale 0.588, i.e. 4.9 x 2.4 map
+                    // units centred on the arrow, whatever it says; "BONE EAST"
+                    // does not fill a box that size and neither does anything
+                    // else. Fitting to it pushed the Deep Docks from a half
+                    // width of 5.8 to 8.7 and did the same to every zone with an
+                    // arrow in it, which is what made the whole map feel small.
+                    //
+                    // textBounds is the answer: TMP_Text.GetTextBounds walks the
+                    // character info and returns the extent of the VISIBLE
+                    // glyphs, in the label's own space, computed during
+                    // generation rather than by the renderer. So it is both
+                    // tight and available the moment ForceMeshUpdate returns.
+                    var labels = arrows[i].GetComponentsInChildren<Tmp>(false);
+                    for (int k = 0; k < labels.Length; k++)
+                    {
+                        var lab = labels[k];
+                        if (lab == null) continue;
+
+                        try { lab.ForceMeshUpdate(); } catch { }
+
+                        Bounds tb;
+                        try { tb = lab.textBounds; } catch { continue; }
+                        // No visible glyphs is not a measurement failure, it is
+                        // a label with nothing to show.
+                        if (tb.size.x < 1e-3f || tb.size.y < 1e-3f) continue;
+                        if (cropping && !InWindow(lab.transform.position, winCentre, winHalf, slack))
+                            continue;
+
+                        var lt = lab.transform;
+                        _corners[0] = lt.TransformPoint(new Vector3(tb.min.x, tb.min.y, 0f));
+                        _corners[1] = lt.TransformPoint(new Vector3(tb.max.x, tb.min.y, 0f));
+                        _corners[2] = lt.TransformPoint(new Vector3(tb.min.x, tb.max.y, 0f));
+                        _corners[3] = lt.TransformPoint(new Vector3(tb.max.x, tb.max.y, 0f));
+                        for (int c = 0; c < 4; c++) b.Encapsulate(_corners[c]);
+                        fitted++;
+                    }
+
+                    // The arrowhead itself, which is an ordinary sprite. Asked
+                    // for as a SpriteRenderer rather than a Renderer so that the
+                    // labels' MeshRenderers -- already measured, and measured
+                    // better -- cannot come back in through this door.
+                    var parts = arrows[i].GetComponentsInChildren<SpriteRenderer>(false);
+                    for (int j = 0; j < parts.Length; j++)
+                    {
+                        var r = parts[j];
+                        if (r == null || !r.enabled || r.sprite == null) continue;
+                        if (cropping && !InWindow(r.transform.position, winCentre, winHalf, slack))
+                            continue;
+                        b.Encapsulate(r.bounds);
+                        fitted++;
+                    }
+                }
+
+                // One line per zone, because "the arrows are still off screen"
+                // and "the arrows were never measured" look identical on the
+                // panel and cost a seven-minute build to tell apart.
+                if (!_loggedArrows)
+                {
+                    _loggedArrows = true;
+                    Debug.Log("[DsMap] fitted " + fitted + " arrow part(s) of " + arrows.Length +
+                              " arrow(s); extents " + roomsOnly.x.ToString("F1") + "," +
+                              roomsOnly.y.ToString("F1") + " -> " +
+                              (b.extents.x / scale).ToString("F1") + "," +
+                              (b.extents.y / scale).ToString("F1"));
+                }
+            }
+
+            if (report)
+                Debug.Log("[DsMap] cropped " + dropped + " of " + (dropped + kept) +
+                          " room(s) the game's own quick map does not show, first " + first +
+                          " | window centre=" + winCentre.x.ToString("F1") + "," +
+                          winCentre.y.ToString("F1") +
+                          " half=" + winHalf.x.ToString("F1") + "," + winHalf.y.ToString("F1") +
+                          " -> extents=" + (b.extents.x / scale).ToString("F1") + "," +
+                          (b.extents.y / scale).ToString("F1"));
 
             centreLocal = _map.transform.InverseTransformPoint(b.center);
             extents = new Vector2(b.extents.x / scale, b.extents.y / scale);
@@ -1018,26 +1345,74 @@ public class DsMapView
 
     Vector3 _zoneCentreLocal;
     Vector2 _zoneExtents;
+    Vector3 _zoneCentreRawLocal;
+    Vector2 _zoneExtentsRaw;
     bool _zoneBoundsOk;
+    int _lastDropped;
+
+    /// <summary>
+    /// The height the game's own quick map is showing, in map units.
+    ///
+    /// Not a framing this panel wants -- see AreaHalfHeight -- but the one
+    /// framing that is known to show the zone, which makes it the right answer
+    /// when there is nothing to measure and the right floor for the full map.
+    /// </summary>
+    float GameHalfHeight(float scale)
+    {
+        return _srcRooms.orthographicSize / scale;
+    }
 
     /// <summary>
     /// How much map to show, in map units, so the whole zone fits this panel.
     ///
-    /// Floored at the game's own quick-map height: fitting a one-room zone would
-    /// otherwise fill the panel with a single corridor, and "never more zoomed in
-    /// than L1" is a rule with no downside.
+    /// Floored, because fitting a one-room zone would fill the panel with a
+    /// single corridor. The floor used to be the game's own quick-map height,
+    /// on the reasoning that "never more zoomed in than L1" costs nothing.
+    /// Measuring all 30 mapped zones says otherwise: it was binding on 24 of
+    /// them and cost up to 3.5x, because it is the height of a FULL-SCREEN 16:9
+    /// frame -- the game shows 21.0 x 11.8 map units there, this panel shows
+    /// 15.8 x 11.8 -- and most of Pharloom's zones do not fill even the game's
+    /// version of it. Inheriting that height inherits its empty parchment and
+    /// loses the width as well. The Cradle covered a quarter of the panel.
+    ///
+    /// So the floor is now about legibility rather than about the game's camera:
+    /// 2.5 map units of half-height is ~10 rooms tall at the measured median
+    /// room pitch of 0.5, which is nobody's idea of a single corridor. Across
+    /// the 30 zones the median fill goes from 68% to 99%, and the four zones the
+    /// floor still binds on -- Moss Cave, Hang, the Cradle, the Front Gate --
+    /// are genuinely tiny rather than mis-framed, the worst of them at 79%.
+    ///
+    /// Note that a zone we could not measure still falls back to the game's
+    /// height, not to this floor: the floor is a limit on how far a KNOWN extent
+    /// may be zoomed into, and applying it to an unknown one would frame a
+    /// fraction of the map and call it the zone.
     /// </summary>
     float AreaHalfHeight(float scale)
     {
-        float floor = _srcRooms.orthographicSize / scale;
-        if (!_zoneBoundsOk) return floor;
+        if (!_zoneBoundsOk) return GameHalfHeight(scale);
 
         float aspect = _rtW / (float)Mathf.Max(_rtH, 1);
-        float fit = Mathf.Max(_zoneExtents.y, _zoneExtents.x / Mathf.Max(aspect, 0.01f));
-        // Breathing room, so the outermost rooms are not flush against the frame
-        // and the fit does not look like a crop that just happened to work.
-        fit *= DsConfig.Int("map_pad", 115) / 100f;
-        return Mathf.Max(fit, floor);
+
+        // Breathing room, in PANEL PIXELS rather than as a fraction of the zone.
+        //
+        // This was a 15% multiplier, which is a margin that grows with the thing
+        // it surrounds: Greymoor got 1.1 map units of border and the Cradle got
+        // 0.4, for a reason that exists in the arithmetic and nowhere on the
+        // panel. What the margin is actually for is keeping the outermost room
+        // off the edge of the frame, and "off the edge" is a distance in pixels.
+        //
+        // So the fit is the extent divided by the fraction of the panel it is
+        // allowed to occupy, which is the whole panel less the border on both
+        // sides -- worked out per axis, because the panel is not square and a
+        // fixed pixel border is a different fraction of each.
+        int px = Mathf.Clamp(DsConfig.Int("map_pad_px", 5), 0, 200);
+        float usableH = Mathf.Max(_rtH - 2 * px, 1) / (float)Mathf.Max(_rtH, 1);
+        float usableW = Mathf.Max(_rtW - 2 * px, 1) / (float)Mathf.Max(_rtW, 1);
+
+        float fit = Mathf.Max(_zoneExtents.y / usableH,
+                              (_zoneExtents.x / Mathf.Max(aspect, 0.01f)) / usableW);
+
+        return Mathf.Max(fit, DsConfig.Int("map_min_half", 250) / 100f);
     }
     /// <summary>
     /// Where the full map should centre, in the map's own coordinates.
@@ -1095,11 +1470,16 @@ public class DsMapView
 
         // A stale one sits outside the map. Half an extent of slack, so being
         // near the edge of a zone is fine and being in another region is not.
+        //
+        // Against the UNCROPPED extent deliberately. The framing extent leaves
+        // out rooms the game's quick map does not show, but Hornet can stand in
+        // one of them -- the Abyss_09 shaft is exactly such a room -- and a
+        // compass reading from a room that exists is not a stale one.
         if (_zoneBoundsOk)
         {
-            Vector2 slack = _zoneExtents * 1.5f;
-            if (Mathf.Abs(local.x - _zoneCentreLocal.x) > slack.x + 1f ||
-                Mathf.Abs(local.y - _zoneCentreLocal.y) > slack.y + 1f) return false;
+            Vector2 slack = _zoneExtentsRaw * 1.5f;
+            if (Mathf.Abs(local.x - _zoneCentreRawLocal.x) > slack.x + 1f ||
+                Mathf.Abs(local.y - _zoneCentreRawLocal.y) > slack.y + 1f) return false;
         }
         return true;
     }
@@ -1232,6 +1612,32 @@ public class DsMapRigLifetime : MonoBehaviour
         try { Texture.Release(); } catch { }
         UnityEngine.Object.Destroy(Texture);
         Texture = null;
+    }
+}
+
+/// <summary>
+/// A hook that runs after every Update in the frame, and before anything is
+/// drawn.
+///
+/// This exists for one reason: the frame in which you sit at a bench. The bench
+/// runs a PlayMaker FSM, TryOpenQuickMap is a PlayMaker action, and the arrows
+/// therefore come back on during somebody else's Update. Ours had already run,
+/// so the arrows were switched off one frame late -- correct, and visibly so,
+/// which is the definition of a flicker.
+///
+/// Script execution order between two Updates is not something to have an
+/// opinion about; LateUpdate versus Update is. Unity runs every Update, then
+/// every LateUpdate, then renders, so a hide placed here lands after any FSM
+/// that could have undone it and still before the camera that would have shown
+/// it. It rides on the rig so it dies with the panel.
+/// </summary>
+public class DsMapLateTick : MonoBehaviour
+{
+    public Action Tick;
+
+    void LateUpdate()
+    {
+        if (Tick != null) Tick();
     }
 }
 #endif
