@@ -123,6 +123,63 @@
         android:layout_marginBottom="24dp"
         android:layout_marginStart="4dp" />
 
+    <!-- ───── Clear the build ─────
+         Last, and visually separated, because it is the only control here
+         that destroys anything. -->
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/text_dim"
+        android:alpha="0.3"
+        android:layout_marginBottom="16dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <Button
+            android:id="@+id/btn_clear_build"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_clear_build"
+            android:textSize="15sp"
+            android:textColor="@color/text_primary"
+            android:backgroundTint="@color/hornet_red_dim"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:minHeight="0dp" />
+
+        <Button
+            android:id="@+id/btn_settings_logs"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/action_logs"
+            android:textSize="15sp"
+            android:textColor="@color/text_on_control"
+            android:backgroundTint="@color/surface_control"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:minHeight="0dp"
+            android:layout_marginStart="10dp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_clear_build_subtitle"
+        android:textColor="@color/text_dim"
+        android:textSize="12sp"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="24dp"
+        android:layout_marginStart="4dp" />
+
     <Button
         android:id="@+id/btn_settings_back"
         android:layout_width="wrap_content"

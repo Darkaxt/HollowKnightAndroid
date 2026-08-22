@@ -24,6 +24,8 @@
 package dev.silksong.launcher
 
 import android.app.Activity
+import android.app.AlertDialog
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
 import android.widget.Switch
@@ -36,6 +38,7 @@ class SettingsActivity : Activity() {
     private lateinit var swPerfOverlay: Switch
     private lateinit var swSkipIntro: Switch
     private lateinit var swDualScreen: Switch
+    private lateinit var btnClearBuild: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -84,5 +87,93 @@ class SettingsActivity : Activity() {
         }
 
         btnBack.setOnClickListener { finish() }
+
+        btnClearBuild = findViewById(R.id.btn_clear_build)
+        btnClearBuild.setOnClickListener { confirmClearBuild() }
+        // Offered only when there is a build to clear. A destructive-looking
+        // button that does nothing is worse than no button.
+        btnClearBuild.isEnabled = BuildReset.hasBuild(this)
+        btnClearBuild.alpha = if (btnClearBuild.isEnabled) 1f else 0.4f
+
+        // The same screen the porting flow offers, because the person who
+        // needs a log is as likely to have reached this screen as that one.
+        findViewById<Button>(R.id.btn_settings_logs).setOnClickListener {
+            startActivity(Intent(this, LogActivity::class.java))
+        }
+    }
+
+    /**
+     * Asks first, and says what will and will not survive.
+     *
+     * The scary half of the sentence is what is kept, not what is deleted:
+     * "clear data" on Android means the saves go too, and this is the same
+     * words for a very different thing.
+     */
+    private fun confirmClearBuild() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_clear_build_title)
+            .setMessage(R.string.settings_clear_build_message)
+            .setNegativeButton(R.string.settings_cancel, null)
+            .setPositiveButton(R.string.settings_clear_build_confirm) { _, _ -> clearBuild() }
+            .show()
+    }
+
+    private fun clearBuild() {
+        // Gigabytes across thousands of small files, so not on the main
+        // thread -- and not cancellable either, because a half-deleted build
+        // is the state this exists to get out of.
+        val progress = AlertDialog.Builder(this)
+            .setMessage(getString(R.string.settings_clear_build_working))
+            .setCancelable(false)
+            .show()
+
+        Thread({
+            var error: Throwable? = null
+            try {
+                BuildReset.clear(this)
+            } catch (t: Throwable) {
+                error = t
+                LauncherLog.log("could not clear the build", t)
+            }
+            runOnUiThread {
+                runCatching { progress.dismiss() }
+                val failure = error
+                if (failure != null) {
+                    AlertDialog.Builder(this)
+                        .setMessage(getString(R.string.settings_clear_build_failed,
+                                              failure.message ?: failure.javaClass.simpleName))
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
+                    return@runOnUiThread
+                }
+                startPorting()
+            }
+        }, "clear-build").start()
+    }
+
+    /**
+     * Back to the porting screen, with nothing stale behind it.
+     *
+     * SetupActivity is the app's entry point and works out what to show from
+     * what is on disk, which is now "a game that needs building"; its onResume
+     * re-reads that, so a reused instance is as correct as a new one.
+     *
+     * CLEAR_TOP finishes everything above it in the task -- this screen and the
+     * launcher behind it, both of which are describing a game that no longer
+     * exists -- and SINGLE_TOP delivers to the existing instance rather than
+     * stacking a second. finishAffinity is deliberately not used: it would
+     * close the task this has just started an activity into.
+     */
+    private fun startPorting() {
+        try {
+            startActivity(
+                Intent(this, SetupActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            )
+            finish()
+        } catch (t: Throwable) {
+            LauncherLog.log("could not open the porting screen: $t")
+            finish()
+        }
     }
 }
