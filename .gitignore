@@ -15,7 +15,14 @@ PLAN.md
 # Gradle build intermediates. Per-machine paths; never commit.
 src/SilksongLauncher.Launcher/app/build/
 
-# Machine-specific paths for the depot-to-apk dev loop.
+# Signing keys. The keystore IS the app's identity on Android: anything signed
+# with it is accepted as an update to an existing install, so a leaked one lets
+# somebody else ship to every user who has this app. Never in a commit.
+*.jks
+*.keystore
+
+# Machine-specific paths for the depot-to-apk dev loop, and the signing
+# passwords that go with them.
 tools/depot-to-apk/dev.env
 
 # Staged into the APK by Gradle from tools/ at build time: the on-device build
