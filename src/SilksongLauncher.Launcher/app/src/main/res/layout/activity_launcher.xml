@@ -56,6 +56,7 @@
                     android:textSize="16sp"
                     android:textColor="@color/text_on_control"
                     android:backgroundTint="@color/surface_control"
+                    android:foreground="@drawable/focus_on_light"
                     android:paddingTop="18dp"
                     android:paddingBottom="18dp"
                     android:minHeight="0dp"
@@ -83,6 +84,7 @@
                             android:textSize="16sp"
                             android:textColor="@color/text_on_control"
                             android:backgroundTint="@color/surface_control"
+                            android:foreground="@drawable/focus_on_light"
                             android:paddingTop="18dp"
                             android:paddingBottom="18dp"
                             android:minHeight="0dp"
@@ -112,6 +114,7 @@
                             android:textSize="16sp"
                             android:textColor="@color/text_on_control"
                             android:backgroundTint="@color/surface_control"
+                            android:foreground="@drawable/focus_on_light"
                             android:paddingTop="18dp"
                             android:paddingBottom="18dp"
                             android:minHeight="0dp"
@@ -137,6 +140,7 @@
                     android:textSize="16sp"
                     android:textColor="@color/text_on_control"
                     android:backgroundTint="@color/surface_control"
+                    android:foreground="@drawable/focus_on_light"
                     android:paddingTop="18dp"
                     android:paddingBottom="18dp"
                     android:minHeight="0dp" />
@@ -151,6 +155,7 @@
                     android:textSize="13sp"
                     android:textColor="@color/text_dim"
                     android:backgroundTint="@android:color/transparent"
+                    android:foreground="@drawable/focus_on_dark"
                     android:paddingTop="8dp"
                     android:paddingBottom="8dp"
                     android:minHeight="0dp" />
@@ -160,6 +165,12 @@
                     android:layout_height="0dp"
                     android:layout_weight="1" />
 
+                <!--
+                  focusedByDefault, so a controller lands here rather than on
+                  whatever happens to be first in the tree. Declarative on
+                  purpose: requestFocus() from code is what put this activity
+                  into non-touch mode and cost every button a second press.
+                -->
                 <Button
                     android:id="@+id/btn_launch"
                     android:layout_width="match_parent"
@@ -169,12 +180,27 @@
                     android:textStyle="bold"
                     android:textColor="@color/text_primary"
                     android:backgroundTint="@color/hornet_red"
+                    android:foreground="@drawable/focus_on_dark"
                     android:paddingTop="18dp"
                     android:paddingBottom="18dp"
-                    android:minHeight="0dp" />
+                    android:minHeight="0dp"
+                    android:focusedByDefault="true" />
             </LinearLayout>
 
             <!-- ── Right: the log ──────────────────────────────────── -->
+            <!--
+              Nothing here takes focus. A ScrollView is focusable by default so
+              that a D-pad can scroll it, and textIsSelectable quietly makes a
+              TextView focusable too, so on a handheld the first stick movement
+              landed in the log and stayed there: the buttons could not be
+              reached at all. The log is a status feed, not a control, and
+              selecting text in it belongs to the Logs screen, which does it
+              properly with Share and Copy.
+
+              blocksDescendants rather than focusable="false" alone, because
+              that only excuses the ScrollView itself and the TextView inside it
+              was the other half of the problem.
+            -->
             <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
@@ -187,7 +213,10 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:fillViewport="true"
-                    android:scrollbars="vertical">
+                    android:scrollbars="vertical"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:descendantFocusability="blocksDescendants">
 
                     <TextView
                         android:id="@+id/txt_log"
@@ -197,7 +226,7 @@
                         android:textColor="@color/text_dim"
                         android:textSize="10sp"
                         android:fontFamily="monospace"
-                        android:textIsSelectable="true" />
+                        android:focusable="false" />
                 </ScrollView>
             </FrameLayout>
         </LinearLayout>

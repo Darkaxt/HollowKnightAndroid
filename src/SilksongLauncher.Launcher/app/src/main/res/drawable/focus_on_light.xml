@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The focus ring for controls that sit on a LIGHT fill.
+
+  The platform's own focus highlight is a faint wash, which on a #B4AEB2 button
+  is very nearly nothing: with a controller you could not tell which button you
+  were on. This is a foreground rather than a background so that it is purely
+  additive. The resting fill, the ripple and the dimming of a disabled button
+  all still come from backgroundTint and are untouched.
+
+  Red rather than white or black: white on a light grey button is invisible,
+  and black reads as the button merely getting smaller against the near-black
+  page. Red is the one colour on this page that cannot be mistaken for either,
+  and a ring that only exists while the control is focused does not compete
+  with Launch for attention the way a red control would.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+            <stroke
+                android:width="4dp"
+                android:color="@color/hornet_red" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+        </shape>
+    </item>
+</selector>
