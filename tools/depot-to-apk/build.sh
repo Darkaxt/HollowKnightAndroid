@@ -251,6 +251,25 @@ XML
     <uses-feature android:glEsVersion="0x00030002" android:required="true" />
     <uses-permission android:name="android.permission.INTERNET" />
     <!--
+      Storage, for the folder a user may pick to say where their copy of the
+      game already is. The picker hands back a URI; what every step after it
+      needs is a path, because the catalog is repointed at a symlink to the
+      depot's own content tree and the retarget rewrites that tree in place
+      through a .NET process. Neither of those can go through a provider.
+
+      Plain file access to a picked folder is available because this app
+      targets SDK 28, which SELinux forces on us anyway (see TARGET_SDK
+      above): the platform gives an app below 29 the legacy storage view,
+      which is the whole volume once READ_EXTERNAL_STORAGE is granted. The two
+      constraints happen to want the same thing.
+
+      Requested at runtime, and refusing costs nothing. The app's own external
+      directory needs no permission, is still where a download goes, and is
+      still the first place a hand copied depot is looked for.
+    -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <!--
       Steam's CDN serves depot chunks over plain HTTP, and its own clients
       download them that way: each chunk is encrypted with the depot key and
       checksummed before anything is written, so the transport adds nothing

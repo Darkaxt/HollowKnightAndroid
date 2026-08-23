@@ -36,6 +36,7 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
@@ -68,6 +69,8 @@ class SetupActivity : Activity() {
         private const val ABI = "arm64"
 
         private const val REQ_LOGIN = 1
+        private const val REQ_PICK_DEPOT = 2
+        private const val REQ_STORAGE = 3
     }
 
     private lateinit var header: TextView
@@ -77,6 +80,8 @@ class SetupActivity : Activity() {
     private lateinit var progress: ProgressBar
     private lateinit var primary: Button
     private lateinit var secondary: Button
+    private lateinit var resetBuild: Button
+    private lateinit var changeFolder: Button
     private var busy = false
     // Set by an action to explain what just happened; cleared when the next
     // one starts. Null means the state summary is shown instead.
@@ -109,7 +114,12 @@ class SetupActivity : Activity() {
 
     // The depot lands on external storage: it is ~8 GB of data, not code, and
     // nothing has to execute out of it.
-    private val depotDir: File? get() = getExternalFilesDir(null)?.let { File(it, "depot") }
+    //
+    // Every volume is considered, not just the primary one, and so is a folder
+    // the user picked. DepotLocation owns that order and the reasons for it;
+    // this screen asks rather than knowing.
+    private val depotDirs: List<File> get() = DepotLocation.candidates(this)
+    private val depotDir: File? get() = DepotLocation.resolve(this)
     private val depotStagingDir: File? get() = getExternalFilesDir(null)?.let { File(it, "depot-staging") }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -189,10 +199,19 @@ class SetupActivity : Activity() {
         "1|" + md.digest().joinToString("") { "%02x".format(it) }.take(16)
     }
 
-    /** The game is built and ready to play. */
+    /**
+     * The game is built and ready to play.
+     *
+     * The depot counts, and not only because the build reads it: the content
+     * is never copied inside the app, so a game whose files have been deleted
+     * or moved since it was built is not ready to play, however finished the
+     * build is. Answering yes would send the user to a Play button that starts
+     * a world with nothing in it.
+     */
     private fun isBuilt(): Boolean =
         dataApk.isFile && File(engineDir, "libil2cpp.so").length() > 0 &&
             UnityDex.isBuilt(this, UnityFetcher.rootFor(this)) &&
+            haveGameFiles() &&
             runCatching { builtMarker.readText() }.getOrNull() == buildSignature
 
     /** The game's own files are on this device, however they got here. */
@@ -265,25 +284,63 @@ class SetupActivity : Activity() {
         // Below the actions, small and quiet, but on THIS screen rather than
         // only in the launcher: setup is where the failures that need
         // reporting happen, and a user who never gets past it would otherwise
-        // never reach a log screen at all.
-        root.addView(Button(this).apply {
-            text = "View logs"
-            setOnClickListener {
-                try {
-                    startActivity(Intent(this@SetupActivity, LogActivity::class.java))
-                } catch (t: Throwable) {
-                    say("Could not open the logs: ${t.message}")
-                }
+        // never reach a log screen at all. The reset is here for the same
+        // reason -- a build that went wrong is looked at from this screen, and
+        // sending someone into the settings menu to get out of it is a detour
+        // through a screen about something else.
+        val quiet = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+        }
+        resetBuild = quietButton("Reset build") { confirmClearBuild() }
+        changeFolder = quietButton("Change folder") { chooseFolder() }
+        quiet.addView(changeFolder)
+        quiet.addView(resetBuild)
+        quiet.addView(quietButton("View logs") {
+            try {
+                startActivity(Intent(this@SetupActivity, LogActivity::class.java))
+            } catch (t: Throwable) {
+                say("Could not open the logs: ${t.message}")
             }
-            backgroundTintList = android.content.res.ColorStateList.valueOf(Color.TRANSPARENT)
-            setTextColor(Color.parseColor("#7A6E71"))
-            textSize = 13f
-            setPadding(0, dp(10), 0, 0)
-        }, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            gravity = android.view.Gravity.END
         })
+        root.addView(quiet, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         return root
+    }
+
+    /** The small text-only actions under the buttons that matter. */
+    private fun quietButton(label: String, onClick: () -> Unit) = Button(this).apply {
+        text = label
+        setOnClickListener { onClick() }
+        backgroundTintList = android.content.res.ColorStateList.valueOf(Color.TRANSPARENT)
+        setTextColor(Color.parseColor("#7A6E71"))
+        textSize = 13f
+        setPadding(0, dp(10), 0, 0)
+    }
+
+    /**
+     * The two quiet actions, which are recovery tools rather than a menu.
+     *
+     * Both are gone once the game is built. This screen is not where a built
+     * game is administered -- the launcher is, and its settings screen already
+     * carries the reset; onResume forwards there the moment a build is found,
+     * so the built state here lasts only for the moment after a port finishes.
+     * Offering "reset the build" beside "Play" at exactly that moment invites
+     * undoing the half hour that just ran.
+     *
+     * Changing the folder is not needed there either, and that is by
+     * construction rather than by luck: the depot is part of isBuilt, so files
+     * that are moved or deleted put this screen straight back into the state
+     * where the picker is the main button.
+     */
+    private fun updateReset(built: Boolean = isBuilt()) {
+        val offer = !busy && !built
+        resetBuild.visibility =
+            if (offer && BuildReset.hasBuild(this)) View.VISIBLE else View.GONE
+        // Not while the big "choose folder" button is up: the same action
+        // twice on one screen is a question about which one is different.
+        changeFolder.visibility =
+            if (offer && secondary.visibility != View.VISIBLE) View.VISIBLE else View.GONE
     }
 
     /**
@@ -315,23 +372,26 @@ class SetupActivity : Activity() {
                     "Some supporting tools are downloaded as part of this, so an internet " +
                     "connection is needed while it runs.\n\n" +
                     "Expect 20-30 minutes on a Snapdragon 8 Gen 2, depending on your network " +
-                    "speed. Keep the app open while it works."
+                    "speed. Keep the app open while it works. Don't delete the game's files " +
+                    "afterwards: they are read from where they are every time you play."
                 primary.text = "Start porting"
                 primary.visibility = View.VISIBLE
                 secondary.visibility = View.GONE
             }
             else -> {
                 status.text = message ?: "Where is your copy of Silksong?"
-                detail.text = "Sign in to Steam to download it, or copy the game's files to\n" +
-                    "${depotDir?.absolutePath ?: "external storage"}"
+                detail.text = "Sign in to Steam to download it, or choose the folder you " +
+                    "copied the game's Linux files into.\n\n" +
+                    "Copying them to\n${depotDir?.absolutePath ?: "external storage"}\nworks too."
                 primary.text = if (signedIn()) "Download from Steam" else "Sign in to Steam"
                 primary.visibility = View.VISIBLE
-                secondary.text = "I have the files"
+                secondary.text = "Choose folder"
                 secondary.visibility = View.VISIBLE
             }
         }
         primary.isEnabled = true
         secondary.isEnabled = true
+        updateReset(built)
     }
 
     /**
@@ -358,6 +418,7 @@ class SetupActivity : Activity() {
         if (running) message = null
         primary.visibility = if (running) View.GONE else View.VISIBLE
         secondary.visibility = if (running) View.GONE else View.VISIBLE
+        updateReset()
         progress.visibility = if (running) View.VISIBLE else View.INVISIBLE
         stepLabel.visibility = if (running && stepNumber > 0) View.VISIBLE else View.GONE
         // The heading says what the app is doing, not what it is called: this
@@ -415,19 +476,118 @@ class SetupActivity : Activity() {
     /**
      * "I have the files."
      *
-     * There is no folder picker: the game is eight gigabytes and copying it a
-     * second time to satisfy a permission model is not a reasonable thing to
-     * ask. The app's own external directory needs no permission and is
-     * reachable over USB or from any file manager, so the answer is to look
-     * there and say plainly what was expected if it is empty.
+     * The game is eight gigabytes, so the answer cannot be to copy it a second
+     * time into somewhere this app can see. It has to be used where it already
+     * is -- and that means a real path, not a Storage Access Framework URI:
+     * the catalog is repointed at a symlink to the depot's own content tree,
+     * and the retarget rewrites that tree in place through a .NET process.
+     * DepotLocation carries the whole argument.
+     *
+     * So: the system folder picker, resolved to a path, checked before it is
+     * kept. Storage permission is asked for first, because without it the
+     * picked folder is a name this app cannot open -- the picker grants access
+     * to a URI, and what happens here is file access to a path.
+     *
+     * The app's own external directory is still searched first and still
+     * works. Nobody who already copied the game there has to do anything.
      */
     private fun onSecondary() {
         refresh()
         if (haveGameFiles()) return
-        val where = depotDir?.absolutePath ?: "external storage"
-        say("No game files found.")
-        detail.text = "Copy the game's files -- \"Hollow Knight Silksong_Data\" and " +
-            "everything beside it -- into\n$where\nthen press this again."
+        for (dir in depotDirs) LauncherLog.log("depot $dir: ${PlayerImage.depotProblem(dir)}")
+        chooseFolder()
+    }
+
+    /** Ask for what the picker needs, then open it. */
+    private fun chooseFolder() {
+        if (!DepotLocation.hasPermission(this)) {
+            requestPermissions(DepotLocation.PERMISSIONS, REQ_STORAGE)
+            return
+        }
+        pickDepotFolder()
+    }
+
+    private fun pickDepotFolder() {
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(DepotLocation.pickIntent(), REQ_PICK_DEPOT)
+        } catch (t: Throwable) {
+            LauncherLog.log("no folder picker on this device", t)
+            sayWhereToCopy("This device has no folder picker.")
+        }
+    }
+
+    /**
+     * What was picked, if anything usable was.
+     *
+     * "Not usable" is never left at that. The person doing this is looking at
+     * their own files and needs to know which of the several possible things
+     * went wrong -- the wrong folder, an unfinished copy, or a card this app
+     * is allowed to read and not to write. All of it goes to the log too,
+     * because the report of this failing reaches us second-hand.
+     */
+    private fun onDepotPicked(uri: Uri?) {
+        if (uri == null) {
+            refresh()
+            return
+        }
+        val before = depotDir
+        // Taken even though the path is what gets used: it costs nothing and
+        // it is the only durable record that this folder was granted at all.
+        runCatching {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        }
+        val dir = DepotLocation.pathFor(uri)
+        LauncherLog.log("picked $uri -> ${dir?.absolutePath ?: "no path behind it"}")
+        if (dir == null) {
+            sayWhereToCopy("That folder is not on this device's own storage.")
+            return
+        }
+        val problem = DepotLocation.problemWith(dir)
+        if (problem != null) {
+            LauncherLog.log("rejected $dir: ${problem.lines().first()}")
+            say("That folder cannot be used.")
+            detail.text = "$dir\n\n$problem"
+            return
+        }
+        DepotLocation.remember(this, dir)
+        DepotLocation.writeMarker(dir)
+        // A different folder is a different content tree, and the built game
+        // reads that tree directly rather than a copy. It has almost certainly
+        // never been retargeted -- and the stamp that would say so identifies
+        // a tree by what is in it, so it cannot tell "already done" from
+        // "never seen". Dropping it, and the marker that says the build
+        // finished, sends the user back through a run that redoes the retarget
+        // and skips everything else.
+        if (before != null && before.absolutePath != dir.absolutePath) {
+            LauncherLog.log("depot moved from $before; the content will be retargeted again")
+            PlayerImage.invalidateContent(Il2cppConverter.rootFor(this))
+            builtMarker.delete()
+        }
+        message = null
+        refresh()
+    }
+
+    /**
+     * The route that has always worked, offered when picking cannot.
+     *
+     * The app's own external directory needs no permission and is reachable
+     * over USB or from any file manager, so it is the fallback whatever the
+     * device does about anything else.
+     */
+    private fun sayWhereToCopy(why: String) {
+        val where = DepotLocation.appDirs(this).firstOrNull()
+        if (where == null) {
+            say("No external storage to look in.")
+            return
+        }
+        say(why)
+        detail.text = "Copy the game's Linux files to\n$where\nso that " +
+            "\"Hollow Knight Silksong_Data\" and everything beside it are in there, " +
+            "then press this again.\n\nLooked there just now and ${PlayerImage.depotProblem(where)}."
     }
 
     // Moves what has been downloaded into where it gets used. Android will not
@@ -476,6 +636,52 @@ class SetupActivity : Activity() {
         }
     }
 
+    /**
+     * Throw the build away and build it again.
+     *
+     * The same thing the settings screen offers, and deliberately the same
+     * words: this deletes what the build produced and keeps everything that
+     * was expensive to fetch, and the sentence people need to read before
+     * pressing it should not exist in two versions. It is the recovery from a
+     * build that finished wrong, so it belongs on the screen where that is
+     * being looked at.
+     */
+    private fun confirmClearBuild() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle(R.string.settings_clear_build_title)
+            .setMessage(R.string.settings_clear_build_message)
+            .setNegativeButton(R.string.settings_cancel, null)
+            .setPositiveButton(R.string.settings_clear_build_confirm) { _, _ -> clearBuild() }
+            .show()
+    }
+
+    /**
+     * Gigabytes across thousands of small files, so not on the main thread --
+     * and not cancellable, because a half-deleted build is the state this
+     * exists to get out of.
+     */
+    private fun clearBuild() {
+        setBusy(true, "Resetting", -1f, "deleting what the build produced")
+        scope.launch {
+            val failure = withContext(Dispatchers.IO) {
+                runCatching { BuildReset.clear(this@SetupActivity) }.exceptionOrNull()
+            }
+            setBusy(false)
+            if (failure != null) {
+                LauncherLog.log("could not clear the build", failure)
+                say("Could not reset: ${failure.message ?: failure.javaClass.simpleName}")
+            } else if (haveGameFiles()) {
+                say("Reset. The game will be built again.")
+            } else {
+                // The reset forgets which folder the game was in, so this is
+                // now the "where is it" screen and the message has to agree
+                // with the button under it.
+                say("Reset. Choose the folder with the game's files again.")
+            }
+            refresh()
+        }
+    }
+
     // ── Steam ──────────────────────────────────────────────────────────────
 
     // Sign in first if we have to. The token from QR sign-in is what the
@@ -497,6 +703,10 @@ class SetupActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_PICK_DEPOT) {
+            onDepotPicked(if (resultCode == RESULT_OK) data?.data else null)
+            return
+        }
         if (requestCode != REQ_LOGIN) return
         if (resultCode != RESULT_OK || data == null) {
             say("Sign-in cancelled.")
@@ -511,6 +721,27 @@ class SetupActivity : Activity() {
         val creds = TokenStore.Credentials(account, token)
         TokenStore(this).write(creds)
         offerToPort(creds)
+    }
+
+    /**
+     * The answer to the storage prompt the folder picker needs.
+     *
+     * Refusing it is not a dead end: the app's own external directory is
+     * readable without any permission at all, so the fallback is named rather
+     * than the request being repeated.
+     */
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQ_STORAGE) return
+        if (DepotLocation.hasPermission(this)) {
+            pickDepotFolder()
+        } else {
+            sayWhereToCopy("Without storage access the app cannot read a folder you choose.")
+        }
     }
 
     // ── The whole thing ────────────────────────────────────────────────────
@@ -552,7 +783,12 @@ class SetupActivity : Activity() {
         val tools = ToolchainFetcher.rootFor(this)
         val dotnet = DotnetFetcher.rootFor(this)
         val out = Il2cppConverter.rootFor(this)
-        val depot = depotDir
+        // A download goes to the app's own directory and never to a folder the
+        // user picked: the resume path deletes files it did not write (see
+        // DepotFetcher.dropUnwritten), which is only ever safe somewhere
+        // nothing else lives. When the game is already on the device, that
+        // copy is used wherever it is.
+        val depot = if (download != null) DepotLocation.downloadTarget(this) else depotDir
         val staging = depotStagingDir
         if (depot == null || staging == null) {
             say("No external storage to work in.")
@@ -566,6 +802,7 @@ class SetupActivity : Activity() {
 
         setStep(if (download != null) 1 else toolsStep, "Starting")
         setBusy(true, "", -1f, "")
+        LauncherLog.log("depot: $depot, data: ${PlayerImage.depotData(depot)}")
         // Nothing survives the process being reclaimed, and a screen that
         // sleeps is the most likely way for that to happen during a build
         // nobody is watching. This costs no permission.
@@ -655,8 +892,10 @@ class SetupActivity : Activity() {
                     }
                 }
                 // Always: the link is in internal storage, so it can go missing
-                // without anything about the image having changed.
-                withContext(Dispatchers.IO) { PlayerImage.linkContent(filesDir, depot) }
+                // without anything about the image having changed. The game's
+                // process is left the same answer, so it can remake the link
+                // itself if it comes back and finds it gone.
+                withContext(Dispatchers.IO) { DepotLocation.relink(this@SetupActivity, depot) }
                 PlayerImage.retargetContent(depot, dotnet, out, assets)
                     .collect { setBusy(true, it.step, it.fraction, it.detail) }
 

@@ -101,7 +101,7 @@ object DepotFetcher {
 
     /** The tree looks right, regardless of whether a run ever finished. */
     private fun isPresentOnDisk(installDir: File): Boolean =
-        installDir.walkTopDown().maxDepth(4).any { it.isDirectory && it.name == DATA_DIR }
+        PlayerImage.depotData(installDir) != null
 
     private fun completeMarker(installDir: File) = File(installDir, ".download-complete")
 

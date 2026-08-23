@@ -45,27 +45,37 @@ ones the port is built from; the Windows depot will not do:
 DepotDownloader -app 1030300 -depot 1030303 -username <your account> -password <your password> -dir silksong
 ```
 
-Open the app once first, so that it creates its folder on the device, then copy what you
-downloaded into `Android/data/com.jakobkhansen.silksong/files/depot/`, so that the device
-ends up looking like this:
+Copy what you downloaded anywhere on the device, then press **Choose folder** in the app
+and point it at the folder you copied. The layout it looks for is this, and it will find
+it a few levels down, so a wrapping folder from your downloader is fine:
 
 ```
-Android/data/com.jakobkhansen.silksong/files/
-└── depot/
-    ├── Hollow Knight Silksong.x86_64
-    ├── UnityPlayer.so
-    └── Hollow Knight Silksong_Data/
-        ├── Managed/
-        ├── MonoBleedingEdge/
-        ├── Plugins/
-        ├── Resources/
-        ├── StreamingAssets/
-        ├── globalgamemanagers
-        ├── resources.assets
-        └── ...
+<the folder you choose>/
+├── Hollow Knight Silksong.x86_64
+├── UnityPlayer.so
+└── Hollow Knight Silksong_Data/
+    ├── Managed/
+    ├── MonoBleedingEdge/
+    ├── Plugins/
+    ├── Resources/
+    ├── StreamingAssets/
+    ├── globalgamemanagers
+    ├── resources.assets
+    └── ...
 ```
 
-Press "I have the files" in the app once it is there.
+The app asks for storage access the first time you do this, because it reads the game
+straight out of that folder rather than copying it.
+
+Copying into `Android/data/com.jakobkhansen.silksong/files/depot/` works too and needs no
+permission at all — open the app once first so that it creates the folder. That is where a
+Steam download goes, and it is still the first place the app looks, so nothing changes if
+you have already done it that way.
+
+**Wherever you put them, leave them there.** The game is several gigabytes of content that
+is never copied into the app: it is read from that folder every time you play, and every
+app update that rebuilds the game reads it too. Deleting or moving the folder stops the
+game from starting.
 
 ## Steam Cloud Saves
 

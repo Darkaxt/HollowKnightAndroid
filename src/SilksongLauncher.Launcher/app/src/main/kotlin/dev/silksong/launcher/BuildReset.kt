@@ -20,8 +20,10 @@
 //                           frame cap -- and the marker that says the
 //                           first-run resolution has been decided
 //           the launcher's settings
+//           the remembered depot folder   the PATH ONLY. See clear() for why.
 //
 //   kept    depot/          the game, ~8 GB, and the user's own property
+//           the game's files wherever the user put them, untouched
 //           unity/          Unity's Android player module, ~640 MB
 //           toolchain/      clang and .NET, several hundred MB
 //           default/        THE SAVES
@@ -72,6 +74,16 @@ object BuildReset {
         }
 
         for (name in INTERNAL) freed += remove(File(context.filesDir, name))
+
+        // Where the game is, but never the game. A reset is what someone does
+        // when the port came out wrong, and one of the things that can be
+        // wrong is the copy it was built from -- an interrupted transfer, or
+        // the wrong folder picked. Keeping the path would rebuild from exactly
+        // the same files without ever asking; forgetting it puts the question
+        // back on screen, with the folder still sitting there to be chosen
+        // again. Costs a few taps and nothing else: a depot this app
+        // downloaded itself is found by looking, so it is unaffected.
+        DepotLocation.forget(context)
 
         clearPreferences(context)
 

@@ -160,6 +160,20 @@ object PlayerImage {
     private fun contentStampFile(root: File) = File(root, "content.stamp")
 
     /**
+     * Forgets that the content tree was retargeted.
+     *
+     * For when the depot moves to a folder this app has not seen before. The
+     * stamp identifies a tree by what is in it, so a different copy of the
+     * game is a tree it has never met and almost certainly a tree nothing has
+     * retargeted. Being wrong in this direction costs a re-run of a step that
+     * is idempotent; being wrong in the other direction ships bundles the
+     * engine cannot read.
+     */
+    fun invalidateContent(root: File) {
+        contentStampFile(root).delete()
+    }
+
+    /**
      * Identity of the Addressables content tree.
      *
      * Stat, not content: this is around 2000 files and several gigabytes, and
@@ -505,11 +519,93 @@ object PlayerImage {
      *
      * Found rather than named: the directory carries the game's display name,
      * which is not ours to hardcode and has a space in it.
+     *
+     * Searched a few levels down rather than only in the depot's top level.
+     * A hand-copied depot is a folder someone dragged across from a PC, and it
+     * arrives wrapped in whatever their downloader or extractor called it --
+     * silksong/, depot_1030303/, the game's own install folder. Every one of
+     * those has the right layout inside it, and every one of them used to be
+     * reported as "no game files". Nothing downstream wants the depot root:
+     * each step resolves off this directory, so what sits above it is free.
+     *
+     * The search is by level rather than depth-first so that the shallowest
+     * copy wins, and it stops at the level where it finds something -- the
+     * data directory's own subtree (StreamingAssets/aa, thousands of bundles)
+     * is never listed, which matters because this runs on the main thread
+     * every time the setup screen is shown.
      */
-    fun depotData(depot: File): File? =
-        depot.listFiles().orEmpty().firstOrNull {
-            it.isDirectory && File(it, "globalgamemanagers").isFile
+    fun depotData(depot: File): File? {
+        var level = childDirs(depot)
+        var depth = 0
+        while (true) {
+            dataDirIn(level)?.let { return it }
+            if (++depth >= DEPOT_SEARCH_DEPTH || level.isEmpty()) break
+            level = level.flatMap(::childDirs)
         }
+        // Last, so that a stray globalgamemanagers loose in the depot root --
+        // someone who copied the inside of the data directory rather than the
+        // directory -- is still accepted, but never beats a real one below.
+        return depot.takeIf { File(it, "globalgamemanagers").isFile }
+    }
+
+    /** How far below the depot root [depotData] will look. */
+    private const val DEPOT_SEARCH_DEPTH = 3
+
+    /** What the game's data directory is called, before the game's name. */
+    private const val DATA_SUFFIX = "_Data"
+
+    /**
+     * The data directory among [dirs], if one of them is.
+     *
+     * globalgamemanagers is the test, because that is the file every later
+     * step actually needs. The name is only a tie-breaker: it decides between
+     * two candidates at the same level, so a real download is not passed over
+     * for whatever else happens to be sitting beside it.
+     */
+    private fun dataDirIn(dirs: List<File>): File? {
+        val hits = dirs.filter { File(it, "globalgamemanagers").isFile }
+        return hits.firstOrNull { it.name.endsWith(DATA_SUFFIX) } ?: hits.firstOrNull()
+    }
+
+    private fun childDirs(dir: File): List<File> =
+        dir.listFiles().orEmpty().filter { it.isDirectory }.sortedBy { it.name }
+
+    /**
+     * Why [depotData] found nothing, in terms of what is actually on the disk.
+     *
+     * Someone who has copied eight gigabytes to the wrong place is owed more
+     * than "not found": the answer is always visible in the directory, and the
+     * app is the only thing standing in it. Written for both the screen and
+     * the log, because the report that brings this to us is second-hand.
+     */
+    fun depotProblem(depot: File): String {
+        if (!depot.isDirectory) return "that folder does not exist yet"
+        val entries = depot.listFiles().orEmpty().sortedBy { it.name }
+        if (entries.isEmpty()) return "that folder is empty"
+
+        // A data directory that is there but unusable is its own answer, and a
+        // much more likely one than a wrong path: an interrupted copy, or a
+        // file manager that gave up on the extensionless files.
+        partialDataDir(depot)?.let {
+            return "\"${it.name}\" is there, but globalgamemanagers is missing from it -- " +
+                "the copy did not finish"
+        }
+        val names = entries.map { if (it.isDirectory) "${it.name}/" else it.name }
+        return "found there instead: " + names.take(6).joinToString(", ") +
+            if (names.size > 6) ", and ${names.size - 6} more" else ""
+    }
+
+    /** A directory named like the game's data, but without the file that counts. */
+    private fun partialDataDir(depot: File): File? {
+        var level = childDirs(depot)
+        var depth = 0
+        while (level.isNotEmpty() && depth < DEPOT_SEARCH_DEPTH) {
+            level.firstOrNull { it.name.endsWith(DATA_SUFFIX) }?.let { return it }
+            level = level.flatMap(::childDirs)
+            depth++
+        }
+        return null
+    }
 
     // ── byte-level edits ───────────────────────────────────────────────────
 

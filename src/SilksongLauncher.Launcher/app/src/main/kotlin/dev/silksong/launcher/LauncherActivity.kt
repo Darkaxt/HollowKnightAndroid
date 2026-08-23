@@ -496,6 +496,19 @@ class LauncherActivity : Activity() {
     }
 
     private fun launchGame() {
+        // The content is not inside the app: it is the depot's own bundle
+        // tree, read through <files>/aa every time the game runs, and the
+        // catalog can point nowhere else. So a depot that has been deleted or
+        // moved is checked for here rather than being discovered by the engine
+        // as an empty world, and the link is remade in case it moved.
+        val depot = DepotLocation.resolve(this)?.takeIf { PlayerImage.depotData(it) != null }
+        if (depot == null) {
+            LauncherLog.log("Launch aborted: the game's files are not on this device")
+            missingGameFiles()
+            return
+        }
+        runCatching { DepotLocation.relink(this, depot) }
+            .onFailure { LauncherLog.log("could not relink the content", it) }
         try {
             LauncherLog.log("Launching $UNITY_ACTIVITY_CLASS")
             // No FLAG_ACTIVITY_NEW_TASK / CLEAR_TASK and no finish()
@@ -518,5 +531,36 @@ class LauncherActivity : Activity() {
             returningFromGame = false
             LauncherLog.log("Failed to launch game: ${t.message}")
         }
+    }
+
+    /**
+     * The depot has gone since the game was built.
+     *
+     * Worth a dialog rather than a log line, because from the outside this
+     * looks like the app breaking on its own. The content was never copied
+     * into the app -- it is several gigabytes and stays where the user put it
+     * -- so deleting or moving that folder takes the game with it, and nothing
+     * about the built engine says so.
+     *
+     * Nothing else is lost, and saying that matters: the toolchain, the
+     * conversion and the compiled engine are all still there, so restoring the
+     * folder or picking it again is minutes rather than the half hour the
+     * first build took.
+     */
+    private fun missingGameFiles() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("The game's files are missing")
+            .setMessage(
+                "Silksong reads its content straight out of the folder you supplied. " +
+                    "That folder is no longer there, so the game cannot start.\n\n" +
+                    "Put it back, or point the app at it again. Everything else that was " +
+                    "built is still here, so it will not have to be done again.",
+            )
+            .setPositiveButton("Find the files") { _, _ ->
+                startActivity(Intent(this, SetupActivity::class.java))
+                finish()
+            }
+            .setNegativeButton("Not now", null)
+            .show()
     }
 }

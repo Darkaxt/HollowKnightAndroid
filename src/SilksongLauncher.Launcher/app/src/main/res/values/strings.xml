@@ -37,7 +37,7 @@
     <string name="settings_clear_build">Reset and re-port</string>
     <string name="settings_clear_build_subtitle">Delete the ported game and every setting, then build it again. Your saves and your Steam sign-in are kept.</string>
     <string name="settings_clear_build_title">Reset and re-port?</string>
-    <string name="settings_clear_build_message">This deletes the ported game and puts every setting — here and in the game — back to its default. It is then built again from the files already on this device, which takes 20–30 minutes.\n\nYour saves are not touched, the game is not downloaded again, and you stay signed in to Steam.</string>
+    <string name="settings_clear_build_message">This deletes the ported game and puts every setting — here and in the game — back to its default. It is then built again from the files already on this device, which takes 20–30 minutes.\n\nYou will be asked where the game\'s files are again. They are not deleted, so pointing at the same folder is all it takes.\n\nYour saves are not touched, the game is not downloaded again, and you stay signed in to Steam.</string>
     <string name="settings_clear_build_confirm">Reset and re-port</string>
     <string name="settings_clear_build_working">Resetting…</string>
     <string name="settings_clear_build_failed">Could not reset: %1$s</string>

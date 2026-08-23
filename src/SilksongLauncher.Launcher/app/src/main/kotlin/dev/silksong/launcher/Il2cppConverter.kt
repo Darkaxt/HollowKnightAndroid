@@ -99,14 +99,14 @@ object Il2cppConverter {
     /**
      * The depot's Managed folder.
      *
-     * Found rather than named: the depot's top directory carries the game's
-     * display name, which is not ours to hardcode and has a space in it.
+     * Off [PlayerImage.depotData] rather than looked for separately: the depot
+     * may be nested under folders a person copied it inside, and two different
+     * ideas of where it is means one of them finds a hand-placed copy and the
+     * other does not.
      */
     private fun depotManaged(depot: File): File? =
-        depot.listFiles()?.asSequence()
-            ?.filter { it.isDirectory }
-            ?.map { File(it, "Managed") }
-            ?.firstOrNull { File(it, "Assembly-CSharp.dll").isFile }
+        PlayerImage.depotData(depot)?.let { File(it, "Managed") }
+            ?.takeIf { File(it, "Assembly-CSharp.dll").isFile }
 
     // ── the run ────────────────────────────────────────────────────────────
 

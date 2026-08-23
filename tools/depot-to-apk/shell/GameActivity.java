@@ -379,23 +379,32 @@ public class GameActivity extends PlayerActivity
     //
     // So the catalog keeps pointing at a short fixed path and that path is a
     // symlink to wherever the content actually is. The content is the depot's
-    // own bundle tree, retargeted in place, which is far too large to copy and
-    // has no reason to move.
+    // own bundle tree, retargeted in place, which is far too large to copy.
+    //
+    // Where that tree is, though, is no longer fixed: the user may point the
+    // launcher at any folder on the device. This process cannot search for it
+    // the way the launcher does, so the launcher writes down the answer it
+    // resolved (DepotLocation.relink) and this reads it. The two paths below
+    // it are what installs made before that existed have, and are still
+    // correct for a depot the app downloaded itself.
     private void linkContent()
     {
         java.io.File link = new java.io.File(getFilesDir(), "aa");
         java.io.File ext = getExternalFilesDir(null);
         if (ext == null) return;
 
-        // Where the depot download leaves the bundles, and the staging
-        // directory used before the download exists. First one wins.
+        // The launcher's answer first, then where a download leaves the
+        // bundles, then the staging directory used before one exists. First
+        // one wins.
         java.io.File[] candidates = {
+            recordedContentDir(ext),
             new java.io.File(ext, "depot/Hollow Knight Silksong_Data/StreamingAssets/aa"),
             new java.io.File(ext, "aa"),
         };
         java.io.File target = null;
         for (java.io.File c : candidates)
         {
+            if (c == null) continue;
             if (c.isDirectory() && c.list() != null && c.list().length > 0) { target = c; break; }
         }
         if (target == null) return;
@@ -419,6 +428,33 @@ public class GameActivity extends PlayerActivity
     {
         try { return !f.getCanonicalPath().equals(f.getAbsolutePath()); }
         catch (java.io.IOException e) { return false; }
+    }
+
+    /**
+     * The content directory the launcher last resolved, or null.
+     *
+     * A plain text file rather than shared preferences: the launcher runs in
+     * its own process, and cross-process preferences mean MODE_MULTI_PROCESS,
+     * which is deprecated because it does not reliably work. Same arrangement
+     * the game's settings already use, in the same directory.
+     */
+    private static java.io.File recordedContentDir(java.io.File ext)
+    {
+        java.io.File f = new java.io.File(ext, "content-path.txt");
+        if (!f.isFile()) return null;
+        try
+        {
+            byte[] b = new byte[(int) Math.min(f.length(), 4096)];
+            java.io.FileInputStream in = new java.io.FileInputStream(f);
+            try { in.read(b); } finally { in.close(); }
+            String path = new String(b, "UTF-8").trim();
+            return path.isEmpty() ? null : new java.io.File(path);
+        }
+        catch (Exception e)
+        {
+            android.util.Log.e(TAG, "could not read the content path: " + e);
+            return null;
+        }
     }
 
     @Override protected void onCreate(Bundle savedInstanceState)
