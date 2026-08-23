@@ -90,6 +90,12 @@
             android:label="@string/settings_title"
             android:process=":launcher"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+
+        <activity
+            android:name="dev.silksong.launcher.ModsActivity"
+            android:exported="false"
+            android:process=":launcher"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
     </application>
 
 </manifest>

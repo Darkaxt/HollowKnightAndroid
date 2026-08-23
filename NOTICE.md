@@ -42,6 +42,7 @@ A copy of the Apache License 2.0 is at
 * **JavaSteam** and **JavaSteam Depot Downloader** — Copyright (c) Lossy and
   JavaSteam contributors
 * **AssetsTools.NET** — Copyright (c) nesrak1
+* **Mono.Cecil** — Copyright (c) Jb Evain
 * **AssetRipper.Primitives** — Copyright (c) AssetRipper contributors
 * **SLF4J** — Copyright (c) QOS.ch
 
