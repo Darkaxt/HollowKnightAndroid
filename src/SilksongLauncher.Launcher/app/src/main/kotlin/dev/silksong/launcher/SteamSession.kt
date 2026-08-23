@@ -201,7 +201,7 @@ class SteamSession : Closeable {
         }
 
         try {
-            LauncherLog.log("Logging on as ${credentials.accountName} (refresh token)…")
+            LauncherLog.log("Logging on with the saved refresh token…")
             // LogOnDetails wraps the field-bag the protocol expects.
             // We populate just the bits relevant for refresh-token login:
             // username + accessToken. shouldRememberPassword=true mirrors

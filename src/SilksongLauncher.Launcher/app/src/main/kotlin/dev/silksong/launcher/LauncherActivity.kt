@@ -155,7 +155,7 @@ class LauncherActivity : Activity() {
     private fun onLoginClicked() {
         if (creds != null) {
             // Logged in already — this button doubles as "log out".
-            LauncherLog.log("Logged out (${creds!!.accountName})")
+            LauncherLog.log("Logged out")
             tokenStore.clear()
             creds = null
             refreshLoginUi()
@@ -182,7 +182,7 @@ class LauncherActivity : Activity() {
         val newCreds = TokenStore.Credentials(account, token)
         tokenStore.write(newCreds)
         creds = newCreds
-        LauncherLog.log("Persisted Steam credentials for $account")
+        LauncherLog.log("Steam credentials saved")
         refreshLoginUi()
     }
 

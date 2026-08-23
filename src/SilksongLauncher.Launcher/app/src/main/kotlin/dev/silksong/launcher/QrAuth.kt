@@ -117,7 +117,7 @@ object QrAuth {
         val result = resultRef.get() ?: throw RuntimeException("polling returned no result")
 
         emit(Event.Polling)
-        LauncherLog.log("Signed in as ${result.accountName}")
+        LauncherLog.log("Signed in")
         emit(Event.Success(result.accountName, result.refreshToken))
     }.flowOn(Dispatchers.IO)
 }

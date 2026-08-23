@@ -133,7 +133,7 @@ object CredentialsAuth {
             clientOSType = EOSType.Android9
         }
 
-        LauncherLog.log("Signing in as $username…")
+        LauncherLog.log("Signing in with an account name and password…")
         val credentialsSession: CredentialsAuthSession = unwrap {
             auth.beginAuthSessionViaCredentials(details).get(30, TimeUnit.SECONDS)
         } ?: throw RuntimeException("beginAuthSessionViaCredentials returned null")
@@ -179,7 +179,7 @@ object CredentialsAuth {
         val result = resultRef.get() ?: throw RuntimeException("polling returned no result")
 
         emit(Event.Polling)
-        LauncherLog.log("Signed in as ${result.accountName}")
+        LauncherLog.log("Signed in")
         emit(Event.Success(result.accountName, result.refreshToken))
     }.flowOn(Dispatchers.IO)
 

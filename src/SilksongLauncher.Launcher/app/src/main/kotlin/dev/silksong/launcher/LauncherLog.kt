@@ -8,6 +8,19 @@
 // background coroutines + JavaSteam callbacks) without forcing every
 // caller to depend on lifecycle libraries. The total event volume is
 // small (~10s of lines per session) so a CopyOnWriteArrayList is fine.
+//
+// NOTHING IDENTIFYING GOES IN HERE. Not the Steam account name, not a
+// SteamID, not a token. This log is written to a file that survives the
+// process, the log screen offers Share and Copy, and the whole reason it
+// exists is for people to send it to us when a build fails -- so every line
+// should be read as something the user is about to post in an issue. Say that
+// a sign-in happened, which is what makes the log useful; say who it was for,
+// and the user has published their Steam account name to get help with a
+// compiler error.
+//
+// The account name still belongs on SCREEN, where it tells the person which
+// account they are signed in as and goes no further: LauncherActivity's login
+// status line and LoginActivity's success message both show it.
 
 package dev.silksong.launcher
 
