@@ -25,6 +25,8 @@ namespace BepInEx.Bootstrap
         /// <summary>The object plugins live on. Survives scene loads.</summary>
         public static UnityEngine.GameObject ManagerObject { get; private set; }
 
+        /// <summary>Public, and oddly named, because BepInEx 5's own is:
+        /// plugins do read it.</summary>
         public static bool _loaded;
 
         static readonly ManualLogSource _log = Logger.CreateLogSource("BepInEx");

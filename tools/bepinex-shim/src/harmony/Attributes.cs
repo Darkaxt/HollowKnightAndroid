@@ -87,7 +87,7 @@ namespace HarmonyLib
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
     public class HarmonyPriority : HarmonyAttribute
     {
-        public HarmonyPriority(int prioritiy) { info.priority = prioritiy; }
+        public HarmonyPriority(int priority) { info.priority = priority; }
     }
 
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]

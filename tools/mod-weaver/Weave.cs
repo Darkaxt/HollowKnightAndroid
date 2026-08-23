@@ -50,6 +50,11 @@ internal static class Weave
         Action<AssemblyDefinition> touched)
     {
         if (prefix is null && postfix is null) return false;
+        if (!target.HasBody || target.Body.Instructions.Count == 0)
+        {
+            report.Note($"{target.FullName} has no body to weave into");
+            return false;
+        }
 
         foreach (var patch in new[] { prefix, postfix })
         {
