@@ -1,0 +1,379 @@
+using Mono.Cecil;
+using Mono.Cecil.Cil;
+
+namespace ModWeaver;
+
+/// <summary>
+/// The chainloader, minus the loading: finds each plugin's Harmony patches and
+/// applies them to the staged assembly set.
+/// </summary>
+internal sealed class Weaver
+{
+    readonly string _assemblies;
+    readonly StagedResolver _resolver;
+    readonly HashSet<AssemblyDefinition> _dirty = new();
+
+    /// Assemblies a plugin may ship a copy of, and which we supply ourselves.
+    ///
+    /// A BepInEx download contains BepInEx.dll and 0Harmony.dll because that
+    /// is how it works on a PC. Here they are the port's own shims, compiled
+    /// on the device against the depot, and letting a plugin's copy overwrite
+    /// them would replace working code with an implementation that assumes a
+    /// runtime we do not have.
+    static readonly string[] Supplied =
+    {
+        "BepInEx", "BepInEx.Core", "BepInEx.Harmony", "BepInEx.Preloader",
+        "0Harmony", "0Harmony20", "HarmonyXInterop",
+        "Mono.Cecil", "Mono.Cecil.Mdb", "Mono.Cecil.Pdb", "Mono.Cecil.Rocks",
+        "MonoMod.RuntimeDetour", "MonoMod.Utils", "MonoMod.Common",
+    };
+
+    public Weaver(string assemblies)
+    {
+        _assemblies = assemblies;
+        _resolver = new StagedResolver(assemblies);
+    }
+
+    public List<PluginReport> Run(IReadOnlyList<string> mods)
+    {
+        var reports = new List<PluginReport>();
+        var plugins = new List<(string Path, AssemblyDefinition Assembly, PluginReport Report)>();
+
+        // Read everything first. A mod is often several assemblies -- a plugin
+        // and the library it was split out of -- and the plugin does not
+        // resolve until the library is in the resolver's hands.
+        foreach (var path in mods)
+        {
+            var file = Path.GetFileName(path);
+            if (!File.Exists(path))
+            {
+                reports.Add(Failed(file, "", $"{file} is not there any more"));
+                continue;
+            }
+
+            AssemblyDefinition assembly;
+            try
+            {
+                assembly = AssemblyDefinition.ReadAssembly(path, new ReaderParameters
+                {
+                    // In memory, because the file is written back out to the
+                    // staged set under its assembly name and a held handle on
+                    // an external-storage file is a needless way to fail.
+                    InMemory = true,
+                    AssemblyResolver = _resolver,
+                });
+            }
+            catch (Exception e)
+            {
+                reports.Add(Failed(file, "", $"not a managed assembly ({e.GetType().Name})"));
+                continue;
+            }
+
+            var name = assembly.Name.Name;
+            if (Supplied.Contains(name))
+            {
+                Console.WriteLine($"{file}: skipped, {name} is supplied by the port");
+                continue;
+            }
+            if (File.Exists(Path.Combine(_assemblies, name + ".dll")))
+            {
+                reports.Add(Failed(file, name, $"{name} is already part of the game and cannot be replaced"));
+                continue;
+            }
+
+            var report = new PluginReport { File = file, Assembly = name };
+            reports.Add(report);
+            _resolver.Add(assembly);
+            plugins.Add((path, assembly, report));
+        }
+
+        foreach (var (path, assembly, report) in plugins)
+        {
+            try
+            {
+                Process(assembly, report);
+            }
+            catch (Exception e)
+            {
+                report.Fail($"weaving threw {e.GetType().Name}: {e.Message}");
+            }
+
+            if (report.Status == PluginStatus.Failed) continue;
+
+            // Named for the assembly rather than the file: Unity resolves an
+            // assembly by its name, and a plugin shipped as MyMod-1.2.dll
+            // would otherwise be listed under a name nothing refers to.
+            //
+            // Written through Cecil rather than copied when the weave changed
+            // it -- raising a private patch method to public is a change to
+            // the plugin, not to the game.
+            var staged = Path.Combine(_assemblies, assembly.Name.Name + ".dll");
+            if (_dirty.Remove(assembly)) assembly.Write(staged);
+            else File.Copy(path, staged, overwrite: true);
+        }
+
+        foreach (var assembly in _dirty)
+        {
+            var to = Path.Combine(_assemblies, assembly.Name.Name + ".dll");
+            assembly.Write(to);
+            Console.WriteLine($"rewrote {Path.GetFileName(to)}");
+        }
+
+        // A plugin whose patches all failed is still in the build: its own
+        // code runs, and a mod that adds a menu without patching anything is
+        // an ordinary and useful kind of mod.
+        return reports;
+    }
+
+    static PluginReport Failed(string file, string assembly, string why)
+    {
+        var report = new PluginReport { File = file, Assembly = assembly };
+        report.Fail(why);
+        return report;
+    }
+
+    void Process(AssemblyDefinition plugin, PluginReport report)
+    {
+        foreach (var reference in plugin.MainModule.AssemblyReferences)
+        {
+            if (Supplied.Contains(reference.Name)) continue;
+            if (_resolver.CanResolve(reference)) continue;
+            report.Fail($"needs {reference.Name}, which is not in this build");
+            return;
+        }
+
+        Describe(plugin, report);
+        NoteUnsupportedCalls(plugin, report);
+
+        foreach (var type in plugin.MainModule.GetTypes())
+        {
+            try
+            {
+                ProcessPatchClass(type, report);
+            }
+            catch (Exception e)
+            {
+                report.Note($"{type.Name} could not be woven ({e.GetType().Name})");
+            }
+        }
+    }
+
+    /// Reads [BepInPlugin(guid, name, version)] for the launcher's list.
+    static void Describe(AssemblyDefinition plugin, PluginReport report)
+    {
+        foreach (var type in plugin.MainModule.GetTypes())
+        {
+            var attr = type.CustomAttributes.FirstOrDefault(a => a.AttributeType.Name == "BepInPlugin");
+            if (attr is null) continue;
+            var args = attr.ConstructorArguments;
+            if (args.Count > 0) report.Guid = args[0].Value as string ?? "";
+            if (args.Count > 1) report.Name = args[1].Value as string ?? "";
+            if (args.Count > 2) report.Version = args[2].Value as string ?? "";
+            return;
+        }
+    }
+
+    /// <summary>
+    /// What the plugin does that cannot survive an AOT compile.
+    ///
+    /// A note rather than a failure: a plugin that calls Harmony directly for
+    /// one patch and declares the other twelve as attributes is still worth
+    /// most of what it is worth. Saying which is which is the point.
+    /// </summary>
+    static void NoteUnsupportedCalls(AssemblyDefinition plugin, PluginReport report)
+    {
+        foreach (var type in plugin.MainModule.GetTypes())
+        {
+            foreach (var method in type.Methods)
+            {
+                if (!method.HasBody) continue;
+                foreach (var ins in method.Body.Instructions)
+                {
+                    if (ins.Operand is not MethodReference called) continue;
+                    var owner = called.DeclaringType.FullName;
+
+                    if (owner == "HarmonyLib.Harmony" && called.Name is "Patch" or "ReversePatch")
+                    {
+                        report.Note("patches methods by calling Harmony at runtime, which does nothing here");
+                    }
+                    else if (owner.StartsWith("System.Reflection.Emit.", StringComparison.Ordinal))
+                    {
+                        report.Note("generates code at runtime (Reflection.Emit), which does nothing here");
+                    }
+                    else if (owner == "System.Reflection.Assembly" &&
+                             called.Name is "Load" or "LoadFrom" or "LoadFile")
+                    {
+                        report.Note("loads assemblies at runtime, which does nothing here");
+                    }
+                }
+            }
+        }
+    }
+
+    void ProcessPatchClass(TypeDefinition type, PluginReport report)
+    {
+        var classSpec = Merge(type.CustomAttributes);
+        var classPatched = type.CustomAttributes.Any(a => a.AttributeType.Name == "HarmonyPatch");
+
+        if (type.CustomAttributes.Any(a =>
+                a.AttributeType.Name is "HarmonyTargetMethod" or "HarmonyTargetMethods") ||
+            type.Methods.Any(m => m.CustomAttributes.Any(a =>
+                a.AttributeType.Name is "HarmonyTargetMethod" or "HarmonyTargetMethods")))
+        {
+            report.Note($"{type.Name} picks its targets at runtime, which a build-time weaver cannot follow");
+            return;
+        }
+
+        var prefixes = new Dictionary<MethodDefinition, List<MethodDefinition>>();
+        var postfixes = new Dictionary<MethodDefinition, List<MethodDefinition>>();
+
+        foreach (var method in type.Methods)
+        {
+            var kind = KindOf(method, classPatched);
+            switch (kind)
+            {
+                case null:
+                    continue;
+                case "unsupported":
+                    report.Note($"{type.Name}.{method.Name} is a transpiler or finalizer, which cannot be woven");
+                    continue;
+            }
+
+            var spec = classSpec.MergedWith(Merge(method.CustomAttributes));
+            if (spec.IsEmpty) continue;
+
+            var target = spec.Resolve(FindType, out var why);
+            if (target is null)
+            {
+                report.Note(why);
+                continue;
+            }
+
+            var into = kind == "prefix" ? prefixes : postfixes;
+            if (!into.TryGetValue(target, out var list)) into[target] = list = new List<MethodDefinition>();
+            list.Add(method);
+        }
+
+        foreach (var target in prefixes.Keys.Concat(postfixes.Keys).Distinct().ToList())
+        {
+            var pre = prefixes.TryGetValue(target, out var a) ? a : new List<MethodDefinition>();
+            var post = postfixes.TryGetValue(target, out var b) ? b : new List<MethodDefinition>();
+
+            // Paired so that a prefix and a postfix from the same class share
+            // one __state local, which is the only way __state means anything.
+            for (var i = 0; i < Math.Max(pre.Count, post.Count); i++)
+            {
+                var prefix = i < pre.Count ? pre[i] : null;
+                var postfix = i < post.Count ? post[i] : null;
+                if (!Weave.Apply(target, prefix, postfix, report, a => _dirty.Add(a))) continue;
+                report.Patched++;
+            }
+        }
+    }
+
+    /// "prefix", "postfix", "unsupported", or null for a method that is not a patch.
+    static string? KindOf(MethodDefinition method, bool classPatched)
+    {
+        foreach (var a in method.CustomAttributes)
+        {
+            switch (a.AttributeType.Name)
+            {
+                case "HarmonyPrefix": return "prefix";
+                case "HarmonyPostfix": return "postfix";
+                case "HarmonyTranspiler":
+                case "HarmonyFinalizer":
+                case "HarmonyReversePatch": return "unsupported";
+            }
+        }
+
+        // Harmony's other convention: inside a patched class, the names alone
+        // are the annotation.
+        var own = method.CustomAttributes.Any(a => a.AttributeType.Name == "HarmonyPatch");
+        if (!classPatched && !own) return null;
+        return method.Name switch
+        {
+            "Prefix" => "prefix",
+            "Postfix" => "postfix",
+            "Transpiler" or "Finalizer" => "unsupported",
+            _ => null,
+        };
+    }
+
+    static PatchSpec Merge(IEnumerable<CustomAttribute> attributes)
+    {
+        var spec = new PatchSpec();
+        foreach (var a in attributes)
+        {
+            if (a.AttributeType.Name != "HarmonyPatch") continue;
+            spec = spec.MergedWith(PatchSpec.FromAttribute(a));
+        }
+        return spec;
+    }
+
+    /// A type named as a string rather than referenced. Looked for in whatever
+    /// has already been loaded, then in the game's own assembly.
+    TypeDefinition? FindType(string fullName)
+    {
+        foreach (var assembly in _resolver.Loaded)
+        {
+            var type = assembly.MainModule.GetType(fullName);
+            if (type is not null) return type;
+        }
+        var game = _resolver.TryResolve("Assembly-CSharp");
+        return game?.MainModule.GetType(fullName);
+    }
+}
+
+/// <summary>
+/// Resolves against the staged assembly set and nothing else.
+///
+/// Cecil's default resolver falls back to the GAC and to the directory the
+/// tool itself is in, which here means .NET 8's own class library -- so a
+/// plugin referencing mscorlib would silently bind to a completely different
+/// System.Object from the one il2cpp is about to compile. The set il2cpp is
+/// handed is the only correct universe, so it is the only one offered.
+/// </summary>
+internal sealed class StagedResolver : IAssemblyResolver
+{
+    readonly string _dir;
+    readonly Dictionary<string, AssemblyDefinition> _cache = new(StringComparer.OrdinalIgnoreCase);
+
+    public StagedResolver(string dir) => _dir = dir;
+
+    public IEnumerable<AssemblyDefinition> Loaded => _cache.Values;
+
+    public void Add(AssemblyDefinition assembly) => _cache[assembly.Name.Name] = assembly;
+
+    public AssemblyDefinition Resolve(AssemblyNameReference name) => Resolve(name, new ReaderParameters());
+
+    public AssemblyDefinition Resolve(AssemblyNameReference name, ReaderParameters parameters)
+    {
+        var found = TryResolve(name.Name);
+        if (found is null) throw new AssemblyResolutionException(name);
+        return found;
+    }
+
+    public bool CanResolve(AssemblyNameReference name) => TryResolve(name.Name) is not null;
+
+    public AssemblyDefinition? TryResolve(string name)
+    {
+        if (_cache.TryGetValue(name, out var cached)) return cached;
+
+        var path = Path.Combine(_dir, name + ".dll");
+        if (!File.Exists(path)) return null;
+
+        var assembly = AssemblyDefinition.ReadAssembly(path, new ReaderParameters
+        {
+            InMemory = true,
+            AssemblyResolver = this,
+        });
+        _cache[name] = assembly;
+        return assembly;
+    }
+
+    public void Dispose()
+    {
+        foreach (var a in _cache.Values) a.Dispose();
+        _cache.Clear();
+    }
+}
