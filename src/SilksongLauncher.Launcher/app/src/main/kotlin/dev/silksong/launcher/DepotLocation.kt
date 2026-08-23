@@ -262,14 +262,21 @@ object DepotLocation {
      * Why a folder cannot be used, or null when it can.
      *
      * Both halves matter and they fail differently. Unreadable is usually a
-     * permission that was refused; unwritable is almost always a removable
-     * card, where a legacy app may read the whole volume and write only its
-     * own directory on it -- and the content retarget rewrites every bundle in
-     * place, so a read-only depot fails minutes into a build rather than here.
+     * permission that was refused; unwritable matters because the content
+     * retarget rewrites every bundle in place, so a read-only depot fails
+     * minutes into a build rather than here.
+     *
+     * Asked rather than assumed, and that is the point. A removable card is
+     * the obvious suspect -- the platform has spent years narrowing what an
+     * app may do with one -- but a card on a legacy-storage app is not
+     * necessarily read-only: verified on an AYN Thor (Android 13), where the
+     * app wrote its own marker into Documents on the SD card without trouble.
+     * Refusing cards by name would have turned a working setup into an error
+     * message, so the probe decides and the device answers for itself.
      */
     fun problemWith(dir: File): String? {
         if (!dir.isDirectory) {
-            return "that folder cannot be read. If it is on an SD card or a USB stick, " +
+            return "that folder cannot be read. If it is on a memory card or a USB stick, " +
                 "try a folder in internal storage instead."
         }
         if (PlayerImage.depotData(dir) == null) {
@@ -279,8 +286,8 @@ object DepotLocation {
         }
         if (!isWritable(contentDir(dir) ?: dir)) {
             return "that folder cannot be written to, and the game's content has to be " +
-                "converted in place. Removable cards are read-only to this app; copy the " +
-                "game to internal storage instead."
+                "converted in place. Some devices keep memory cards read-only for apps; " +
+                "if that folder is on one, copy the game to internal storage instead."
         }
         return null
     }
