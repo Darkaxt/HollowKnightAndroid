@@ -279,11 +279,31 @@ jobs:
             gh release delete "$tag" --yes --cleanup-tag
           fi
 
-          # One line, and deliberately no --generate-notes: that appends the
-          # commit and contributor list, which is neither short nor stable
-          # across a history rewrite.
+          # Deliberately no --generate-notes: that appends the commit and
+          # contributor list, which is neither short nor stable across a
+          # history rewrite.
+          #
+          # A template rather than finished notes. "## Changes" is left empty
+          # on purpose: what changed in a release is a judgement about what
+          # people will notice, and no generator makes it. Fill it in on the
+          # release page after the workflow publishes -- editing notes does not
+          # touch the tag or the asset.
+          #
+          # The caching note is here because it is the question every update
+          # otherwise produces. Installing a new version invalidates the build
+          # signature and the porting screen comes back, which looks exactly
+          # like the first install and its half hour of work; in fact the
+          # depot, the toolchain and everything the conversion did are all
+          # still there, so it is minutes.
           notes="$RUNNER_TEMP/notes.md"
-          echo "Hollow Knight: Silksong Android ${{ steps.version.outputs.version }}" > "$notes"
+          cat > "$notes" <<EOF
+          ## Hollow Knight: Silksong Android ${{ steps.version.outputs.version }}
+
+          **Note when updating from a previous version**: This will trigger the porting process again, but it is heavily cached, so should only take a few minutes.
+
+          ## Changes
+
+          EOF
 
           args=(--title "$tag"
                 --notes-file "$notes")
