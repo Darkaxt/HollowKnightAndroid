@@ -63,20 +63,6 @@ silksong/                          <-- pick THIS one
     └── ...
 ```
 
-In short: if you can see `Hollow Knight Silksong_Data` listed inside the folder you are
-looking at, that is the one to choose. (If you do pick the `_Data` folder by mistake it
-still works, and so does a folder that merely has the game a few levels below it — the app
-searches a little way down. The rule above is just the one that always works.)
-
-The picker opens in **Documents**, which is as good a place as any to have put it. You will
-be asked for storage access the first time, because the app reads the game straight out of
-that folder instead of copying it.
-
-Copying into `Android/data/com.jakobkhansen.silksong/files/depot/` still works too, and
-needs no permission — open the app once first so that it creates the folder. That is where
-a Steam download goes, and it is still the first place the app looks when you have not
-picked anything, so nothing changes if you have already set it up that way.
-
 **Wherever you put them, leave them there.** The game is several gigabytes of content that
 is never copied into the app: it is read from that folder every time you play, and every
 app update that rebuilds the game reads it too. Deleting or moving the folder stops the
