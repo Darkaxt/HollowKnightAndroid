@@ -64,6 +64,10 @@ export AP="$UNITY_PLAYER_ROOT/android"
 say "building bundle-surgery"
 dotnet build -c Release tools/bundle-surgery/BundleSurgery.csproj --nologo -v quiet
 
+# Same for mod-weaver, the build-time Harmony weaver.
+say "building mod-weaver"
+dotnet build -c Release tools/mod-weaver/ModWeaver.csproj --nologo -v quiet
+
 # A signing key, because a container has none.
 #
 # apksigner needs one and the build fails at the last step without it. On a

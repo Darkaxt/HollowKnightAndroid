@@ -61,28 +61,32 @@ object Il2cppConverter {
     /**
      * Whether the conversion is older than what it was made from.
      *
-     * Only the patches are checked, because only the patches change without
-     * anything else changing: the depot is fixed and the Input System is
-     * rebuilt from a pinned version, but the port's own code is edited between
-     * builds. Without this a changed patch compiles happily, is copied into
-     * the assembly set, and is then skipped by a conversion that thinks it has
-     * nothing to do -- so the player keeps running the previous version and
-     * nothing says otherwise.
+     * Three things change without anything else changing: the port's own
+     * patches, the BepInEx shims, and the mods folder. The depot is fixed and
+     * the Input System is rebuilt from a pinned version, so neither of those
+     * can go stale. Without this check a changed patch compiles happily, is
+     * copied into the assembly set, and is then skipped by a conversion that
+     * thinks it has nothing to do -- so the player keeps running the previous
+     * version and nothing says otherwise.
      */
-    fun isStale(root: File): Boolean {
-        val patches = PackageCompiler.patchAssembly(root)
-        if (!patches.isFile) return false
-        val staged = File(asmDir(root), patches.name)
-        if (!staged.isFile) return true
-        // Content, not length. Two builds of the patches differ in what they
-        // do far more often than in how big they are, and a same-size assembly
-        // read as "unchanged" means the conversion is skipped, the old
-        // generated C++ is recompiled, and the device runs the previous
-        // version of a patch while every log line says the build succeeded.
-        // That is not hypothetical: it cost three rounds of chasing a bug that
-        // had already been fixed.
-        if (staged.length() != patches.length()) return true
-        return !staged.readBytes().contentEquals(patches.readBytes())
+    fun isStale(root: File, mods: File? = null): Boolean {
+        if (mods != null && Mods.isStale(mods, root)) return true
+        val ours = listOf(PackageCompiler.patchAssembly(root)) + PackageCompiler.shimAssemblies(root)
+        for (built in ours) {
+            if (!built.isFile) continue
+            val staged = File(asmDir(root), built.name)
+            if (!staged.isFile) return true
+            // Content, not length. Two builds of the patches differ in what
+            // they do far more often than in how big they are, and a same-size
+            // assembly read as "unchanged" means the conversion is skipped,
+            // the old generated C++ is recompiled, and the device runs the
+            // previous version of a patch while every log line says the build
+            // succeeded. That is not hypothetical: it cost three rounds of
+            // chasing a bug that had already been fixed.
+            if (staged.length() != built.length()) return true
+            if (!staged.readBytes().contentEquals(built.readBytes())) return true
+        }
+        return false
     }
 
     // ── inputs ─────────────────────────────────────────────────────────────
@@ -110,7 +114,14 @@ object Il2cppConverter {
 
     // ── the run ────────────────────────────────────────────────────────────
 
-    fun convert(unity: File, depot: File, dotnet: File, root: File): Flow<Progress> = channelFlow {
+    fun convert(
+        unity: File,
+        depot: File,
+        dotnet: File,
+        root: File,
+        mods: File? = null,
+        assets: android.content.res.AssetManager? = null,
+    ): Flow<Progress> = channelFlow {
         val bcl = bclDir(unity)
         val engine = engineManagedDir(unity)
         val deploy = deployDir(unity)
@@ -121,8 +132,27 @@ object Il2cppConverter {
         if (!File(deploy, "il2cpp.dll").isFile) throw IOException("il2cpp.dll is missing: $deploy")
 
         send(Progress("Preparing the converter", -1f, "assemblies"))
-        val assemblies = stageAssemblies(bcl, engine, managed, PackageCompiler.outputDir(root), asmDir(root))
+        var assemblies = stageAssemblies(bcl, engine, managed, PackageCompiler.outputDir(root), asmDir(root))
         LauncherLog.log("il2cpp input: ${assemblies.size} assemblies")
+
+        // The chainloader, run here rather than at game startup: this is the
+        // last moment the game exists as IL, so it is the only moment a
+        // Harmony patch can be applied. Plugins are woven into the staged set
+        // and then converted along with everything else, which is why the
+        // assembly list is taken again afterwards -- a plugin il2cpp is not
+        // handed is a plugin that is not in the game.
+        if (mods != null && assets != null) {
+            val plugins = Mods.enabled(mods)
+            if (plugins.isNotEmpty()) {
+                send(Progress("Weaving mods", -1f, "${plugins.size} plugin(s)"))
+                Mods.weave(dotnet, root, mods, asmDir(root), assets) { line ->
+                    trySend(Progress("Weaving mods", -1f, line.take(80)))
+                }
+                assemblies = asmDir(root).listFiles().orEmpty()
+                    .filter { it.name.endsWith(".dll") }.sortedBy { it.name }
+                LauncherLog.log("il2cpp input after weaving: ${assemblies.size} assemblies")
+            }
+        }
 
         prepareTool(deploy)
 
@@ -184,6 +214,9 @@ object Il2cppConverter {
         LauncherLog.log(
             "il2cpp: ${seconds}s, $cpp cpp + $c c, metadata ${metadata(root).length()} bytes",
         )
+        // Only now: the stamp says "this build contains that mod set", and it
+        // would be a lie if the conversion had failed anywhere above.
+        if (mods != null) Mods.markCurrent(mods, root)
         send(Progress("Converted", 1f, "$cpp C++ files in ${seconds}s"))
     }.flowOn(Dispatchers.IO)
 

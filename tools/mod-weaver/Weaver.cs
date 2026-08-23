@@ -143,6 +143,7 @@ internal sealed class Weaver
         }
 
         Describe(plugin, report);
+        if (!ReferencesResolve(plugin, report)) return;
         NoteUnsupportedCalls(plugin, report);
 
         foreach (var type in plugin.MainModule.GetTypes())
@@ -156,6 +157,60 @@ internal sealed class Weaver
                 report.Note($"{type.Name} could not be woven ({e.GetType().Name})");
             }
         }
+    }
+
+    /// <summary>
+    /// Every type and member the plugin names must exist in this build.
+    ///
+    /// This is the check that pays for itself. An unresolvable reference is not
+    /// caught by anything else until il2cpp trips over it, and il2cpp failing
+    /// takes the whole build down -- seventeen minutes of native compile that
+    /// never starts, for one plugin using a Harmony class the shim does not
+    /// have. Here it is one line in a report, before anything is built.
+    ///
+    /// Types are fatal to the plugin, because a type that is not there cannot
+    /// be substituted. Members are only noted: Cecil cannot always resolve a
+    /// member of a generic type it can resolve perfectly well, and refusing a
+    /// working mod is worse than letting an unusual one through.
+    /// </summary>
+    bool ReferencesResolve(AssemblyDefinition plugin, PluginReport report)
+    {
+        var missing = new List<string>();
+
+        foreach (var reference in plugin.MainModule.GetTypeReferences())
+        {
+            if (reference.IsGenericParameter) continue;
+            if (missing.Count >= 5) break;
+            if (Resolves(() => reference.Resolve() is not null)) continue;
+            missing.Add(reference.FullName);
+        }
+
+        if (missing.Count > 0)
+        {
+            report.Fail($"needs {string.Join(", ", missing)}, which this build does not have");
+            return false;
+        }
+
+        foreach (var reference in plugin.MainModule.GetMemberReferences())
+        {
+            if (missing.Count >= 5) break;
+            var declaring = reference.DeclaringType;
+            if (declaring is null || declaring.IsGenericInstance || declaring.IsArray) continue;
+            if (Resolves(() => reference.Resolve() is not null)) continue;
+            missing.Add($"{declaring.FullName}.{reference.Name}");
+        }
+
+        if (missing.Count > 0)
+            report.Note($"calls {string.Join(", ", missing)}, which this build does not have");
+
+        return true;
+    }
+
+    static bool Resolves(Func<bool> resolve)
+    {
+        try { return resolve(); }
+        catch (AssemblyResolutionException) { return false; }
+        catch (Exception) { return true; }
     }
 
     /// Reads [BepInPlugin(guid, name, version)] for the launcher's list.

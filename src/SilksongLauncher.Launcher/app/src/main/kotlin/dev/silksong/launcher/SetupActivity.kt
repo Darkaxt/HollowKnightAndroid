@@ -871,8 +871,16 @@ class SetupActivity : Activity() {
                 // they are a few seconds to compile.
                 PackageCompiler.compilePatches(unity, depot, dotnet, out, assets)
                     .collect { setBusy(true, it.step, it.fraction, it.detail) }
-                if (!Il2cppConverter.isPresent(out) || Il2cppConverter.isStale(out)) {
-                    Il2cppConverter.convert(unity, depot, dotnet, out).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                // The BepInEx shims, on the same terms and for the same
+                // reason: they are ours, they change with the app, and they
+                // have to be compiled against the user's own depot.
+                PackageCompiler.compileShims(unity, depot, dotnet, out, assets)
+                    .collect { setBusy(true, it.step, it.fraction, it.detail) }
+                val mods = Mods.dir(this@SetupActivity)
+                withContext(Dispatchers.IO) { Mods.ensure(mods) }
+                if (!Il2cppConverter.isPresent(out) || Il2cppConverter.isStale(out, mods)) {
+                    Il2cppConverter.convert(unity, depot, dotnet, out, mods, assets)
+                        .collect { setBusy(true, it.step, it.fraction, it.detail) }
                 }
                 NativeBuild.build(unity, tools, out, assets, install = engineDir)
                     .collect { setBusy(true, it.step, it.fraction, it.detail) }

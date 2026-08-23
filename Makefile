@@ -116,6 +116,9 @@ devices: ## List connected devices
 surgery: ## Build bundle-surgery (Gradle stages it into the APK)
 	dotnet build -c Release tools/bundle-surgery/BundleSurgery.csproj
 
+weaver: ## Build mod-weaver (Gradle stages it into the APK)
+	dotnet build -c Release tools/mod-weaver/ModWeaver.csproj
+
 # The one thing the APK build still needs from Unity: the Android player
 # module, which carries the player classes compiled into the dex,
 # UnityPlayerActivity's source, Gradle, and libunity/libmain. This is the same
@@ -142,4 +145,4 @@ check: ## Compile-check the patch sources against your depot (fast, thorough)
 	@pwsh -NoProfile -File tools/silksong-patches/check.ps1
 
 clean: ## Remove build outputs
-	rm -rf "$(BUILD_ROOT)" "$(APK_DIR)" src/SilksongLauncher.Launcher/app/build tools/bundle-surgery/bin tools/bundle-surgery/obj
+	rm -rf "$(BUILD_ROOT)" "$(APK_DIR)" src/SilksongLauncher.Launcher/app/build tools/bundle-surgery/bin tools/bundle-surgery/obj tools/mod-weaver/bin tools/mod-weaver/obj

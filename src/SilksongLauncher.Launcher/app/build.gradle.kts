@@ -197,3 +197,32 @@ val stagePatches by tasks.registering(Sync::class) {
     into(layout.projectDirectory.dir("src/main/assets/ondevice/patches"))
 }
 tasks.named("preBuild") { dependsOn(stagePatches) }
+
+// mod-weaver: the build-time chainloader. Same arrangement as bundle-surgery
+// -- a small framework-dependent .NET app built on a PC, carried in the APK,
+// run on the device by the .NET that is already there.
+val stageModWeaver by tasks.registering(Copy::class) {
+    val built = rootProject.file("../../tools/mod-weaver/bin/Release/net8.0")
+    from(built) {
+        include(
+            "ModWeaver.dll", "ModWeaver.runtimeconfig.json", "ModWeaver.deps.json",
+            "Mono.Cecil.dll", "Mono.Cecil.Rocks.dll", "Mono.Cecil.Mdb.dll", "Mono.Cecil.Pdb.dll",
+        )
+    }
+    into(layout.projectDirectory.dir("src/main/assets/ondevice/mod-weaver"))
+    doFirst {
+        require(File(built, "ModWeaver.dll").isFile) {
+            "mod-weaver is not built. Run: dotnet build -c Release tools/mod-weaver"
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn(stageModWeaver) }
+
+// The BepInEx shims, shipped as source and compiled on the device for the same
+// reason the patches are: a plugin and the game have to agree about what
+// UnityEngine.MonoBehaviour is, and only the depot can settle that.
+val stageBepInExShim by tasks.registering(Sync::class) {
+    from(rootProject.file("../../tools/bepinex-shim/src"))
+    into(layout.projectDirectory.dir("src/main/assets/ondevice/bepinex"))
+}
+tasks.named("preBuild") { dependsOn(stageBepInExShim) }
