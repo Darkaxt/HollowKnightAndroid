@@ -122,7 +122,7 @@ class ModsActivity : Activity() {
         // is not always what the assembly inside is called.
         val reports = Mods.lastReport(root).associateBy { it.file }
 
-        if (Mods.isStale(mods, root)) {
+        if (Mods.isStale(mods, root, assets)) {
             list.addView(
                 note("The mods folder has changed since the last build. Rebuild to apply it."),
             )

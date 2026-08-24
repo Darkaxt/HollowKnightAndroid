@@ -878,7 +878,7 @@ class SetupActivity : Activity() {
                     .collect { setBusy(true, it.step, it.fraction, it.detail) }
                 val mods = Mods.dir(this@SetupActivity)
                 withContext(Dispatchers.IO) { Mods.ensure(mods) }
-                if (!Il2cppConverter.isPresent(out) || Il2cppConverter.isStale(out, mods)) {
+                if (!Il2cppConverter.isPresent(out) || Il2cppConverter.isStale(out, mods, assets)) {
                     Il2cppConverter.convert(unity, depot, dotnet, out, mods, assets)
                         .collect { setBusy(true, it.step, it.fraction, it.detail) }
                 }

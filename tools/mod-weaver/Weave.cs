@@ -79,126 +79,128 @@ internal static class Weave
         var module = target.Module;
         var body = target.Body;
         body.SimplifyMacros();
-
-        var wantsResult = target.ReturnType.MetadataType != MetadataType.Void;
-        VariableDefinition? resultVar = null;
-        if (wantsResult)
+        try
         {
-            resultVar = new VariableDefinition(module.ImportReference(target.ReturnType));
-        }
-        VariableDefinition? stateVar = null;
-
-        // Everything is built first and committed second. Building can fail --
-        // an argument the weaver does not understand -- and a body that has
-        // already been half-rewritten cannot be put back.
-        var prefixCode = new List<Instruction>();
-        var postfixCode = new List<Instruction>();
-        var scratch = new List<VariableDefinition>();
-
-        var postfixStart = Instruction.Create(OpCodes.Nop);
-
-        if (prefix is not null)
-        {
-            if (!LoadArguments(target, prefix, resultVar, ref stateVar, scratch, prefixCode, report, touched))
+            var wantsResult = target.ReturnType.MetadataType != MetadataType.Void;
+            VariableDefinition? resultVar = null;
+            if (wantsResult)
             {
-                body.OptimizeMacros();
-                return false;
+                resultVar = new VariableDefinition(module.ImportReference(target.ReturnType));
             }
-            prefixCode.Add(Instruction.Create(OpCodes.Call, module.ImportReference(prefix)));
-            var ret = prefix.ReturnType;
-            if (ret.MetadataType == MetadataType.Boolean)
-            {
-                prefixCode.Add(Instruction.Create(OpCodes.Brfalse, postfixStart));
-            }
-            else if (ret.MetadataType != MetadataType.Void)
-            {
-                report.Note(
-                    $"{Where(prefix)} returns {ret.Name}; a prefix has to return void or bool");
-                body.OptimizeMacros();
-                return false;
-            }
-        }
+            VariableDefinition? stateVar = null;
 
-        if (postfix is not null)
-        {
-            if (!LoadArguments(target, postfix, resultVar, ref stateVar, scratch, postfixCode, report, touched))
+            // Everything is built first and committed second. Building can fail --
+            // an argument the weaver does not understand -- and a body that has
+            // already been half-rewritten cannot be put back.
+            var prefixCode = new List<Instruction>();
+            var postfixCode = new List<Instruction>();
+            var scratch = new List<VariableDefinition>();
+
+            var postfixStart = Instruction.Create(OpCodes.Nop);
+
+            if (prefix is not null)
             {
-                body.OptimizeMacros();
-                return false;
-            }
-            postfixCode.Add(Instruction.Create(OpCodes.Call, module.ImportReference(postfix)));
-            var ret = postfix.ReturnType;
-            if (ret.MetadataType != MetadataType.Void)
-            {
-                // A postfix may return the value it was given, which is how a
-                // patch rewrites a result without a by-ref parameter.
-                if (resultVar is not null && Assignable(target.ReturnType, ret))
+                if (!LoadArguments(target, prefix, resultVar, ref stateVar, scratch, prefixCode, report, touched))
                 {
-                    postfixCode.Add(Instruction.Create(OpCodes.Stloc, resultVar));
+                    return false;
+                }
+                prefixCode.Add(Instruction.Create(OpCodes.Call, module.ImportReference(prefix)));
+                var ret = prefix.ReturnType;
+                if (ret.MetadataType == MetadataType.Boolean)
+                {
+                    prefixCode.Add(Instruction.Create(OpCodes.Brfalse, postfixStart));
+                }
+                else if (ret.MetadataType != MetadataType.Void)
+                {
+                    report.Note(
+                        $"{Where(prefix)} returns {ret.Name}; a prefix has to return void or bool");
+                    return false;
+                }
+            }
+
+            if (postfix is not null)
+            {
+                if (!LoadArguments(target, postfix, resultVar, ref stateVar, scratch, postfixCode, report, touched))
+                {
+                    return false;
+                }
+                postfixCode.Add(Instruction.Create(OpCodes.Call, module.ImportReference(postfix)));
+                var ret = postfix.ReturnType;
+                if (ret.MetadataType != MetadataType.Void)
+                {
+                    // A postfix may return the value it was given, which is how a
+                    // patch rewrites a result without a by-ref parameter.
+                    if (resultVar is not null && Assignable(target.ReturnType, ret))
+                    {
+                        postfixCode.Add(Instruction.Create(OpCodes.Stloc, resultVar));
+                    }
+                    else
+                    {
+                        postfixCode.Add(Instruction.Create(OpCodes.Pop));
+                        report.Note($"{Where(postfix)} returns a value that does not fit the patched method; ignoring it");
+                    }
+                }
+            }
+
+            // ── committed from here ────────────────────────────────────────────
+
+            if (resultVar is not null) body.Variables.Add(resultVar);
+            foreach (var v in scratch) body.Variables.Add(v);
+            if (body.Variables.Count > 0) body.InitLocals = true;
+
+            var il = body.GetILProcessor();
+            var first = body.Instructions[0];
+            var rets = body.Instructions.Where(i => i.OpCode.Code == Code.Ret).ToList();
+
+            il.Append(postfixStart);
+
+            foreach (var ret in rets)
+            {
+                // Branching out of a try or a handler is only legal with `leave`,
+                // and a body written by something other than a C# compiler can
+                // perfectly well return from inside one.
+                var jump = Protected(body, ret) ? OpCodes.Leave : OpCodes.Br;
+                if (resultVar is not null)
+                {
+                    // Mutated rather than replaced: branches and exception-handler
+                    // boundaries hold references to this instruction, and swapping
+                    // it for a new one silently repoints them at the wrong place.
+                    il.InsertAfter(ret, Instruction.Create(jump, postfixStart));
+                    ret.OpCode = OpCodes.Stloc;
+                    ret.Operand = resultVar;
                 }
                 else
                 {
-                    postfixCode.Add(Instruction.Create(OpCodes.Pop));
-                    report.Note($"{Where(postfix)} returns a value that does not fit the patched method; ignoring it");
+                    ret.OpCode = jump;
+                    ret.Operand = postfixStart;
                 }
             }
+
+            foreach (var ins in postfixCode) il.Append(ins);
+            if (resultVar is not null) il.Append(Instruction.Create(OpCodes.Ldloc, resultVar));
+            il.Append(Instruction.Create(OpCodes.Ret));
+
+            // Last, so that the branches above are already pointing at real
+            // instructions. Inserting before the original first instruction keeps
+            // every existing branch into it correct.
+            foreach (var ins in prefixCode) il.InsertBefore(first, ins);
+
+            // A Harmony patch method is private by convention, and it is now
+            // called from another assembly. Nothing else can grant that access:
+            // the alternative is a MethodAccessException at the first patched call,
+            // which under IL2CPP surfaces as a crash rather than an exception.
+            Publicise(prefix);
+            Publicise(postfix);
+            if (prefix is not null) touched(prefix.Module.Assembly);
+            if (postfix is not null) touched(postfix.Module.Assembly);
+            touched(target.Module.Assembly);
+
+            return true;
         }
-
-        // ── committed from here ────────────────────────────────────────────
-
-        if (resultVar is not null) body.Variables.Add(resultVar);
-        foreach (var v in scratch) body.Variables.Add(v);
-        if (body.Variables.Count > 0) body.InitLocals = true;
-
-        var il = body.GetILProcessor();
-        var first = body.Instructions[0];
-        var rets = body.Instructions.Where(i => i.OpCode.Code == Code.Ret).ToList();
-
-        il.Append(postfixStart);
-
-        foreach (var ret in rets)
+        finally
         {
-            // Branching out of a try or a handler is only legal with `leave`,
-            // and a body written by something other than a C# compiler can
-            // perfectly well return from inside one.
-            var jump = Protected(body, ret) ? OpCodes.Leave : OpCodes.Br;
-            if (resultVar is not null)
-            {
-                // Mutated rather than replaced: branches and exception-handler
-                // boundaries hold references to this instruction, and swapping
-                // it for a new one silently repoints them at the wrong place.
-                il.InsertAfter(ret, Instruction.Create(jump, postfixStart));
-                ret.OpCode = OpCodes.Stloc;
-                ret.Operand = resultVar;
-            }
-            else
-            {
-                ret.OpCode = jump;
-                ret.Operand = postfixStart;
-            }
+            body.OptimizeMacros();
         }
-
-        foreach (var ins in postfixCode) il.Append(ins);
-        if (resultVar is not null) il.Append(Instruction.Create(OpCodes.Ldloc, resultVar));
-        il.Append(Instruction.Create(OpCodes.Ret));
-
-        // Last, so that the branches above are already pointing at real
-        // instructions. Inserting before the original first instruction keeps
-        // every existing branch into it correct.
-        foreach (var ins in prefixCode) il.InsertBefore(first, ins);
-
-        // A Harmony patch method is private by convention, and it is now
-        // called from another assembly. Nothing else can grant that access:
-        // the alternative is a MethodAccessException at the first patched call,
-        // which under IL2CPP surfaces as a crash rather than an exception.
-        Publicise(prefix);
-        Publicise(postfix);
-        if (prefix is not null) touched(prefix.Module.Assembly);
-        if (postfix is not null) touched(postfix.Module.Assembly);
-        touched(target.Module.Assembly);
-
-        body.OptimizeMacros();
-        return true;
     }
 
     /// <summary>
@@ -249,70 +251,70 @@ internal static class Weave
             switch (name)
             {
                 case "__instance":
-                {
-                    if (target.IsStatic)
                     {
-                        report.Note($"{Where(patch)} wants __instance, but {target.Name} is static");
-                        return false;
+                        if (target.IsStatic)
+                        {
+                            report.Note($"{Where(patch)} wants __instance, but {target.Name} is static");
+                            return false;
+                        }
+                        if (target.DeclaringType.IsValueType)
+                        {
+                            report.Note($"{Where(patch)} patches a struct method, which is not supported");
+                            return false;
+                        }
+                        if (byRef)
+                        {
+                            report.Note($"{Where(patch)} takes __instance by ref, which is not supported");
+                            return false;
+                        }
+                        if (!Assignable(want, target.DeclaringType))
+                        {
+                            report.Note($"{Where(patch)} types __instance as {want.Name}, which {target.DeclaringType.Name} is not");
+                            return false;
+                        }
+                        into.Add(Instruction.Create(OpCodes.Ldarg_0));
+                        continue;
                     }
-                    if (target.DeclaringType.IsValueType)
-                    {
-                        report.Note($"{Where(patch)} patches a struct method, which is not supported");
-                        return false;
-                    }
-                    if (byRef)
-                    {
-                        report.Note($"{Where(patch)} takes __instance by ref, which is not supported");
-                        return false;
-                    }
-                    if (!Assignable(want, target.DeclaringType))
-                    {
-                        report.Note($"{Where(patch)} types __instance as {want.Name}, which {target.DeclaringType.Name} is not");
-                        return false;
-                    }
-                    into.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    continue;
-                }
 
                 case "__result":
-                {
-                    if (resultVar is null)
                     {
-                        report.Note($"{Where(patch)} wants __result, but {target.Name} returns nothing");
-                        return false;
+                        if (resultVar is null)
+                        {
+                            report.Note($"{Where(patch)} wants __result, but {target.Name} returns nothing");
+                            return false;
+                        }
+                        if (!Assignable(want, target.ReturnType) && !(want.FullName == "System.Object" && !byRef))
+                        {
+                            report.Note($"{Where(patch)} types __result as {want.Name} rather than {target.ReturnType.Name}");
+                            return false;
+                        }
+                        into.Add(byRef
+                            ? Instruction.Create(OpCodes.Ldloca, resultVar)
+                            : Instruction.Create(OpCodes.Ldloc, resultVar));
+                        if (!byRef && want.FullName == "System.Object" && target.ReturnType.IsValueType)
+                        {
+                            into.Add(Instruction.Create(OpCodes.Box, module.ImportReference(target.ReturnType)));
+                        }
+                        continue;
                     }
-                    if (!Assignable(want, target.ReturnType) && !(want.FullName == "System.Object" && !byRef))
-                    {
-                        report.Note($"{Where(patch)} types __result as {want.Name} rather than {target.ReturnType.Name}");
-                        return false;
-                    }
-                    into.Add(byRef
-                        ? Instruction.Create(OpCodes.Ldloca, resultVar)
-                        : Instruction.Create(OpCodes.Ldloc, resultVar));
-                    if (!byRef && want.FullName == "System.Object" && target.ReturnType.IsValueType)
-                    {
-                        into.Add(Instruction.Create(OpCodes.Box, module.ImportReference(target.ReturnType)));
-                    }
-                    continue;
-                }
 
                 case "__state":
-                {
-                    if (stateVar is null)
                     {
-                        stateVar = new VariableDefinition(module.ImportReference(want));
-                        scratch.Add(stateVar);
+                        if (stateVar is null)
+                        {
+                            stateVar = new VariableDefinition(module.ImportReference(want));
+                            scratch.Add(stateVar);
+                        }
+                        else if (stateVar.VariableType.FullName != want.FullName)
+                        {
+                            report.Note($"{Where(patch)} types __state differently from its prefix");
+                            return false;
+                        }
+                        into.Add(byRef
+                            ? Instruction.Create(OpCodes.Ldloca, stateVar)
+                            : Instruction.Create(OpCodes.Ldloc, stateVar));
+                        continue;
                     }
-                    else if (stateVar.VariableType.FullName != want.FullName)
-                    {
-                        report.Note($"{Where(patch)} types __state differently from its prefix");
-                        return false;
-                    }
-                    into.Add(byRef
-                        ? Instruction.Create(OpCodes.Ldloca, stateVar)
-                        : Instruction.Create(OpCodes.Ldloc, stateVar));
-                    continue;
-                }
 
                 case "__originalMethod":
                 case "__args":

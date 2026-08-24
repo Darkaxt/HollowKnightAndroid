@@ -21,6 +21,7 @@ package dev.silksong.launcher
 
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.security.MessageDigest
 
 object Mods {
@@ -115,37 +116,46 @@ object Mods {
     private fun stampFile(root: File): File = File(root, "mods.stamp")
 
     /**
-     * What the enabled set contains, by content.
+     * What the enabled set and the weaver that consumes it contain, by content.
      *
      * Content and not timestamps: a plugin replaced by a different build of
      * itself is the case that matters most, and it is also the case most
      * likely to arrive with whatever mtime the zip carried.
      */
-    fun stamp(mods: File): String {
+    fun stamp(mods: File, assets: android.content.res.AssetManager? = null): String {
         val sha = MessageDigest.getInstance("SHA-256")
-        for (dll in enabled(mods)) {
+        val plugins = enabled(mods)
+        for (dll in plugins) {
             sha.update(relativePath(mods, dll).toByteArray())
-            dll.inputStream().use { input ->
-                val buf = ByteArray(1 shl 16)
-                while (true) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    sha.update(buf, 0, n)
-                }
+            dll.inputStream().use { sha.updateFrom(it) }
+        }
+        if (plugins.isNotEmpty() && assets != null) {
+            for (name in assets.list(WEAVER_ASSET_DIR).orEmpty().sorted()) {
+                sha.update("weaver/$name".toByteArray())
+                assets.open("$WEAVER_ASSET_DIR/$name").use { sha.updateFrom(it) }
             }
         }
         return sha.digest().joinToString("") { "%02x".format(it) }
     }
 
-    /** Whether the mods folder differs from what the current build was made from. */
-    fun isStale(mods: File, root: File): Boolean {
-        val f = stampFile(root)
-        val previous = if (f.isFile) f.readText().trim() else ""
-        return previous != stamp(mods)
+    private fun MessageDigest.updateFrom(input: InputStream) {
+        val buf = ByteArray(1 shl 16)
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            update(buf, 0, n)
+        }
     }
 
-    fun markCurrent(mods: File, root: File) {
-        stampFile(root).writeText(stamp(mods))
+    /** Whether the mods folder differs from what the current build was made from. */
+    fun isStale(mods: File, root: File, assets: android.content.res.AssetManager? = null): Boolean {
+        val f = stampFile(root)
+        val previous = if (f.isFile) f.readText().trim() else ""
+        return previous != stamp(mods, assets)
+    }
+
+    fun markCurrent(mods: File, root: File, assets: android.content.res.AssetManager? = null) {
+        stampFile(root).writeText(stamp(mods, assets))
     }
 
     fun clearStamp(root: File) {

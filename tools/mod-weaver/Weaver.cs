@@ -314,6 +314,15 @@ internal sealed class Weaver
             var pre = prefixes.TryGetValue(target, out var a) ? a : new List<MethodDefinition>();
             var post = postfixes.TryGetValue(target, out var b) ? b : new List<MethodDefinition>();
 
+            if ((pre.Count > 1 || post.Count > 1) && pre.Concat(post).Any(UsesState))
+            {
+                report.Note($"{type.Name} uses __state across multiple patches on {target.FullName}; state is paired by position");
+            }
+            if (pre.Count(p => p.ReturnType.MetadataType == MetadataType.Boolean) > 1)
+            {
+                report.Note($"{type.Name} has multiple bool prefixes on {target.FullName}; a skipped original may skip later prefixes too");
+            }
+
             // Paired so that a prefix and a postfix from the same class share
             // one __state local, which is the only way __state means anything.
             for (var i = 0; i < Math.Max(pre.Count, post.Count); i++)
@@ -353,6 +362,9 @@ internal sealed class Weaver
             _ => null,
         };
     }
+
+    static bool UsesState(MethodDefinition method) =>
+        method.Parameters.Any(p => p.Name == "__state");
 
     static PatchSpec Merge(IEnumerable<CustomAttribute> attributes)
     {

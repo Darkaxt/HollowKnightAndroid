@@ -69,8 +69,12 @@ object Il2cppConverter {
      * thinks it has nothing to do -- so the player keeps running the previous
      * version and nothing says otherwise.
      */
-    fun isStale(root: File, mods: File? = null): Boolean {
-        if (mods != null && Mods.isStale(mods, root)) return true
+    fun isStale(
+        root: File,
+        mods: File? = null,
+        assets: android.content.res.AssetManager? = null,
+    ): Boolean {
+        if (mods != null && Mods.isStale(mods, root, assets)) return true
         val ours = listOf(PackageCompiler.patchAssembly(root)) + PackageCompiler.shimAssemblies(root)
         for (built in ours) {
             if (!built.isFile) continue
@@ -216,7 +220,7 @@ object Il2cppConverter {
         )
         // Only now: the stamp says "this build contains that mod set", and it
         // would be a lie if the conversion had failed anywhere above.
-        if (mods != null) Mods.markCurrent(mods, root)
+        if (mods != null) Mods.markCurrent(mods, root, assets)
         send(Progress("Converted", 1f, "$cpp C++ files in ${seconds}s"))
     }.flowOn(Dispatchers.IO)
 
