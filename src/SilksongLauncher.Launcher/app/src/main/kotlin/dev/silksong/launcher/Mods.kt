@@ -130,12 +130,25 @@ object Mods {
             dll.inputStream().use { sha.updateFrom(it) }
         }
         if (plugins.isNotEmpty() && assets != null) {
-            for (name in assets.list(WEAVER_ASSET_DIR).orEmpty().sorted()) {
-                sha.update("weaver/$name".toByteArray())
-                assets.open("$WEAVER_ASSET_DIR/$name").use { sha.updateFrom(it) }
-            }
+            sha.updateAssets(assets, WEAVER_ASSET_DIR)
         }
         return sha.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun MessageDigest.updateAssets(assets: android.content.res.AssetManager, dir: String) {
+        for (name in assets.list(dir).orEmpty().sorted()) {
+            val path = "$dir/$name"
+            val children = assets.list(path).orEmpty()
+            if (children.isNotEmpty()) {
+                updateAssets(assets, path)
+            } else {
+                try {
+                    update(path.toByteArray())
+                    assets.open(path).use { updateFrom(it) }
+                } catch (_: IOException) {
+                }
+            }
+        }
     }
 
     private fun MessageDigest.updateFrom(input: InputStream) {
