@@ -78,7 +78,7 @@ internal static class Weave
 
         var module = target.Module;
         var body = target.Body;
-        body.SimplifyMacros();
+        var simplified = false;
         try
         {
             var wantsResult = target.ReturnType.MetadataType != MetadataType.Void;
@@ -144,6 +144,9 @@ internal static class Weave
 
             // ── committed from here ────────────────────────────────────────────
 
+            body.SimplifyMacros();
+            simplified = true;
+
             if (resultVar is not null) body.Variables.Add(resultVar);
             foreach (var v in scratch) body.Variables.Add(v);
             if (body.Variables.Count > 0) body.InitLocals = true;
@@ -199,7 +202,7 @@ internal static class Weave
         }
         finally
         {
-            body.OptimizeMacros();
+            if (simplified) body.OptimizeMacros();
         }
     }
 

@@ -20,7 +20,7 @@ internal sealed class Weaver
     /// on the device against the depot, and letting a plugin's copy overwrite
     /// them would replace working code with an implementation that assumes a
     /// runtime we do not have.
-    static readonly string[] Supplied =
+    static readonly HashSet<string> Supplied = new(StringComparer.OrdinalIgnoreCase)
     {
         "BepInEx", "BepInEx.Core", "BepInEx.Harmony", "BepInEx.Preloader",
         "0Harmony", "0Harmony20", "HarmonyXInterop",
