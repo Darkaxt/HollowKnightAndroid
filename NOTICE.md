@@ -16,8 +16,7 @@ Stated first because it is the point of the whole design:
   game travels in the APK; it is downloaded from the user's own Steam depot, on
   their own device, with their own account.
 * **No Unity binaries.** `libunity.so`, `libmain.so` and `libil2cpp.so` are
-  fetched or built on the device. The only native library shipped is
-  `libzstd-jni`.
+  fetched or built on the device.
 
 ## Redistributed in the APK
 
@@ -39,10 +38,18 @@ A copy of the Apache License 2.0 is at
 
 ### MIT License
 
+* **.NET** — Copyright (c) .NET Foundation and Contributors. The Mono build of
+  the .NET runtime for `android-arm64`, from
+  `Microsoft.NETCore.App.Runtime.Mono.android-arm64`: the native libraries in
+  `lib/arm64-v8a/` (`libmonosgen-2.0.so`, its components, and the
+  `libSystem.*.so` shims) and the class library in `assets/mono-bcl/`. The
+  launcher runs il2cpp, Roslyn and bundle-surgery on it, on the device.
+
+  Upstream's own `LICENSE.TXT` and `THIRD-PARTY-NOTICES.TXT` are shipped
+  beside the assemblies, in `assets/mono-bcl/`.
 * **JavaSteam** and **JavaSteam Depot Downloader** — Copyright (c) Lossy and
   JavaSteam contributors
 * **AssetsTools.NET** — Copyright (c) nesrak1
-* **AssetRipper.Primitives** — Copyright (c) AssetRipper contributors
 * **SLF4J** — Copyright (c) QOS.ch
 
 ### BSD family

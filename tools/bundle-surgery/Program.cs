@@ -1,10 +1,6 @@
 using AssetsTools.NET;
 using AssetsTools.NET.Extra;
 using System.Text;
-// Two unrelated libraries both expose a `UnityVersion` type. Make the
-// AssetRipper one canonical here (the one ShaderBlob.cs uses), and refer
-// to AssetsTools.NET's by its full path when we need to parse via it.
-using UnityVersion = AssetRipper.Primitives.UnityVersion;
 
 namespace BundleSurgery;
 
@@ -26,12 +22,13 @@ namespace BundleSurgery;
 // BuildTarget (in the inner SerializedFile header's m_TargetPlatform):
 //   13=Android  19=StandaloneWin64  24=StandaloneLinux64
 //
-// ShaderGpuProgramType (in SubProgramEntry's ProgType field):
+// ShaderGpuProgramType (in a shader subprogram's ProgType field):
 //   4=GLES3  6=GLCore32  15=DX11VertexSM40  17=DX11PixelSM40  25=SPIRV
 //
-// The compressed shader blob is a list of SubProgramEntry structs
-// concatenated. Each entry starts with the magic `BA 75 0A 0C`
-// (little-endian 202012090). See ShaderBlob.cs for the parser.
+// The compressed shader blob is a list of subprogram entries concatenated.
+// Each entry starts with the magic `BA 75 0A 0C` (little-endian 202012090).
+// A parser for it lived in ShaderBlob.cs until nothing called it any more;
+// git has it if the format is ever needed again.
 //
 // On-device shader debugging (Adreno Vulkan):
 //   adb shell setprop log.tag.Adreno-Vulkan VERBOSE

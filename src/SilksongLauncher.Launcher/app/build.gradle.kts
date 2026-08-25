@@ -319,17 +319,23 @@ fun sha256Of(f: File): String =
 // them.
 val stageBundleSurgery by tasks.registering(Copy::class) {
     val built = rootProject.file("../../tools/bundle-surgery/bin/Release/net8.0")
+    val dest = layout.projectDirectory.dir("src/main/assets/ondevice/bundle-surgery")
     from(built) {
         include(
             "BundleSurgery.dll", "BundleSurgery.runtimeconfig.json", "BundleSurgery.deps.json",
-            "AssetsTools.NET.dll", "AssetRipper.Primitives.dll", "classdata.tpk",
+            "AssetsTools.NET.dll", "classdata.tpk",
         )
     }
-    into(layout.projectDirectory.dir("src/main/assets/ondevice/bundle-surgery"))
+    into(dest)
     doFirst {
         require(File(built, "BundleSurgery.dll").isFile) {
             "bundle-surgery is not built. Run: dotnet build -c Release tools/bundle-surgery"
         }
+        // Emptied first, because a Copy only ever adds. Dropping a dependency
+        // from the list above would otherwise leave the old assembly sitting
+        // in the staging directory and it would go on being packaged --
+        // which is exactly what AssetRipper.Primitives.dll did.
+        delete(dest)
     }
 }
 tasks.named("preBuild") { dependsOn(stageBundleSurgery) }
