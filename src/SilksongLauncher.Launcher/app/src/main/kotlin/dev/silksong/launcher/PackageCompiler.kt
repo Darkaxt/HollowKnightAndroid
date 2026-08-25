@@ -25,7 +25,7 @@
 // control, and it makes a C# compiler into another thing Unity has to keep
 // where we found it. Roslyn is Microsoft's, published as an ordinary NuGet
 // package, and the five files that make up a working csc come to 9.6 MB.
-// It runs on the .NET that DotnetFetcher already stages.
+// It runs on the .NET that MonoRuntime ships.
 
 package dev.silksong.launcher
 
@@ -130,7 +130,7 @@ object PackageCompiler {
     fun compilePatches(
         unity: File,
         depot: File,
-        dotnet: File,
+        context: android.content.Context,
         root: File,
         assets: android.content.res.AssetManager,
     ): Flow<Progress> = channelFlow {
@@ -167,10 +167,11 @@ object PackageCompiler {
             for (f in cs) w.println("\"$f\"")
         }
 
-        val result = Toolchain.exec(
-            DotnetFetcher.command(dotnet, csc, "@${rsp.absolutePath}"),
+        val result = MonoRuntime.exec(
+            context,
+            csc,
+            listOf("@${rsp.absolutePath}"),
             cwd = root,
-            env = DotnetFetcher.environment(dotnet),
         )
         if (!result.ok || out.length() <= 0) {
             val errors = result.output.lineSequence().filter { it.contains("error CS") }.toList()
@@ -272,7 +273,7 @@ object PackageCompiler {
      * source; [depot] supplies the assemblies the package references that the
      * engine does not carry, UnityEngine.UI among them.
      */
-    fun compile(unity: File, depot: File, dotnet: File, root: File): Flow<Progress> = channelFlow {
+    fun compile(unity: File, depot: File, context: android.content.Context, root: File): Flow<Progress> = channelFlow {
         val pkg = UnityFetcher.packageDir(unity)
         val sources = File(pkg, "InputSystem")
         if (!sources.isDirectory) throw IOException("the Input System source is missing: $sources")
@@ -342,11 +343,12 @@ object PackageCompiler {
         val log = File(root, "inputsystem.log")
         val sink = log.bufferedWriter()
         val result = try {
-            Toolchain.exec(
-                DotnetFetcher.command(dotnet, csc, "@${rsp.absolutePath}"),
-                cwd = root,
-                env = DotnetFetcher.environment(dotnet),
-            ) { line ->
+            MonoRuntime.exec(
+            context,
+            csc,
+            listOf("@${rsp.absolutePath}"),
+            cwd = root,
+        ) { line ->
                 sink.write(line); sink.write("\n")
                 if (line.contains("error CS")) trySend(Progress("Compiling the Input System", -1f, line.take(90)))
             }

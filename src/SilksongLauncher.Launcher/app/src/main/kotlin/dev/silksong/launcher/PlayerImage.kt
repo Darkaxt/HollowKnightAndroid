@@ -9,7 +9,7 @@
 //
 // The Kotlin counterpart of step 4 of tools/depot-to-apk/build.sh. The asset
 // surgery is done by the same bundle-surgery build a PC uses, carried in the
-// APK and run under the .NET that DotnetFetcher stages -- so its output here
+// APK and run under the .NET that MonoRuntime ships -- so its output here
 // is byte-identical to a desktop run. The two edits that are plain byte pokes
 // are done directly rather than shelling out for them.
 //
@@ -208,7 +208,7 @@ object PlayerImage {
     fun build(
         unity: File,
         depot: File,
-        dotnet: File,
+        context: android.content.Context,
         root: File,
         assets: android.content.res.AssetManager,
         contentRoot: String,
@@ -242,7 +242,7 @@ object PlayerImage {
             val src = File(data, name)
             if (!src.isFile) continue
             send(Progress("Retargeting shaders", (n.toFloat() / shaderFiles.size), name))
-            run(surgery, dotnet, listOf("extract-vulkan-android", src.absolutePath, File(img, name).absolutePath))
+            run(surgery, context, listOf("extract-vulkan-android", src.absolutePath, File(img, name).absolutePath))
         }
 
         send(Progress("Assembling the player image", -1f, "copying"))
@@ -276,19 +276,19 @@ object PlayerImage {
             val f = File(img, name)
             if (!f.isFile) continue
             coroutineContext.ensureActive()
-            run(surgery, dotnet, listOf("set-unity-version", f.absolutePath, UNITY_VERSION))
+            run(surgery, context, listOf("set-unity-version", f.absolutePath, UNITY_VERSION))
             retargetToAndroid(f)
         }
         File(img, "Resources/unity_builtin_extra").takeIf { it.isFile }?.let {
-            run(surgery, dotnet, listOf("set-unity-version", it.absolutePath, UNITY_VERSION))
+            run(surgery, context, listOf("set-unity-version", it.absolutePath, UNITY_VERSION))
             retargetToAndroid(it)
         }
 
         // A built player keeps its resolved API list in BuildSettings, not in
         // the editor-only PlayerSettings table.
         val ggm = File(img, "globalgamemanagers")
-        run(surgery, dotnet, listOf("set-graphics-apis", ggm.absolutePath, GRAPHICS_APIS))
-        run(surgery, dotnet, listOf("set-build-version", ggm.absolutePath, UNITY_VERSION))
+        run(surgery, context, listOf("set-graphics-apis", ggm.absolutePath, GRAPHICS_APIS))
+        run(surgery, context, listOf("set-build-version", ggm.absolutePath, UNITY_VERSION))
 
         setScriptingBackend(File(img, "boot.config"))
         registerPatches(img, root)
@@ -314,7 +314,7 @@ object PlayerImage {
             // Idempotent: the token is gone after the first pass, which is
             // what makes a re-run safe rather than an error.
             val patched = File(aaOut, "catalog.bin")
-            val r = tryRun(surgery, dotnet, listOf("patch-catalog-path", patched.absolutePath, patched.absolutePath, contentRoot))
+            val r = tryRun(surgery, context, listOf("patch-catalog-path", patched.absolutePath, patched.absolutePath, contentRoot))
             if (!r.ok) LauncherLog.log("catalog: already repointed, or ${r.output.trim().take(160)}")
         } else {
             LauncherLog.log("no catalog.bin under $aaSrc -- Addressables content will not resolve")
@@ -447,7 +447,7 @@ object PlayerImage {
      */
     fun retargetContent(
         depot: File,
-        dotnet: File,
+        context: android.content.Context,
         root: File,
         assets: android.content.res.AssetManager,
     ): Flow<Progress> = channelFlow {
@@ -487,7 +487,7 @@ object PlayerImage {
             // bar can only move once per top-level group -- and one group here
             // holds most of the 2068 bundles, so it sat at 0% for minutes
             // while the work was actually going fine.
-            val r = run(surgery, dotnet, listOf("retarget-tree", group.absolutePath, group.absolutePath)) { line ->
+            val r = run(surgery, context, listOf("retarget-tree", group.absolutePath, group.absolutePath)) { line ->
                 PROGRESS.find(line)?.let { m ->
                     val n = m.groupValues[1].toIntOrNull() ?: return@let
                     trySend(
@@ -754,11 +754,11 @@ object PlayerImage {
 
     private suspend fun run(
         surgery: File,
-        dotnet: File,
+        context: android.content.Context,
         args: List<String>,
         onLine: (String) -> Unit = {},
     ): Toolchain.Result {
-        val r = tryRun(surgery, dotnet, args, onLine)
+        val r = tryRun(surgery, context, args, onLine)
         if (!r.ok) {
             throw IOException(
                 "bundle-surgery ${args.firstOrNull()} failed: " +
@@ -770,14 +770,15 @@ object PlayerImage {
 
     private suspend fun tryRun(
         surgery: File,
-        dotnet: File,
+        context: android.content.Context,
         args: List<String>,
         onLine: (String) -> Unit = {},
     ): Toolchain.Result =
-        Toolchain.exec(
-            DotnetFetcher.command(dotnet, surgery, *args.toTypedArray()),
+        MonoRuntime.exec(
+            context,
+            surgery,
+            args,
             cwd = surgery.parentFile,
-            env = DotnetFetcher.environment(dotnet),
             onLine = onLine,
         )
 }

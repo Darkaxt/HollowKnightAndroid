@@ -2,6 +2,8 @@
 // silksong-launcher.aar, which tools/depot-to-apk/build.sh unpacks into
 // the APK it assembles (classes, JNI libraries and assets alike).
 
+import java.security.MessageDigest
+
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
@@ -11,10 +13,30 @@ android {
     namespace = "dev.silksong.launcher"
     compileSdk = 36
 
+    // Pinned to the NDK Unity's Android player ships, which is what
+    // tools/depot-to-apk builds against. Left unset, AGP picks its own
+    // default and then refuses to run when ndk.dir disagrees with it.
+    ndkVersion = "27.2.12479018"
+
     defaultConfig {
         // Must match the Silksong APK's minSdk so AGP doesn't reject
         // the merged manifest.
         minSdk = 26
+
+        // arm64 only, matching the rest of the APK. Building the other ABIs
+        // would double the work to produce something no Silksong device runs.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
+    }
+
+    // monohost, the .NET host. See src/main/cpp/monohost.c for why the
+    // runtime is Microsoft's android-arm64 build rather than a Linux one.
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     compileOptions {
@@ -30,6 +52,16 @@ android {
     // re-namespaces resources via androidx anyway).
     buildFeatures {
         buildConfig = false
+    }
+
+    // The .NET runtime staged by fetchMonoRuntime. Its shared libraries join
+    // monohost in lib/arm64-v8a/, and the class library rides in assets --
+    // build.sh copies both out of the AAR into the APK it assembles.
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDir(layout.buildDirectory.dir("mono/jniLibs"))
+            assets.srcDir(layout.buildDirectory.dir("mono/assets"))
+        }
     }
 }
 
@@ -134,6 +166,14 @@ tasks.register("collectRuntimeDeps") {
         }
         val abis = jni.listFiles()?.joinToString { it.name } ?: "none"
         logger.lifecycle("runtime deps: ${out.listFiles()?.count { it.extension == "jar" }} jar(s), jni: $abis")
+
+        // The .NET runtime's own Java classes, staged by fetchMonoRuntime.
+        // Copied in here rather than there because this task empties the
+        // directory before filling it, and it runs second.
+        copy {
+            from(layout.buildDirectory.dir("mono/libs")) { include("*.jar") }
+            into(out)
+        }
     }
 }
 
@@ -147,6 +187,129 @@ val stageBuildScript by tasks.registering(Copy::class) {
     into(layout.projectDirectory.dir("src/main/assets/ondevice"))
 }
 tasks.named("preBuild") { dependsOn(stageBuildScript) }
+
+// ── the .NET runtime ────────────────────────────────────────────────────
+//
+// Microsoft's Mono build of .NET for android-arm64: the runtime MAUI ships,
+// linked against bionic. It replaces a bundle that used to be assembled at
+// run time from Microsoft's linux-arm64 tarball and Debian's own glibc --
+// which cannot work on a current Android at all. Every app runs under a
+// seccomp filter generated from the syscalls bionic itself makes, and it
+// answers anything else with SIGSYS rather than ENOSYS, so glibc 2.35+ dies
+// registering rseq before reaching main() with nothing printed. See
+// src/main/cpp/monohost.c.
+//
+// Fetched here rather than committed: 25 MB of binaries do not belong in a
+// git history. Pinned by version and checked against its hash, so what a
+// build produces does not depend on what nuget.org served that day.
+//
+// MIT licensed; LICENSE.TXT and THIRD-PARTY-NOTICES.TXT ship beside it.
+//
+// The CDN host is deliberate. api.nuget.org is the metadata service and is
+// not always reachable; globalcdn.nuget.org is where the packages themselves
+// live and is what the client downloads from either way.
+val monoVersion = "9.0.16"
+val monoSha256 = "60fb0433157a54c580ca598743110c61a81feea19a29b76f611ed1448acc1100"
+val monoStage = layout.buildDirectory.dir("mono")
+
+val fetchMonoRuntime by tasks.registering {
+    description = "Downloads the android-arm64 .NET runtime and stages it for packaging"
+    group = "build"
+
+    val pkg = "microsoft.netcore.app.runtime.mono.android-arm64"
+    val nupkg = layout.buildDirectory.file("mono/$pkg.$monoVersion.nupkg")
+    val stage = monoStage
+
+    inputs.property("version", monoVersion)
+    inputs.property("sha256", monoSha256)
+    outputs.dir(stage)
+
+    doLast {
+        val file = nupkg.get().asFile
+        file.parentFile.mkdirs()
+
+        // Re-download only when the file that is there is not the file that
+        // was asked for. A truncated download is the interesting case: it
+        // unpacks far enough to look fine and fails much later.
+        val have = file.isFile && sha256Of(file) == monoSha256
+        if (!have) {
+            val url = "https://globalcdn.nuget.org/packages/$pkg.$monoVersion.nupkg"
+            logger.lifecycle("mono runtime: downloading $monoVersion")
+            uri(url).toURL().openStream().use { input ->
+                file.outputStream().use { input.copyTo(it) }
+            }
+            val got = sha256Of(file)
+            if (got != monoSha256) {
+                file.delete()
+                throw GradleException("mono runtime $monoVersion hash mismatch: expected $monoSha256, got $got")
+            }
+        }
+
+        val out = stage.get().asFile
+        delete(File(out, "jniLibs"))
+        delete(File(out, "assets"))
+
+        val native = "runtimes/android-arm64/native"
+
+        // The runtime's shared libraries, which have to be somewhere the
+        // installer will extract to an executable directory -- lib/<abi>/ is
+        // the only such place. monohost is built into the same directory by
+        // CMake and lands beside them.
+        copy {
+            from(zipTree(file)) { include("$native/*.so") }
+            into(File(out, "jniLibs/arm64-v8a"))
+            eachFile { path = name }
+            includeEmptyDirs = false
+        }
+
+        // The class library is data: it is read and JIT'd, never executed as
+        // a file, so it goes in assets and is staged to filesDir on first
+        // run. System.Private.CoreLib sits with the native files upstream
+        // but belongs with the rest of the assemblies here.
+        copy {
+            from(zipTree(file)) {
+                include("runtimes/android-arm64/lib/net9.0/*.dll")
+                include("$native/System.Private.CoreLib.dll")
+                include("LICENSE.TXT")
+                include("THIRD-PARTY-NOTICES.TXT")
+            }
+            into(File(out, "assets/mono-bcl"))
+            eachFile { path = name }
+            includeEmptyDirs = false
+        }
+
+        // The Java half of the cryptography shim.
+        //
+        // .NET does not implement cryptography on Android; it calls Java's,
+        // and libSystem.Security.Cryptography.Native.Android.so is the JNI
+        // side of that. Its JNI_OnLoad resolves three classes in
+        // net.dot.android.crypto and calls abort() if they are not on the
+        // class path -- "GetClassGRef: class net/dot/android/crypto/
+        // DotnetProxyTrustManager was not found", which takes the process
+        // with it. The classes ship in the runtime pack beside the library
+        // and have to be dexed into the APK. build.sh dexes every jar in
+        // runtime-deps, so collectRuntimeDeps puts it there.
+        copy {
+            from(zipTree(file)) { include("$native/*.jar") }
+            into(File(out, "libs"))
+            eachFile { path = name }
+            includeEmptyDirs = false
+        }
+
+        val libs = File(out, "jniLibs/arm64-v8a").listFiles()?.size ?: 0
+        val bcl = File(out, "assets/mono-bcl").listFiles()?.count { it.extension == "dll" } ?: 0
+        val jars = File(out, "libs").listFiles()?.count { it.extension == "jar" } ?: 0
+        logger.lifecycle("mono runtime $monoVersion: $libs native libs, $bcl assemblies, $jars jar(s)")
+    }
+}
+tasks.named("preBuild") { dependsOn(fetchMonoRuntime) }
+// The crypto jar it stages is dexed by way of runtime-deps, so that task
+// cannot run before this one has produced it.
+tasks.named("collectRuntimeDeps") { dependsOn(fetchMonoRuntime) }
+
+fun sha256Of(f: File): String =
+    MessageDigest.getInstance("SHA-256").digest(f.readBytes())
+        .joinToString("") { "%02x".format(it) }
 
 // bundle-surgery, the tool that retargets Unity serialized files and bundles.
 // It is a small framework-dependent .NET app -- around 550 KB with its type

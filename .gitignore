@@ -15,6 +15,22 @@ PLAN.md
 # Gradle build intermediates. Per-machine paths; never commit.
 src/SilksongLauncher.Launcher/app/build/
 
+# CMake's own working tree for the monojni build. Absolute paths to the NDK,
+# regenerated from CMakeLists.txt on any machine that builds.
+src/SilksongLauncher.Launcher/app/.cxx/
+
+# The Gradle wrapper Android Studio writes when the project is opened. Nothing
+# builds with it: tools/depot-to-apk drives Gradle out of the Unity player
+# module (8.11), and the wrapper pins a version that fails to configure this
+# project at all. Keeping it out avoids offering a broken second way to build.
+src/SilksongLauncher.Launcher/gradle/wrapper/
+src/SilksongLauncher.Launcher/gradlew
+src/SilksongLauncher.Launcher/gradlew.bat
+
+# adb logcat dumps and pulled device state from a debugging session. Useful
+# while a bug is open, meaningless afterwards, and megabytes either way.
+logs-*/
+
 # Signing keys. The keystore IS the app's identity on Android: anything signed
 # with it is accepted as an update to an existing install, so a leaked one lets
 # somebody else ship to every user who has this app. Never in a commit.

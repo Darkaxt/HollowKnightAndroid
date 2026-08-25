@@ -20,7 +20,7 @@ app/src/main/
 │   ├── UnityFetcher.kt         # Unity's editor pieces and Android module
 │   ├── UnityDex.kt             # dexes Unity's player classes on the device
 │   ├── ToolchainFetcher.kt     # clang + NDK sysroot
-│   ├── DotnetFetcher.kt        # .NET 8 + glibc
+│   ├── MonoRuntime.kt          # .NET for android-arm64 (bionic)
 │   ├── DepotFetcher.kt         # the game, from Steam, via JavaSteam
 │   ├── Il2cppConverter.kt      # IL -> C++
 │   ├── NativeBuild.kt          # C++ -> libil2cpp.so

@@ -5,7 +5,7 @@
 // the apphost is only a launcher: il2cpp.dll beside it is portable IL. Strip
 // the bundled runtime and the deps.json, and it becomes an ordinary
 // framework-dependent app that any .NET can run -- including the one
-// DotnetFetcher stages here.
+// MonoRuntime ships.
 //
 // This once ran on a PC, as a shell script and as steps 1 and 2 of
 // tools/depot-to-apk/build.sh; both are retired. A desktop run of the same
@@ -110,7 +110,7 @@ object Il2cppConverter {
 
     // ── the run ────────────────────────────────────────────────────────────
 
-    fun convert(unity: File, depot: File, dotnet: File, root: File): Flow<Progress> = channelFlow {
+    fun convert(unity: File, depot: File, context: android.content.Context, root: File): Flow<Progress> = channelFlow {
         val bcl = bclDir(unity)
         val engine = engineManagedDir(unity)
         val deploy = deployDir(unity)
@@ -135,11 +135,10 @@ object Il2cppConverter {
         dataDir(root).mkdirs()
 
         val argv = ArrayList<String>()
-        argv += DotnetFetcher.command(dotnet, File(deploy, "il2cpp.dll"))
         argv += "--convert-to-cpp"
-        // The command line is long -- around 185 of these -- but it goes
-        // straight to execve rather than through a shell, so the argument
-        // limit that would force a shell to spill them to a file does not apply.
+        // The command line is long -- around 185 of these -- but it is handed
+        // to the runtime as an array, so the argument limit that would force a
+        // shell to spill them to a file does not apply.
         for (a in assemblies) argv += "--assembly=${a.absolutePath}"
         argv += "--generatedcppdir=${cppDir(root).absolutePath}"
         argv += "--data-folder=${dataDir(root).absolutePath}"
@@ -154,12 +153,13 @@ object Il2cppConverter {
         val sink = log.bufferedWriter()
         val started = System.currentTimeMillis()
         val result = try {
-            Toolchain.exec(
+            MonoRuntime.exec(
+                context,
+                File(deploy, "il2cpp.dll"),
                 argv,
                 // il2cpp resolves parts of its own installation relative to
                 // the working directory.
                 cwd = deploy,
-                env = DotnetFetcher.environment(dotnet),
             ) { line ->
                 sink.write(line); sink.write("\n")
                 trySend(Progress("Converting to C++", -1f, line.take(80)))

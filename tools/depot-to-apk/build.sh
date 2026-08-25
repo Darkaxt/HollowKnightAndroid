@@ -231,6 +231,8 @@ step_5_apk_shell() {
             android:exported="false" android:process=":launcher"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+        <service android:name="dev.silksong.launcher.MonoService"
+            android:exported="false" android:process=":builder" />
 XML
 )
     else

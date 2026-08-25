@@ -781,7 +781,6 @@ class SetupActivity : Activity() {
     private fun run(download: TokenStore.Credentials?) {
         val unity = UnityFetcher.rootFor(this)
         val tools = ToolchainFetcher.rootFor(this)
-        val dotnet = DotnetFetcher.rootFor(this)
         val out = Il2cppConverter.rootFor(this)
         // A download goes to the app's own directory and never to a folder the
         // user picked: the resume path deletes files it did not write (see
@@ -854,9 +853,7 @@ class SetupActivity : Activity() {
                 if (!ToolchainFetcher.isPresent(tools)) {
                     ToolchainFetcher.fetch(tools).collect { setBusy(true, it.step, it.fraction, it.detail) }
                 }
-                if (!DotnetFetcher.isPresent(dotnet)) {
-                    DotnetFetcher.fetch(dotnet).collect { setBusy(true, it.step, it.fraction, it.detail) }
-                }
+                MonoRuntime.stage(this@SetupActivity).collect { setBusy(true, it.step, it.fraction, it.detail) }
 
                 if (PlayerImage.depotData(depot) == null) {
                     throw java.io.IOException("the game's files are not on this device")
@@ -865,14 +862,14 @@ class SetupActivity : Activity() {
                 // ── Step 3: building ──────────────────────────────────────
                 setStep(buildStep, "Building Silksong")
                 if (!PackageCompiler.isPresent(out)) {
-                    PackageCompiler.compile(unity, depot, dotnet, out).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                    PackageCompiler.compile(unity, depot, this@SetupActivity, out).collect { setBusy(true, it.step, it.fraction, it.detail) }
                 }
                 // Always rebuilt: these are ours and change with the app, and
                 // they are a few seconds to compile.
-                PackageCompiler.compilePatches(unity, depot, dotnet, out, assets)
+                PackageCompiler.compilePatches(unity, depot, this@SetupActivity, out, assets)
                     .collect { setBusy(true, it.step, it.fraction, it.detail) }
                 if (!Il2cppConverter.isPresent(out) || Il2cppConverter.isStale(out)) {
-                    Il2cppConverter.convert(unity, depot, dotnet, out).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                    Il2cppConverter.convert(unity, depot, this@SetupActivity, out).collect { setBusy(true, it.step, it.fraction, it.detail) }
                 }
                 NativeBuild.build(unity, tools, out, assets, install = engineDir)
                     .collect { setBusy(true, it.step, it.fraction, it.detail) }
@@ -883,7 +880,7 @@ class SetupActivity : Activity() {
                 if (PlayerImage.isCurrent(out, pkgDir, depot)) {
                     LauncherLog.log("player image is current; not rebuilding or repacking")
                 } else {
-                    PlayerImage.build(unity, depot, dotnet, out, assets, PlayerImage.contentRootFor(this@SetupActivity))
+                    PlayerImage.build(unity, depot, this@SetupActivity, out, assets, PlayerImage.contentRootFor(this@SetupActivity))
                         .collect { setBusy(true, it.step, it.fraction, it.detail) }
                     setBusy(true, "packing the player image", -1f, "")
                     withContext(Dispatchers.IO) {
@@ -896,7 +893,7 @@ class SetupActivity : Activity() {
                 // process is left the same answer, so it can remake the link
                 // itself if it comes back and finds it gone.
                 withContext(Dispatchers.IO) { DepotLocation.relink(this@SetupActivity, depot) }
-                PlayerImage.retargetContent(depot, dotnet, out, assets)
+                PlayerImage.retargetContent(depot, this@SetupActivity, out, assets)
                     .collect { setBusy(true, it.step, it.fraction, it.detail) }
 
                 // Last, and only on the way out of a run that got here: this

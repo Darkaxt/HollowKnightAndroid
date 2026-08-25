@@ -90,6 +90,10 @@
             android:label="@string/settings_title"
             android:process=":launcher"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+        <service
+            android:name="dev.silksong.launcher.MonoService"
+            android:exported="false"
+            android:process=":builder" />
     </application>
 
 </manifest>
