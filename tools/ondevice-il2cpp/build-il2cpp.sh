@@ -420,8 +420,15 @@ echo "### PHASE D: linking libil2cpp.so"
 # So: no pipe, the status is kept, and a failed link takes its output with it
 # rather than leaving a corpse for the installer to pick up and the engine to
 # dlopen twenty minutes later.
+#
+# max-page-size is 16 KB because Android 15 allows devices whose pages are,
+# and a library aligned for 4 KB cannot be mapped on one. lld defaults to 4 KB
+# for Android, so it has to be asked. Nothing is lost on a 4 KB device -- the
+# alignment is padding between segments, which such a kernel maps happily, and
+# every other .so in the APK is already built this way.
 "$USR/bin/clang++" $TGT -shared -fPIC -fuse-ld=lld -nostdlib++ \
     -Wl,-soname,libil2cpp.so \
+    -Wl,-z,max-page-size=16384 \
     -o "$ROOT/libil2cpp.so" obj/*.o "$BASELIB" \
     -lc++_static -lc++abi -llog -lm -ldl -lc \
     -Wl,--allow-shlib-undefined >>err.log 2>&1
