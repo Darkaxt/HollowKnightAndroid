@@ -12,7 +12,7 @@
 // .Android.so has to be loaded the Java way, before any managed code asks for
 // a hash. Roslyn asks on the first source file it parses.
 //
-// Loaded from MonoService, which runs in :builder. Loading it anywhere else
+// Loaded from MonoProvider, which runs in :builder. Loading it anywhere else
 // would put the runtime in the launcher's own process.
 
 package dev.silksong.launcher

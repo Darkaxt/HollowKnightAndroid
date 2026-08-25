@@ -39,7 +39,7 @@ package dev.silksong.launcher
 
 import android.app.ActivityManager
 import android.content.Context
-import android.content.Intent
+import android.os.Bundle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -64,7 +64,7 @@ object MonoRuntime {
     /**
      * The host, as the installer left it.
      *
-     * Not an executable any more, and not exec'd: see MonoService for why the
+     * Not an executable any more, and not exec'd: see MonoProvider for why the
      * runtime needs an app process rather than a child process.
      */
     fun runtimeDir(context: Context): File = File(context.applicationInfo.nativeLibraryDir)
@@ -106,9 +106,10 @@ object MonoRuntime {
      * stderr onto it and writes the result file when the run ends, so this
      * tails the one until the other appears. A pipe would say "the run is
      * over" by reaching end of file, which is tidier, but the descriptor
-     * cannot be handed to the service: the activity manager refuses an Intent
-     * carrying one. Both processes are the same application, so a path in the
-     * cache directory is a channel they already share.
+     * cannot be handed across: the activity manager refuses an Intent
+     * carrying one, and there is no Intent here anyway. Both processes are
+     * the same application, so a path in the cache directory is a channel
+     * they already share.
      */
     suspend fun exec(
         context: Context,
@@ -130,15 +131,15 @@ object MonoRuntime {
         val flatEnv = ArrayList<String>(merged.size * 2)
         for ((k, v) in merged) { flatEnv += k; flatEnv += v }
 
-        val intent = Intent(context, MonoService::class.java).apply {
-            putExtra(MonoService.EXTRA_ASSEMBLY, assembly.absolutePath)
-            putExtra(MonoService.EXTRA_ARGS, args.toTypedArray())
-            putExtra(MonoService.EXTRA_CWD, cwd?.absolutePath)
-            putExtra(MonoService.EXTRA_BCL, bclDir(context).absolutePath)
-            putExtra(MonoService.EXTRA_RUNTIME, runtimeDir(context).absolutePath)
-            putExtra(MonoService.EXTRA_ENV, flatEnv.toTypedArray())
-            putExtra(MonoService.EXTRA_RESULT, result.absolutePath)
-            putExtra(MonoService.EXTRA_OUT, out.absolutePath)
+        val request = Bundle().apply {
+            putString(MonoProvider.KEY_ASSEMBLY, assembly.absolutePath)
+            putStringArray(MonoProvider.KEY_ARGS, args.toTypedArray())
+            putString(MonoProvider.KEY_CWD, cwd?.absolutePath)
+            putString(MonoProvider.KEY_BCL, bclDir(context).absolutePath)
+            putString(MonoProvider.KEY_RUNTIME, runtimeDir(context).absolutePath)
+            putStringArray(MonoProvider.KEY_ENV, flatEnv.toTypedArray())
+            putString(MonoProvider.KEY_OUT, out.absolutePath)
+            putString(MonoProvider.KEY_RESULT, result.absolutePath)
         }
 
         val collected = StringBuilder()
@@ -147,14 +148,18 @@ object MonoRuntime {
         // Stops :builder when the caller goes away. Toolchain.exec did the
         // same with destroyForcibly, and for the same reason: without it a
         // cancelled build leaves il2cpp running on every core with several
-        // gigabytes held, in a process that hosts a started service and so is
-        // not a candidate for reclaim. The retry then lands in that process
-        // and finds a runtime that cannot be started twice.
+        // gigabytes held. Killing the process is the only lever there is --
+        // the run is a thread in another process, and nothing about a
+        // provider offers to interrupt it.
         val onCancel = coroutineContext[Job]?.invokeOnCompletion { cause ->
-            if (cause != null) runCatching { context.stopService(Intent(context, MonoService::class.java)) }
+            if (cause != null) runCatching { killBuilder(context) }
         }
         try {
-            context.startService(intent)
+            // A binder call into :builder, which creates that process if it
+            // is not there. Deliberately not startService: an app in the
+            // background is not allowed to start one, and a build outlives
+            // the user's attention.
+            context.contentResolver.call(MonoProvider.uri(context), MonoProvider.METHOD_RUN, null, request)
 
             // Tail. Reading stops one pass *after* the result file appears,
             // not as soon as it does: the last of the output may still have
@@ -247,7 +252,7 @@ object MonoRuntime {
             if (collected.length < MAX_CAPTURED) collected.append(note).append('\n')
         }
 
-        Toolchain.Result(exitCode ?: MonoService.FAILED, collected.toString())
+        Toolchain.Result(exitCode ?: MonoProvider.FAILED, collected.toString())
     }
 
     /** As much output as is kept; the rest is streamed to [onLine] and dropped. */
@@ -267,7 +272,22 @@ object MonoRuntime {
         }.getOrDefault(true)
     }
 
-    /** Must match android:process on MonoService in the manifest. */
+    /**
+     * Ends the :builder process, whatever it is doing.
+     *
+     * killBackgroundProcesses is the only thing an app can point at one of
+     * its own processes -- there is no "stop" for a provider, and the run is
+     * a thread inside it that nothing here can reach. It needs
+     * KILL_BACKGROUND_PROCESSES, which is a normal permission: granted at
+     * install, no prompt. If it is somehow refused, the worst case is the
+     * process outliving a cancelled build, which is where this started.
+     */
+    private fun killBuilder(context: Context) {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return
+        runCatching { am.killBackgroundProcesses(context.packageName) }
+    }
+
+    /** Must match android:process on MonoProvider in the manifest. */
     private const val BUILDER_PROCESS = ":builder"
 
     /**

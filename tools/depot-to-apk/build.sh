@@ -231,10 +231,15 @@ step_5_apk_shell() {
             android:exported="false" android:process=":launcher"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
-        <service android:name="dev.silksong.launcher.MonoService"
+        <provider android:name="dev.silksong.launcher.MonoProvider"
+            android:authorities="@PKG@.mono"
             android:exported="false" android:process=":builder" />
 XML
 )
+        # The heredoc above is quoted, so that the XML is taken literally and
+        # cannot be surprised by a $ in it. The authority is the one thing in
+        # there that has to vary, and it varies with the package.
+        launcher_block=${launcher_block//@PKG@/$PKG}
     else
         game_filter=$(cat <<'XML'
             <intent-filter>
@@ -252,6 +257,12 @@ XML
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="$TARGET_SDK" />
     <uses-feature android:glEsVersion="0x00030002" android:required="true" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!--
+      Ending the :builder process when a build is cancelled. A normal
+      permission: granted at install, never prompted for. There is no other
+      way to stop work running in another of our own processes.
+    -->
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <!--
       Storage, for the folder a user may pick to say where their copy of the
       game already is. The picker hands back a URI; what every step after it

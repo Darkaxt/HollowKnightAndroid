@@ -10,6 +10,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!--
+      Ending the :builder process when a build is cancelled. A normal
+      permission: granted at install, never prompted for. There is no other
+      way to stop work running in another of our own processes.
+    -->
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
+
+    <!--
       Library AAR manifest. AGP merges this into the host (Silksong)
       manifest when Unity packages the APK. By declaring LauncherActivity
       with MAIN+LAUNCHER here, our Activity wins the "user clicks the
@@ -90,8 +97,9 @@
             android:label="@string/settings_title"
             android:process=":launcher"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
-        <service
-            android:name="dev.silksong.launcher.MonoService"
+        <provider
+            android:name="dev.silksong.launcher.MonoProvider"
+            android:authorities="${applicationId}.mono"
             android:exported="false"
             android:process=":builder" />
     </application>
