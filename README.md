@@ -15,7 +15,7 @@ Steam integration for game files and cloud saves.
 
 - **Dual screen**: Show interactive map, inventory, crests, tasks and journal on the second screen
 - **Steam integration (optional)**: Sign in to Steam if you want the app to download game files and/or your Steam cloud saves for you
-- **High performance**: Compiles to native arm64 via IL2CPP
+- **High performance**: Compiles to native arm64 via IL2CPP and uses Vulkan shaders
 - **Fully open source and legal**: Supply your own game files either manually or through Steam sign-in (the app downloads them for you)
 - **Compilation on device**: Just download the APK and supply the game files, porting happens on device (20–30 min on a Snapdragon 8 Gen 2)
 - **QoL settings**: Skip intro, set resolution, auto upload/download cloud saves etc.
