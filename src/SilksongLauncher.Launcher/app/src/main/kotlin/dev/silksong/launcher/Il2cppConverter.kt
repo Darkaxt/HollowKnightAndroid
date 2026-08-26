@@ -186,7 +186,7 @@ object Il2cppConverter {
         argv += "--static-lib-il2-cpp"
 
         val expected = expectedSources(root)
-        send(Progress("Converting to C++", 0f, "0 of ~$expected files"))
+        send(Progress("Converting to C++", 0f, "0 of $expected files"))
         val log = File(root, "convert.log")
         val sink = log.bufferedWriter()
         val started = System.currentTimeMillis()
@@ -215,7 +215,7 @@ object Il2cppConverter {
                     Progress(
                         "Converting to C++",
                         (n.toFloat() / expected).coerceIn(0f, 0.99f),
-                        "$n of ~$expected files",
+                        "$n of $expected files",
                     ),
                 )
             }
