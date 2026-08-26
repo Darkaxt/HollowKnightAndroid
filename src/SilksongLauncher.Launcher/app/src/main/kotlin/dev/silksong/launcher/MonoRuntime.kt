@@ -38,6 +38,7 @@
 package dev.silksong.launcher
 
 import android.app.ActivityManager
+import android.content.ContentProviderClient
 import android.content.Context
 import android.os.Bundle
 import android.os.RemoteException
@@ -147,6 +148,10 @@ object MonoRuntime {
         val collected = StringBuilder()
         var died = false
         var exitCode: Int? = null
+        // Held for as long as the run, and closed in the finally below. See
+        // startRun: this connection is what keeps :builder off the bottom of
+        // the activity manager's list while it works.
+        var client: ContentProviderClient? = null
         // Stops :builder when the caller goes away. Toolchain.exec did the
         // same with destroyForcibly, and for the same reason: without it a
         // cancelled build leaves il2cpp running on every core with several
@@ -170,7 +175,7 @@ object MonoRuntime {
             if (cause is CancellationException) runCatching { killBuilder(context) }
         }
         try {
-            startRun(context, request)
+            client = startRun(context, request)
 
             // Tail. Reading stops one pass *after* the result file appears,
             // not as soon as it does: the last of the output may still have
@@ -246,6 +251,10 @@ object MonoRuntime {
                 onLine(carry.toString())
             }
         } finally {
+            // First: it is the run's claim on the process, and the run is
+            // over. A provider whose process has already gone takes this
+            // without complaint.
+            runCatching { client?.close() }
             out.delete()
             // Read before this, so deleting here rather than after the read
             // is what keeps a cancelled run from leaving one behind.
@@ -294,8 +303,21 @@ object MonoRuntime {
      * dies, which is precisely what this one does after every run; unstable
      * says "expected", leaves the launcher alone, and lets the activity
      * manager drop the connection itself.
+     *
+     * It is returned rather than closed here, and the caller holds it until
+     * the run is over. Closing it at once looks right -- the call returns
+     * immediately, because the provider hands the run to a thread and
+     * replies -- and it is what cost a user their conversion: a process with
+     * no clients is a cached process, the cheapest thing on the device to
+     * reclaim, and this one spends half an hour holding several gigabytes.
+     * The activity manager raises a provider's host towards the processes
+     * connected to it, the same as it does for a bound service, so an open
+     * connection from the foreground :launcher is the difference between
+     * il2cpp being the first thing killed under pressure and it being
+     * roughly as safe as the screen the user is watching. See issue #6,
+     * where a conversion was taken at 583s.
      */
-    private suspend fun startRun(context: Context, request: Bundle) {
+    private suspend fun startRun(context: Context, request: Bundle): ContentProviderClient {
         var refusal = "no reason given"
         for (attempt in 1..START_ATTEMPTS) {
             awaitBuilderGone(context)
@@ -305,12 +327,12 @@ object MonoRuntime {
             if (client != null) {
                 try {
                     client.call(MonoProvider.METHOD_RUN, null, request)
-                    return
+                    return client
                 } catch (e: RemoteException) {
                     // The process was there and went away between acquiring it
-                    // and asking it to run.
+                    // and asking it to run. This one is finished with; the
+                    // next attempt acquires again.
                     refusal = e.toString()
-                } finally {
                     runCatching { client.close() }
                 }
             } else {
