@@ -40,6 +40,7 @@ package dev.silksong.launcher
 import android.app.ActivityManager
 import android.content.ContentProviderClient
 import android.content.Context
+import android.os.Build
 import android.os.Bundle
 import android.os.RemoteException
 import kotlinx.coroutines.CancellationException
@@ -123,6 +124,11 @@ object MonoRuntime {
         onLine: (String) -> Unit = {},
     ): Toolchain.Result = withContext(Dispatchers.IO) {
         if (!assembly.isFile) throw IOException("no such assembly: $assembly")
+
+        // Wall clock, for matching against the platform's record of process
+        // deaths later: those are timestamped, and a record from an earlier
+        // run would be the wrong answer confidently given.
+        val startedWall = System.currentTimeMillis()
 
         val stamp = System.nanoTime()
         val out = File(context.cacheDir, "mono-$stamp.out")
@@ -264,8 +270,7 @@ object MonoRuntime {
         }
 
         if (died) {
-            val note = "the build process was killed before it finished; " +
-                "on a large conversion this is usually the system reclaiming its memory"
+            val note = deathOf(context, startedWall)
             LauncherLog.log("mono: $note")
             onLine("monojni: $note")
             if (collected.length < MAX_CAPTURED) collected.append(note).append('\n')
@@ -465,6 +470,88 @@ object MonoRuntime {
      * declare it.
      */
     private fun builderAlive(context: Context): Boolean = builderRunning(context) ?: true
+
+    /**
+     * Why :builder is not there any more, asked of the platform rather than
+     * guessed at.
+     *
+     * This used to say "on a large conversion this is usually the system
+     * reclaiming its memory", which is a plausible sentence and was the wrong
+     * one: a Retroid Pocket Flip 2 reported it for a run that had in fact
+     * crashed with SIGSEGV while still in the foreground, and the message sent
+     * the diagnosis after memory for as long as anyone believed it. A guess
+     * printed in the same tone as a fact is worse than no message.
+     *
+     * Android keeps the answer. getHistoricalProcessExitReasons is readable
+     * for one's own package from API 30 and distinguishes the cases that
+     * matter here -- reclaimed for memory, killed, crashed, stopped
+     * responding -- and free memory at the moment of asking says whether the
+     * device was up against it either way.
+     *
+     * Only a record from this run will do, hence [since]: the previous run
+     * ended by killing its own process, so there is always an older record
+     * saying SIGKILL, and reporting that one would be a confident lie. The
+     * record is written when the death is reaped, which is a moment after the
+     * process stops answering, so it is worth waiting briefly for.
+     */
+    private suspend fun deathOf(context: Context, since: Long): String {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            ?: return "the build process ended before it finished"
+        val free = "; ${memory(context)}"
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return "the build process ended before it finished$free"
+        }
+        repeat(EXIT_REASON_TRIES) { attempt ->
+            if (attempt > 0) delay(EXIT_REASON_WAIT_MS)
+            val info = runCatching {
+                am.getHistoricalProcessExitReasons(context.packageName, 0, 20)
+                    .firstOrNull { it.processName.endsWith(BUILDER_PROCESS) && it.timestamp >= since }
+            }.getOrNull()
+            if (info != null) return describeExit(info) + free
+        }
+        return "the build process ended before it finished, and the system has not said why$free"
+    }
+
+    private fun describeExit(info: android.app.ApplicationExitInfo): String = when (info.reason) {
+        android.app.ApplicationExitInfo.REASON_LOW_MEMORY ->
+            "the system stopped the build process to reclaim memory"
+        android.app.ApplicationExitInfo.REASON_SIGNALED -> when (info.status) {
+            11 -> "the build process crashed (SIGSEGV)"
+            6 -> "the build process aborted (SIGABRT)"
+            9 -> "the build process was killed (SIGKILL)"
+            else -> "the build process was signalled (${info.status})"
+        }
+        android.app.ApplicationExitInfo.REASON_CRASH -> "the build process crashed"
+        android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "the build process crashed in native code"
+        android.app.ApplicationExitInfo.REASON_ANR -> "the build process stopped responding"
+        android.app.ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE ->
+            "the system stopped the build process for using too much of the device"
+        android.app.ApplicationExitInfo.REASON_EXIT_SELF -> "the build process exited (${info.status})"
+        else -> "the build process ended (reason ${info.reason}, status ${info.status})"
+    }
+
+    private fun gb(bytes: Long): String = String.format(java.util.Locale.US, "%.1f GB", bytes / 1024.0 / 1024.0 / 1024.0)
+
+    /**
+     * What the device has left, in the words a bug report needs.
+     *
+     * Logged where a run begins as well as where one dies: a single reading
+     * taken after the fact says nothing about whether the device was already
+     * against the wall, and "4.7 GB is needed" is only meaningful next to what
+     * was actually free when the work started.
+     */
+    fun memory(context: Context): String = runCatching {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val mi = ActivityManager.MemoryInfo()
+        am.getMemoryInfo(mi)
+        val pressure = if (mi.lowMemory) ", and the device is short of memory" else ""
+        "${gb(mi.availMem)} of ${gb(mi.totalMem)} free$pressure"
+    }.getOrDefault("free memory unknown")
+
+    /** How long the platform is given to write the record of a death. */
+    private const val EXIT_REASON_TRIES = 6
+    private const val EXIT_REASON_WAIT_MS = 250L
 
     /**
      * Ends every process of this app that is not in the foreground, :builder

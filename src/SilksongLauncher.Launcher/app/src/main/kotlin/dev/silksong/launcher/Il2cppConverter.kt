@@ -186,6 +186,7 @@ object Il2cppConverter {
         argv += "--static-lib-il2-cpp"
 
         val expected = expectedSources(root)
+        LauncherLog.log("il2cpp: starting; ${MonoRuntime.memory(context)}")
         send(Progress("Converting to C++", 0f, "0 of $expected files"))
         val log = File(root, "convert.log")
         val sink = log.bufferedWriter()
