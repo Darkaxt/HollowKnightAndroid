@@ -28,9 +28,12 @@
 package dev.silksong.launcher
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
 
@@ -53,6 +56,40 @@ object Il2cppConverter {
 
     /** global-metadata.dat is the one output nothing else can substitute for. */
     fun metadata(root: File): File = File(dataDir(root), "Metadata/global-metadata.dat")
+
+    /** How often the output directory is counted while il2cpp works. */
+    private const val PROGRESS_POLL_MS = 2_000L
+
+    /**
+     * What the last conversion produced, and what the next one is measured
+     * against.
+     *
+     * A count rather than a guess at the work: the set is 186 assemblies of
+     * someone else's game, and nothing here can predict how much C++ that
+     * becomes. It barely moves between runs, though -- the same depot and the
+     * same patches produce the same files -- so the last answer is a good
+     * denominator and a wrong one only costs a bar that fills unevenly.
+     *
+     * Kept beside the output rather than in it: [convert] empties the
+     * directory before il2cpp starts, which is exactly when this is needed.
+     */
+    private fun sourceCount(root: File) = File(root, "cpp.count")
+
+    private fun expectedSources(root: File): Int =
+        sourceCount(root).takeIf { it.isFile }?.readText()?.trim()?.toIntOrNull()
+            ?.takeIf { it > 0 } ?: DEFAULT_SOURCES
+
+    private fun rememberSources(root: File) {
+        val n = cppDir(root).list()?.size ?: return
+        if (n > 0) runCatching { sourceCount(root).writeText(n.toString()) }
+    }
+
+    /**
+     * The count before there has ever been one, from a Pixel 10 Pro: 950 .cpp
+     * and 197 .c, plus a header. Only ever used for a first conversion, and
+     * replaced by that conversion's own number.
+     */
+    private const val DEFAULT_SOURCES = 1148
 
     fun isPresent(root: File): Boolean =
         metadata(root).length() > 0 &&
@@ -148,10 +185,41 @@ object Il2cppConverter {
         argv += "--enable-array-bounds-check"
         argv += "--static-lib-il2-cpp"
 
-        send(Progress("Converting to C++", -1f, "${assemblies.size} assemblies"))
+        val expected = expectedSources(root)
+        send(Progress("Converting to C++", 0f, "0 of ~$expected files"))
         val log = File(root, "convert.log")
         val sink = log.bufferedWriter()
         val started = System.currentTimeMillis()
+        // Real progress, counted off the output directory.
+        //
+        // il2cpp says nothing at all while it works: its stdout is block
+        // buffered into a file and the whole of it arrives at once when the
+        // process ends, so the line-driven detail below never fires and the
+        // bar had nothing to move on. Six minutes of a full stop looks
+        // exactly like a hang -- one person waited half an hour and gave up
+        // on a conversion that may well have been working.
+        //
+        // The files themselves are the honest signal: they land steadily
+        // throughout, and there is no interpretation involved in counting
+        // them. The total is close to fixed for a given depot and patch set,
+        // so the previous run's count is the denominator and the constant is
+        // only ever used once.
+        val ticker = launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(PROGRESS_POLL_MS)
+                val n = cppDir(root).list()?.size ?: 0
+                // Never quite full: the step is over when il2cpp says so, not
+                // when a guessed total is reached, and a bar that sits at 100%
+                // is a bar that has started lying.
+                trySend(
+                    Progress(
+                        "Converting to C++",
+                        (n.toFloat() / expected).coerceIn(0f, 0.99f),
+                        "$n of ~$expected files",
+                    ),
+                )
+            }
+        }
         val result = try {
             MonoRuntime.exec(
                 context,
@@ -162,9 +230,9 @@ object Il2cppConverter {
                 cwd = deploy,
             ) { line ->
                 sink.write(line); sink.write("\n")
-                trySend(Progress("Converting to C++", -1f, line.take(80)))
             }
         } finally {
+            ticker.cancel()
             sink.flush(); sink.close()
         }
         val seconds = (System.currentTimeMillis() - started) / 1000
@@ -181,6 +249,7 @@ object Il2cppConverter {
 
         val cpp = cppDir(root).listFiles()?.count { it.name.endsWith(".cpp") } ?: 0
         val c = cppDir(root).listFiles()?.count { it.name.endsWith(".c") } ?: 0
+        rememberSources(root)
         LauncherLog.log(
             "il2cpp: ${seconds}s, $cpp cpp + $c c, metadata ${metadata(root).length()} bytes",
         )

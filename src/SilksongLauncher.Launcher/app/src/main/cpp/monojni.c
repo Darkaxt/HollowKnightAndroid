@@ -94,6 +94,17 @@ static int (*g_exitcode_get)(void) = NULL;
 static void write_result(void) {
     if (g_result_written || g_result_path[0] == '\0') return;
     g_result_written = 1;
+
+    // Before the result file, never after. The launcher stops reading the
+    // output the pass after this file appears, so anything still sitting in
+    // stdio's buffer at that moment is never read and is deleted with the
+    // file. On the exit() path that is all of it: bionic runs atexit
+    // handlers first and flushes the streams afterwards, so a program that
+    // ends through Environment.Exit -- which is how il2cpp ends, including
+    // when it ends badly -- had its entire output thrown away. That is why a
+    // 375-second conversion could leave a convert.log of nothing at all.
+    fflush(NULL);
+
     unsigned int code = g_exit_code;
     // A normal return has already put the real answer in g_exit_code; only
     // ask the runtime when this is the exit() path.
