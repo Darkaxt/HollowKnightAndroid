@@ -455,6 +455,18 @@ object PlayerImage {
         val aa = File(data, "StreamingAssets/aa")
         if (!aa.isDirectory) throw IOException("no Addressables content at $aa")
 
+        // Said before the first walk rather than after it.
+        //
+        // Everything between here and the first bundle -- the stamp, staging
+        // the tool, counting what there is to do -- is three passes over a
+        // couple of thousand files on the slowest storage in the device, and
+        // none of it used to say anything at all. Until the first bundle was
+        // reported the screen still held whatever the previous step had put
+        // there, which on a Retroid Pocket Flip 2 meant sitting on "packing
+        // the player image" for minutes after the packing had finished. A
+        // step that is working and a step that has died looked the same.
+        send(Progress("Retargeting content", -1f, "checking what is already done"))
+
         // Nothing a patch edit does can reach the content tree, and this step
         // is minutes of opening bundles to conclude exactly that.
         if (contentStampFile(root).takeIf { it.isFile }?.readText() == contentStamp(aa)) {
@@ -463,8 +475,10 @@ object PlayerImage {
             return@channelFlow
         }
 
+        send(Progress("Retargeting content", -1f, "preparing the tool"))
         val surgery = stageSurgery(root, assets)
 
+        send(Progress("Retargeting content", -1f, "counting bundles"))
         // A shipped Addressables tree groups content into subdirectories, and
         // in this game most of the scenes live below the top level.
         val groups = aa.listFiles().orEmpty()
@@ -476,6 +490,9 @@ object PlayerImage {
         val total = counts.values.sum()
         if (total == 0) throw IOException("no bundles to retarget under $aa")
         var finished = 0
+        // The real total, as soon as it is known, so the bar starts from a
+        // number rather than from the first bundle a hundred bundles later.
+        send(Progress("Retargeting content", 0f, "0 of $total bundles"))
 
         for (group in groups) {
             coroutineContext.ensureActive()
