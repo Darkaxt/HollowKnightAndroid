@@ -154,6 +154,8 @@ object MonoRuntime {
         val collected = StringBuilder()
         var died = false
         var exitCode: Int? = null
+        var peakKb = 0L
+        var sampled = 0L
         // Held for as long as the run, and closed in the finally below. See
         // startRun: this connection is what keeps :builder off the bottom of
         // the activity manager's list while it works.
@@ -250,6 +252,19 @@ object MonoRuntime {
                         !builderAlive(context) && !result.isFile
                     ) { died = true; break }
                 }
+                // What the run is actually costing, sampled while it is still
+                // there to ask. Every estimate of what a conversion needs has
+                // so far come from one measurement on one phone, extrapolated
+                // to devices nobody here owns -- and it has been wrong twice.
+                // A number taken on the machine that struggled is worth more
+                // than any amount of reasoning about it, and it is only
+                // useful if it was recorded before the process went away.
+                val now = System.currentTimeMillis()
+                if (now - sampled >= RSS_SAMPLE_MS) {
+                    sampled = now
+                    val rss = builderRssKb(context)
+                    if (rss > peakKb) peakKb = rss
+                }
                 delay(120)
             }
             if (carry.isNotEmpty()) {
@@ -274,6 +289,12 @@ object MonoRuntime {
             LauncherLog.log("mono: $note")
             onLine("monojni: $note")
             if (collected.length < MAX_CAPTURED) collected.append(note).append('\n')
+        }
+        // Only for runs big enough to be worth a line. The compilers finish in
+        // seconds and take a few hundred megabytes; the conversion is the one
+        // that has ever been near the edge, and it is the one this is for.
+        if (peakKb >= RSS_LOG_FLOOR_KB) {
+            LauncherLog.log("mono: ${assembly.name} peaked at ${gb(peakKb * 1024)}; ${memory(context)}")
         }
 
         Toolchain.Result(exitCode ?: MonoProvider.FAILED, collected.toString())
@@ -461,6 +482,31 @@ object MonoRuntime {
             am.runningAppProcesses?.any { it.processName.endsWith(BUILDER_PROCESS) }
         }.getOrNull()
     }
+
+    /**
+     * How much memory :builder is holding, in kB, or 0 when it cannot be told.
+     *
+     * /proc is readable here because :builder is this app's own process and
+     * shares its uid; the hidepid the platform applies keeps other apps out,
+     * not us. VmRSS rather than PSS: it is one line of a file this process may
+     * already open, where getProcessMemoryInfo is a binder call per sample and
+     * has been narrowed for third-party callers more than once.
+     */
+    private fun builderRssKb(context: Context): Long = runCatching {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val pid = am.runningAppProcesses?.firstOrNull { it.processName.endsWith(BUILDER_PROCESS) }?.pid
+            ?: return 0L
+        File("/proc/$pid/status").useLines { lines ->
+            lines.firstOrNull { it.startsWith("VmRSS:") }
+                ?.filter { it.isDigit() }
+                ?.toLongOrNull()
+                ?: 0L
+        }
+    }.getOrDefault(0L)
+
+    /** How often the run's memory is sampled, and the size worth reporting. */
+    private const val RSS_SAMPLE_MS = 2_000L
+    private const val RSS_LOG_FLOOR_KB = 512L * 1024L
 
     /**
      * True while the :builder process exists.

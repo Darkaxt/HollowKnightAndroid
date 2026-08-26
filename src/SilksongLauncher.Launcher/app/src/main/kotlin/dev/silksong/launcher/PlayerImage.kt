@@ -664,6 +664,23 @@ object PlayerImage {
             if (names.size > 6) ", and ${names.size - 6} more" else ""
     }
 
+    /**
+     * Why [depotData] found nothing, in one phrase and without naming
+     * anything the user did not choose to show us.
+     *
+     * [depotProblem] is written for the screen, where listing the directory is
+     * the whole point -- the person standing in front of it needs to see what
+     * the app sees. The log is a different audience: it gets copied into bug
+     * reports and sent to strangers, and an inventory of someone's Download
+     * folder has no business travelling with it. Same answer, no contents.
+     */
+    fun depotProblemSummary(depot: File): String = when {
+        !depot.isDirectory -> "that folder does not exist yet"
+        depot.listFiles().orEmpty().isEmpty() -> "that folder is empty"
+        partialDataDir(depot) != null -> "a data folder is there, but the copy did not finish"
+        else -> "no game data in it"
+    }
+
     /** A directory named like the game's data, but without the file that counts. */
     private fun partialDataDir(depot: File): File? {
         var level = childDirs(depot)

@@ -548,7 +548,7 @@ class SetupActivity : Activity() {
         }
         val problem = DepotLocation.problemWith(dir)
         if (problem != null) {
-            LauncherLog.log("rejected $dir: ${problem.lines().first()}")
+            LauncherLog.log("rejected ${dir.name}: ${PlayerImage.depotProblemSummary(dir)}")
             say("That folder cannot be used.")
             detail.text = "$dir\n\n$problem"
             return
