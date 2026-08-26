@@ -32,10 +32,13 @@
 package dev.silksong.launcher
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.IOException
@@ -494,31 +497,70 @@ object PlayerImage {
         // number rather than from the first bundle a hundred bundles later.
         send(Progress("Retargeting content", 0f, "0 of $total bundles"))
 
-        for (group in groups) {
-            coroutineContext.ensureActive()
-            val count = counts.getValue(group)
-            if (count == 0) continue
-            val before = finished
-            // retarget-tree reports "  N / M  (Ts)" on stderr every hundred
-            // bundles, which exec folds in with stdout. Without reading it the
-            // bar can only move once per top-level group -- and one group here
-            // holds most of the 2068 bundles, so it sat at 0% for minutes
-            // while the work was actually going fine.
-            val r = run(surgery, context, listOf("retarget-tree", group.absolutePath, group.absolutePath)) { line ->
-                PROGRESS.find(line)?.let { m ->
-                    val n = m.groupValues[1].toIntOrNull() ?: return@let
-                    trySend(
-                        Progress(
-                            "Retargeting content",
-                            (before + n).toFloat() / total,
-                            "${before + n} of $total bundles",
-                        ),
-                    )
-                }
+        // What has actually been rewritten, counted off the tree.
+        //
+        // The reader below was meant to be this, and cannot be: retarget-tree
+        // prints nothing this side of the runtime -- the per-group line in the
+        // log came back empty on a Retroid Pocket Flip 2, after a run that
+        // rewrote all 2068 bundles perfectly well. Whatever it says goes
+        // nowhere we can see, and with one group holding the whole tree the
+        // bar could then only move once, at the end. It read 0% for seven
+        // minutes of a working retarget.
+        //
+        // The files answer without being asked. A bundle rewritten after this
+        // started has an mtime to prove it, and that is true whatever the tool
+        // does or does not print. Both paths report through [publish], so the
+        // reader still wins if it ever has something to say.
+        val startedAt = System.currentTimeMillis()
+        val seen = java.util.concurrent.atomic.AtomicInteger(0)
+        fun publish(n: Int) {
+            if (n <= 0 || n < seen.get()) return
+            seen.set(n)
+            // Never quite full: the step ends when the tool returns, not when
+            // the last file lands, and the two are not the same moment.
+            trySend(
+                Progress(
+                    "Retargeting content",
+                    (n.toFloat() / total).coerceAtMost(0.99f),
+                    "$n of $total bundles",
+                ),
+            )
+        }
+
+        val ticker = launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(RETARGET_POLL_MS)
+                publish(
+                    aa.walkTopDown().count {
+                        it.isFile && it.name.endsWith(".bundle") && it.lastModified() >= startedAt
+                    },
+                )
             }
-            finished += count
-            LauncherLog.log("retargeted ${group.name}: ${r.output.trim().lines().lastOrNull()}")
-            send(Progress("Retargeting content", finished.toFloat() / total, "$finished of $total bundles"))
+        }
+
+        try {
+            for (group in groups) {
+                coroutineContext.ensureActive()
+                val count = counts.getValue(group)
+                if (count == 0) continue
+                val before = finished
+                // What retarget-tree is documented to print: "  N / M  (Ts)"
+                // every hundred bundles, which exec folds in with stdout. It
+                // has never been seen to arrive; the count above is what
+                // actually moves the bar, and this is kept only because it
+                // costs nothing and would be the better answer if it came.
+                val r = run(surgery, context, listOf("retarget-tree", group.absolutePath, group.absolutePath)) { line ->
+                    PROGRESS.find(line)?.let { m ->
+                        val n = m.groupValues[1].toIntOrNull() ?: return@let
+                        publish(before + n)
+                    }
+                }
+                finished += count
+                LauncherLog.log("retargeted ${group.name}: ${r.output.trim().lines().lastOrNull()}")
+                publish(finished)
+            }
+        } finally {
+            ticker.cancel()
         }
         // Recomputed rather than reused: the run just rewrote these files, so
         // the stamp that identifies "already retargeted" is the state they are
@@ -528,6 +570,16 @@ object PlayerImage {
     }.flowOn(Dispatchers.IO)
 
     private val PROGRESS = Regex("""^\s*(\d+)\s*/\s*(\d+)\s""")
+
+    /**
+     * How often the bundle tree is counted while the retarget runs.
+     *
+     * A pass over a couple of thousand files, so not free -- and it competes
+     * with the work it is measuring, on the same storage. Slow enough not to
+     * matter, often enough that a stalled step is obvious within a screenful
+     * of waiting.
+     */
+    private const val RETARGET_POLL_MS = 5_000L
 
     // ── the depot ──────────────────────────────────────────────────────────
 
