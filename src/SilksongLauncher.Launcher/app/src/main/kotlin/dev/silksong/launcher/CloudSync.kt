@@ -78,8 +78,13 @@ object CloudSync {
      * no online subsystem provides a userId. We sync cloud saves to
      * that exact directory so the game picks them up on its next
      * launch.
+     *
+     * Defined by [SaveDir], which is also what prepares the directory
+     * before a launch -- one definition, because a cloud pull writing
+     * to a different directory than the one the game reads is a bug
+     * with no symptom until somebody loses a save.
      */
-    private const val SAVE_SUBDIR = "default"
+    private const val SAVE_SUBDIR = SaveDir.SUBDIR
 
     /**
      * Fallback cloud-path prefix used when the user has NO existing
@@ -548,11 +553,7 @@ object CloudSync {
         }
     }.flowOn(Dispatchers.IO)
 
-    private fun saveDirFor(context: Context): File {
-        val external = context.getExternalFilesDir(null)
-            ?: context.filesDir // fallback if external storage isn't mounted
-        return File(external, SAVE_SUBDIR)
-    }
+    private fun saveDirFor(context: Context): File = SaveDir.of(context)
 
     /**
      * Local save files we consider candidates for push: every plain

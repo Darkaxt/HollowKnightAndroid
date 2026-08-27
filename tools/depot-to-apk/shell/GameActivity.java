@@ -457,8 +457,371 @@ public class GameActivity extends PlayerActivity
         }
     }
 
+    // ── the game's own log, on disk ─────────────────────────────────────────
+    //
+    // Save failures are why this exists. DesktopPlatform.WriteSaveSlot puts
+    // every reason a save can fail into Debug.LogException and nothing else:
+    //
+    //     try { File.WriteAllBytes(text, bytes); }
+    //     catch (Exception e) { Debug.LogException(e); }   // and carries on
+    //
+    // That reaches logcat, which is gone the moment the user unplugs, and the
+    // launcher's own log file never sees a line of it. So a report from a
+    // device nobody working on the port owns says "cannot save" and carries no
+    // cause -- which is exactly the position an Android 15 report left us in.
+    //
+    // An app may read its OWN logcat with no permission at all: the platform
+    // has filtered the buffer by uid since Jelly Bean, so this returns this
+    // package's output and nobody else's. The game runs in THIS process, so
+    // --pid is the engine, and the Unity tag is the game's own C# logging.
+    //
+    // Rotated once per launch rather than appended forever. The interesting
+    // session is the one that just failed, and keeping a single previous
+    // generation means that relaunching the game to go and fetch the log does
+    // not destroy the log being fetched.
+    private static final String GAME_LOG = "game.log";
+
+    // Enough for a session's worth of Unity output without becoming the
+    // reason external storage filled up. Two generations, so twice this.
+    private static final long GAME_LOG_MAX_BYTES = 512L * 1024L;
+
+    // The distilled version, and the one a report is actually likely to
+    // contain. game.log is ~180 KB per session and is rotated on every launch,
+    // which is fine for "the run that just failed" and useless for the way
+    // these bugs are actually met: a player whose save will not stick, or
+    // whose game dies after two hours, relaunches and tries again several
+    // times before it occurs to anybody to go looking for a log -- and by then
+    // the session that explained it has been rotated past .prev and is gone.
+    //
+    // So the lines that matter are ALSO appended here, and this file is not
+    // rotated per launch. It only ever collects faults, so a cap this size
+    // holds many sessions rather than three.
+    private static final String ERROR_LOG = "errors.log";
+    private static final long ERROR_LOG_MAX_BYTES = 128L * 1024L;
+
+    // Substrings, not patterns: this runs on every line the engine logs, and a
+    // regex per line during a level load is a cost with nothing to show for
+    // it. Deliberately wider than any one bug -- the exception that explains a
+    // lost save is a FileStream constructor throwing, and its own text
+    // mentions neither saving nor Silksong.
+    //
+    // "Fatal signal" is what libc writes from the dying process when the
+    // engine segfaults. It is the ONLY part of a native crash we can see: the
+    // backtrace is produced by crash_dump, which is a different uid, and an
+    // app may only ever read its own uid's log. So that line plus the thread
+    // name is the whole of what a native crash leaves us, and it must not be
+    // the line that gets rotated away.
+    private static final String[] FAULT_MARKERS = {
+        "Exception", "Access to the path", "EACCES", "ENOSPC",
+        "No space left", "Temp file", "save file", "SaveSlot",
+        "Sharing violation", "IOException",
+        "Fatal signal", "FATAL EXCEPTION", "OutOfMemory", "Out of memory",
+        "abort message", "libc :", "was killed",
+    };
+
+    private static boolean isNoteworthy(String line)
+    {
+        for (String m : FAULT_MARKERS) if (line.contains(m)) return true;
+        return false;
+    }
+
+    private void startLogCapture()
+    {
+        final java.io.File ext = getExternalFilesDir(null);
+        if (ext == null) return;
+        final java.io.File out = new java.io.File(ext, GAME_LOG);
+        final java.io.File prev = new java.io.File(ext, GAME_LOG + ".prev");
+        rotate(out, prev);
+
+        Thread t = new Thread(new Runnable()
+        {
+            @Override public void run() { captureLog(out, prev); }
+        }, "game-log");
+        // Daemon: this thread blocks on a pipe that only closes when logcat
+        // does, and it must never be the reason the process refuses to exit.
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private static void rotate(java.io.File out, java.io.File prev)
+    {
+        try
+        {
+            if (!out.isFile()) return;
+            prev.delete();
+            if (!out.renameTo(prev)) out.delete();
+        }
+        catch (Exception e)
+        {
+            android.util.Log.w(TAG, "could not rotate the game log: " + e);
+        }
+    }
+
+    private void captureLog(java.io.File out, java.io.File prev)
+    {
+        java.lang.Process proc = null;
+        java.io.Writer w = null;
+        java.io.Writer saveW = null;
+        try
+        {
+            final java.io.File ext = getExternalFilesDir(null);
+            final java.io.File saveOut = (ext == null) ? null : new java.io.File(ext, ERROR_LOG);
+            // Trimmed at the door rather than mid-stream: this file grows by a
+            // handful of lines per session, so it reaching the cap at all is
+            // already unusual and one previous generation is ample.
+            if (saveOut != null && saveOut.length() > ERROR_LOG_MAX_BYTES)
+            {
+                rotate(saveOut, new java.io.File(ext, ERROR_LOG + ".prev"));
+            }
+
+            String header = "=== " + new java.text.SimpleDateFormat(
+                    "yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(new java.util.Date())
+                + " game pid " + android.os.Process.myPid() + " ===\n";
+
+            // -v time to match the launcher's own log, so the two can be read
+            // side by side when a report carries both.
+            proc = new ProcessBuilder(
+                    "logcat", "-v", "time", "--pid=" + android.os.Process.myPid())
+                .redirectErrorStream(true)
+                .start();
+
+            java.io.BufferedReader in = new java.io.BufferedReader(
+                new java.io.InputStreamReader(proc.getInputStream()), 1 << 16);
+            w = new java.io.BufferedWriter(
+                new java.io.OutputStreamWriter(new java.io.FileOutputStream(out, true)));
+            long written = out.length();
+            try
+            {
+                w.write(header);
+                for (String line; (line = in.readLine()) != null; )
+                {
+                    w.write(line);
+                    w.write('\n');
+                    // Flushed per line on purpose, the same bargain
+                    // LauncherLog makes: the whole point is to survive the
+                    // process dying, and a buffered writer's last few
+                    // kilobytes are the ones that say why it died.
+                    w.flush();
+
+                    if (saveOut != null && isNoteworthy(line))
+                    {
+                        // Opened on the first line worth keeping, so a session
+                        // that saves without trouble adds nothing at all --
+                        // not even a header to page past.
+                        if (saveW == null)
+                        {
+                            saveW = new java.io.BufferedWriter(new java.io.OutputStreamWriter(
+                                new java.io.FileOutputStream(saveOut, true)));
+                            saveW.write(header);
+                        }
+                        saveW.write(line);
+                        saveW.write('\n');
+                        saveW.flush();
+                    }
+
+                    written += line.length() + 1;
+                    if (written > GAME_LOG_MAX_BYTES)
+                    {
+                        w.close();
+                        rotate(out, prev);
+                        w = new java.io.BufferedWriter(new java.io.OutputStreamWriter(
+                            new java.io.FileOutputStream(out, true)));
+                        written = 0L;
+                    }
+                }
+            }
+            finally
+            {
+                try { in.close(); } catch (Exception ignored) { }
+            }
+        }
+        catch (Exception e)
+        {
+            // A log that cannot be written must never cost the game its
+            // launch. This is diagnostics and nothing else depends on it.
+            android.util.Log.w(TAG, "game log capture stopped: " + e);
+        }
+        finally
+        {
+            if (w != null) { try { w.close(); } catch (Exception ignored) { } }
+            if (saveW != null) { try { saveW.close(); } catch (Exception ignored) { } }
+            if (proc != null) proc.destroy();
+        }
+    }
+
+    // ── did the last session end, or did it die? ────────────────────────────
+    //
+    // A native crash and an out-of-memory kill both leave us nothing to read:
+    // the backtrace belongs to crash_dump and the kill belongs to lmkd, and
+    // both are other uids, which an app may not read the log of. So the only
+    // way to know is to notice AFTERWARDS.
+    //
+    // A marker is written when the game starts, refreshed with the running
+    // time and the memory picture as it goes, and deleted when the activity
+    // stops of its own accord. Finding one at the next launch means the
+    // previous run never got to delete it, and its contents say how long that
+    // run lasted and what memory looked like when it stopped -- which is the
+    // difference between "it crashes after about two hours" and a report that
+    // can be acted on.
+    //
+    // Deleted on onStop as well as onDestroy, and deliberately: the engine
+    // calls System.exit(0) on quit and onDestroy does not reliably follow it.
+    // Treating a stopped activity as a clean end costs us the ability to spot
+    // a background kill, and buys us a signal that is not crying wolf on every
+    // ordinary exit -- and a game that dies two hours into being PLAYED is
+    // resumed, not stopped, so the case we are chasing is still caught.
+    private static final String ALIVE = "session.running";
+
+    private static final long HEARTBEAT_MS = 60_000L;
+
+    private java.io.File extFile(String name)
+    {
+        java.io.File ext = getExternalFilesDir(null);
+        return (ext == null) ? null : new java.io.File(ext, name);
+    }
+
+    /** Straight to the file, not via logcat: a dying process may not get a turn. */
+    private void appendError(String text)
+    {
+        android.util.Log.e(TAG, text);
+        java.io.File f = extFile(ERROR_LOG);
+        if (f == null) return;
+        try
+        {
+            java.io.Writer w = new java.io.OutputStreamWriter(
+                new java.io.FileOutputStream(f, true));
+            try { w.write(text); w.write('\n'); w.flush(); }
+            finally { w.close(); }
+        }
+        catch (Exception ignored) { }
+    }
+
+    private void reportPreviousSession()
+    {
+        java.io.File f = extFile(ALIVE);
+        if (f == null || !f.isFile()) return;
+        String detail;
+        try
+        {
+            byte[] b = new byte[(int) Math.min(f.length(), 4096)];
+            java.io.FileInputStream in = new java.io.FileInputStream(f);
+            try { in.read(b); } finally { in.close(); }
+            detail = new String(b, "UTF-8").trim();
+        }
+        catch (Exception e) { detail = "marker unreadable: " + e; }
+        appendError("previous session did NOT exit cleanly -- last seen: " + detail);
+        f.delete();
+    }
+
+    /** Uptime and memory, the two things a two-hour death is usually about. */
+    private String status(long startedMs)
+    {
+        long upSec = (android.os.SystemClock.elapsedRealtime() - startedMs) / 1000L;
+        Runtime rt = Runtime.getRuntime();
+        long javaMb = (rt.totalMemory() - rt.freeMemory()) / (1024L * 1024L);
+        long nativeMb = android.os.Debug.getNativeHeapAllocatedSize() / (1024L * 1024L);
+        long availMb = -1;
+        boolean low = false;
+        try
+        {
+            android.app.ActivityManager am =
+                (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            android.app.ActivityManager.MemoryInfo mi =
+                new android.app.ActivityManager.MemoryInfo();
+            am.getMemoryInfo(mi);
+            availMb = mi.availMem / (1024L * 1024L);
+            low = mi.lowMemory;
+        }
+        catch (Exception ignored) { }
+        return "uptime " + (upSec / 3600) + "h" + ((upSec % 3600) / 60) + "m"
+            + ", java " + javaMb + " MB, native " + nativeMb + " MB"
+            + ", system free " + availMb + " MB" + (low ? " (LOW MEMORY)" : "");
+    }
+
+    private void startHeartbeat()
+    {
+        final long started = android.os.SystemClock.elapsedRealtime();
+        writeMarker(status(started));
+        Thread t = new Thread(new Runnable()
+        {
+            @Override public void run()
+            {
+                while (true)
+                {
+                    try { Thread.sleep(HEARTBEAT_MS); }
+                    catch (InterruptedException e) { return; }
+                    String s = status(started);
+                    // Into game.log by way of our own capture, and into the
+                    // marker so that it survives the process that wrote it.
+                    android.util.Log.i(TAG, s);
+                    writeMarker(s);
+                }
+            }
+        }, "game-heartbeat");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private void writeMarker(String text)
+    {
+        java.io.File f = extFile(ALIVE);
+        if (f == null) return;
+        try
+        {
+            java.io.Writer w = new java.io.OutputStreamWriter(new java.io.FileOutputStream(f));
+            try { w.write(text); w.flush(); }
+            finally { w.close(); }
+        }
+        catch (Exception ignored) { }
+    }
+
+    /**
+     * Java-side crashes, written before the process is taken away.
+     *
+     * The engine is IL2CPP and most of what can go wrong here is native, which
+     * this cannot see. What it does catch is anything thrown on a Java thread
+     * -- the shell's own threads included -- and it writes the stack straight
+     * to the file rather than trusting the log-capture thread to be scheduled
+     * once more before the process ends.
+     */
+    private void installCrashHandler()
+    {
+        final Thread.UncaughtExceptionHandler prev =
+            Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler()
+        {
+            @Override public void uncaughtException(Thread t, Throwable e)
+            {
+                try
+                {
+                    java.io.StringWriter sw = new java.io.StringWriter();
+                    e.printStackTrace(new java.io.PrintWriter(sw));
+                    appendError("FATAL EXCEPTION on thread " + t.getName() + "\n" + sw);
+                }
+                catch (Throwable ignored) { }
+                if (prev != null) prev.uncaughtException(t, e);
+            }
+        });
+    }
+
+    @Override protected void onStop()
+    {
+        java.io.File f = extFile(ALIVE);
+        if (f != null) f.delete();
+        super.onStop();
+    }
+
     @Override protected void onCreate(Bundle savedInstanceState)
     {
+        // First, so that everything below it is in the file too: the engine
+        // install and the content link are the other two things that fail on
+        // hardware we do not have.
+        startLogCapture();
+        installCrashHandler();
+        // Before the marker is rewritten, or the evidence is the thing that
+        // overwrites the evidence.
+        reportPreviousSession();
+        startHeartbeat();
         // Before super.onCreate: that is where UnityPlayerActivity constructs
         // the player, which is what triggers the engine's own library loading.
         installEngine();

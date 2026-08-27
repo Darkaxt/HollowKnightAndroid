@@ -128,6 +128,19 @@ class LogActivity : Activity() {
             append(LauncherLog.deviceSummary()).append('\n')
             append('\n')
             append(if (body.isBlank()) "(no log yet)" else body)
+
+            // The game's own log, appended after the launcher's rather than
+            // interleaved with it. The two come from different processes, and
+            // the engine's is the only one that carries the reason a save
+            // failed -- which is the whole point of collecting it.
+            for (f in LauncherLog.gameLogs(this@LogActivity)) {
+                val text = runCatching {
+                    f.takeIf { it.isFile }?.readText()
+                }.getOrNull()
+                if (text.isNullOrBlank()) continue
+                append("\n\n===== ").append(f.name).append(" =====\n")
+                append(text)
+            }
         }
     }
 

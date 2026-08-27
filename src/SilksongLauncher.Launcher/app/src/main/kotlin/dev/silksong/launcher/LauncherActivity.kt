@@ -525,6 +525,11 @@ class LauncherActivity : Activity() {
             // is the moment the game will read them, so it is the moment they
             // cannot be stale.
             settings.exportForGame(this)
+            // Same reason, and the more important one: this is the last moment
+            // before the engine owns the save directory. See SaveDir -- the
+            // game promotes a stranded save temp over the real save without
+            // saying so, and clearing them is only possible from out here.
+            SaveDir.prepare(this)
             returningFromGame = true
             startActivity(intent)
         } catch (t: Throwable) {

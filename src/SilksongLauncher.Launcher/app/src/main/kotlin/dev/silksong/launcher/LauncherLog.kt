@@ -75,6 +75,14 @@ object LauncherLog {
     // useful directly after the reset that a failed build provoked.
 
     private const val LOG_NAME = "launcher.log"
+
+    /**
+     * Must match GAME_LOG / ERROR_LOG in GameActivity.java, which writes them.
+     * The two cannot share a constant: that class is compiled into the
+     * hand-assembled game shell rather than into this module.
+     */
+    private const val GAME_LOG_NAME = "game.log"
+    private const val ERROR_LOG_NAME = "errors.log"
     private const val MAX_FILE_BYTES = 256L * 1024L
     private const val MAX_FILE_LINES = 4000
     private val fileLock = Any()
@@ -89,6 +97,31 @@ object LauncherLog {
     /** The copy a user can actually get at, when there is external storage. */
     fun externalFile(context: Context): File? =
         context.getExternalFilesDir(null)?.let { File(it, LOG_NAME) }
+
+    /**
+     * The game's logs, most useful first.
+     *
+     * A separate set of files written by a separate process, and it has to be:
+     * the engine's C# logging is the only place a save failure ever appears --
+     * DesktopPlatform.WriteSaveSlot puts the reason in Debug.LogException and
+     * nowhere else -- and that runs in the game's process, not this one. See
+     * GameActivity.startLogCapture, which is what writes these.
+     *
+     * errors.log leads because it is the distilled one: faults only, appended
+     * across sessions rather than rotated per launch, so it still holds the
+     * run that went wrong after the player has relaunched five times. game.log
+     * is the full session and both of its generations follow, because the
+     * context around a fault is worth having when it is still there.
+     */
+    fun gameLogs(context: Context): List<File> =
+        context.getExternalFilesDir(null)?.let {
+            listOf(
+                File(it, "$ERROR_LOG_NAME.prev"),
+                File(it, ERROR_LOG_NAME),
+                File(it, "$GAME_LOG_NAME.prev"),
+                File(it, GAME_LOG_NAME),
+            )
+        }.orEmpty()
 
     /**
      * Starts writing to disk. Safe to call more than once and from any process.
