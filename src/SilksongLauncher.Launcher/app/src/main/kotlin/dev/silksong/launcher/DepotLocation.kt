@@ -110,9 +110,14 @@ object DepotLocation {
      * Whichever candidate actually holds the game wins, so a picked folder
      * that has been emptied falls back to the app's own directory rather than
      * taking the whole app down with it.
+     *
+     * Another platform's build does not count as holding the game: it has the
+     * same data directory and cannot be built from, so passing over it lets a
+     * working Linux copy elsewhere be found instead of being shadowed by the
+     * Windows one that happens to be listed first.
      */
     fun resolve(context: Context): File? =
-        candidates(context).firstOrNull { PlayerImage.depotData(it) != null }
+        candidates(context).firstOrNull { usable(it) }
             ?: appDirs(context).firstOrNull()
 
     /**
@@ -124,8 +129,11 @@ object DepotLocation {
     fun downloadTarget(context: Context): File? = appDirs(context).firstOrNull()
 
     /** True when the game's files are somewhere this app can reach them. */
-    fun present(context: Context): Boolean =
-        candidates(context).any { PlayerImage.depotData(it) != null }
+    fun present(context: Context): Boolean = candidates(context).any { usable(it) }
+
+    /** A folder holding a copy of the game this port can actually be built from. */
+    private fun usable(dir: File): Boolean =
+        PlayerImage.depotData(dir) != null && PlayerImage.foreignBuild(dir) == null
 
     // ── the pointer ────────────────────────────────────────────────────────
 
@@ -278,6 +286,15 @@ object DepotLocation {
         if (!dir.isDirectory) {
             return "that folder cannot be read. If it is on a memory card or a USB stick, " +
                 "try a folder in internal storage instead."
+        }
+        // First, because this folder holds a complete and correct copy of the
+        // game and every other answer here is about one that does not. It is
+        // also the only one that can be given when [PlayerImage.depotData]
+        // finds nothing: a macOS copy keeps its data a level deeper than that
+        // search goes, so without this it would be turned away as empty.
+        PlayerImage.wrongBuildProblem(dir)?.let {
+            return "$it.\n\nIn Steam, install Silksong for Linux, or download depot " +
+                "${DepotFetcher.DEPOT_ID} with DepotDownloader, and choose that folder instead."
         }
         if (PlayerImage.depotData(dir) == null) {
             return "no game files in there: ${PlayerImage.depotProblem(dir)}.\n\n" +

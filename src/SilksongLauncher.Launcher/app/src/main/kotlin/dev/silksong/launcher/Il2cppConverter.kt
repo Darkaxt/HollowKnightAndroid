@@ -153,6 +153,13 @@ object Il2cppConverter {
         val deploy = deployDir(unity)
         val managed = depotManaged(depot)
             ?: throw IOException("no Managed folder with Assembly-CSharp.dll under $depot")
+        // Last line of defence, and the one that names the cause. Everything
+        // above this can be reached by a depot that was accepted before the
+        // platform was ever checked -- an app updated mid-build, a pointer
+        // written by an older version -- and the failure without it is the
+        // one this check exists because of: four minutes of work, then il2cpp
+        // dying on two class libraries at once with nothing readable to say.
+        PlayerImage.wrongBuildProblem(depot)?.let { throw IOException(it) }
         if (!bcl.isDirectory) throw IOException("the unityaot class library is missing: $bcl")
         if (!engine.isDirectory) throw IOException("the Android player's Managed folder is missing: $engine")
         if (!File(deploy, "il2cpp.dll").isFile) throw IOException("il2cpp.dll is missing: $deploy")
@@ -275,8 +282,9 @@ object Il2cppConverter {
             }
             val why = result.output.lineSequence()
                 .firstOrNull { it.contains("rror", true) || it.contains("xception", true) }
-                ?: "exit ${result.code}"
-            throw IOException("il2cpp failed after ${seconds}s: ${why.trim().take(300)}")
+                ?.trim()?.take(300)
+                ?: lastWords(log)
+            throw IOException("il2cpp failed after ${seconds}s, exit ${result.code}: $why")
         }
         if (metadata(root).length() <= 0) {
             throw IOException("il2cpp produced no global-metadata.dat")
@@ -290,6 +298,43 @@ object Il2cppConverter {
         )
         send(Progress("Converted", 1f, "$cpp C++ files in ${seconds}s"))
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * The last thing il2cpp said, for a failure that said nothing error-shaped.
+     *
+     * The line above this picks the first line of output that reads like an
+     * error, which is the right answer when there is one and was the only
+     * answer there was. When there is not, what it fell back to was "exit
+     * 120" -- and that is what a bug report on 1.0.3-rc3 consisted of, for a
+     * failure whose cause was sitting unread in convert.log a directory away.
+     * il2cpp does not always announce itself: fed two class libraries at once
+     * it dies part-way through a sentence about a type, which contains
+     * neither "error" nor "exception".
+     *
+     * So: the end of the log, which is where a program that stopped says why.
+     * Read from the tail rather than whole -- a conversion that got some way
+     * in leaves megabytes -- and the first line of that read is dropped,
+     * because a seek to a byte offset lands in the middle of one.
+     */
+    private fun lastWords(log: File): String {
+        val lines = runCatching {
+            java.io.RandomAccessFile(log, "r").use { raf ->
+                val from = (raf.length() - TAIL_BYTES).coerceAtLeast(0L)
+                raf.seek(from)
+                val buf = ByteArray((raf.length() - from).toInt())
+                raf.readFully(buf)
+                String(buf, Charsets.UTF_8).lines().let { if (from > 0) it.drop(1) else it }
+            }
+        }.getOrDefault(emptyList())
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        if (lines.isEmpty()) return "it printed nothing at all, so ${log.name} is empty too"
+        return lines.takeLast(TAIL_LINES).joinToString(" | ").takeLast(300)
+    }
+
+    /** How much of the converter's log a failure quotes. */
+    private const val TAIL_BYTES = 8L * 1024L
+    private const val TAIL_LINES = 3
 
     /**
      * Composes the assembly set, in the order Unity composes it.

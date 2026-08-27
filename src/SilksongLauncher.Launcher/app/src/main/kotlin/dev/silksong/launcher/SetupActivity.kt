@@ -216,7 +216,51 @@ class SetupActivity : Activity() {
 
     /** The game's own files are on this device, however they got here. */
     private fun haveGameFiles(): Boolean =
-        depotDir?.let { PlayerImage.depotData(it) != null } == true
+        depotDir?.let {
+            PlayerImage.depotData(it) != null && PlayerImage.foreignBuild(it) == null
+        } == true
+
+    /**
+     * The wrong platform's copy, and where it is, or null when there is none.
+     *
+     * Only asked once there is no usable depot, so a stray Windows folder
+     * beside a working Linux one is nobody's problem: [DepotLocation.resolve]
+     * has already passed over it, and a screen that complained about it would
+     * be complaining about a build that is going to work.
+     *
+     * Across every candidate rather than the resolved one, because a macOS
+     * copy is never resolved at all -- its data directory sits a level below
+     * where [PlayerImage.depotData] looks -- and "where is your copy of
+     * Silksong" is the wrong thing to say to someone whose copy is right
+     * there. See [PlayerImage.foreignBuild].
+     */
+    private fun wrongBuild(): Pair<File, PlayerImage.ForeignBuild>? {
+        if (haveGameFiles()) return null
+        return depotDirs.firstNotNullOfOrNull { dir ->
+            PlayerImage.foreignBuild(dir)?.let { dir to it }
+        }
+    }
+
+    /**
+     * Says so in the log, once per folder.
+     *
+     * The screen is where this gets read, and the log is where it gets
+     * reported: the whole reason this check exists is a bug report that could
+     * not say which copy of the game it was about. [refresh] runs on every
+     * resume and every state change, so the folder is remembered to keep one
+     * mistake from filling the file.
+     */
+    private var notedWrongBuild: String? = null
+
+    private fun noteWrongBuild(where: File, build: PlayerImage.ForeignBuild) {
+        val key = "${where.absolutePath}:${build.depot}"
+        if (notedWrongBuild == key) return
+        notedWrongBuild = key
+        LauncherLog.log(
+            "depot: ${build.label} build (depot ${build.depot}) in ${where.absolutePath}; " +
+                "this port needs the Linux depot ${DepotFetcher.DEPOT_ID}",
+        )
+    }
 
     /** Signed in to Steam, so the depot can be downloaded. */
     private fun signedIn(): Boolean = TokenStore(this).read() != null
@@ -356,6 +400,7 @@ class SetupActivity : Activity() {
         stepLabel.visibility = View.GONE
         val built = isBuilt()
         val haveGame = haveGameFiles()
+        val foreign = wrongBuild()
 
         when {
             built -> {
@@ -364,6 +409,21 @@ class SetupActivity : Activity() {
                 primary.text = "Play"
                 primary.visibility = View.VISIBLE
                 secondary.visibility = View.GONE
+            }
+            // Ahead of "ready to port", and ahead of a Steam download that
+            // would otherwise unpack the Linux depot on top of this one and
+            // leave a folder that is half of each.
+            foreign != null -> {
+                val (where, build) = foreign
+                noteWrongBuild(where, build)
+                status.text = "That is the ${build.label} version of Silksong"
+                detail.text = "Found in\n${where.absolutePath}\n\n" +
+                    "This port is built from the Linux version, depot " +
+                    "${DepotFetcher.DEPOT_ID}. Install Silksong for Linux in Steam, or " +
+                    "download that depot with DepotDownloader, then point this at it."
+                primary.visibility = View.GONE
+                secondary.text = "Choose folder"
+                secondary.visibility = View.VISIBLE
             }
             readyToPort || haveGame -> {
                 status.text = message ?: "Ready to port Silksong"
@@ -864,6 +924,7 @@ class SetupActivity : Activity() {
                 if (PlayerImage.depotData(depot) == null) {
                     throw java.io.IOException("the game's files are not on this device")
                 }
+                PlayerImage.wrongBuildProblem(depot)?.let { throw java.io.IOException(it) }
 
                 // ── Step 3: building ──────────────────────────────────────
                 setStep(buildStep, "Building Silksong")

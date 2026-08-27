@@ -640,6 +640,98 @@ object PlayerImage {
         dir.listFiles().orEmpty().filter { it.isDirectory }.sortedBy { it.name }
 
     /**
+     * A desktop build of Silksong that is not the one this port is made from.
+     *
+     * The port is built around the LINUX depot, 1030303, and only that one:
+     * the retarget reads the Linux player's shaders for their Vulkan slice,
+     * and the IL2CPP converter is fed the Linux player's assemblies. See
+     * [DepotFetcher.DEPOT_ID].
+     *
+     * Nothing used to check. Every desktop build has a "<game>_Data" folder
+     * with a globalgamemanagers in it, so a Windows or macOS copy passed for
+     * the real thing, and the build ran for four minutes and then died inside
+     * il2cpp -- which reported the exit code and not the reason, so the report
+     * that came back said only "il2cpp failed after 5s: exit 120".
+     *
+     * The mechanism is worth stating, because it is not obvious that a wrong
+     * platform should matter at all when the IL is the same IL. It is the
+     * class library. The converter composes its assembly set as unityaot BCL,
+     * then the Android player's engine assemblies, then whatever the depot has
+     * that neither of those already provides -- and the Windows player ships
+     * class library assemblies the unityaot profile has no copy of, so they
+     * are not shadowed by name and they land in the set. il2cpp is then
+     * handed two class libraries from two profiles at once. That is the
+     * failure the header of Il2cppConverter describes: it does not produce a
+     * message about profiles, it dies. The count is the tell -- the Linux
+     * depot makes a set of 186 assemblies, and the report that provoked this
+     * had 200.
+     */
+    enum class ForeignBuild(val depot: Int, val label: String) {
+        WINDOWS(1030301, "Windows"),
+        MACOS(1030302, "macOS"),
+    }
+
+    /**
+     * Which other platform's build this is, or null for the Linux one.
+     *
+     * By the player library, because it is named for its platform, it sits in
+     * a fixed place beside the data directory, and no build carries another's.
+     * The macOS layout also gets its bundle recognised: the data directory
+     * there is "Contents/Resources/Data", a level deeper than [depotData]
+     * looks and not named "_Data" either, so a macOS copy would otherwise
+     * reach the screen as "no game data in it" -- true, unhelpful, and the
+     * kind of answer that has someone re-copying eight gigabytes.
+     *
+     * Finding the Linux player is an answer too, and it comes first because
+     * it is the common case: the right depot ends this at its own top level
+     * without listing anything else.
+     *
+     * The walk matches [depotData]'s -- the same levels, for the same reason
+     * -- except that the bulk directories are pruned. Nothing here needs to
+     * look inside a data directory, and StreamingAssets/aa is thousands of
+     * files that this must never enumerate: it runs on the main thread every
+     * time the setup screen is drawn.
+     */
+    fun foreignBuild(depot: File): ForeignBuild? {
+        if (!depot.isDirectory) return null
+        var level = listOf(depot)
+        var depth = 0
+        while (level.isNotEmpty() && depth <= DEPOT_SEARCH_DEPTH) {
+            for (dir in level) {
+                val names = dir.list().orEmpty()
+                if (names.any { it.equals("UnityPlayer.so", ignoreCase = true) }) return null
+                if (names.any { it.equals("UnityPlayer.dll", ignoreCase = true) }) {
+                    return ForeignBuild.WINDOWS
+                }
+                if (names.any { it.equals("UnityPlayer.dylib", ignoreCase = true) }) {
+                    return ForeignBuild.MACOS
+                }
+                if (names.any { it.endsWith(".app", ignoreCase = true) && File(dir, it).isDirectory }) {
+                    return ForeignBuild.MACOS
+                }
+            }
+            level = level.flatMap(::childDirs).filterNot { isBulkDir(it.name) }
+            depth++
+        }
+        return null
+    }
+
+    /** A directory whose contents are the game's, and are never worth listing. */
+    private fun isBulkDir(name: String): Boolean =
+        name.endsWith(DATA_SUFFIX) || name == "Data" || name == "StreamingAssets"
+
+    /**
+     * What to tell someone holding the wrong build, or null when they are not.
+     *
+     * Says the platform rather than only the depot number, because the number
+     * is what they typed and the platform is what they got wrong.
+     */
+    fun wrongBuildProblem(depot: File): String? = foreignBuild(depot)?.let {
+        "that is the ${it.label} version of Silksong (depot ${it.depot}). " +
+            "This port is built from the Linux version, depot ${DepotFetcher.DEPOT_ID}"
+    }
+
+    /**
      * Why [depotData] found nothing, in terms of what is actually on the disk.
      *
      * Someone who has copied eight gigabytes to the wrong place is owed more
@@ -651,6 +743,11 @@ object PlayerImage {
         if (!depot.isDirectory) return "that folder does not exist yet"
         val entries = depot.listFiles().orEmpty().sortedBy { it.name }
         if (entries.isEmpty()) return "that folder is empty"
+
+        // Before anything about what is missing: this folder holds a complete
+        // and correct copy of the game, and naming what is absent from it
+        // would send the reader looking for a copy that went wrong.
+        wrongBuildProblem(depot)?.let { return it }
 
         // A data directory that is there but unusable is its own answer, and a
         // much more likely one than a wrong path: an interrupted copy, or a
@@ -677,6 +774,7 @@ object PlayerImage {
     fun depotProblemSummary(depot: File): String = when {
         !depot.isDirectory -> "that folder does not exist yet"
         depot.listFiles().orEmpty().isEmpty() -> "that folder is empty"
+        foreignBuild(depot) != null -> "that is the ${foreignBuild(depot)?.label} build, not the Linux one"
         partialDataDir(depot) != null -> "a data folder is there, but the copy did not finish"
         else -> "no game data in it"
     }

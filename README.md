@@ -39,7 +39,8 @@ if your device doesn't work.
 
 If you'd rather not sign in, download the game's **Linux** depot on a PC with
 [DepotDownloader](https://github.com/SteamRE/DepotDownloader). The Linux files are the
-ones the port is built from; the Windows depot will not do:
+ones the port is built from; the Windows (1030301) and macOS (1030302) depots will not do,
+and the app rejects them:
 
 ```sh
 DepotDownloader -app 1030300 -depot 1030303 -username <your account> -password <your password> -dir silksong
