@@ -48,7 +48,35 @@ done
 
 export LD_LIBRARY_PATH="$USR/lib"
 CLANG="$USR/bin/clang"
+
+# How many compiles run at once.
+#
+# Cores, capped by memory. Every clang here is a real process holding a real
+# working set -- the generated translation units are large, several are over
+# 2 MB of C++ with a precompiled header attached, and one can hold several
+# hundred megabytes at its peak. On a phone with room that does not matter and
+# the count is simply the core count. On one without it, eight of them at once
+# is how a build gets its process killed rather than merely being slow: Android
+# does not refuse the memory, it takes the process, and the build ends with
+# nothing to show for the hour.
+#
+# MemAvailable rather than MemTotal, because unlike the conversion this runs
+# fifteen minutes after the user pressed the button and what else is resident
+# by then is a real constraint rather than an accident. 400 MB budgeted per
+# compile, and half a gigabyte left for everything that is not this.
+#
+# sed rather than awk: awk is not on every Android build, sed is.
 JOBS=$(nproc)
+_avail=$(sed -n 's/^MemAvailable: *\([0-9]*\) kB$/\1/p' /proc/meminfo 2>/dev/null)
+if [ -n "$_avail" ]; then
+    _fit=$(( (_avail - 524288) / 409600 ))
+    [ "$_fit" -lt 1 ] && _fit=1
+    [ "$_fit" -lt "$JOBS" ] && JOBS=$_fit
+fi
+# The caller's word beats both. The app knows things this does not -- which
+# tier the conversion had to fall back to, for one -- and a terminal run is
+# often deliberately throttled to keep the phone usable.
+JOBS="${BUILD_JOBS:-$JOBS}"
 
 # --sysroot points at the NDK (not Termux's) so the produced .so depends only
 # on bionic: liblog/libm/libdl/libc, exactly like Unity's own libil2cpp.so.
@@ -286,7 +314,7 @@ compile_all() {
 }
 
 
-echo "### device: $(getprop ro.product.model), $JOBS cores"
+echo "### device: $(getprop ro.product.model), $(nproc) cores, $JOBS parallel compiles"
 echo "### clang: $($CLANG --version 2>/dev/null | head -1)"
 
 T0=$(date +%s)
@@ -339,12 +367,18 @@ echo "  $([ -f obj/zgc_amalgam.o ] && echo OK || echo FAILED)  $(( $(date +%s)-T
 # the runtime's calls only resolve against a Z_PREFIX build of these sources.
 T2c=$(date +%s)
 echo "### PHASE C3: compiling zlib ($(ls "$EXTERNAL"/zlib/*.c | wc -l) TUs)"
+n=0
 for f in "$EXTERNAL"/zlib/*.c; do
     out="obj/zl_$(basename "$f").o"
     [ -f "$out" ] && continue
     $CLANG -x c -std=gnu99 -march=armv8-a $OPT -fPIC -fvisibility=hidden \
            -DZ_PREFIX -DHAVE_HIDDEN -DNDEBUG -DANDROID \
            -I"$EXTERNAL/zlib" $TGT -c "$f" -o "$out" 2>>err.log &
+    # Bounded like every other phase. These are small and there are only a
+    # dozen of them, so this is never the phase that runs a device out of
+    # memory -- but a build that has been throttled to one compile at a time
+    # has been throttled for a reason, and starting twelve here ignores it.
+    n=$((n+1)); [ $((n % JOBS)) -eq 0 ] && wait
 done
 wait
 echo "  objects: $(ls obj/zl_*.o 2>/dev/null | wc -l)  $(( $(date +%s)-T2c ))s"

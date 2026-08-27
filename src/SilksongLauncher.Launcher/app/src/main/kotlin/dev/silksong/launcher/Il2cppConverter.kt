@@ -163,14 +163,6 @@ object Il2cppConverter {
 
         prepareTool(deploy)
 
-        // Any previous attempt is cleared: il2cpp is not asked to reconcile a
-        // half-written tree, and a stale .cpp left behind by an interrupted
-        // run would be compiled into the result.
-        cppDir(root).deleteRecursively()
-        dataDir(root).deleteRecursively()
-        cppDir(root).mkdirs()
-        dataDir(root).mkdirs()
-
         val argv = ArrayList<String>()
         argv += "--convert-to-cpp"
         // The command line is long -- around 185 of these -- but it is handed
@@ -186,59 +178,99 @@ object Il2cppConverter {
         argv += "--static-lib-il2-cpp"
 
         val expected = expectedSources(root)
-        LauncherLog.log("il2cpp: starting; ${MonoRuntime.memory(context)}")
-        send(Progress("Converting to C++", 0f, "0 of $expected files"))
         val log = File(root, "convert.log")
-        val sink = log.bufferedWriter()
         val started = System.currentTimeMillis()
-        // Real progress, counted off the output directory.
+
+        // One attempt, and the machinery that makes it watchable.
         //
-        // il2cpp says nothing at all while it works: its stdout is block
-        // buffered into a file and the whole of it arrives at once when the
-        // process ends, so the line-driven detail below never fires and the
-        // bar had nothing to move on. Six minutes of a full stop looks
-        // exactly like a hang -- one person waited half an hour and gave up
-        // on a conversion that may well have been working.
-        //
-        // The files themselves are the honest signal: they land steadily
-        // throughout, and there is no interpretation involved in counting
-        // them. The total is close to fixed for a given depot and patch set,
-        // so the previous run's count is the denominator and the constant is
-        // only ever used once.
-        val ticker = launch(Dispatchers.IO) {
-            while (isActive) {
-                delay(PROGRESS_POLL_MS)
-                val n = cppDir(root).list()?.size ?: 0
-                // Never quite full: the step is over when il2cpp says so, not
-                // when a guessed total is reached, and a bar that sits at 100%
-                // is a bar that has started lying.
-                trySend(
-                    Progress(
-                        "Converting to C++",
-                        (n.toFloat() / expected).coerceIn(0f, 0.99f),
-                        "$n of $expected files",
-                    ),
-                )
+        // A function rather than a block because a conversion can be reclaimed
+        // for memory and tried again smaller, and everything here has to be
+        // done afresh when it is: the output directory is emptied, the log is
+        // rewritten, and the progress counter starts from nothing.
+        suspend fun attempt(budget: MonoRuntime.Budget): Toolchain.Result {
+            // Any previous attempt is cleared: il2cpp is not asked to reconcile
+            // a half-written tree, and a stale .cpp left behind by an
+            // interrupted run would be compiled into the result.
+            cppDir(root).deleteRecursively()
+            dataDir(root).deleteRecursively()
+            cppDir(root).mkdirs()
+            dataDir(root).mkdirs()
+
+            LauncherLog.log("il2cpp: starting with $budget; ${MonoRuntime.memory(context)}")
+            send(Progress("Converting to C++", 0f, "0 of $expected files"))
+            val sink = log.bufferedWriter()
+            // Real progress, counted off the output directory.
+            //
+            // il2cpp says nothing at all while it works: its stdout is block
+            // buffered into a file and the whole of it arrives at once when the
+            // process ends, so the line-driven detail below never fires and the
+            // bar had nothing to move on. Six minutes of a full stop looks
+            // exactly like a hang -- one person waited half an hour and gave up
+            // on a conversion that may well have been working.
+            //
+            // The files themselves are the honest signal: they land steadily
+            // throughout, and there is no interpretation involved in counting
+            // them. The total is close to fixed for a given depot and patch set,
+            // so the previous run's count is the denominator and the constant is
+            // only ever used once.
+            val ticker = launch(Dispatchers.IO) {
+                while (isActive) {
+                    delay(PROGRESS_POLL_MS)
+                    val n = cppDir(root).list()?.size ?: 0
+                    // Never quite full: the step is over when il2cpp says so, not
+                    // when a guessed total is reached, and a bar that sits at 100%
+                    // is a bar that has started lying.
+                    trySend(
+                        Progress(
+                            "Converting to C++",
+                            (n.toFloat() / expected).coerceIn(0f, 0.99f),
+                            "$n of $expected files",
+                        ),
+                    )
+                }
+            }
+            return try {
+                MonoRuntime.exec(
+                    context,
+                    File(deploy, "il2cpp.dll"),
+                    argv,
+                    // il2cpp resolves parts of its own installation relative to
+                    // the working directory.
+                    cwd = deploy,
+                    env = budget.toEnv(),
+                ) { line ->
+                    sink.write(line); sink.write("\n")
+                }
+            } finally {
+                ticker.cancel()
+                sink.flush(); sink.close()
             }
         }
-        val result = try {
-            MonoRuntime.exec(
-                context,
-                File(deploy, "il2cpp.dll"),
-                argv,
-                // il2cpp resolves parts of its own installation relative to
-                // the working directory.
-                cwd = deploy,
-            ) { line ->
-                sink.write(line); sink.write("\n")
-            }
-        } finally {
-            ticker.cancel()
-            sink.flush(); sink.close()
+
+        var budget = MonoRuntime.budget(context)
+        var result = attempt(budget)
+        // Reclaimed rather than failed: the settings were too generous for
+        // this device as it stood, so the same work is offered a smaller share
+        // of it. Only for that one cause -- a conversion that threw is a
+        // conversion that will throw again, and retrying it costs the user
+        // another six minutes to reach the same message.
+        while (result.outOfMemory) {
+            val next = budget.tighter() ?: break
+            budget = next
+            LauncherLog.log("il2cpp: reclaimed for memory; retrying with $budget")
+            send(Progress("Converting to C++", 0f, "retrying with less memory"))
+            result = attempt(budget)
         }
         val seconds = (System.currentTimeMillis() - started) / 1000
 
         if (!result.ok) {
+            if (result.outOfMemory) {
+                throw IOException(
+                    "il2cpp ran out of memory after ${seconds}s, at the smallest settings " +
+                        "there are ($budget). Close other apps, or restart the device, and " +
+                        "try again -- ${MonoRuntime.memory(context)}.",
+                )
+            }
             val why = result.output.lineSequence()
                 .firstOrNull { it.contains("rror", true) || it.contains("xception", true) }
                 ?: "exit ${result.code}"
@@ -356,6 +388,16 @@ object Il2cppConverter {
         // runtime the device happens to carry. Invariant globalization keeps
         // ICU out of the picture -- il2cpp does not need culture data, and it
         // is 30 MB not to have to fetch.
+        //
+        // Inert, and kept anyway: nothing on the device reads it. hostfxr and
+        // hostpolicy are the parts that would, and they are among the files
+        // deleted above; the runtime is started through the hosting API with
+        // the properties monojni passes it, which is where the settings that
+        // actually take effect live. It is written so the deploy directory
+        // describes what it is being run as, and Server GC says false here for
+        // the same reason it says false there -- this collector has no server
+        // mode, and a file claiming otherwise is a file that sends the next
+        // person looking in the wrong place.
         File(deploy, "il2cpp.runtimeconfig.json").writeText(
             """
             {
@@ -364,7 +406,7 @@ object Il2cppConverter {
                 "framework": { "name": "Microsoft.NETCore.App", "version": "8.0.0" },
                 "rollForward": "latestMajor",
                 "configProperties": {
-                  "System.GC.Server": true,
+                  "System.GC.Server": false,
                   "System.Globalization.Invariant": true,
                   "System.Globalization.PredefinedCulturesOnly": true,
                   "System.Runtime.TieredCompilation.QuickJit": false

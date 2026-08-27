@@ -100,7 +100,144 @@ object MonoRuntime {
         "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT" to "1",
         "HOME" to context.filesDir.absolutePath,
         "TMPDIR" to File(context.filesDir, "tmp").apply { mkdirs() }.absolutePath,
-    )
+    ) + budget(context).toEnv()
+
+    /**
+     * How much of the device one .NET run is allowed to help itself to.
+     *
+     * The conversion is the largest thing this app ever asks a machine to do,
+     * and on a phone the machine is shared with everything else the user has
+     * open. Android does not refuse the memory; it takes the process instead,
+     * which arrives as "the system stopped the build process to reclaim
+     * memory" and forty seconds of wasted work. A 4 GB device reported 1.9 GB
+     * free at the start of a conversion and lost the process before the first
+     * hundred files.
+     *
+     * Two numbers, because il2cpp's appetite has two sources. It converts
+     * assemblies in parallel, and every worker holds its own share of the type
+     * graph, so peak memory rises with the number of workers; and it allocates
+     * hard enough that SGen's default policy -- let the heap roughly double
+     * before collecting again -- floats far more garbage than a small device
+     * can carry.
+     *
+     * [heapMb] of zero means no limit at all, which is what a device with room
+     * to spare gets: the phones this already works on should keep the runtime
+     * they were measured with, and a collector tuned for a 4 GB device is
+     * slower on one that never needed it.
+     */
+    data class Budget(val cores: Int, val heapMb: Int) {
+
+        /**
+         * The environment that imposes it.
+         *
+         * DOTNET_PROCESSOR_COUNT is the whole of the first half. Under this
+         * runtime Environment.ProcessorCount is an icall to mono_cpu_limit(),
+         * which reads that variable before it looks at the machine, so every
+         * degree of parallelism the program derives from the core count --
+         * Parallel.For, the thread pool's own floor, the collector's
+         * workers -- follows from it. That matters more than any il2cpp option
+         * would: it needs no cooperation from the tool, and it cannot be
+         * spelled wrong in a way that goes unnoticed, because the runtime
+         * either reads it or the count is unchanged.
+         *
+         * MONO_GC_PARAMS is the second half, and is read once when the
+         * collector starts -- which is why [MonoService] gets these through
+         * the environment rather than as host properties: monojni sets them
+         * with setenv before it loads the runtime at all.
+         *
+         *   soft-heap-limit  past this size the collector stops letting the
+         *                    heap grow by a proportion of itself and allows
+         *                    only a nursery's worth of growth between major
+         *                    collections, forcing each one rather than letting
+         *                    it run concurrently. This is the knob that trades
+         *                    time for memory, and the only one that does so
+         *                    without an upper bound to be wrong about: an
+         *                    unset max-heap-size stays unlimited, so a heap
+         *                    that genuinely needs to be larger than this still
+         *                    grows rather than throwing.
+         *   nursery-size     pinned, which also turns off the dynamic nursery
+         *                    that would otherwise grow -- and, past the soft
+         *                    limit, that growth allowance is measured in
+         *                    nurseries, so pinning it small keeps it small.
+         *   major=marksweep  the serial collector rather than the concurrent
+         *                    one. Concurrent marking keeps a worker and its
+         *                    working set alive and lets the program allocate
+         *                    throughout the mark; neither is worth having when
+         *                    the problem is memory and the cores are already
+         *                    capped.
+         *
+         * Unknown or malformed options are reported and ignored by SGen rather
+         * than being fatal, so the worst a mistake here costs is the tuning.
+         */
+        fun toEnv(): Map<String, String> = if (heapMb <= 0) emptyMap() else mapOf(
+            "DOTNET_PROCESSOR_COUNT" to cores.toString(),
+            "MONO_GC_PARAMS" to "major=marksweep,nursery-size=4m,soft-heap-limit=${heapMb}m",
+        )
+
+        /**
+         * The next step down, for a run that has already been reclaimed once.
+         *
+         * Halving both rather than picking a new tier: what was tried is known
+         * to be too much for this device as it stood, and how much too much is
+         * not knowable from here. Null at the floor, which is the point at
+         * which there is nothing left to give up and the failure is the
+         * device's rather than the settings'.
+         */
+        fun tighter(): Budget? = when {
+            heapMb <= 0 -> Budget(cores.coerceAtMost(4), 1024)
+            cores <= 1 && heapMb <= FLOOR_HEAP_MB -> null
+            else -> Budget((cores / 2).coerceAtLeast(1), (heapMb / 2).coerceAtLeast(FLOOR_HEAP_MB))
+        }
+
+        override fun toString(): String =
+            if (heapMb <= 0) "$cores cores, heap unlimited" else "$cores cores, $heapMb MB heap"
+    }
+
+    /** Below this there is no point continuing to squeeze; il2cpp needs it. */
+    private const val FLOOR_HEAP_MB = 384
+
+    /**
+     * What this device gets, from what it has rather than what is free.
+     *
+     * Total memory rather than available: available is whatever the user
+     * happened to have open when the button was pressed, and a build that
+     * silently converts with two workers because a browser was in the
+     * background is a build whose duration nobody can explain. Total is a
+     * property of the phone, so the same phone always builds the same way.
+     *
+     * The tiers are deliberately coarse and the top one is "change nothing":
+     * every device this is known to work on is above it, and they should keep
+     * the behaviour they were measured with.
+     *
+     * The boundaries sit well inside each band rather than on it, because
+     * totalMem is not the number on the box. The kernel's own carveout comes
+     * off it first, and how much varies by a few percent between devices: a
+     * Retroid Pocket Flip 2 with 8 GB reports 7.52, and 4 GB devices report
+     * anywhere from about 3.4 to 3.9. A threshold placed at the nominal figure
+     * therefore splits a single class of device in two, and the half that
+     * falls through lands a whole tier below where it belongs -- a 4 GB phone
+     * would convert on one core because it happened to report 3.4 rather than
+     * 3.6. Each cut is made in the empty space between bands instead.
+     */
+    fun budget(context: Context): Budget {
+        val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+        val total = runCatching {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val mi = ActivityManager.MemoryInfo()
+            am.getMemoryInfo(mi)
+            mi.totalMem
+        }.getOrDefault(0L)
+        val gb = total / 1024.0 / 1024.0 / 1024.0
+        return when {
+            // Unknown is treated as roomy: a device that will not answer the
+            // question is not evidence that it is small, and capping every
+            // such device would slow builds that were never in trouble.
+            total <= 0L || gb >= 7.0 -> Budget(cores, 0)
+            gb >= 5.2 -> Budget(cores.coerceAtMost(4), 1024)
+            gb >= 3.2 -> Budget(cores.coerceAtMost(2), 640)
+            else -> Budget(1, FLOOR_HEAP_MB)
+        }
+    }
 
     /**
      * Runs a .NET program in a builder process and collects what it printed.
@@ -157,6 +294,7 @@ object MonoRuntime {
 
         val collected = StringBuilder()
         var died = false
+        var lowMemory = false
         var exitCode: Int? = null
         var peakKb = 0L
         var sampled = 0L
@@ -300,10 +438,11 @@ object MonoRuntime {
         }
 
         if (died) {
-            val note = deathOf(context, slot, pid, startedWall)
-            LauncherLog.log("mono: $note")
-            onLine("monojni: $note")
-            if (collected.length < MAX_CAPTURED) collected.append(note).append('\n')
+            val death = deathOf(context, slot, pid, startedWall)
+            lowMemory = death.lowMemory
+            LauncherLog.log("mono: ${death.note}")
+            onLine("monojni: ${death.note}")
+            if (collected.length < MAX_CAPTURED) collected.append(death.note).append('\n')
         }
         // Only for runs big enough to be worth a line. The compilers finish in
         // seconds and take a few hundred megabytes; the conversion is the one
@@ -312,7 +451,7 @@ object MonoRuntime {
             LauncherLog.log("mono: ${assembly.name} peaked at ${gb(peakKb * 1024)}; ${memory(context)}")
         }
 
-        Toolchain.Result(exitCode ?: MonoService.FAILED, collected.toString())
+        Toolchain.Result(exitCode ?: MonoService.FAILED, collected.toString(), lowMemory)
     }
 
     /** As much output as is kept; the rest is streamed to [onLine] and dropped. */
@@ -494,7 +633,19 @@ object MonoRuntime {
                     // every core for ten minutes in the foreground scheduling
                     // group, which is a change to how every device runs a
                     // build and is not what was wrong with this one.
-                    Context.BIND_AUTO_CREATE,
+                    //
+                    // ABOVE_CLIENT says the builder matters more than the app
+                    // that asked for it, which is simply true: :launcher is a
+                    // progress bar and can be rebuilt from nothing, while the
+                    // builder is holding an hour of work that has to start
+                    // again if it goes. Without it the activity manager floors
+                    // the builder at the visible bucket even while the
+                    // launcher is in the foreground, so on a device short of
+                    // memory the process carrying the whole build is offered
+                    // to the low memory killer several levels before the one
+                    // drawing the screen. It changes only that ordering; the
+                    // scheduling group is BIND_IMPORTANT's doing, not this.
+                    Context.BIND_AUTO_CREATE or Context.BIND_ABOVE_CLIENT,
                 )
             }.getOrDefault(false)
             if (!bound) {
@@ -747,13 +898,13 @@ object MonoRuntime {
      * second record under the same name can belong to a process this run
      * never used.
      */
-    private suspend fun deathOf(context: Context, slot: Slot?, pid: Int, since: Long): String {
+    private suspend fun deathOf(context: Context, slot: Slot?, pid: Int, since: Long): Death {
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-            ?: return "the build process ended before it finished"
+            ?: return Death("the build process ended before it finished", false)
         val free = "; ${memory(context)}"
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            return "the build process ended before it finished$free"
+            return Death("the build process ended before it finished$free", false)
         }
         repeat(EXIT_REASON_TRIES) { attempt ->
             if (attempt > 0) delay(EXIT_REASON_WAIT_MS)
@@ -764,10 +915,28 @@ object MonoRuntime {
                         else isBuilder(it.processName, slot) && it.timestamp >= since
                     }
             }.getOrNull()
-            if (info != null) return describeExit(info) + free
+            if (info != null) return Death(describeExit(info) + free, isLowMemory(info))
         }
-        return "the build process ended before it finished, and the system has not said why$free"
+        return Death(
+            "the build process ended before it finished, and the system has not said why$free",
+            false,
+        )
     }
+
+    /** What the platform said about a process that is no longer there. */
+    private data class Death(val note: String, val lowMemory: Boolean)
+
+    /**
+     * Whether the platform took the process for its memory.
+     *
+     * Both reasons count. REASON_LOW_MEMORY is the low memory killer proper;
+     * EXCESSIVE_RESOURCE_USAGE is what some devices report for the same
+     * decision, and a run that ends either way ends for the same reason and
+     * wants the same smaller settings on the next attempt.
+     */
+    private fun isLowMemory(info: android.app.ApplicationExitInfo): Boolean =
+        info.reason == android.app.ApplicationExitInfo.REASON_LOW_MEMORY ||
+            info.reason == android.app.ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE
 
     private fun describeExit(info: android.app.ApplicationExitInfo): String = when (info.reason) {
         android.app.ApplicationExitInfo.REASON_LOW_MEMORY ->

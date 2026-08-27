@@ -103,8 +103,14 @@ object Toolchain {
      * Result of a finished process. Output is stdout and stderr interleaved,
      * as the program produced them -- keeping them apart loses the ordering,
      * and for a compiler the ordering is most of the diagnostic.
+     *
+     * [outOfMemory] is set when the program did not fail so much as get taken:
+     * the platform reclaimed its process. It is a separate field rather than
+     * something a caller reads out of [output] because it decides whether a
+     * retry is worth making, and a decision that turns on matching a sentence
+     * is a decision that breaks the next time the sentence is reworded.
      */
-    data class Result(val code: Int, val output: String) {
+    data class Result(val code: Int, val output: String, val outOfMemory: Boolean = false) {
         val ok: Boolean get() = code == 0
     }
 
