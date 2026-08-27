@@ -615,6 +615,13 @@ class SetupActivity : Activity() {
      *
      * Each file goes through a temporary name, so an interrupted copy is never
      * left looking like a complete library.
+     *
+     * Everything staged is installed, with no attempt to decide that a copy
+     * can be skipped. This used to skip when the sizes matched, which is not a
+     * safe question -- see NativeBuild.installTo, where exactly that shipped a
+     * stale engine -- and there is nothing to gain by asking it: a staged file
+     * is deleted once it is in, so the only way to find one here is for it to
+     * be new.
      */
     private fun moveStaged() {
         val src = stagingDir ?: return
@@ -625,7 +632,6 @@ class SetupActivity : Activity() {
                 name == "data.apk" -> File(pkgDir, "data.apk")
                 else -> continue
             }
-            if (dst.length() == f.length()) { f.delete(); continue }
             dst.parentFile?.mkdirs()
             val tmp = File(dst.parentFile, "${dst.name}.part")
             f.inputStream().use { i -> tmp.outputStream().use { o -> i.copyTo(o, 1 shl 20) } }

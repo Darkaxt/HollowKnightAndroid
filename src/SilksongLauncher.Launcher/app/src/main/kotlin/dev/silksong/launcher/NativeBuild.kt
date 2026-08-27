@@ -185,10 +185,37 @@ object NativeBuild {
      * Written to a temporary name and renamed, because this is 293 MB onto a
      * phone: an interrupted copy that kept the final name would be a
      * truncated ELF that the engine would try to load.
+     *
+     * Whether the copy can be skipped is decided by a stamp beside the
+     * destination rather than by comparing the two files. It used to be a
+     * size comparison alone, and that is not enough: two builds of this game
+     * came to exactly 315563224 bytes, so a rebuilt engine was silently not
+     * installed and the game went on running the previous one. That presents
+     * as the change you just made not working, which is an expensive way to
+     * spend an evening.
+     *
+     * A stamp rather than the destination's own modification time, because
+     * copying that across does not survive the filesystem: setLastModified
+     * lands on a second boundary here while the source carries nanoseconds,
+     * so the two never compare equal. A stamp is exact, and a missing or
+     * unreadable one means "install", which costs a copy and never costs
+     * correctness.
+     *
+     * In practice the skip rarely fires: the link step rewrites the library
+     * on every build, so its modification time moves even when the bytes come
+     * out identical, and the copy happens. That is the intended trade. A few
+     * seconds against a build measured in minutes is not worth the risk of
+     * being clever about what "the same file" means.
      */
     private fun installTo(from: File, to: File) {
         to.parentFile?.mkdirs()
-        if (to.length() == from.length()) return
+        val stamp = File(to.parentFile, "${to.name}.stamp")
+        val want = "${from.length()}:${from.lastModified()}"
+        if (to.length() == from.length() &&
+            runCatching { stamp.readText().trim() }.getOrNull() == want
+        ) {
+            return
+        }
         val tmp = File(to.parentFile, "${to.name}.part")
         from.inputStream().use { i -> tmp.outputStream().use { o -> i.copyTo(o, 1 shl 20) } }
         if (!tmp.renameTo(to)) {
@@ -196,6 +223,9 @@ object NativeBuild {
             throw IOException("could not install the engine to $to")
         }
         to.setExecutable(true, true)
+        // Written last, so that an interrupted copy leaves a stamp that does
+        // not match and the next build installs again.
+        runCatching { stamp.writeText(want) }
         LauncherLog.log("installed ${to.name} to ${to.parent}")
     }
 

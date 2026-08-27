@@ -111,7 +111,13 @@ public class GameActivity extends PlayerActivity
             boolean isData = so.getName().equals("data.apk");
             if (!isLib && !isData) continue;
             java.io.File out = isData ? externalDataApk() : new java.io.File(dst, so.getName());
-            if (out.length() == so.length()) { so.delete(); continue; }
+            // Everything staged is installed. This used to skip when the sizes
+            // matched, which is not a safe question -- two builds of this game
+            // came to exactly 315563224 bytes, so a rebuilt engine was dropped
+            // here without being installed and the game went on loading the
+            // old one. There is nothing to gain by asking either: a staged
+            // file is deleted once it is in, so finding one here means it is
+            // new.
             try
             {
                 // Via a temporary name, so an interrupted copy is never left
