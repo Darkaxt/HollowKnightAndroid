@@ -98,28 +98,39 @@ object Il2cppConverter {
     /**
      * Whether the conversion is older than what it was made from.
      *
-     * Only the patches are checked, because only the patches change without
+     * Only our own assemblies are checked, because only they change without
      * anything else changing: the depot is fixed and the Input System is
      * rebuilt from a pinned version, but the port's own code is edited between
      * builds. Without this a changed patch compiles happily, is copied into
      * the assembly set, and is then skipped by a conversion that thinks it has
      * nothing to do -- so the player keeps running the previous version and
      * nothing says otherwise.
+     *
+     * BOTH of ours, and that is not a tidiness point. SilksongIo arrived in a
+     * release whose patch sources had not changed at all, so a check that
+     * looked only at SilksongPatches said "nothing to do" and skipped the
+     * conversion that applies the File.Replace redirect -- which would have
+     * shipped a release whose headline fix reached nobody who already had a
+     * build. An assembly of ours that is missing from the staged set counts as
+     * stale for the same reason: that is exactly what an upgrade looks like.
      */
     fun isStale(root: File): Boolean {
-        val patches = PackageCompiler.patchAssembly(root)
-        if (!patches.isFile) return false
-        val staged = File(asmDir(root), patches.name)
-        if (!staged.isFile) return true
-        // Content, not length. Two builds of the patches differ in what they
-        // do far more often than in how big they are, and a same-size assembly
-        // read as "unchanged" means the conversion is skipped, the old
-        // generated C++ is recompiled, and the device runs the previous
-        // version of a patch while every log line says the build succeeded.
-        // That is not hypothetical: it cost three rounds of chasing a bug that
-        // had already been fixed.
-        if (staged.length() != patches.length()) return true
-        return !staged.readBytes().contentEquals(patches.readBytes())
+        val ours = listOf(PackageCompiler.patchAssembly(root), PackageCompiler.ioAssembly(root))
+        for (built in ours) {
+            if (!built.isFile) continue
+            val staged = File(asmDir(root), built.name)
+            if (!staged.isFile) return true
+            // Content, not length. Two builds of the patches differ in what
+            // they do far more often than in how big they are, and a same-size
+            // assembly read as "unchanged" means the conversion is skipped, the
+            // old generated C++ is recompiled, and the device runs the previous
+            // version of a patch while every log line says the build succeeded.
+            // That is not hypothetical: it cost three rounds of chasing a bug
+            // that had already been fixed.
+            if (staged.length() != built.length()) return true
+            if (!staged.readBytes().contentEquals(built.readBytes())) return true
+        }
+        return false
     }
 
     // ── inputs ─────────────────────────────────────────────────────────────
