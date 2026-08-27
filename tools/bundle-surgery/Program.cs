@@ -55,6 +55,7 @@ internal static class Program
             Console.Error.WriteLine("  set-graphics-apis <globalgamemanagers> <ids>     — set BuildSettings.m_GraphicsAPIs (21=Vulkan, 11=GLES3, 17=OpenGLCore)");
             Console.Error.WriteLine("  set-build-version <globalgamemanagers> <version> — set BuildSettings.m_Version (must match the SerializedFile version)");
             Console.Error.WriteLine("  patch-catalog-path <in.bin> <out.bin> <abs-path> — repoint an Addressables catalog's content root at an absolute path");
+            Console.Error.WriteLine("  redirect-file-replace <Assembly-CSharp.dll> <SilksongIo.dll> — point the game's File.Replace calls at SafeIo (fixes saving where ReplaceFile is unsupported)");
             Console.Error.WriteLine("  retarget-tree <src-dir> <dst-dir>               — extract-vulkan-android over a whole bundle tree, in parallel, resumable");
             Console.Error.WriteLine();
             Console.Error.WriteLine("inspection (diagnostic):");
@@ -67,6 +68,7 @@ internal static class Program
             "set-graphics-apis" when args.Length >= 3 => SetGraphicsApis(args[1], args[2]),
             "set-build-version" when args.Length >= 3 => SetBuildVersion(args[1], args[2]),
             "patch-catalog-path" when args.Length >= 4 => PatchCatalogPath(args[1], args[2], args[3]),
+            "redirect-file-replace" when args.Length >= 3 => RedirectFileReplace.Run(args[1], args[2]),
             "retarget-tree" when args.Length >= 3 => RetargetTree(args[1], args[2]),
             "extract-vulkan-android" when args.Length >= 3 => ExtractVulkanAndroid(args[1], args[2]),
             "shader-report" when args.Length >= 2 => ShaderReport(args[1]),

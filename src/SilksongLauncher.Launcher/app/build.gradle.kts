@@ -366,3 +366,15 @@ val stagePatches by tasks.registering(Sync::class) {
     into(layout.projectDirectory.dir("src/main/assets/ondevice/patches"))
 }
 tasks.named("preBuild") { dependsOn(stagePatches) }
+
+// SafeIo, staged the same way and for the same reasons, but kept apart from
+// the patches above because it is compiled apart from them. The patches are
+// built AGAINST the depot's Assembly-CSharp so that they can name the game's
+// types; this one must not be, because Assembly-CSharp is rewritten to call
+// INTO it, and two assemblies that reference each other is a cycle no
+// compiler will accept. Separate directory, separate compile, one direction.
+val stageIo by tasks.registering(Sync::class) {
+    from(rootProject.file("../../tools/silksong-io/src")) { into("src") }
+    into(layout.projectDirectory.dir("src/main/assets/ondevice/silksong-io"))
+}
+tasks.named("preBuild") { dependsOn(stageIo) }

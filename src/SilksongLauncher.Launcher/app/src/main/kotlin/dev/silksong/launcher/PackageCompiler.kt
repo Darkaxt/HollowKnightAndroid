@@ -188,6 +188,97 @@ object PackageCompiler {
     fun entryPoints(root: File): String? =
         File(root, "patches/entrypoints.json").takeIf { it.isFile }?.readText()
 
+    // ── SafeIo ─────────────────────────────────────────────────────────────
+
+    private const val IO = "SilksongIo.dll"
+    private const val IO_ASSETS = "ondevice/silksong-io"
+
+    /** Named for the converter, which stages it and then rewrites against it. */
+    const val IO_ASSEMBLY = IO
+
+    fun ioAssembly(root: File): File = File(outputDir(root), IO)
+
+    fun ioPresent(root: File): Boolean = ioAssembly(root).length() > 0
+
+    /**
+     * Compiles SafeIo, which Assembly-CSharp is rewritten to call.
+     *
+     * Separate from [compilePatches] and it has to be. The patches are built
+     * against the depot so they can name the game's own types; this is built
+     * against the class library and the engine ONLY, because the Cecil pass
+     * makes Assembly-CSharp reference it and two assemblies referencing each
+     * other is a cycle. UnityEngine is allowed and is not one: nothing in the
+     * engine references the game.
+     *
+     * See tools/silksong-io/src/SafeIo.cs for what it is for -- in short,
+     * File.Replace does not work on some devices and the game commits every
+     * save through it.
+     */
+    suspend fun compileIo(
+        unity: File,
+        context: android.content.Context,
+        root: File,
+        assets: android.content.res.AssetManager,
+    ) {
+        val csc = stageRoslyn(root) { _, _ -> }
+        val src = File(root, "silksong-io").apply { deleteRecursively(); mkdirs() }
+        copyAssets(assets, IO_ASSETS, src)
+
+        val cs = File(src, "src").walkTopDown()
+            .filter { it.isFile && it.extension == "cs" }
+            .map { it.absolutePath }
+            .toList()
+        if (cs.isEmpty()) throw IOException("no SafeIo sources in the APK")
+
+        val out = ioAssembly(root)
+        out.parentFile.mkdirs()
+        val rsp = File(root, "silksong-io.rsp")
+        rsp.printWriter().use { w ->
+            w.println("-target:library")
+            w.println("-out:\"${out.absolutePath}\"")
+            w.println("-optimize+")
+            w.println("-nostdlib+")
+            w.println("-noconfig")
+            w.println("-langversion:9.0")
+            w.println("-deterministic+")
+            w.println("-define:UNITY_ANDROID")
+            for (r in ioReferences(unity)) w.println("-reference:\"${r.absolutePath}\"")
+            for (f in cs) w.println("\"$f\"")
+        }
+
+        val result = MonoRuntime.exec(context, csc, listOf("@${rsp.absolutePath}"), cwd = root)
+        if (!result.ok || out.length() <= 0) {
+            val errors = result.output.lineSequence().filter { it.contains("error CS") }.toList()
+            throw IOException(
+                "SafeIo did not compile (${errors.size} errors): " +
+                    (errors.firstOrNull() ?: "exit ${result.code}").trim().take(300),
+            )
+        }
+        LauncherLog.log("SilksongIo.dll: ${out.length()} bytes from ${cs.size} source(s)")
+    }
+
+    /**
+     * The class library and the Android engine, and deliberately not the depot.
+     *
+     * Leaving the depot out is not an optimisation, it is the constraint that
+     * makes the rewrite legal: a SafeIo that had picked up a reference to
+     * Assembly-CSharp could not be called from Assembly-CSharp.
+     */
+    private fun ioReferences(unity: File): List<File> {
+        val out = ArrayList<File>()
+        val seen = HashSet<String>()
+        val dirs = listOf(
+            File(unity, "editor/Editor/Data/MonoBleedingEdge/lib/mono/unityaot-linux"),
+            File(unity, "android/Variations/il2cpp/Managed"),
+        )
+        for (dir in dirs) {
+            for (f in dir.listFiles().orEmpty()) {
+                if (f.isFile && f.extension == "dll" && seen.add(f.name)) out += f
+            }
+        }
+        return out
+    }
+
     /**
      * The patches see everything: class library, Android engine, and the
      * depot.

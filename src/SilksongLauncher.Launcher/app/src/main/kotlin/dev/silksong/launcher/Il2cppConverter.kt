@@ -161,6 +161,8 @@ object Il2cppConverter {
         val assemblies = stageAssemblies(bcl, engine, managed, PackageCompiler.outputDir(root), asmDir(root))
         LauncherLog.log("il2cpp input: ${assemblies.size} assemblies")
 
+        redirectSaveCalls(context, root)
+
         prepareTool(deploy)
 
         val argv = ArrayList<String>()
@@ -303,6 +305,48 @@ object Il2cppConverter {
      * because adding an unrelated assembly would change the type graph for no
      * reason.
      */
+    /**
+     * Points the game's File.Replace calls at SafeIo, before il2cpp sees them.
+     *
+     * This is the only moment it can be done. The launcher is not running
+     * while the game is, and WriteSaveSlot is the depot's own compiled code --
+     * so the call site is rewritten here, while it is still IL and after the
+     * assemblies have been staged but before they are turned into C++.
+     *
+     * See tools/silksong-io/src/SafeIo.cs: File.Replace fails outright on some
+     * devices, and the game commits every save and every shared-data write
+     * through it. The helper tries the original call first, so on a device
+     * where saving already worked this changes nothing at all.
+     *
+     * A failure here is logged rather than thrown, and that is a deliberate
+     * trade. If a future Silksong update reshapes the save path the rewrite
+     * will stop matching, and a game that builds and cannot save on SOME
+     * devices is a great deal better than a game that will not build on any.
+     */
+    private suspend fun redirectSaveCalls(context: android.content.Context, root: File) {
+        val assembly = File(asmDir(root), "Assembly-CSharp.dll")
+        val helper = File(asmDir(root), PackageCompiler.IO_ASSEMBLY)
+        if (!assembly.isFile) {
+            LauncherLog.log("save fix: no Assembly-CSharp.dll staged; skipping the File.Replace redirect")
+            return
+        }
+        if (!helper.isFile) {
+            LauncherLog.log("save fix: ${PackageCompiler.IO_ASSEMBLY} was not staged; skipping the File.Replace redirect")
+            return
+        }
+        try {
+            val surgery = PlayerImage.stageSurgery(root, context.assets)
+            PlayerImage.run(
+                surgery,
+                context,
+                listOf("redirect-file-replace", assembly.absolutePath, helper.absolutePath),
+            ) { line -> LauncherLog.log("save fix: ${line.trim()}") }
+        } catch (t: Throwable) {
+            LauncherLog.log("save fix: could not redirect File.Replace -- saving may fail on devices " +
+                "whose storage cannot do it", t)
+        }
+    }
+
     private fun stageAssemblies(
         bcl: File,
         engine: File,

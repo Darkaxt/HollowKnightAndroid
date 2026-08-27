@@ -824,7 +824,7 @@ object PlayerImage {
      * On external storage beside the build: it is read by .NET, not executed,
      * and keeping it next to what it operates on means one place to clear.
      */
-    private fun stageSurgery(root: File, assets: android.content.res.AssetManager): File {
+    internal fun stageSurgery(root: File, assets: android.content.res.AssetManager): File {
         val dir = File(root, "bundle-surgery")
         dir.mkdirs()
         for (name in assets.list(SURGERY_ASSET_DIR).orEmpty()) {
@@ -838,7 +838,7 @@ object PlayerImage {
         return dll
     }
 
-    private suspend fun run(
+    internal suspend fun run(
         surgery: File,
         context: android.content.Context,
         args: List<String>,
