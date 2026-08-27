@@ -167,6 +167,9 @@ object MonoRuntime {
         // Which of the two processes the run ended up in, for the questions
         // below that have to name it.
         var slot: Slot? = null
+        // And which process, for the same reason: a builder is identified by
+        // pid, not by name. See Binding.pid.
+        var pid = 0
         // Whether the tail below got to the end of the run on its own. False
         // means something took this coroutine away mid-run -- a cancelled
         // build, most often -- and the process on the other end is still
@@ -176,6 +179,7 @@ object MonoRuntime {
             val builder = startRun(context, request)
             binding = builder
             slot = builder.slot
+            pid = builder.pid
 
             // Tail. Reading stops one pass *after* the result file appears,
             // not as soon as it does: the last of the output may still have
@@ -241,7 +245,7 @@ object MonoRuntime {
                 if (++idle >= 8) {
                     idle = 0
                     if (System.currentTimeMillis() - started > STARTUP_GRACE_MS &&
-                        !builderAlive(context, builder.slot) && !result.isFile
+                        !builderAlive(context, builder.slot, builder.pid) && !result.isFile
                     ) { died = true; break }
                 }
                 // What the run is actually costing, sampled while it is still
@@ -254,7 +258,7 @@ object MonoRuntime {
                 val now = System.currentTimeMillis()
                 if (now - sampled >= RSS_SAMPLE_MS) {
                     sampled = now
-                    val rss = builderRssKb(context, builder.slot)
+                    val rss = builderRssKb(builder.pid)
                     if (rss > peakKb) peakKb = rss
                 }
                 delay(120)
@@ -296,7 +300,7 @@ object MonoRuntime {
         }
 
         if (died) {
-            val note = deathOf(context, slot, startedWall)
+            val note = deathOf(context, slot, pid, startedWall)
             LauncherLog.log("mono: $note")
             onLine("monojni: $note")
             if (collected.length < MAX_CAPTURED) collected.append(note).append('\n')
@@ -363,7 +367,7 @@ object MonoRuntime {
             val binding = Binding(context.applicationContext, slot)
             // Every way out of the attempt except the one that hands the
             // binding to the caller has to release it. A registered connection
-            // nobody owns holds a process at BIND_IMPORTANT for as long as the
+            // nobody owns holds a builder process alive for as long as the
             // launcher lives, and the wait below is a suspension point, so a
             // build cancelled while a builder is coming up unwinds straight
             // through here.
@@ -441,6 +445,22 @@ object MonoRuntime {
 
         @Volatile private var bound = false
 
+        /**
+         * The process this run is in, or 0 when it could not be told.
+         *
+         * By pid and not by name, because the name is no longer unique in
+         * time. A run ends by killing its own process while this binding is
+         * still held, which the activity manager reads as a service crashing
+         * and answers by scheduling a restart a second later -- "Scheduling
+         * restart of crashed service ... for connection", once per run. The
+         * restart is normally cancelled by the unbind that follows
+         * immediately, but the one path that deliberately waits is the one
+         * that decides a run has died, and a replacement wearing the same
+         * name would make it wait for ever.
+         */
+        @Volatile var pid = 0
+            private set
+
         /** Why the process did not come up, once [connect] has said it did not. */
         @Volatile var failure: String? = null
             private set
@@ -466,10 +486,15 @@ object MonoRuntime {
                 context.bindService(
                     Intent(context, slot.service),
                     this,
-                    // AUTO_CREATE is what starts the process. IMPORTANT is
-                    // what keeps it out of the cached bucket for as long as
-                    // this binding is held -- see startRun.
-                    Context.BIND_AUTO_CREATE or Context.BIND_IMPORTANT,
+                    // AUTO_CREATE is what starts the process, and holding the
+                    // binding is what keeps it out of the cached bucket --
+                    // which is all the provider connection this replaces did,
+                    // and all that issue #6 needs. Deliberately not
+                    // BIND_IMPORTANT: that would also put a process that pegs
+                    // every core for ten minutes in the foreground scheduling
+                    // group, which is a change to how every device runs a
+                    // build and is not what was wrong with this one.
+                    Context.BIND_AUTO_CREATE,
                 )
             }.getOrDefault(false)
             if (!bound) {
@@ -487,6 +512,10 @@ object MonoRuntime {
                 } else {
                     "the build process did not come up within ${timeoutMs / 1000}s"
                 }
+            } else {
+                // Safe to ask now and only now: the binder came back, so the
+                // process is up, and nothing else of this name can be.
+                pid = builderPid(context, slot)
             }
             return m
         }
@@ -541,17 +570,28 @@ object MonoRuntime {
      * question that has no answer would cost every run its full timeout.
      */
     private suspend fun awaitBuilderGone(context: Context, slot: Slot) {
-        if (waitBuilderGone(context, slot)) return
+        // The process about to be used has to be gone: one process hosts one
+        // run, and a second arriving in it would be refused.
+        val targetGone = waitBuilderGone(context, slot)
+        // The other one cannot block this start -- that is what having two is
+        // for -- but a builder still up as a run begins is a straggler from an
+        // earlier one, because runs are strictly sequential. Nothing here
+        // needs it gone; it is worth clearing because it is holding whatever
+        // the run that made it was holding, and with one process this was
+        // noticed for free.
+        val strays = Slot.values().filter { it != slot && builderRunning(context, it) == true }
+        if (targetGone && strays.isEmpty()) return
+
+        val up = (if (targetGone) strays else strays + slot).joinToString(", ") { it.process }
         if (!launcherForeground()) {
             LauncherLog.log(
-                "mono: ${slot.process} is still up from an earlier run, " +
+                "mono: $up still up from an earlier run, " +
                     "and :launcher is in the background; leaving it",
             )
             return
         }
         LauncherLog.log(
-            "mono: ${slot.process} is still up from an earlier run; " +
-                "ending this app's background processes",
+            "mono: $up still up from an earlier run; ending this app's background processes",
         )
         killBuilder(context)
         waitBuilderGone(context, slot)
@@ -602,6 +642,12 @@ object MonoRuntime {
         }.getOrNull()
     }
 
+    /** The pid of a builder process, or 0 when it cannot be told. */
+    private fun builderPid(context: Context, slot: Slot): Int = runCatching {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return 0
+        am.runningAppProcesses?.firstOrNull { it.processName.endsWith(slot.process) }?.pid ?: 0
+    }.getOrDefault(0)
+
     /**
      * How much memory a builder is holding, in kB, or 0 when it cannot be told.
      *
@@ -611,10 +657,8 @@ object MonoRuntime {
      * already open, where getProcessMemoryInfo is a binder call per sample and
      * has been narrowed for third-party callers more than once.
      */
-    private fun builderRssKb(context: Context, slot: Slot): Long = runCatching {
-        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val pid = am.runningAppProcesses?.firstOrNull { it.processName.endsWith(slot.process) }?.pid
-            ?: return 0L
+    private fun builderRssKb(pid: Int): Long = runCatching {
+        if (pid <= 0) return 0L
         File("/proc/$pid/status").useLines { lines ->
             lines.firstOrNull { it.startsWith("VmRSS:") }
                 ?.filter { it.isDigit() }
@@ -628,14 +672,23 @@ object MonoRuntime {
     private const val RSS_LOG_FLOOR_KB = 512L * 1024L
 
     /**
-     * True while the builder process running this run exists.
+     * True while the process this run was given still exists.
+     *
+     * The pid rather than the name: see [Binding.pid]. Falling back to the
+     * name when there is no pid keeps a device that will not list its own
+     * processes behaving as it did.
      *
      * Unknown counts as alive: this decides whether a run that has gone quiet
      * is dead, and a device that will not answer the question is no reason to
      * declare it.
      */
-    private fun builderAlive(context: Context, slot: Slot): Boolean =
-        builderRunning(context, slot) ?: true
+    private fun builderAlive(context: Context, slot: Slot, pid: Int): Boolean {
+        if (pid <= 0) return builderRunning(context, slot) ?: true
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return true
+        return runCatching {
+            am.runningAppProcesses?.any { it.pid == pid }
+        }.getOrNull() ?: true
+    }
 
     /** Whether an exit record names a builder process, and which. */
     private fun isBuilder(name: String, slot: Slot?): Boolean =
@@ -688,8 +741,13 @@ object MonoRuntime {
      * saying SIGKILL, and reporting that one would be a confident lie. The
      * record is written when the death is reaped, which is a moment after the
      * process stops answering, so it is worth waiting briefly for.
+     *
+     * By [pid] where there is one, for the same reason [Binding.pid] exists:
+     * the activity manager restarts a bound service whose process died, so a
+     * second record under the same name can belong to a process this run
+     * never used.
      */
-    private suspend fun deathOf(context: Context, slot: Slot?, since: Long): String {
+    private suspend fun deathOf(context: Context, slot: Slot?, pid: Int, since: Long): String {
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
             ?: return "the build process ended before it finished"
         val free = "; ${memory(context)}"
@@ -701,7 +759,10 @@ object MonoRuntime {
             if (attempt > 0) delay(EXIT_REASON_WAIT_MS)
             val info = runCatching {
                 am.getHistoricalProcessExitReasons(context.packageName, 0, 20)
-                    .firstOrNull { isBuilder(it.processName, slot) && it.timestamp >= since }
+                    .firstOrNull {
+                        if (pid > 0) it.pid == pid
+                        else isBuilder(it.processName, slot) && it.timestamp >= since
+                    }
             }.getOrNull()
             if (info != null) return describeExit(info) + free
         }
