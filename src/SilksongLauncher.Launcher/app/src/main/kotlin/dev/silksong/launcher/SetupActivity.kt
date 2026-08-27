@@ -866,12 +866,12 @@ class SetupActivity : Activity() {
                 }
                 // Always rebuilt: these are ours and change with the app, and
                 // they are a few seconds to compile.
+                // Ordered before the patches deliberately, as an experiment
+                // turned permanent: see below.
+                PackageCompiler.compileIo(unity, depot, this@SetupActivity, out, assets)
+                    .collect { setBusy(true, it.step, it.fraction, it.detail) }
                 PackageCompiler.compilePatches(unity, depot, this@SetupActivity, out, assets)
                     .collect { setBusy(true, it.step, it.fraction, it.detail) }
-                // Same reasoning, and it must precede the conversion: the
-                // converter rewrites Assembly-CSharp's File.Replace calls
-                // against this assembly before turning either into C++.
-                PackageCompiler.compileIo(unity, this@SetupActivity, out, assets)
                 if (!Il2cppConverter.isPresent(out) || Il2cppConverter.isStale(out)) {
                     Il2cppConverter.convert(unity, depot, this@SetupActivity, out).collect { setBusy(true, it.step, it.fraction, it.detail) }
                 }

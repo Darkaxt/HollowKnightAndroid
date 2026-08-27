@@ -216,11 +216,15 @@ object PackageCompiler {
      */
     suspend fun compileIo(
         unity: File,
+        depot: File,
         context: android.content.Context,
         root: File,
         assets: android.content.res.AssetManager,
-    ) {
-        val csc = stageRoslyn(root) { _, _ -> }
+    ): Flow<Progress> = channelFlow {
+        send(Progress("Compiling the save fix", -1f, ""))
+        val csc = stageRoslyn(root) { done, total ->
+            trySend(Progress("Fetching Roslyn", done.toFloat() / total, ToolchainFetcher.mb(done, total)))
+        }
         val src = File(root, "silksong-io").apply { deleteRecursively(); mkdirs() }
         copyAssets(assets, IO_ASSETS, src)
 
@@ -242,29 +246,54 @@ object PackageCompiler {
             w.println("-langversion:9.0")
             w.println("-deterministic+")
             w.println("-define:UNITY_ANDROID")
-            for (r in ioReferences(unity)) w.println("-reference:\"${r.absolutePath}\"")
+            for (r in ioReferences(unity, depot)) w.println("-reference:\"${r.absolutePath}\"")
             for (f in cs) w.println("\"$f\"")
         }
 
-        val result = MonoRuntime.exec(context, csc, listOf("@${rsp.absolutePath}"), cwd = root)
+        // Streamed to the log rather than only kept for the error path. A
+        // compiler that fails with nothing to say is the case that cost the
+        // most time here, and one line per invocation is a cheap insurance
+        // against meeting it again.
+        val result = MonoRuntime.exec(context, csc, listOf("@${rsp.absolutePath}"), cwd = root) { line ->
+            val t = line.trimEnd()
+            if (t.isNotEmpty()) LauncherLog.log("csc: $t")
+        }
+        LauncherLog.log(
+            "SafeIo compile: exit=${result.code} ok=${result.ok} " +
+                "output=${result.output.length}B dll=${out.length()}B",
+        )
         if (!result.ok || out.length() <= 0) {
             val errors = result.output.lineSequence().filter { it.contains("error CS") }.toList()
-            throw IOException(
-                "SafeIo did not compile (${errors.size} errors): " +
-                    (errors.firstOrNull() ?: "exit ${result.code}").trim().take(300),
-            )
+            // The compiler does not always fail with a CS diagnostic -- a bad
+            // response file or a missing reference path can end it with
+            // nothing on stdout at all -- so the tail of whatever it DID say
+            // goes in the message rather than an unhelpful "0 errors".
+            val detail = errors.firstOrNull()
+                ?: result.output.trim().lines().takeLast(3).joinToString(" | ").ifBlank { "exit ${result.code}" }
+            throw IOException("SafeIo did not compile (${errors.size} errors): ${detail.trim().take(400)}")
         }
         LauncherLog.log("SilksongIo.dll: ${out.length()} bytes from ${cs.size} source(s)")
-    }
+        send(Progress("Save fix ready", 1f, ""))
+    }.flowOn(Dispatchers.IO)
 
     /**
-     * The class library and the Android engine, and deliberately not the depot.
+     * The class library, the Android engine, and netstandard -- and nothing
+     * else of the depot's.
      *
-     * Leaving the depot out is not an optimisation, it is the constraint that
-     * makes the rewrite legal: a SafeIo that had picked up a reference to
-     * Assembly-CSharp could not be called from Assembly-CSharp.
+     * Leaving the rest of the depot out is not an optimisation, it is the
+     * constraint that makes the rewrite legal: a SafeIo that had picked up a
+     * reference to Assembly-CSharp could not be called from Assembly-CSharp.
+     *
+     * netstandard.dll is the exception and has to be. UnityEngine's own
+     * signatures are typed through it -- Debug.LogWarning(object) resolves
+     * System.Object there -- so without it every call into the engine fails
+     * with CS0012 "the type 'Object' is defined in an assembly that is not
+     * referenced". It only ships in the depot's Managed folder, which is why
+     * one file is taken from a directory otherwise avoided. It is a facade
+     * over the class library and references nothing of the game's, so it
+     * cannot reintroduce the cycle.
      */
-    private fun ioReferences(unity: File): List<File> {
+    private fun ioReferences(unity: File, depot: File): List<File> {
         val out = ArrayList<File>()
         val seen = HashSet<String>()
         val dirs = listOf(
@@ -276,6 +305,10 @@ object PackageCompiler {
                 if (f.isFile && f.extension == "dll" && seen.add(f.name)) out += f
             }
         }
+        PlayerImage.depotData(depot)
+            ?.let { File(it, "Managed/netstandard.dll") }
+            ?.takeIf { it.isFile && seen.add(it.name) }
+            ?.let { out += it }
         return out
     }
 

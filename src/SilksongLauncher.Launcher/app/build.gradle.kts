@@ -324,6 +324,11 @@ val stageBundleSurgery by tasks.registering(Copy::class) {
         include(
             "BundleSurgery.dll", "BundleSurgery.runtimeconfig.json", "BundleSurgery.deps.json",
             "AssetsTools.NET.dll", "classdata.tpk",
+            // Mono.Cecil rewrites the game's File.Replace call sites to SafeIo
+            // before il2cpp converts them -- see RedirectFileReplace.cs. Named
+            // here like the rest: this list is explicit so that a transitive
+            // package cannot quietly add a megabyte to the APK.
+            "Mono.Cecil.dll",
         )
     }
     into(dest)

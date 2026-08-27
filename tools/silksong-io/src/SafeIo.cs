@@ -47,6 +47,49 @@ public static class SafeIo
     // fills the log with the same stack.
     static volatile bool _replaceUnusable;
 
+    /// <summary>
+    /// Forces the rename path, for testing it on a device that does not need it.
+    ///
+    /// Every device we can get our hands on takes the File.Replace branch and
+    /// succeeds, which means the branch that matters to the people actually
+    /// affected is the one that never runs here. Dropping this file beside the
+    /// saves makes it run, so the fallback can be exercised on working
+    /// hardware instead of being shipped on the strength of a code review:
+    ///
+    ///     adb shell touch /sdcard/Android/data/&lt;pkg&gt;/files/force-rename-saves
+    ///
+    /// Read once. It is also a support lever -- a player whose saves break in
+    /// some new way can be asked to create it -- which is why it stays in
+    /// rather than being a thing we deleted after the test.
+    /// </summary>
+    static bool Forced
+    {
+        get
+        {
+            if (_forcedKnown) return _forced;
+            try
+            {
+                _forced = File.Exists(Path.Combine(
+                    Application.persistentDataPath, "force-rename-saves"));
+                if (_forced)
+                {
+                    Debug.LogWarning("[SafeIo] force-rename-saves is present: committing every "
+                        + "write by rename without trying File.Replace first.");
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[SafeIo] could not check for force-rename-saves: " + e.Message);
+                _forced = false;
+            }
+            _forcedKnown = true;
+            return _forced;
+        }
+    }
+
+    static volatile bool _forced;
+    static volatile bool _forcedKnown;
+
     /// <summary>Stands in for File.Replace(string, string, string).</summary>
     public static void Replace(string source, string destination, string backup)
     {
@@ -58,7 +101,7 @@ public static class SafeIo
     {
         Exception primary = null;
 
-        if (!_replaceUnusable)
+        if (!_replaceUnusable && !Forced)
         {
             try
             {
