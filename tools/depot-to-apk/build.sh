@@ -231,15 +231,22 @@ step_5_apk_shell() {
             android:exported="false" android:process=":launcher"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
-        <provider android:name="dev.silksong.launcher.MonoProvider"
-            android:authorities="@PKG@.mono"
+        <!--
+          The two builder processes. See MonoService: the .NET runtime needs a
+          process of its own, cannot be started twice in one, and a run
+          therefore ends by killing the process it ran in. There are two so
+          that the next run never asks for a process whose predecessor is
+          still being reaped.
+        -->
+        <service android:name="dev.silksong.launcher.MonoService"
             android:exported="false" android:process=":builder" />
+        <service android:name="dev.silksong.launcher.MonoServiceAlt"
+            android:exported="false" android:process=":builder2" />
 XML
 )
         # The heredoc above is quoted, so that the XML is taken literally and
-        # cannot be surprised by a $ in it. The authority is the one thing in
-        # there that has to vary, and it varies with the package.
-        launcher_block=${launcher_block//@PKG@/$PKG}
+        # cannot be surprised by a $ in it. Nothing in there varies with the
+        # package any more.
     else
         game_filter=$(cat <<'XML'
             <intent-filter>
@@ -258,9 +265,10 @@ XML
     <uses-feature android:glEsVersion="0x00030002" android:required="true" />
     <uses-permission android:name="android.permission.INTERNET" />
     <!--
-      Ending the :builder process when a build is cancelled. A normal
-      permission: granted at install, never prompted for. There is no other
-      way to stop work running in another of our own processes.
+      Ending a builder process when a build is cancelled goes down the
+      binding now, but this is still what clears a straggler left by a run
+      that would not stop. A normal permission: granted at install, never
+      prompted for.
     -->
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <!--

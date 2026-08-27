@@ -22,18 +22,19 @@
 // inside SHA256.Create, on the checksum Roslyn takes of every source file.
 //
 // So the runtime has to live in a process that has a JVM, which on Android
-// means an app process. It gets one of its own -- see MonoService and
-// ":builder" in the manifest -- rather than the launcher's, because the
+// means an app process. It gets one of its own -- see MonoService and the two
+// builder processes in the manifest -- rather than the launcher's, because the
 // isolation a subprocess gave away for free is worth keeping:
 //
 //   il2cpp calls Environment.Exit, which ends the process it is running in.
-//   In :builder that is a process whose whole purpose is to be ended.
+//   In a builder that is a process whose whole purpose is to be ended.
 //
 //   il2cpp resolves parts of its own installation relative to the working
 //   directory, and chdir() is process-wide.
 //
 //   The runtime cannot be initialised twice in a process, and there are four
-//   programs to run. :builder is killed after each one, so each starts clean.
+//   programs to run. The builder is killed after each one, so each starts
+//   clean.
 //
 // What is left here is the part hostfxr and hostpolicy would do on a desktop:
 // find the runtime, decide which assemblies it may load, and start it. There

@@ -38,22 +38,27 @@
 package dev.silksong.launcher
 
 import android.app.ActivityManager
-import android.content.ContentProviderClient
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.os.Build
 import android.os.Bundle
+import android.os.IBinder
+import android.os.Message
+import android.os.Messenger
 import android.os.RemoteException
-import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.IOException
-import kotlin.coroutines.coroutineContext
+import java.util.concurrent.atomic.AtomicInteger
 
 object MonoRuntime {
 
@@ -68,7 +73,7 @@ object MonoRuntime {
     /**
      * The host, as the installer left it.
      *
-     * Not an executable any more, and not exec'd: see MonoProvider for why the
+     * Not an executable any more, and not exec'd: see MonoService for why the
      * runtime needs an app process rather than a child process.
      */
     fun runtimeDir(context: Context): File = File(context.applicationInfo.nativeLibraryDir)
@@ -98,7 +103,7 @@ object MonoRuntime {
     )
 
     /**
-     * Runs a .NET program in :builder and collects what it printed.
+     * Runs a .NET program in a builder process and collects what it printed.
      *
      * Deliberately the same shape as Toolchain.exec, and returning the same
      * Result, because until the runtime moved into a process of its own that
@@ -106,14 +111,13 @@ object MonoRuntime {
      * assembly and its arguments instead of a command line, and are otherwise
      * unchanged.
      *
-     * The output file is the whole protocol. :builder redirects stdout and
-     * stderr onto it and writes the result file when the run ends, so this
-     * tails the one until the other appears. A pipe would say "the run is
-     * over" by reaching end of file, which is tidier, but the descriptor
-     * cannot be handed across: the activity manager refuses an Intent
-     * carrying one, and there is no Intent here anyway. Both processes are
-     * the same application, so a path in the cache directory is a channel
-     * they already share.
+     * The output file is the whole protocol. The builder process redirects
+     * stdout and stderr onto it and writes the result file when the run ends,
+     * so this tails the one until the other appears. A pipe would say "the run
+     * is over" by reaching end of file, which is tidier, and it would have to
+     * survive a process whose last act is to kill itself. Both processes are
+     * the same application, so a path in the cache directory is a channel they
+     * already share, and it keeps its contents after the writer has gone.
      */
     suspend fun exec(
         context: Context,
@@ -141,14 +145,14 @@ object MonoRuntime {
         for ((k, v) in merged) { flatEnv += k; flatEnv += v }
 
         val request = Bundle().apply {
-            putString(MonoProvider.KEY_ASSEMBLY, assembly.absolutePath)
-            putStringArray(MonoProvider.KEY_ARGS, args.toTypedArray())
-            putString(MonoProvider.KEY_CWD, cwd?.absolutePath)
-            putString(MonoProvider.KEY_BCL, bclDir(context).absolutePath)
-            putString(MonoProvider.KEY_RUNTIME, runtimeDir(context).absolutePath)
-            putStringArray(MonoProvider.KEY_ENV, flatEnv.toTypedArray())
-            putString(MonoProvider.KEY_OUT, out.absolutePath)
-            putString(MonoProvider.KEY_RESULT, result.absolutePath)
+            putString(MonoService.KEY_ASSEMBLY, assembly.absolutePath)
+            putStringArray(MonoService.KEY_ARGS, args.toTypedArray())
+            putString(MonoService.KEY_CWD, cwd?.absolutePath)
+            putString(MonoService.KEY_BCL, bclDir(context).absolutePath)
+            putString(MonoService.KEY_RUNTIME, runtimeDir(context).absolutePath)
+            putStringArray(MonoService.KEY_ENV, flatEnv.toTypedArray())
+            putString(MonoService.KEY_OUT, out.absolutePath)
+            putString(MonoService.KEY_RESULT, result.absolutePath)
         }
 
         val collected = StringBuilder()
@@ -156,34 +160,22 @@ object MonoRuntime {
         var exitCode: Int? = null
         var peakKb = 0L
         var sampled = 0L
-        // Held for as long as the run, and closed in the finally below. See
-        // startRun: this connection is what keeps :builder off the bottom of
-        // the activity manager's list while it works.
-        var client: ContentProviderClient? = null
-        // Stops :builder when the caller goes away. Toolchain.exec did the
-        // same with destroyForcibly, and for the same reason: without it a
-        // cancelled build leaves il2cpp running on every core with several
-        // gigabytes held. Killing the process is the only lever there is --
-        // the run is a thread in another process, and nothing about a
-        // provider offers to interrupt it.
-        //
-        // Left registered for the life of the job rather than disposed on the
-        // way out. Disposing in the finally below looks tidy and cannot work:
-        // that block runs as cancellation unwinds, which is before this job
-        // completes, so the handler was always removed a moment before the
-        // only event that would have fired it.
-        //
-        // Cancellation only. Any other ending leaves the process alone,
-        // because killBuilder is package-wide and takes every process of this
-        // app that is not in the foreground -- :launcher among them, which is
-        // where the build is being run from. A step that failed is not a
-        // reason to end a build the user is still waiting on; a cancelled one
-        // is already over.
-        coroutineContext[Job]?.invokeOnCompletion { cause ->
-            if (cause is CancellationException) runCatching { killBuilder(context) }
-        }
+        // Held for as long as the run, and released in the finally below. See
+        // startRun: this binding is what keeps the builder process off the
+        // bottom of the activity manager's list while it works.
+        var binding: Binding? = null
+        // Which of the two processes the run ended up in, for the questions
+        // below that have to name it.
+        var slot: Slot? = null
+        // Whether the tail below got to the end of the run on its own. False
+        // means something took this coroutine away mid-run -- a cancelled
+        // build, most often -- and the process on the other end is still
+        // going. See the finally.
+        var ended = false
         try {
-            client = startRun(context, request)
+            val builder = startRun(context, request)
+            binding = builder
+            slot = builder.slot
 
             // Tail. Reading stops one pass *after* the result file appears,
             // not as soon as it does: the last of the output may still have
@@ -229,7 +221,7 @@ object MonoRuntime {
                 if (done) break
                 if (finished) { done = true; continue }
 
-                // Is :builder still there?
+                // Is the builder process still there?
                 //
                 // The result file is written by the native side, from an
                 // atexit handler that survives Environment.Exit -- but not
@@ -249,7 +241,7 @@ object MonoRuntime {
                 if (++idle >= 8) {
                     idle = 0
                     if (System.currentTimeMillis() - started > STARTUP_GRACE_MS &&
-                        !builderAlive(context) && !result.isFile
+                        !builderAlive(context, builder.slot) && !result.isFile
                     ) { died = true; break }
                 }
                 // What the run is actually costing, sampled while it is still
@@ -262,7 +254,7 @@ object MonoRuntime {
                 val now = System.currentTimeMillis()
                 if (now - sampled >= RSS_SAMPLE_MS) {
                     sampled = now
-                    val rss = builderRssKb(context)
+                    val rss = builderRssKb(context, builder.slot)
                     if (rss > peakKb) peakKb = rss
                 }
                 delay(120)
@@ -271,11 +263,30 @@ object MonoRuntime {
                 if (collected.length < MAX_CAPTURED) collected.append(carry)
                 onLine(carry.toString())
             }
+            ended = true
         } finally {
-            // First: it is the run's claim on the process, and the run is
-            // over. A provider whose process has already gone takes this
-            // without complaint.
-            runCatching { client?.close() }
+            // First: it is the run's claim on the process, and the run is over
+            // one way or another.
+            //
+            // A run that ended on its own has already killed its process, or
+            // is a moment from doing so, and is left to finish: unbinding is
+            // all that is owed. A run that did not is still going, and leaving
+            // it would leave il2cpp on every core with several gigabytes held
+            // for as long as the app lives -- so the process is ended, which
+            // is the only lever there is. The run is a thread in another
+            // process and nothing about a binding offers to interrupt it.
+            //
+            // Cancellation is the case this is for and not the only one: an
+            // exception from anywhere in the tail -- onLine writing to a log
+            // that has gone away, say -- orphans the run just as thoroughly.
+            //
+            // Down the binding rather than through killBackgroundProcesses,
+            // which is what this used to be. That is package-wide and takes
+            // every process of this app that is not in the foreground --
+            // :launcher among them, which is where the build is being run
+            // from, and which is in the background in exactly the case worth
+            // surviving.
+            runCatching { if (ended) binding?.close() else binding?.quit() }
             out.delete()
             // Read before this, so deleting here rather than after the read
             // is what keeps a cancelled run from leaving one behind.
@@ -285,7 +296,7 @@ object MonoRuntime {
         }
 
         if (died) {
-            val note = deathOf(context, startedWall)
+            val note = deathOf(context, slot, startedWall)
             LauncherLog.log("mono: $note")
             onLine("monojni: $note")
             if (collected.length < MAX_CAPTURED) collected.append(note).append('\n')
@@ -297,149 +308,253 @@ object MonoRuntime {
             LauncherLog.log("mono: ${assembly.name} peaked at ${gb(peakKb * 1024)}; ${memory(context)}")
         }
 
-        Toolchain.Result(exitCode ?: MonoProvider.FAILED, collected.toString())
+        Toolchain.Result(exitCode ?: MonoService.FAILED, collected.toString())
     }
 
     /** As much output as is kept; the rest is streamed to [onLine] and dropped. */
     private const val MAX_CAPTURED = 1 shl 20
 
     /**
-     * Starts the run in :builder, which is the part that can be refused.
+     * Starts the run in a builder process, which is the part that can be
+     * refused.
      *
-     * A binder call into the provider is what creates that process.
-     * Deliberately not startService: an app in the background is not allowed
-     * to start one, and a build outlives the user's attention. But acquiring a
-     * provider is not the certainty it looks like -- ContentResolver.call
-     * throws "Unknown authority" for every reason the activity manager has to
-     * hand back nothing, and a build asks for this twenty times over tens of
-     * minutes with a process death between each.
+     * bindService with BIND_AUTO_CREATE is what creates that process.
+     * Deliberately not startService, which an app in the background may not
+     * call from API 26 onwards and a build outlives the user's attention; and
+     * deliberately not a ContentProvider any more, which had the same reach
+     * and no way back from a refusal. See MonoService for both.
      *
-     * Two of those reasons are ours to avoid, and both come from the same
-     * fact: a run ends by killing its own process, and the activity manager
-     * only learns of it when binder reports the death. Until it does, the
-     * record for the provider still names a process that is gone, and a call
-     * arriving in that window is answered with nothing rather than with a new
-     * process. So the previous process is waited out first, and a refusal is
-     * retried rather than ending the build -- one lost race is not a reason to
-     * throw away an hour of conversion. See issue #4, where the third of three
-     * runs was made in the same second as the second one's death.
+     * Three things can go wrong, and all three are survivable here. bindService
+     * can return false, which is the activity manager saying it will not even
+     * try. The binding can be accepted and never connect, which is the process
+     * failing to come up. And the process can come up and go away between
+     * connecting and being handed the run. Each is retried rather than ending
+     * the build: one lost start is not a reason to throw away an hour of
+     * conversion.
      *
-     * The client is deliberately the unstable kind. The platform kills
-     * processes that hold a *stable* reference to a provider whose process
-     * dies, which is precisely what this one does after every run; unstable
-     * says "expected", leaves the launcher alone, and lets the activity
-     * manager drop the connection itself.
+     * Every attempt takes the other process, because much the likeliest reason
+     * a start is refused is the previous run's process. A run ends by killing
+     * itself, and the activity manager will not start a second process with
+     * the same name until that death has been reaped -- it holds the new start
+     * until it is, and cancels it outright after ten seconds. Alternating
+     * means an attempt never queues behind the funeral the last one tripped
+     * over. See issue #4, where a device that was slow to reap refused every
+     * run from the third onwards and stayed that way across a restart of the
+     * app, because the state that refuses lives in system_server.
      *
-     * It is returned rather than closed here, and the caller holds it until
-     * the run is over. Closing it at once looks right -- the call returns
-     * immediately, because the provider hands the run to a thread and
-     * replies -- and it is what cost a user their conversion: a process with
-     * no clients is a cached process, the cheapest thing on the device to
-     * reclaim, and this one spends half an hour holding several gigabytes.
-     * The activity manager raises a provider's host towards the processes
-     * connected to it, the same as it does for a bound service, so an open
-     * connection from the foreground :launcher is the difference between
-     * il2cpp being the first thing killed under pressure and it being
-     * roughly as safe as the screen the user is watching. See issue #6,
-     * where a conversion was taken at 583s.
+     * The binding is returned rather than dropped here, and the caller holds
+     * it until the run is over. Releasing it at once looks right -- the
+     * message is one way, so the run is already going -- and it is what cost a
+     * user their conversion: a process nothing is bound to is a cached
+     * process, the cheapest thing on the device to reclaim, and this one
+     * spends half an hour holding several gigabytes. A bound service's process
+     * is raised towards the processes bound to it, so an open binding from the
+     * foreground :launcher is the difference between il2cpp being the first
+     * thing killed under pressure and it being roughly as safe as the screen
+     * the user is watching. See issue #6, where a conversion was taken at
+     * 583s.
      */
-    private suspend fun startRun(context: Context, request: Bundle): ContentProviderClient {
+    private suspend fun startRun(context: Context, request: Bundle): Binding {
+        val since = System.currentTimeMillis()
         var refusal = "no reason given"
         for (attempt in 1..START_ATTEMPTS) {
-            awaitBuilderGone(context)
-            val client = runCatching {
-                context.contentResolver.acquireUnstableContentProviderClient(MonoProvider.uri(context))
-            }.getOrNull()
-            if (client != null) {
-                try {
-                    client.call(MonoProvider.METHOD_RUN, null, request)
-                    return client
-                } catch (e: RemoteException) {
-                    // The process was there and went away between acquiring it
-                    // and asking it to run. This one is finished with; the
-                    // next attempt acquires again.
-                    refusal = e.toString()
-                    runCatching { client.close() }
+            val slot = nextSlot()
+            awaitBuilderGone(context, slot)
+            val binding = Binding(context.applicationContext, slot)
+            // Every way out of the attempt except the one that hands the
+            // binding to the caller has to release it. A registered connection
+            // nobody owns holds a process at BIND_IMPORTANT for as long as the
+            // launcher lives, and the wait below is a suspension point, so a
+            // build cancelled while a builder is coming up unwinds straight
+            // through here.
+            var keep = false
+            try {
+                val messenger = binding.connect(CONNECT_TIMEOUT_MS)
+                if (messenger != null) {
+                    messenger.send(
+                        Message.obtain(null, MonoService.MSG_RUN).apply { data = request },
+                    )
+                    keep = true
+                    return binding
                 }
-            } else {
-                refusal = "the activity manager would not start it"
+                refusal = binding.failure ?: "no reason given"
+            } catch (e: RemoteException) {
+                // It was there and went away between connecting and being
+                // asked to run. This one is finished with; the next attempt
+                // takes the other process.
+                refusal = e.toString()
+            } finally {
+                if (!keep) binding.close()
             }
-            LauncherLog.log("mono: $BUILDER_PROCESS did not start, attempt $attempt of $START_ATTEMPTS ($refusal)")
-            if (attempt < START_ATTEMPTS) delay(START_RETRY_MS * attempt)
+            LauncherLog.log(
+                "mono: ${slot.process} did not start, attempt $attempt of $START_ATTEMPTS ($refusal)",
+            )
+            if (attempt < START_ATTEMPTS) delay(START_RETRY_MS)
         }
+        // Whether a process was ever forked is the one thing that separates
+        // "the activity manager would not start it" from "it started and
+        // something took it", and it is the first thing anyone reading a bug
+        // report about this will want. The platform keeps the answer.
+        LauncherLog.log("mono: giving up; ${fateOfBuilder(context, since)}")
         throw IOException(
             "the build process could not be started: $refusal. " +
-                "Close the app from the recents screen and start the build again -- " +
-                "it carries on from where it stopped.",
+                "Force stop the app in Android's app settings, or restart the device, " +
+                "then start the build again -- it carries on from where it stopped.",
         )
     }
 
     /**
-     * Waits for the previous run's process to actually be gone.
+     * The two interchangeable builder processes.
      *
-     * One process hosts one run, and the next one cannot be started until the
-     * last has been reaped: see [startRun]. Normally this returns at once --
-     * the launcher stops reading when the result file appears, which is a
-     * moment before the process ends, so there is a fraction of a second to
-     * wait for and no more.
-     *
-     * A process that outstays that is not this run's and is not going to
-     * become it. Leaving it would fail differently and worse: the provider
-     * would be acquired, the run refused by the process already using it, and
-     * the build would blame the compiler.
-     *
-     * So it is asked to quit, and asking always reaches it: it is here
-     * because it is running, and a running process is one the provider can be
-     * acquired from. Deliberately not [killBuilder], which is
-     * killBackgroundProcesses -- that is package-wide and takes every process
-     * of this app that is not in the foreground, including :launcher, which
-     * is where the build is being run from. A build the user has pressed Home
-     * on is precisely the case MonoProvider exists to survive, so the one
-     * thing this must not do is end it.
-     *
-     * It stays as the last resort for a process that will not go on its own,
-     * and only while :launcher is in the foreground and therefore not among
-     * what it would take. Otherwise the straggler is left alone and the run
-     * is attempted anyway: it will fail, but a failed run is recoverable and
-     * a killed launcher is not.
-     *
-     * A device that will not say which of its own processes exist gets none
-     * of this and goes straight to the call -- [builderRunning] answering
-     * nothing is treated as "not there", so nothing is waited for and no
-     * straggler is ever noticed. That is the right way round: the retries in
-     * [startRun] still cover the race this exists for, whereas waiting on a
-     * question that has no answer would cost every run its full timeout.
+     * See MonoService for why there are two of them. [process] must match
+     * android:process on the matching service in the manifest: it is what the
+     * activity manager reports back, and what everything below looks for when
+     * it asks whether a particular one is still running.
      */
-    private suspend fun awaitBuilderGone(context: Context) {
-        if (waitBuilderGone(context)) return
-        LauncherLog.log("mono: $BUILDER_PROCESS is still up from an earlier run; asking it to quit")
-        quitBuilder(context)
-        if (waitBuilderGone(context)) return
-        if (!launcherForeground()) {
-            LauncherLog.log("mono: $BUILDER_PROCESS will not quit, and :launcher is in the background; leaving it")
-            return
-        }
-        LauncherLog.log("mono: $BUILDER_PROCESS will not quit; ending this app's background processes")
-        killBuilder(context)
-        waitBuilderGone(context)
+    private enum class Slot(val process: String, val service: Class<out MonoService>) {
+        A(":builder", MonoService::class.java),
+        B(":builder2", MonoServiceAlt::class.java),
+    }
+
+    private val slots = AtomicInteger(0)
+
+    /** The next process to try, which is never the one just tried. */
+    private fun nextSlot(): Slot {
+        val all = Slot.values()
+        return all[(slots.getAndIncrement() and Int.MAX_VALUE) % all.size]
     }
 
     /**
-     * Asks the :builder process to end itself.
+     * One binding to one builder process, and the wait for it to come up.
      *
-     * The reply is not interesting and neither is a failure to get one: a
-     * dead provider is a dead process, which is what was being asked for.
-     * Whether it worked is settled by looking, not by this.
+     * A ServiceConnection is called back on the main thread and a build runs
+     * on Dispatchers.IO, so the connection is handed over rather than waited
+     * for. Bound against the application context: the binding outlives any
+     * one screen, and an Activity that is torn down while still bound is
+     * where "ServiceConnection leaked" comes from.
      */
-    private fun quitBuilder(context: Context) {
-        val client = runCatching {
-            context.contentResolver.acquireUnstableContentProviderClient(MonoProvider.uri(context))
-        }.getOrNull() ?: return
-        try {
-            runCatching { client.call(MonoProvider.METHOD_QUIT, null, null) }
-        } finally {
-            runCatching { client.close() }
+    private class Binding(private val context: Context, val slot: Slot) : ServiceConnection {
+
+        private val connected = CompletableDeferred<Messenger?>()
+
+        @Volatile private var messenger: Messenger? = null
+
+        @Volatile private var bound = false
+
+        /** Why the process did not come up, once [connect] has said it did not. */
+        @Volatile var failure: String? = null
+            private set
+
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val m = service?.let { Messenger(it) }
+            messenger = m
+            connected.complete(m)
         }
+
+        // A run ends by killing its own process, so losing the service is the
+        // ordinary end of a binding rather than a fault. Whether the run
+        // produced anything is settled by the result file, not by this.
+        override fun onServiceDisconnected(name: ComponentName?) = Unit
+
+        override fun onNullBinding(name: ComponentName?) {
+            connected.complete(null)
+        }
+
+        /** Binds, and waits for the process to exist. Null if it does not. */
+        suspend fun connect(timeoutMs: Long): Messenger? {
+            bound = runCatching {
+                context.bindService(
+                    Intent(context, slot.service),
+                    this,
+                    // AUTO_CREATE is what starts the process. IMPORTANT is
+                    // what keeps it out of the cached bucket for as long as
+                    // this binding is held -- see startRun.
+                    Context.BIND_AUTO_CREATE or Context.BIND_IMPORTANT,
+                )
+            }.getOrDefault(false)
+            if (!bound) {
+                // bindService can leave the connection registered even when it
+                // says no, so it is released either way; unregistering one that
+                // was never registered is what the catch is for.
+                runCatching { context.unbindService(this) }
+                failure = "the activity manager would not start it"
+                return null
+            }
+            val m = withTimeoutOrNull(timeoutMs) { connected.await() }
+            if (m == null) {
+                failure = if (connected.isCompleted) {
+                    "the build process gave nothing to talk to"
+                } else {
+                    "the build process did not come up within ${timeoutMs / 1000}s"
+                }
+            }
+            return m
+        }
+
+        /**
+         * Ends the process on the other end, and releases this.
+         *
+         * Reaches exactly one process, which killBackgroundProcesses could
+         * not: see the finally in [exec].
+         */
+        fun quit() {
+            messenger?.let { m ->
+                runCatching { m.send(Message.obtain(null, MonoService.MSG_QUIT)) }
+            }
+            close()
+        }
+
+        fun close() {
+            if (!bound) return
+            bound = false
+            runCatching { context.unbindService(this) }
+        }
+    }
+
+    /**
+     * Waits for a straggler in the process about to be used.
+     *
+     * Rare now, and it used to be every run: a process only ever hosts one
+     * run, so the next one needed the last one's process to be gone, and the
+     * two were consecutive. Alternating the two slots takes that out -- by the
+     * time a slot comes round again, a whole run has happened in the other
+     * one, which is seconds at least and usually minutes.
+     *
+     * What is left is a process that outstayed all of that, which is not this
+     * run's and is not going to become it. Starting anyway would fail
+     * differently and worse: the binding would connect, the run would be
+     * refused by the process already using it, and the build would blame the
+     * compiler.
+     *
+     * [killBuilder] is the only lever, and it is a blunt one --
+     * killBackgroundProcesses is package-wide and takes every process of this
+     * app that is not in the foreground, including :launcher, which is where
+     * the build is being run from. So it is used only while :launcher is in
+     * the foreground and therefore out of its reach. Otherwise the straggler
+     * is left alone and the run is attempted anyway: it will fail, but a
+     * failed run is recoverable and a killed launcher is not.
+     *
+     * A device that will not say which of its own processes exist gets none of
+     * this -- [builderRunning] answering nothing is treated as "not there", so
+     * nothing is waited for and no straggler is ever noticed. That is the
+     * right way round: [startRun] retries anyway, whereas waiting on a
+     * question that has no answer would cost every run its full timeout.
+     */
+    private suspend fun awaitBuilderGone(context: Context, slot: Slot) {
+        if (waitBuilderGone(context, slot)) return
+        if (!launcherForeground()) {
+            LauncherLog.log(
+                "mono: ${slot.process} is still up from an earlier run, " +
+                    "and :launcher is in the background; leaving it",
+            )
+            return
+        }
+        LauncherLog.log(
+            "mono: ${slot.process} is still up from an earlier run; " +
+                "ending this app's background processes",
+        )
+        killBuilder(context)
+        waitBuilderGone(context, slot)
     }
 
     /**
@@ -458,9 +573,9 @@ object MonoRuntime {
     }.getOrDefault(false)
 
     /** True if the process is gone before [BUILDER_EXIT_WAIT_MS] is up. */
-    private suspend fun waitBuilderGone(context: Context): Boolean {
+    private suspend fun waitBuilderGone(context: Context, slot: Slot): Boolean {
         val deadline = System.currentTimeMillis() + BUILDER_EXIT_WAIT_MS
-        while (builderRunning(context) == true) {
+        while (builderRunning(context, slot) == true) {
             if (System.currentTimeMillis() >= deadline) return false
             delay(50)
         }
@@ -468,33 +583,37 @@ object MonoRuntime {
     }
 
     /**
-     * Whether the :builder process exists, or null when that cannot be told.
+     * Whether a given builder process exists, or null when that cannot be told.
      *
      * getRunningAppProcesses has been useless for looking at other apps since
      * Android 5, and that is not what this is for: an app can still see its
      * own processes, which is exactly the question here. It can still answer
      * nothing at all, though, and the two callers want opposite things from
      * that -- so the uncertainty is returned rather than resolved here.
+     *
+     * Note that it answers about the process the platform still lists, which
+     * is not the same as the process the platform has finished reaping. That
+     * gap is the whole reason [startRun] alternates rather than waiting.
      */
-    private fun builderRunning(context: Context): Boolean? {
+    private fun builderRunning(context: Context, slot: Slot): Boolean? {
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return null
         return runCatching {
-            am.runningAppProcesses?.any { it.processName.endsWith(BUILDER_PROCESS) }
+            am.runningAppProcesses?.any { it.processName.endsWith(slot.process) }
         }.getOrNull()
     }
 
     /**
-     * How much memory :builder is holding, in kB, or 0 when it cannot be told.
+     * How much memory a builder is holding, in kB, or 0 when it cannot be told.
      *
-     * /proc is readable here because :builder is this app's own process and
+     * /proc is readable here because the builder is this app's own process and
      * shares its uid; the hidepid the platform applies keeps other apps out,
      * not us. VmRSS rather than PSS: it is one line of a file this process may
      * already open, where getProcessMemoryInfo is a binder call per sample and
      * has been narrowed for third-party callers more than once.
      */
-    private fun builderRssKb(context: Context): Long = runCatching {
+    private fun builderRssKb(context: Context, slot: Slot): Long = runCatching {
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val pid = am.runningAppProcesses?.firstOrNull { it.processName.endsWith(BUILDER_PROCESS) }?.pid
+        val pid = am.runningAppProcesses?.firstOrNull { it.processName.endsWith(slot.process) }?.pid
             ?: return 0L
         File("/proc/$pid/status").useLines { lines ->
             lines.firstOrNull { it.startsWith("VmRSS:") }
@@ -509,16 +628,46 @@ object MonoRuntime {
     private const val RSS_LOG_FLOOR_KB = 512L * 1024L
 
     /**
-     * True while the :builder process exists.
+     * True while the builder process running this run exists.
      *
      * Unknown counts as alive: this decides whether a run that has gone quiet
      * is dead, and a device that will not answer the question is no reason to
      * declare it.
      */
-    private fun builderAlive(context: Context): Boolean = builderRunning(context) ?: true
+    private fun builderAlive(context: Context, slot: Slot): Boolean =
+        builderRunning(context, slot) ?: true
+
+    /** Whether an exit record names a builder process, and which. */
+    private fun isBuilder(name: String, slot: Slot?): Boolean =
+        if (slot != null) name.endsWith(slot.process)
+        else Slot.values().any { name.endsWith(it.process) }
 
     /**
-     * Why :builder is not there any more, asked of the platform rather than
+     * What became of the processes a refused start asked for.
+     *
+     * The distinction worth having in a bug report is whether one was ever
+     * forked at all. No record means the activity manager never started one,
+     * and the refusal is its own; a record means a process did start and
+     * something took it, and says what. Guessing between those two is what the
+     * old message did, and it guessed wrong on the device that provoked all of
+     * this.
+     */
+    private fun fateOfBuilder(context: Context, since: Long): String {
+        val free = memory(context)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return free
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            ?: return free
+        val info = runCatching {
+            am.getHistoricalProcessExitReasons(context.packageName, 0, 20)
+                .firstOrNull { isBuilder(it.processName, null) && it.timestamp >= since }
+        }.getOrNull()
+        val what = info?.let { describeExit(it) }
+            ?: "the system has no record of a build process having started"
+        return "$what; $free"
+    }
+
+    /**
+     * Why a builder is not there any more, asked of the platform rather than
      * guessed at.
      *
      * This used to say "on a large conversion this is usually the system
@@ -540,7 +689,7 @@ object MonoRuntime {
      * record is written when the death is reaped, which is a moment after the
      * process stops answering, so it is worth waiting briefly for.
      */
-    private suspend fun deathOf(context: Context, since: Long): String {
+    private suspend fun deathOf(context: Context, slot: Slot?, since: Long): String {
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
             ?: return "the build process ended before it finished"
         val free = "; ${memory(context)}"
@@ -552,7 +701,7 @@ object MonoRuntime {
             if (attempt > 0) delay(EXIT_REASON_WAIT_MS)
             val info = runCatching {
                 am.getHistoricalProcessExitReasons(context.packageName, 0, 20)
-                    .firstOrNull { it.processName.endsWith(BUILDER_PROCESS) && it.timestamp >= since }
+                    .firstOrNull { isBuilder(it.processName, slot) && it.timestamp >= since }
             }.getOrNull()
             if (info != null) return describeExit(info) + free
         }
@@ -600,34 +749,30 @@ object MonoRuntime {
     private const val EXIT_REASON_WAIT_MS = 250L
 
     /**
-     * Ends every process of this app that is not in the foreground, :builder
-     * included.
+     * Ends every process of this app that is not in the foreground, the
+     * builders included.
      *
-     * The bluntest thing here, and never the first thing tried. On cancel it
-     * is the only thing that will do: the run is a thread in another process
-     * that nothing here can interrupt, and a cancelled build must not leave
-     * il2cpp holding several gigabytes on every core. :launcher going with it
-     * costs nothing there, because the build is already over.
+     * The bluntest thing here, and no longer used for anything but a
+     * straggler. Cancelling a run goes down the binding instead -- see the
+     * cancellation handler in [exec] -- because that reaches the one process
+     * that should go, and this reaches :launcher too, which is where the build
+     * is being run from and which is in the background in exactly the case
+     * worth surviving.
      *
-     * [awaitBuilderGone] uses it too, but only after asking nicely and only
-     * while :launcher is in the foreground and so out of its reach. Anywhere
-     * else it would be a bug -- a build the user has pressed Home on is a
-     * background process like any other.
+     * [awaitBuilderGone] is what is left, and only while :launcher is in the
+     * foreground and so out of its reach. Anywhere else it would be a bug.
      *
      * Needs KILL_BACKGROUND_PROCESSES, which is a normal permission: granted
-     * at install, no prompt. If it is somehow refused, the worst case is the
-     * process outliving a cancelled build, which is where this started.
+     * at install, no prompt. If it is somehow refused, the worst case is a
+     * straggler outliving the run that made it.
      */
     private fun killBuilder(context: Context) {
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return
         runCatching { am.killBackgroundProcesses(context.packageName) }
     }
 
-    /** Must match android:process on MonoProvider in the manifest. */
-    private const val BUILDER_PROCESS = ":builder"
-
     /**
-     * How long :builder is allowed to not exist before it counts as dead.
+     * How long a builder is allowed to not exist before it counts as dead.
      *
      * Only has to cover the gap between the run being asked for and the
      * process appearing, which is a process fork; a second is generous.
@@ -635,26 +780,37 @@ object MonoRuntime {
     private const val STARTUP_GRACE_MS = 4_000L
 
     /**
-     * How many times a refused start is asked for again.
+     * How long a builder process is given to come up once the activity manager
+     * has taken the binding.
      *
-     * The thing being waited out is a binder death reaching the activity
-     * manager, which is tens of milliseconds; the rest is for a device with
-     * nothing to spare, since a build is the busiest this phone has been all
-     * week. Four attempts spread over three seconds is nothing against a
-     * conversion that takes half an hour, and a fifth would not tell us
-     * anything a fourth did not: past this, the refusal is not a race and
-     * only the app being restarted will clear it.
+     * Deliberately generous, because a fork is not the slowest thing being
+     * waited for. When the previous run's process is still being reaped, the
+     * activity manager holds the new start until it has been, and allows ten
+     * seconds before giving up on it -- so anything shorter than that reports
+     * a failure the platform had not finished deciding on. Four attempts over
+     * three seconds is what this used to be, and on a device that reaps slowly
+     * it gave up while the start it had asked for was still pending.
      */
-    private const val START_ATTEMPTS = 4
-    private const val START_RETRY_MS = 500L
+    private const val CONNECT_TIMEOUT_MS = 20_000L
 
     /**
-     * How long the previous run's process is given to disappear.
+     * How many times a refused start is asked for again, and the pause between.
      *
-     * Killing itself is the last thing it does and it is a signal, so this is
-     * normally over in a fraction of a second. The bound is here for the
-     * process that will not go, and it is what that costs before it is killed
-     * -- once per run, so it is deliberately short.
+     * Each attempt takes the other process, so a second attempt asks a
+     * genuinely different question rather than the same one again. Three of
+     * them is around a minute at worst, which is nothing against a conversion
+     * that takes half an hour -- and everything against losing one.
+     */
+    private const val START_ATTEMPTS = 3
+    private const val START_RETRY_MS = 1_000L
+
+    /**
+     * How long a straggler in the process about to be used is given to go.
+     *
+     * Normally nothing is waited for at all: a slot only comes round again
+     * after a whole run has happened in the other one. The bound is here for
+     * the process that will not go, and it is what that costs before it is
+     * killed -- so it is deliberately short.
      */
     private const val BUILDER_EXIT_WAIT_MS = 3_000L
 
