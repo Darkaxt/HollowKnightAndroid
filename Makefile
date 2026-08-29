@@ -150,6 +150,7 @@ test: ## Run host-side launcher and converter tests
 	java -classpath "$(AP)/Tools/gradle/lib/gradle-launcher-8.11.jar" \
 		org.gradle.launcher.GradleMain -p src/SilksongLauncher.Launcher \
 		:app:testDebugUnitTest
+	dotnet test tools/bundle-surgery-tests/BundleSurgery.Tests.csproj -c Release
 
 clean: ## Remove build outputs
 	rm -rf "$(BUILD_ROOT)" "$(APK_DIR)" src/SilksongLauncher.Launcher/app/build tools/bundle-surgery/bin tools/bundle-surgery/obj

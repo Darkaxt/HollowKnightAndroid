@@ -44,7 +44,7 @@ internal static class Program
     static string ClassDataPath { get; } = Path.Combine(
         AppContext.BaseDirectory, "classdata.tpk");
 
-    static int Main(string[] args)
+    internal static int Main(string[] args)
     {
         if (args.Length < 1)
         {
@@ -166,8 +166,6 @@ internal static class Program
     // printing a line per bundle across thousands of files is just noise.
     static bool RetargetOne(string inputPath, string outputPath)
     {
-        const int ANDROID_BUILD_TARGET = 13;
-
         var manager = new AssetsManager();
         manager.LoadClassPackage(ClassDataPath);
 
@@ -179,25 +177,11 @@ internal static class Program
         {
             if ((dirInfo.Flags & 4) == 0) continue;
             var afile = manager.LoadAssetsFileFromBundle(bundle, dirInfo.Name);
-            bool anyChange = false;
-
-            foreach (var asset in afile.file.GetAssetsOfType(AssetClassID.Shader))
-            {
-                var bf = manager.GetBaseField(afile, asset);
-                if (bf == null) continue;
-                if (StripToVulkanOnly(bf))
-                {
-                    asset.SetNewData(bf);
-                    anyChange = true;
-                }
-            }
-
-            if (afile.file.Metadata.TargetPlatform != ANDROID_BUILD_TARGET)
-            {
-                afile.file.Metadata.TargetPlatform = ANDROID_BUILD_TARGET;
-                anyChange = true;
-            }
-            if (anyChange)
+            var transformed = SerializedFileTransformer.TransformLoaded(
+                manager,
+                afile,
+                requireVulkan: false);
+            if (transformed.Changed)
             {
                 dirInfo.SetNewData(afile.file);
                 changedAnything = true;
@@ -484,165 +468,81 @@ internal static class Program
 
     static int ExtractVulkanAndroid(string inputPath, string outputPath)
     {
-        const int ANDROID_BUILD_TARGET = 13;
-        const int LINUX64_BUILD_TARGET = 24;
-
-        var manager = new AssetsManager();
-        manager.LoadClassPackage(ClassDataPath);
-
-        bool isBundle = !inputPath.EndsWith(".assets", StringComparison.OrdinalIgnoreCase);
-        if (!isBundle)
+        if (AssetsFile.IsAssetsFile(inputPath))
         {
-            // .assets file path — process the single file.
-            var afile = manager.LoadAssetsFile(inputPath);
-            manager.LoadClassDatabaseFromPackage(afile.file.Metadata.UnityVersion);
-            int shadersProcessed = 0, shadersSkipped = 0;
-            foreach (var asset in afile.file.GetAssetsOfType(AssetClassID.Shader))
-            {
-                var bf = manager.GetBaseField(afile, asset);
-                if (bf == null) continue;
-                if (StripToVulkanOnly(bf))
-                {
-                    asset.SetNewData(bf);
-                    shadersProcessed++;
-                }
-                else shadersSkipped++;
-            }
-            // Update Android BuildTarget
-            afile.file.Metadata.TargetPlatform = ANDROID_BUILD_TARGET;
-            using var fs = File.Create(outputPath);
-            using var writer = new AssetsFileWriter(fs);
-            afile.file.Write(writer);
-            Console.Error.WriteLine($"  {Path.GetFileName(inputPath)}: {shadersProcessed} stripped, {shadersSkipped} skipped, BuildTarget→Android");
+            var report = SerializedFileTransformer.Transform(
+                inputPath,
+                outputPath,
+                requireVulkan: false);
+            Console.Error.WriteLine(
+                $"  {Path.GetFileName(inputPath)}: {report.VulkanShaders} stripped, " +
+                $"{report.MissingVulkanShaders} skipped, BuildTarget→Android");
             return 0;
         }
 
-        var bundle = manager.LoadBundleFile(inputPath, true);
-        manager.LoadClassDatabaseFromPackage(bundle.file.Header.EngineVersion);
-        int totalShaders = 0, totalSkipped = 0;
-        var modifiedAfiles = new HashSet<AssetsFileInstance>();
-        foreach (var dirInfo in bundle.file.BlockAndDirInfo.DirectoryInfos)
+        if (!IsUnityFsBundle(inputPath))
         {
-            if ((dirInfo.Flags & 4) == 0) continue;
-            var afile = manager.LoadAssetsFileFromBundle(bundle, dirInfo.Name);
-            bool anyChange = false;
-            foreach (var asset in afile.file.GetAssetsOfType(AssetClassID.Shader))
+            throw new InvalidDataException(
+                $"Input is neither a Unity serialized file nor a UnityFS bundle: {inputPath}");
+        }
+
+        var partPath = Path.GetFullPath(outputPath) + ".part";
+        var manager = new AssetsManager();
+        try
+        {
+            manager.LoadClassPackage(ClassDataPath);
+            var bundle = manager.LoadBundleFile(inputPath, true);
+            manager.LoadClassDatabaseFromPackage(bundle.file.Header.EngineVersion);
+            var totalShaders = 0;
+            var totalSkipped = 0;
+            foreach (var dirInfo in bundle.file.BlockAndDirInfo.DirectoryInfos)
             {
-                var bf = manager.GetBaseField(afile, asset);
-                if (bf == null) continue;
-                if (StripToVulkanOnly(bf))
+                if ((dirInfo.Flags & 4) == 0) continue;
+                var afile = manager.LoadAssetsFileFromBundle(bundle, dirInfo.Name);
+                var transformed = SerializedFileTransformer.TransformLoaded(
+                    manager,
+                    afile,
+                    requireVulkan: false);
+                totalShaders += transformed.Report.VulkanShaders;
+                totalSkipped += transformed.Report.MissingVulkanShaders;
+                if (transformed.Changed)
                 {
-                    asset.SetNewData(bf);
-                    totalShaders++;
-                    anyChange = true;
+                    dirInfo.SetNewData(afile.file);
                 }
-                else totalSkipped++;
             }
-            // Update BuildTarget Linux→Android on every inner serialized file.
-            if (afile.file.Metadata.TargetPlatform == LINUX64_BUILD_TARGET ||
-                afile.file.Metadata.TargetPlatform != ANDROID_BUILD_TARGET)
+
+            Console.Error.WriteLine(
+                $"  {Path.GetFileName(inputPath)}: {totalShaders} stripped, " +
+                $"{totalSkipped} skipped");
+
+            if (File.Exists(partPath)) File.Delete(partPath);
+            using (var stream = File.Create(partPath))
+            using (var writer = new AssetsFileWriter(stream))
             {
-                afile.file.Metadata.TargetPlatform = ANDROID_BUILD_TARGET;
-                anyChange = true;
+                bundle.file.Write(writer);
             }
-            if (anyChange)
-            {
-                dirInfo.SetNewData(afile.file);
-                modifiedAfiles.Add(afile);
-            }
+            manager.UnloadAll();
+            File.Move(partPath, Path.GetFullPath(outputPath), overwrite: true);
+            return 0;
         }
-
-        Console.Error.WriteLine($"  {Path.GetFileName(inputPath)}: {totalShaders} stripped, {totalSkipped} skipped");
-
-        // Always write — even if no shaders changed, we want the BuildTarget bump.
-        var tempPath = outputPath + ".tmp";
-        using (var fs = File.Create(tempPath))
-        using (var writer = new AssetsFileWriter(fs))
-            bundle.file.Write(writer);
-        if (File.Exists(outputPath)) File.Delete(outputPath);
-        File.Move(tempPath, outputPath);
-        return 0;
+        catch
+        {
+            if (File.Exists(partPath)) File.Delete(partPath);
+            throw;
+        }
+        finally
+        {
+            manager.UnloadAll();
+        }
     }
 
-    // Mutate the shader's blob arrays to keep only the Vulkan (platform 18)
-    // slice. Returns false if the shader has no Vulkan slice (caller should
-    // pass-through the original).
-    static bool StripToVulkanOnly(AssetTypeValueField bf)
+    static bool IsUnityFsBundle(string path)
     {
-        var platformsArr = bf["platforms.Array"];
-        if (platformsArr.AsArray.size == 0) return false;
-
-        // Find the slot whose value is 18 (vulkan).
-        int vulkanIdx = -1;
-        for (int i = 0; i < platformsArr.AsArray.size; i++)
-        {
-            if (platformsArr[i].AsInt == 18) { vulkanIdx = i; break; }
-        }
-        if (vulkanIdx < 0) return false;
-
-        // Read the per-platform arrays. Each array's element is either a
-        // direct uint or a wrapper (`.Array[0]`) depending on the asset type.
-        uint ReadVal(AssetTypeValueField outer, int idx)
-        {
-            var inner = outer[idx];
-            if (inner.Children.Count > 0 && inner.Children[0].FieldName == "Array")
-                return inner["Array"][0].AsUInt;
-            return inner.AsUInt;
-        }
-        void SetVal(AssetTypeValueField outer, int idx, uint v)
-        {
-            var inner = outer[idx];
-            if (inner.Children.Count > 0 && inner.Children[0].FieldName == "Array")
-                inner["Array"][0].AsUInt = v;
-            else
-                inner.AsUInt = v;
-        }
-
-        var offsetsArr = bf["offsets.Array"];
-        var compressedLengthsArr = bf["compressedLengths.Array"];
-        var decompressedLengthsArr = bf["decompressedLengths.Array"];
-
-        uint vulkanOffset = ReadVal(offsetsArr, vulkanIdx);
-        uint vulkanCompressedLen = ReadVal(compressedLengthsArr, vulkanIdx);
-        uint vulkanDecompressedLen = ReadVal(decompressedLengthsArr, vulkanIdx);
-
-        // Extract the Vulkan slice from the shared compressedBlob.
-        var compressedBlob = bf["compressedBlob.Array"].AsByteArray;
-        var vulkanSlice = new byte[vulkanCompressedLen];
-        Array.Copy(compressedBlob, (int)vulkanOffset, vulkanSlice, 0, (int)vulkanCompressedLen);
-
-        // Reduce platforms[] to a single element holding 18, and rewrite the
-        // per-platform arrays accordingly. AssetTypeValueField doesn't expose
-        // a clean array-truncate, but moving the desired element to slot[0]
-        // and shortening size = 1 via array AsArray.size works for primitive
-        // arrays.
-        if (vulkanIdx != 0)
-        {
-            // Copy the values down to slot[0].
-            platformsArr[0].AsInt = platformsArr[vulkanIdx].AsInt;
-            SetVal(offsetsArr, 0, ReadVal(offsetsArr, vulkanIdx));
-            SetVal(compressedLengthsArr, 0, ReadVal(compressedLengthsArr, vulkanIdx));
-            SetVal(decompressedLengthsArr, 0, ReadVal(decompressedLengthsArr, vulkanIdx));
-        }
-        SetVal(offsetsArr, 0, 0); // The slice starts at byte 0 of the new blob.
-        // Resize down to 1 element. AssetTypeArrayInformation.size works for
-        // primitive int/uint arrays — the writer truncates to that size.
-        var pa = platformsArr.AsArray; pa.size = 1; platformsArr.AsArray = pa;
-        var oa = offsetsArr.AsArray; oa.size = 1; offsetsArr.AsArray = oa;
-        var ca = compressedLengthsArr.AsArray; ca.size = 1; compressedLengthsArr.AsArray = ca;
-        var da = decompressedLengthsArr.AsArray; da.size = 1; decompressedLengthsArr.AsArray = da;
-        // Also truncate the Children list so the serializer doesn't try to
-        // write the stale extra elements.
-        platformsArr.Children = new List<AssetTypeValueField> { platformsArr.Children[0] };
-        offsetsArr.Children = new List<AssetTypeValueField> { offsetsArr.Children[0] };
-        compressedLengthsArr.Children = new List<AssetTypeValueField> { compressedLengthsArr.Children[0] };
-        decompressedLengthsArr.Children = new List<AssetTypeValueField> { decompressedLengthsArr.Children[0] };
-
-        bf["compressedBlob.Array"].AsByteArray = vulkanSlice;
-        return true;
+        using var probe = File.OpenRead(path);
+        Span<byte> magic = stackalloc byte[7];
+        return probe.Read(magic) == magic.Length &&
+            System.Text.Encoding.ASCII.GetString(magic) == "UnityFS";
     }
-
-
 
     // Subset of Unity's internal ShaderGpuProgramType enum (originally
     // observed in USCSandbox's source; the enum itself is part of Unity's
@@ -664,7 +564,7 @@ internal static class Program
     /// The question it exists to answer: does a platform ever have more than
     /// ONE entry in offsets/compressedLengths? Unity's newer shader format
     /// nests those arrays per platform -- offsets[platform][chunk] -- and
-    /// StripToVulkanOnly only ever read and rewrote chunk 0. A shader with
+    /// The legacy transformer only ever read and rewrote chunk 0. A shader with
     /// more than one chunk therefore kept stale offsets pointing past the end
     /// of the blob it was given, which is not a load failure and not a magenta
     /// error shader: it is a variant that silently renders wrong.
