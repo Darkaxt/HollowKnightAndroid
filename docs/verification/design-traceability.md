@@ -1,6 +1,6 @@
 # Unified Platform Design Traceability
 
-Last cross-check: 2026-08-30, implementation baseline / Task 1.
+Last cross-check: 2026-08-30, Task 5 serialized-file transformer.
 
 States follow the design contract: `COMPLETE`, `BLOCKER`, `DEFERRED`, and
 `NOT-STARTED`. `NOT-STARTED` means the planned milestone has not begun. The
@@ -11,17 +11,17 @@ approved local-first POC exception permits independent Tasks 5–7.
 |---|---:|---|---|---|---|
 | Host test harness: JUnit, Robolectric, Android resources, and patch compile check | 1 | COMPLETE | `docs/verification/host-poc-2026-08-30.md` records green Gradle and 32-source patch checks | Pinned Unity Android module and user-owned Silksong assemblies | Repeat the recorded Gradle command and `check.ps1` successfully |
 | Evidence: Silksong Linux layout and Vulkan slices | Baseline | COMPLETE | Design evidence records Unity 6000.0.50f1 and 2,068 Addressables bundles | User-owned Linux source | Repeat census when registering a new source build |
-| Evidence: Hollow Knight 1.5.12612 classic layout | Baseline | COMPLETE | Design evidence records 501 levels, 501 shared assets, and 503 parsed serialized files | User-owned Linux source | Converter POC repeats a full read-only census |
-| Evidence: Hollow Knight Vulkan coverage | Baseline | COMPLETE | Design evidence records 125 of 125 shaders with Vulkan slices | User-owned Linux source | `manifest-classic-tree` reports zero missing Vulkan shaders |
+| Evidence: Hollow Knight 1.5.12612 backward-compatibility oracle | Baseline | COMPLETE | Design evidence records 501 levels, 501 shared assets, and 503 parsed serialized files; this version is not a current implementation target | User-owned compatibility source | Use only to compare observable compatibility after validating 1.5.12620 |
+| Evidence: Hollow Knight 1.5.12612 compatibility Vulkan coverage | Baseline | COMPLETE | Design evidence records 125 of 125 shaders with Vulkan slices only as a compatibility oracle, not current-source acceptance | User-owned compatibility source | Compare after 1.5.12620 `manifest-classic-tree` reports zero missing Vulkan shaders |
 | Evidence: Windows Hollow Knight is unsuitable | Baseline | COMPLETE | Design evidence records Direct3D 11 and no Vulkan slices | None | Validator returns `WINDOWS_SOURCE` for a synthetic Windows fixture |
 | Evidence: production ABI is ARM64 only | Baseline | COMPLETE | Design and repository build configuration both specify `arm64-v8a` | None | APK/native artifact ABI inspection at release |
 | Evidence: x86-64 emulator cannot prove the native pipeline | Baseline | COMPLETE | Design records the ABI mismatch and limits emulator evidence to fakes | None | No release row cites x86-64 as native/device proof |
-| Current Hollow Knight 1.5.12620 source acceptance | 2 | NOT-STARTED | Profile targets 1.5.12620, but its encrypted archive has not passed the new exact-manifest converter | Tasks 5–7 and archive access | Full read-only census, exact manifest, zero missing Vulkan, media/plugin report |
+| Current Hollow Knight 1.5.12620 source acceptance | 2 | BLOCKER | Profile and transformer target 1.5.12620, but its encrypted archive cannot yet be read and has not passed exact-manifest validation | Archive access plus Tasks 6–7 | Full read-only census, exact manifest, zero missing Vulkan, media/plugin report |
 | Goal 1: one launcher APK and package identity | 4 | NOT-STARTED | Launcher selection milestone has not begun | Profiles and generations | Both profiles launch from one installed package |
 | Goal 2: choose game before Unity | 4 | NOT-STARTED | Launcher selection milestone has not begun | Selected profile store | Robolectric selector test plus both switch directions on Thor |
 | Goal 3: independent provision/validate/build/repair/reset/launch | 3–4 | NOT-STARTED | Build coordinator and switching have not begun | Profiles, manifests, generations | Isolation and reset matrix passes for both profiles |
 | Goal 4: reuse on-device Vulkan architecture | 3 | NOT-STARTED | Hollow Knight build integration has not begun | Converter and toolchain registry | Hollow Knight reaches a playable room through the shared player |
-| Goal 5: classic Hollow Knight converter | 2 | NOT-STARTED | Converter POC has not begun | Serialized transformer | All manifest-selected files convert and revalidate |
+| Goal 5: classic Hollow Knight converter | 2 | BLOCKER | Task 5 serialized-file transformation is complete; classic-tree discovery and exact 1.5.12620 manifest selection are still missing | Tasks 6–7 and current archive access | All manifest-selected files convert and revalidate |
 | Goal 6: shared mod and skin libraries with adapters | 5 | NOT-STARTED | Shared libraries have not begun | Game adapters | Shared discovery and per-game compatibility tests pass |
 | Goal 7: multiple skins and death rotation | 5 | NOT-STARTED | Skin runtime has not begun | Lifecycle and skin adapters | Death selects and stable respawn applies with rollback |
 | Goal 8: shared dual-screen Vulkan foundation | 6 | NOT-STARTED | Renderer extraction has not begun | Both game adapters | Silksong regression and Hollow Knight proof screen pass on Thor |
@@ -48,7 +48,7 @@ approved local-first POC exception permits independent Tasks 5–7.
 | Architecture: cooperative cancellation, no elapsed-time cancellation | 3 | NOT-STARTED | Coordinator has not begun | Atomic staging jobs | Cancellation test removes only its owned staging job |
 | Architecture: Silksong Addressables conversion preserved | 1 | BLOCKER | Task 4 regression has not run; independent converter POC cannot close this gate | Existing Silksong Linux depot and Thor | `make test`, `make check`, launcher build/install, then force-stop/monkey and Play on `bfa98654` reproduce base path |
 | Architecture: Hollow Knight classic discovery by content | 2 | NOT-STARTED | Classic converter has not begun | Serialized transformer and exact manifest | Extensionless levels parse and deterministic discovery passes |
-| Architecture: every serialized file becomes Android/Vulkan | 2 | NOT-STARTED | Classic converter has not begun | Vulkan-bearing source | Full report shows target 13 and zero missing Vulkan |
+| Architecture: every serialized file becomes Android/Vulkan | 2 | BLOCKER | Shared standalone/bundle-entry transformation rewrites target 13 and normalizes all Vulkan chunks on synthetic files; full classic-tree traversal is still missing | Tasks 6–7 and current source | Full report shows target 13 and zero missing Vulkan |
 | Architecture: built-ins replaced and sidecars preserved | 2–3 | NOT-STARTED | Conversion/package integration has not begun | Exact Unity player and converter | Sidecar hashes match; Android built-ins are installed |
 | Architecture: plugins/media are inventoried before conversion policy | 2–3 | NOT-STARTED | Census reporting has not begun | Classic report schema | Report lists every plugin/media format and rejects unsupported plugins |
 | Architecture: classic output is resumable and ZIP64-readable | 2–3 | NOT-STARTED | Resume/package work has not begun | Converter report and packager | Hash-keyed resume plus ZIP64 reopen tests pass |
@@ -74,12 +74,12 @@ approved local-first POC exception permits independent Tasks 5–7.
 | Host test: exact source-manifest validation | 2 | NOT-STARTED | Exact-manifest tests have not begun | Task 7 | Supported, platform, incomplete, mixed, missing-Vulkan, and unknown cases pass |
 | Host test: platform/version rejection | 1–2 | NOT-STARTED | Behavior tests have not begun | Tasks 2 and 7 | Windows and unknown-version cases pass |
 | Host test: classic discovery/sidecars | 2 | NOT-STARTED | Converter tests have not begun | Task 6 | Legal synthetic fixture suite passes |
-| Host test: Vulkan coverage/target rewrite | 2 | NOT-STARTED | Transformer tests have not begun | Task 5 | Synthetic missing-Vulkan and output-reopen tests pass |
+| Host test: Vulkan coverage/target rewrite | 2 | COMPLETE | Six synthetic tests cover required/optional missing Vulkan, target 13, blob selection, multi-chunk offsets, `.part` reopen, and header-based extensionless input | None | `dotnet test tools/bundle-surgery-tests/BundleSurgery.Tests.csproj -c Release --no-restore` passes 6/6 |
 | Host test: atomic generation/recovery | 3 | NOT-STARTED | Publisher tests have not begun | Task 9 | Injected-failure suite passes |
 | Host test: mod/skin manifests and safe mode | 5 | NOT-STARTED | Library tests have not begun | Tasks 12–14 | Compatibility/collision/safe-mode suites pass |
 | Host test: death-to-respawn rotation | 5 | NOT-STARTED | Rotation tests have not begun | Task 13 | State-transition suite passes |
 | Host test: launcher/settings/reset isolation | 1–4 | NOT-STARTED | Storage and launcher tests have not begun | Tasks 3, 9, 11 | Robolectric isolation suite passes |
-| Emulator: Robolectric covers fakeable UI/state behavior | 1–5 | NOT-STARTED | Runner bootstrap is in progress | Host test harness | Named Robolectric suites pass on the host |
+| Emulator: Robolectric covers fakeable UI/state behavior | 1–5 | COMPLETE | The host runner loads real Android resources and runs current profile/path/selection suites; later features add their own rows and tests | Pinned Gradle/Android player module | `:app:testDebugUnitTest` passes on the host |
 | Emulator: x86-64 is optional and not native evidence | Boundary | COMPLETE | Design and plan explicitly exclude it as release proof | None | Traceability cites no x86 native/device claims |
 | Device gate 1: clean provisioning for both Linux sources | Release | NOT-STARTED | Device matrix has not begun | Both profiles | Clean source-to-ready run passes per profile |
 | Device gate 2: exact toolchain and on-device IL2CPP | Release | NOT-STARTED | Device matrix has not begun | Toolchain registry | Logs and artifact hashes prove exact components |

@@ -425,7 +425,7 @@ git commit -m "refactor: route Silksong through game profiles"
 - Create: `tools/bundle-surgery-tests/Fixtures/SyntheticAssetFactory.cs`
 - Modify: `Makefile`
 
-- [ ] **Step 1: Create the xUnit project and a failing transform test**
+- [x] **Step 1: Create the xUnit project and a failing transform test**
 
 The test project references `BundleSurgery.csproj`, xUnit `2.9.2`, and
 `Microsoft.NET.Test.Sdk` `17.12.0`. Add:
@@ -443,7 +443,7 @@ public void Transform_requires_a_vulkan_slice_when_a_shader_is_present()
 }
 ```
 
-- [ ] **Step 2: Expose internals to the test assembly**
+- [x] **Step 2: Expose internals to the test assembly**
 
 ```csharp
 using System.Runtime.CompilerServices;
@@ -457,7 +457,7 @@ converter test project to the `Makefile` test target:
 	dotnet test tools/bundle-surgery-tests/BundleSurgery.Tests.csproj -c Release
 ```
 
-- [ ] **Step 3: Extract the reusable transformer**
+- [x] **Step 3: Extract the reusable transformer**
 
 Move serialized-file loading, shader-platform selection, target-platform
 rewrite, and output verification from `Program.cs` into:
@@ -483,13 +483,13 @@ The transformer writes to `output.part`, reopens and verifies the produced
 serialized file, then renames it to `output`. A shader without Vulkan throws
 when `requireVulkan` is true.
 
-- [ ] **Step 4: Keep existing CLI behavior as a delegation**
+- [x] **Step 4: Keep existing CLI behavior as a delegation**
 
 `extract-vulkan-android` recognizes serialized files by header, not by
 `.assets` suffix. Bundle traversal calls the same transformer for each inner
 serialized file.
 
-- [ ] **Step 5: Run tests and regression commands**
+- [x] **Step 5: Run tests and regression commands**
 
 Run:
 
@@ -500,7 +500,7 @@ dotnet build tools/bundle-surgery/BundleSurgery.csproj -c Release
 
 Expected: all xUnit tests pass and BundleSurgery builds without warnings.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tools/bundle-surgery tools/bundle-surgery-tests
