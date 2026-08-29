@@ -324,6 +324,38 @@ record attribution. The monochrome themed icon should communicate the same
 two-part diagonal composition. Icon generation is a separately reviewed
 visual task and is not part of this documentation change.
 
+## Design traceability and stage gates
+
+Every implementation milestone ends with a fresh cross-check against this
+design document. The reviewer maintains
+`docs/verification/design-traceability.md`, with one row for every numbered
+goal, non-goal boundary, architecture contract, error-recovery rule, test gate,
+and release gate.
+
+Each row has exactly one state:
+
+- `COMPLETE`: implemented and linked to current test, build, or device
+  evidence;
+- `BLOCKER`: required by the current or an earlier milestone but absent,
+  incorrect, regressed, or unverified;
+- `DEFERRED`: deliberately assigned to a later named milestone, with a reason,
+  dependency, acceptance test, and target milestone;
+- `NOT-STARTED`: permitted only for requirements whose planned milestone has
+  not begun.
+
+An unmet requirement cannot be described only in a progress summary. If its
+planned milestone has ended, it must be either a blocker or a tracked
+deferral. A deferral without a target milestone and acceptance test is a
+blocker. A blocker prevents starting a dependent milestone and prevents a
+release, although independent work may continue when the traceability record
+shows that it cannot conceal or worsen the blocked contract.
+
+The stage review also compares the working diff with the implementation plan,
+records any intentional design change, checks that no proprietary content was
+introduced, and confirms that the previous working Silksong and profile
+generations remain recoverable. Design changes are made in this specification
+before code begins to depend on them.
+
 ## Error handling and recovery
 
 - Source validation is read-only. The app never edits or deletes the user's
@@ -357,10 +389,13 @@ visual task and is not part of this documentation change.
 
 ### Emulator tests
 
-The existing x86-64 emulator tests Android UI, launcher navigation, profile
-state, storage, manifest parsing, import flows, error reporting, and lifecycle
-behavior through fakes. It does not run the ARM64 Unity player or on-device
-ARM64 compiler pipeline.
+The production APK cannot run on the existing x86-64 emulator because its
+launcher runtime, fetched tools, Unity player, and IL2CPP output are ARM64.
+Robolectric host tests cover launcher navigation, profile state, storage,
+manifest parsing, import flows, error reporting, and lifecycle behavior through
+fakes. An x86-64 emulator shell would require a deliberately separate test
+artifact with the native pipeline replaced by fakes; it is optional and is not
+accepted as evidence for the production pipeline.
 
 An ARM64 Android environment may run broader integration tests if it supports
 the required executable-files policy and Vulkan features. Emulator-only
