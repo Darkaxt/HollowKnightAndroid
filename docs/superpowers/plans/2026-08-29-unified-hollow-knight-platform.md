@@ -518,33 +518,46 @@ git commit -m "refactor: share serialized file transformation"
 
 Create a fixture containing `globalgamemanagers`, `resources.assets`,
 `level0`, `level1`, `sharedassets0.assets`, `sharedassets1.assets`, and paired
-`.resS` files. Assert deterministic ordering and exact sidecar pairing.
+`.resS`/`.resource` files. Assert content-based discovery, numeric ordering,
+exact sidecar ownership, and deterministic hashes. Discovery produces an
+inventory; it does not claim support.
 
 ```csharp
-var tree = ClassicPlayerTree.Discover(fixture.Root);
-Assert.Equal(new[] { "level0", "level1" }, tree.Levels.Select(Path.GetFileName));
-Assert.Empty(tree.Errors);
+var inventory = ClassicPlayerTree.Discover(fixture.Root);
+Assert.Equal(
+    new[] { "level0", "level1" },
+    inventory.Files
+        .Where(file => file.Kind == ClassicFileKind.Serialized)
+        .Select(file => Path.GetFileName(file.RelativePath)));
+Assert.Empty(inventory.Diagnostics);
 ```
 
-Add rejection tests for a missing `sharedassets1.assets`, an orphaned sidecar,
-duplicate numeric indices, and a non-Linux BuildSettings platform.
+Add rejection tests for a manifest-required missing file, an orphaned sidecar,
+duplicate normalized/case/numeric aliases, rooted or traversal paths,
+source/output overlap, reparse points, and a non-Linux BuildSettings platform.
+Do not infer a universal `levelN` to `sharedassetsN.assets` relationship.
 
-- [ ] **Step 2: Implement discovery and validation**
+- [ ] **Step 2: Implement inventory and exact-manifest validation**
 
 ```csharp
-internal sealed record ClassicPlayerLayout(
-    string GlobalGameManagers,
-    IReadOnlyList<string> SerializedFiles,
-    IReadOnlyList<string> Sidecars,
-    IReadOnlyList<string> Errors);
+internal sealed record ClassicPlayerInventory(
+    string SourceRoot,
+    string SourceTreeSha256,
+    IReadOnlyList<ClassicFileEntry> Files,
+    IReadOnlyList<ClassicDiagnostic> Diagnostics);
+
+internal static ClassicValidationResult Validate(
+    ClassicPlayerInventory inventory,
+    ClassicProfileManifest manifest);
 ```
 
-Sort numeric filenames numerically, not lexically. Required serialized-file
-membership comes from the exact profile manifest; do not infer a universal
-`levelN` to `sharedassetsN.assets` pairing rule. Treat `.resS` and `.resource`
-as opaque sidecars, associate them through serialized references or a
-documented basename rule, and validate normalized containment under the
-selected data root. Reject source/output overlap and reparse points.
+Only successful validation constructs `ValidatedClassicPlayerLayout`, the
+type accepted by conversion. The versioned C# manifest parser shares Task 7's
+JSON contract. Every required file has normalized relative path, size,
+SHA-256, and an explicit `TRANSFORM`, `COPY`, `EXCLUDE`, or
+`REPLACE_AT_ASSEMBLY` action. Sidecars carry an owner path or use the documented
+exact-basename rule. Sort numeric filenames numerically, not lexically, and
+validate normalized containment under the selected data root.
 
 - [ ] **Step 3: Add classic-tree commands**
 
@@ -560,7 +573,20 @@ without rewriting them, and writes a versioned JSON report. Resume identity
 includes input SHA-256, transformer version, transformation options, profile
 ID, and game version; reuse also verifies the existing output hash. It never
 writes inside the source root. `manifest-classic-tree` performs discovery and
-the shader/media/plugin census without producing converted game data.
+the shader/media/plugin census without producing converted game data or a
+`SUPPORTED` decision. Source, output, manifest, and report locations are
+canonicalized; source/output overlap and reparse points are rejected.
+
+The report JSON is schema version 1, uses `/` relative paths in deterministic
+order, and is the sole machine-readable command result. It records command,
+status, profile/game versions, source-tree and manifest hashes, transformer
+options, per-file input/output hashes and transform counts, media/plugin
+census, and diagnostics. It is written through `report.json.part`, reopened,
+then renamed. Exit codes are `0` complete, `2` usage, `3` validation failure,
+`4` transform/integrity failure, and `1` unexpected internal failure.
+
+Task 6 does not copy desktop built-ins or create the final ZIP64 package.
+Those entries are `REPLACE_AT_ASSEMBLY` and remain a Task 10 blocker.
 
 Run:
 
@@ -611,12 +637,16 @@ data class ManifestFile(
     val relativePath: String,
     val size: Long,
     val sha256: String,
+    val action: ManifestAction,
+    val ownerRelativePath: String? = null,
 )
 ```
 
 The committed JSON contains only normalized relative paths, sizes, version
 identifiers, counts, and hashes. It contains no game bytes or extracted
-strings. Exact per-file hashes make mixed-build classification deterministic.
+strings. `ManifestAction` is `TRANSFORM`, `COPY`, `EXCLUDE`, or
+`REPLACE_AT_ASSEMBLY`. Exact per-file hashes make mixed-build classification
+deterministic.
 
 - [ ] **Step 3: Implement read-only validation**
 

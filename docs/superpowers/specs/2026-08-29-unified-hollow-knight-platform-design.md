@@ -241,6 +241,24 @@ Hollow Knight receives a classic-player converter that:
 - packages the result using a ZIP64-capable, readable data layout rather than
   assuming the existing Silksong Addressables arrangement.
 
+Classic conversion has three fail-closed phases. Discovery produces a
+read-only inventory of normalized relative paths, content hashes, serialized
+metadata, sidecars, media, native plugins, and diagnostics; it never claims
+that an unknown source is supported. Validation compares that inventory with
+the exact current profile manifest and is the only operation that can create a
+validated layout. Conversion accepts only that validated layout. Manifest
+entries explicitly say `TRANSFORM`, `COPY`, `EXCLUDE`, or
+`REPLACE_AT_ASSEMBLY`, and sidecars name an owner or use the documented exact
+basename rule. Raw roots plus inferred filename lists are never accepted by
+the conversion seam.
+
+Source, output, and report locations are canonicalized and pairwise disjoint.
+Rooted/traversal paths, case collisions, numeric aliases such as `level1` and
+`level01`, and reparse points fail validation. Desktop built-ins are reported
+as `REPLACE_AT_ASSEMBLY`; their Android replacement and final ZIP64 packaging
+remain the later packaging milestone rather than being copied by the classic
+converter.
+
 The classic converter is resumable by file content hash. It validates every
 input and output serialized file, rather than treating a successful rewrite
 of two representative scenes as proof of all 501 scenes.
