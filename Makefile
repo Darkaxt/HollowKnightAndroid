@@ -22,6 +22,7 @@ ADB     ?= adb
 SILKSONG_CACHE ?= $(shell cd ~ && pwd)/.cache/silksong
 BUILD_ROOT  ?= $(SILKSONG_CACHE)/build
 PLAYER_ROOT ?= $(SILKSONG_CACHE)/unity-player
+AP          ?= $(PLAYER_ROOT)/android
 # The one build output that belongs in the repo.
 APK_DIR ?= build
 export SILKSONG_CACHE BUILD_ROOT PLAYER_ROOT APK_DIR
@@ -34,7 +35,7 @@ APK     ?= $(APK_DIR)/SilksongAndroid-$(VERSION).apk
 FILES   := /sdcard/Android/data/$(PKG)/files
 
 .PHONY: help dev dev-fast device-wipe install logcat game-logcat build-log \
-        game-reset check surgery player devices clean \
+        game-reset check test surgery player devices clean \
         docker-image docker-apk docker-up docker-dev docker-down docker-shell
 
 help: ## Show this help
@@ -140,6 +141,15 @@ player: ## Fetch Unity's Android player module (instead of installing Unity)
 # device started compiling the sources itself.
 check: ## Compile-check the patch sources against your depot (fast, thorough)
 	@pwsh -NoProfile -File tools/silksong-patches/check.ps1
+
+test: ## Run host-side launcher and converter tests
+	@test -f "$(AP)/Tools/gradle/lib/gradle-launcher-8.11.jar" || { \
+		echo "No pinned Gradle launcher under AP=$(AP). Run 'make player' or set AP explicitly." >&2; \
+		exit 1; \
+	}
+	java -classpath "$(AP)/Tools/gradle/lib/gradle-launcher-8.11.jar" \
+		org.gradle.launcher.GradleMain -p src/SilksongLauncher.Launcher \
+		:app:testDebugUnitTest
 
 clean: ## Remove build outputs
 	rm -rf "$(BUILD_ROOT)" "$(APK_DIR)" src/SilksongLauncher.Launcher/app/build tools/bundle-surgery/bin tools/bundle-surgery/obj

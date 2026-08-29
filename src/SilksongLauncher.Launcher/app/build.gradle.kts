@@ -48,6 +48,10 @@ android {
         jvmTarget = "17"
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     // Don't ship a separate R class in the AAR (Unity's manifest merger
     // re-namespaces resources via androidx anyway).
     buildFeatures {
@@ -114,6 +118,10 @@ dependencies {
     // already comes via JavaSteam → collectRuntimeDeps.
     compileOnly("com.google.protobuf:protobuf-java:4.29.2")
     compileOnly("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
 }
 
 // ── collectRuntimeDeps task ─────────────────────────────────────────────

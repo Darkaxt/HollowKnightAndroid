@@ -56,9 +56,17 @@ if (-not (Test-Path (Join-Path $Player 'UnityEngine.CoreModule.dll'))) {
 Write-Host "[check] depot:  $Depot"
 Write-Host "[check] player: $Player"
 
-$work = Join-Path $env:TEMP 'silksong-patch-check'
+$taskTempRoot = if ($env:DUALSOULS_TEMP_ROOT) {
+    $env:DUALSOULS_TEMP_ROOT
+} elseif (Test-Path -LiteralPath 'D:\Temp' -PathType Container) {
+    'D:\Temp'
+} else {
+    [System.IO.Path]::GetTempPath()
+}
+$work = Join-Path $taskTempRoot ("dualsouls-patch-check-{0}" -f [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 
+try {
 $sources = Get-ChildItem $src -Recurse -Filter *.cs | ForEach-Object { "    <Compile Include=`"$($_.FullName)`" />" }
 
 # Engine assemblies from the Android player, game assemblies from the depot --
@@ -143,10 +151,8 @@ $proc = Start-Process dotnet `
                   '-p:UseSharedCompilation=false' `
     -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"
 
-if (-not $proc.WaitForExit(180000)) {
-    $proc.Kill()
-    Write-Error "[check] dotnet build did not finish within 180s"
-}
+$proc.WaitForExit()
+$exitCode = $proc.ExitCode
 
 $out = @()
 foreach ($f in @($log, "$log.err")) {
@@ -155,8 +161,10 @@ foreach ($f in @($log, "$log.err")) {
 $errors = $out | Select-String -Pattern 'error '
 if ($errors) {
     $errors | Select-Object -First 30 | ForEach-Object { Write-Host $_ -ForegroundColor Red }
-    Write-Host "[check] FAILED ($($errors.Count) error(s))" -ForegroundColor Red
-    exit 1
+    throw "[check] FAILED ($($errors.Count) error(s))"
+}
+if ($exitCode -ne 0) {
+    throw "[check] dotnet build exited with $exitCode"
 }
 Write-Host "[check] OK - $($sources.Count) sources compile against the depot" -ForegroundColor Green
 
@@ -168,4 +176,13 @@ $ep = Join-Path $PSScriptRoot 'entrypoints.json'
 if (Test-Path $ep) {
     $count = (Get-Content $ep -Raw | ConvertFrom-Json).entryPoints.Count
     Write-Host "[check] entry points: $count"
+}
+} finally {
+    $resolvedRoot = [System.IO.Path]::GetFullPath($taskTempRoot).TrimEnd('\', '/')
+    $resolvedWork = [System.IO.Path]::GetFullPath($work)
+    $ownedPrefix = $resolvedRoot + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedWork.StartsWith($ownedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to clean work directory outside task temp root: $resolvedWork"
+    }
+    Remove-Item -LiteralPath $resolvedWork -Recurse -Force -ErrorAction SilentlyContinue
 }
