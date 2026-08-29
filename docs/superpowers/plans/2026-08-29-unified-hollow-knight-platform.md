@@ -514,7 +514,7 @@ git commit -m "refactor: share serialized file transformation"
 - Modify: `tools/bundle-surgery/Program.cs`
 - Create: `tools/bundle-surgery-tests/ClassicPlayerTreeTests.cs`
 
-- [ ] **Step 1: Write failing layout tests**
+- [x] **Step 1: Write failing layout tests**
 
 Create a fixture containing `globalgamemanagers`, `resources.assets`,
 `level0`, `level1`, `sharedassets0.assets`, `sharedassets1.assets`, and paired
@@ -537,7 +537,7 @@ duplicate normalized/case/numeric aliases, rooted or traversal paths,
 source/output overlap, reparse points, and a non-Linux BuildSettings platform.
 Do not infer a universal `levelN` to `sharedassetsN.assets` relationship.
 
-- [ ] **Step 2: Implement inventory and exact-manifest validation**
+- [x] **Step 2: Implement inventory and exact-manifest validation**
 
 ```csharp
 internal sealed record ClassicPlayerInventory(
@@ -559,7 +559,7 @@ SHA-256, and an explicit `TRANSFORM`, `COPY`, `EXCLUDE`, or
 exact-basename rule. Sort numeric filenames numerically, not lexically, and
 validate normalized containment under the selected data root.
 
-- [ ] **Step 3: Add classic-tree commands**
+- [x] **Step 3: Add classic-tree commands**
 
 Add these exact commands:
 
@@ -598,7 +598,12 @@ dotnet test tools/bundle-surgery-tests/BundleSurgery.Tests.csproj -c Release \
 Expected: exit 0; the synthetic output has Android target 13 in every produced
 serialized file and an error-free conversion report.
 
-- [ ] **Step 4: Run all converter tests and commit**
+Tracked deferral: the implementation rejects source/output reparse points, but
+the live filesystem fixture is deferred because repository policy forbids
+creating symlinks. Add a non-symlink reparse integration fixture before this
+host POC is promoted into the production pipeline.
+
+- [x] **Step 4: Run all converter tests and commit**
 
 ```bash
 dotnet test tools/bundle-surgery-tests/BundleSurgery.Tests.csproj -c Release

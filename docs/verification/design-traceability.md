@@ -1,6 +1,6 @@
 # Unified Platform Design Traceability
 
-Last cross-check: 2026-08-30, Task 5 serialized-file transformer.
+Last cross-check: 2026-08-30, Task 6 classic Unity player-tree converter.
 
 States follow the design contract: `COMPLETE`, `BLOCKER`, `DEFERRED`, and
 `NOT-STARTED`. `NOT-STARTED` means the planned milestone has not begun. The
@@ -21,7 +21,7 @@ approved local-first POC exception permits independent Tasks 5–7.
 | Goal 2: choose game before Unity | 4 | NOT-STARTED | Launcher selection milestone has not begun | Selected profile store | Robolectric selector test plus both switch directions on Thor |
 | Goal 3: independent provision/validate/build/repair/reset/launch | 3–4 | NOT-STARTED | Build coordinator and switching have not begun | Profiles, manifests, generations | Isolation and reset matrix passes for both profiles |
 | Goal 4: reuse on-device Vulkan architecture | 3 | NOT-STARTED | Hollow Knight build integration has not begun | Converter and toolchain registry | Hollow Knight reaches a playable room through the shared player |
-| Goal 5: classic Hollow Knight converter | 2 | BLOCKER | Task 5 serialized-file transformation is complete; classic-tree discovery and exact 1.5.12620 manifest selection are still missing | Tasks 6–7 and current archive access | All manifest-selected files convert and revalidate |
+| Goal 5: classic Hollow Knight converter | 2 | BLOCKER | Task 6 conversion is complete against legal synthetic trees; exact 1.5.12620 manifest selection and real-tree proof are still missing | Task 7 and current archive access | All current-manifest-selected files convert and revalidate |
 | Goal 6: shared mod and skin libraries with adapters | 5 | NOT-STARTED | Shared libraries have not begun | Game adapters | Shared discovery and per-game compatibility tests pass |
 | Goal 7: multiple skins and death rotation | 5 | NOT-STARTED | Skin runtime has not begun | Lifecycle and skin adapters | Death selects and stable respawn applies with rollback |
 | Goal 8: shared dual-screen Vulkan foundation | 6 | NOT-STARTED | Renderer extraction has not begun | Both game adapters | Silksong regression and Hollow Knight proof screen pass on Thor |
@@ -42,16 +42,16 @@ approved local-first POC exception permits independent Tasks 5–7.
 | Architecture: toolchains shared by content hash/version | 3 | NOT-STARTED | Toolchain registry has not begun | Exact descriptors | Wrong hash cannot affect another toolchain directory |
 | Architecture: profile path construction is isolated and contained | 1 | COMPLETE | `ProfilePathsTest` proves distinct roots, normalized containment, traversal rejection, absolute-ID rejection, and sibling-prefix safety | None | Targeted ProfilePaths test suite passes |
 | Architecture: existing game pipeline uses only profile-scoped storage | 1 | BLOCKER | Path primitives exist, but Task 4 has not routed the current Silksong pipeline through them | Task 4 regression | Silksong builds/launches through `profiles/silksong` without touching a Hollow Knight root |
-| Architecture: source depot remains untouched | 2–3 | NOT-STARTED | Validator/converter have not begun | Read-only adapters | Before/after source tree manifest and timestamps agree |
+| Architecture: source depot remains untouched | 2–3 | BLOCKER | Task 6 tests prove unchanged synthetic source hashes; the current 1.5.12620 depot cannot yet be read for real-source evidence | Current archive access and Task 7 | Before/after current-source tree manifest and timestamps agree |
 | Architecture: atomic generation publication and rollback | 3 | NOT-STARTED | Generation publisher has not begun | Profile paths | Injected-failure tests retain previous current generation |
 | Architecture: shared provisioning state machine | 3 | NOT-STARTED | Build coordinator has not begun | Profiles, validator, converters | Structured stages execute and report profile-scoped evidence |
 | Architecture: cooperative cancellation, no elapsed-time cancellation | 3 | NOT-STARTED | Coordinator has not begun | Atomic staging jobs | Cancellation test removes only its owned staging job |
 | Architecture: Silksong Addressables conversion preserved | 1 | BLOCKER | Task 4 regression has not run; independent converter POC cannot close this gate | Existing Silksong Linux depot and Thor | `make test`, `make check`, launcher build/install, then force-stop/monkey and Play on `bfa98654` reproduce base path |
-| Architecture: Hollow Knight classic discovery by content | 2 | NOT-STARTED | Classic converter has not begun | Serialized transformer and exact manifest | Extensionless levels parse and deterministic discovery passes |
-| Architecture: every serialized file becomes Android/Vulkan | 2 | BLOCKER | Shared standalone/bundle-entry transformation rewrites target 13 and normalizes all Vulkan chunks on synthetic files; full classic-tree traversal is still missing | Tasks 6–7 and current source | Full report shows target 13 and zero missing Vulkan |
-| Architecture: built-ins replaced and sidecars preserved | 2–3 | NOT-STARTED | Conversion/package integration has not begun | Exact Unity player and converter | Sidecar hashes match; Android built-ins are installed |
-| Architecture: plugins/media are inventoried before conversion policy | 2–3 | NOT-STARTED | Census reporting has not begun | Classic report schema | Report lists every plugin/media format and rejects unsupported plugins |
-| Architecture: classic output is resumable and ZIP64-readable | 2–3 | NOT-STARTED | Resume/package work has not begun | Converter report and packager | Hash-keyed resume plus ZIP64 reopen tests pass |
+| Architecture: Hollow Knight classic discovery by content | 2 | COMPLETE | Task 6 discovers extensionless serialized files by header, sorts numeric names within directories, binds exact sidecars, and emits deterministic hashes; live reparse-fixture coverage is a tracked deferral because project policy forbids symlinks | Non-symlink reparse integration fixture before promotion | 24 focused legal-synthetic tests pass, then the integration fixture rejects a reparse path |
+| Architecture: every serialized file becomes Android/Vulkan | 2 | BLOCKER | Task 6 traverses and rewrites every manifest-selected synthetic serialized file to target 13/Vulkan; current 1.5.12620 coverage is unproven | Task 7 and current archive access | Current full report shows target 13 and zero missing Vulkan |
+| Architecture: built-ins replaced and sidecars preserved | 2–3 | BLOCKER | Task 6 preserves sidecar bytes and reports desktop built-ins as `REPLACEMENT_REQUIRED`; Android built-in assembly is deliberately absent | Task 10 | Sidecar hashes match and Android built-ins are installed |
+| Architecture: plugins/media are inventoried before conversion policy | 2–3 | BLOCKER | Versioned Task 6 census lists synthetic plugins/media and excludes declared desktop plugins; current-source inventory/policy is unavailable | Task 7 and current archive access | Current report lists every plugin/media format and rejects unsupported plugins |
+| Architecture: classic output is resumable and ZIP64-readable | 2–3 | BLOCKER | Task 6 resume verifies both identity and output hashes and repairs tampering; ZIP64 packaging is deliberately absent | Task 10 | Hash-keyed resume plus ZIP64 reopen tests pass |
 | Architecture: shared patches contain no game-specific types | 5–6 | NOT-STARTED | Shared source extraction has not begun | Per-game adapters | Shared projects compile without either game assembly |
 | Architecture: external mods resolve per profile and fail safely | 5 | NOT-STARTED | Mod resolver has not begun | Generation publisher | Compatibility/dependency/safe-mode tests pass |
 | Architecture: skin scanner treats immediate children as packs | 5 | NOT-STARTED | Skin scanner has not begun | Manifest schema | Multiple valid siblings survive one invalid sibling |
@@ -62,7 +62,7 @@ approved local-first POC exception permits independent Tasks 5–7.
 | Architecture: game adapters supply screens/state only | 6 | NOT-STARTED | Adapters have not begun | Renderer boundary | Shared runtime references no game-specific types |
 | Architecture: single-display fallback remains usable | 6 | NOT-STARTED | Fallback has not begun | Renderer abstraction | Host decision test and device fallback smoke pass |
 | Branding: diagonal combined identity and adaptive safe zone | 7 | NOT-STARTED | Visual task has not begun | Licensed/original artwork | Circle/squircle/rounded/OEM plus monochrome review passes |
-| Recovery: validation never writes to source | 2 | NOT-STARTED | Validator has not begun | Read-only implementation | Before/after source metadata comparison passes |
+| Recovery: validation never writes to source | 2 | BLOCKER | Task 6 writes only disjoint output/report paths and preserves synthetic source hashes; current-source metadata proof is unavailable | Current archive access and Task 7 | Before/after current-source metadata comparison passes |
 | Recovery: generated artifacts stage and verify before publish | 3 | NOT-STARTED | Generation publisher has not begun | Atomic writer | Injected failures never update current pointer |
 | Recovery: resume/discard exact staging job only | 2–3 | NOT-STARTED | Resume/coordinator work has not begun | Content hashes and job IDs | Interruption test preserves source and other jobs |
 | Recovery: unsupported/corrupt input fails before replacement | 2–3 | NOT-STARTED | Validators have not begun | Exact manifests | Error matrix retains previous generation |
@@ -73,7 +73,7 @@ approved local-first POC exception permits independent Tasks 5–7.
 | Host test: selected-profile persistence | 1 | COMPLETE | `SelectedGameStoreTest` covers default, recreation, unknown stored IDs, and unregistered-profile rejection | None | Targeted SelectedGameStore suite passes |
 | Host test: exact source-manifest validation | 2 | NOT-STARTED | Exact-manifest tests have not begun | Task 7 | Supported, platform, incomplete, mixed, missing-Vulkan, and unknown cases pass |
 | Host test: platform/version rejection | 1–2 | NOT-STARTED | Behavior tests have not begun | Tasks 2 and 7 | Windows and unknown-version cases pass |
-| Host test: classic discovery/sidecars | 2 | NOT-STARTED | Converter tests have not begun | Task 6 | Legal synthetic fixture suite passes |
+| Host test: classic discovery/sidecars | 2 | COMPLETE | 24 focused Task 6 tests cover discovery, exact sidecars, manifests, conversion, census, resume, aliases, and command failures; live reparse coverage is tracked separately | Non-symlink reparse integration fixture before promotion | `dotnet test ... --filter FullyQualifiedName~ClassicPlayerTreeTests` passes 24/24 |
 | Host test: Vulkan coverage/target rewrite | 2 | COMPLETE | Six synthetic tests cover required/optional missing Vulkan, target 13, blob selection, multi-chunk offsets, `.part` reopen, and header-based extensionless input | None | `dotnet test tools/bundle-surgery-tests/BundleSurgery.Tests.csproj -c Release --no-restore` passes 6/6 |
 | Host test: atomic generation/recovery | 3 | NOT-STARTED | Publisher tests have not begun | Task 9 | Injected-failure suite passes |
 | Host test: mod/skin manifests and safe mode | 5 | NOT-STARTED | Library tests have not begun | Tasks 12–14 | Compatibility/collision/safe-mode suites pass |
