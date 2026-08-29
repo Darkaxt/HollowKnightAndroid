@@ -129,8 +129,11 @@ public sealed class ClassicPlayerTreeTests
             diagnostic.RelativePath == "sharedassets1.assets");
     }
 
-    [Fact]
-    public void Validate_rejects_traversal_in_a_manifest_path()
+    [Theory]
+    [InlineData("../outside.assets")]
+    [InlineData("/outside.assets")]
+    [InlineData("C:/outside.assets")]
+    public void Validate_rejects_traversal_or_rooted_manifest_paths(string relativePath)
     {
         using var fixture = SyntheticAssetFactory.WithShaderPlatforms(18);
         var dataRoot = CreateDataRoot(fixture, "globalgamemanagers");
@@ -138,7 +141,7 @@ public sealed class ClassicPlayerTreeTests
         var manifest = ManifestFor(
             inventory,
             new ClassicManifestFile(
-                "../outside.assets",
+                relativePath,
                 1,
                 new string('0', 64),
                 ClassicManifestAction.Transform,
@@ -148,7 +151,37 @@ public sealed class ClassicPlayerTreeTests
 
         Assert.Null(result.Layout);
         Assert.Contains(result.Diagnostics, diagnostic =>
-            diagnostic.Code == "INVALID_MANIFEST_PATH");
+            diagnostic.Code == "INVALID_MANIFEST_PATH" &&
+            diagnostic.RelativePath == relativePath);
+    }
+
+    [Fact]
+    public void Validate_rejects_case_insensitive_manifest_aliases()
+    {
+        using var fixture = SyntheticAssetFactory.WithShaderPlatforms(18);
+        var dataRoot = CreateDataRoot(fixture, "globalgamemanagers");
+        var inventory = ClassicPlayerTree.Discover(dataRoot);
+        var hash = new string('0', 64);
+        var manifest = ManifestFor(
+            inventory,
+            new ClassicManifestFile(
+                "Data/File.bin",
+                1,
+                hash,
+                ClassicManifestAction.Copy,
+                null),
+            new ClassicManifestFile(
+                "data/file.bin",
+                1,
+                hash,
+                ClassicManifestAction.Copy,
+                null));
+
+        var result = ClassicPlayerTree.Validate(inventory, manifest);
+
+        Assert.Null(result.Layout);
+        Assert.Contains(result.Diagnostics, diagnostic =>
+            diagnostic.Code == "DUPLICATE_MANIFEST_PATH");
     }
 
     [Fact]
