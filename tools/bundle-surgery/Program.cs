@@ -57,6 +57,8 @@ internal static class Program
             Console.Error.WriteLine("  patch-catalog-path <in.bin> <out.bin> <abs-path> — repoint an Addressables catalog's content root at an absolute path");
             Console.Error.WriteLine("  redirect-file-replace <Assembly-CSharp.dll> <SilksongIo.dll> — point the game's File.Replace calls at SafeIo (fixes saving where ReplaceFile is unsupported)");
             Console.Error.WriteLine("  retarget-tree <src-dir> <dst-dir>               — extract-vulkan-android over a whole bundle tree, in parallel, resumable");
+            Console.Error.WriteLine("  retarget-classic-tree <source-root> <output-root> <profile-manifest.json> <report.json>");
+            Console.Error.WriteLine("  manifest-classic-tree <source-root> <report.json>");
             Console.Error.WriteLine();
             Console.Error.WriteLine("inspection (diagnostic):");
             return 2;
@@ -70,6 +72,10 @@ internal static class Program
             "patch-catalog-path" when args.Length >= 4 => PatchCatalogPath(args[1], args[2], args[3]),
             "redirect-file-replace" when args.Length >= 3 => RedirectFileReplace.Run(args[1], args[2]),
             "retarget-tree" when args.Length >= 3 => RetargetTree(args[1], args[2]),
+            "manifest-classic-tree" when args.Length == 3 =>
+                ClassicTreeCommands.Manifest(args[1], args[2]),
+            "retarget-classic-tree" when args.Length == 5 =>
+                ClassicTreeCommands.Retarget(args[1], args[2], args[3], args[4]),
             "extract-vulkan-android" when args.Length >= 3 => ExtractVulkanAndroid(args[1], args[2]),
             "shader-report" when args.Length >= 2 => ShaderReport(args[1]),
             _ => Usage(),

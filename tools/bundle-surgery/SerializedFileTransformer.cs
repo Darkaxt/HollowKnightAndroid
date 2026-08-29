@@ -12,6 +12,12 @@ internal sealed record LoadedTransformResult(
     TransformReport Report,
     bool Changed);
 
+internal sealed record SerializedTransformOptions(
+    bool RequireVulkan,
+    IReadOnlyList<int>? GraphicsApis,
+    string? UnityVersion,
+    string? BuildSettingsVersion);
+
 internal static class SerializedFileTransformer
 {
     internal const int AndroidBuildTarget = 13;
@@ -24,7 +30,16 @@ internal static class SerializedFileTransformer
     internal static TransformReport Transform(
         string input,
         string output,
-        bool requireVulkan)
+        bool requireVulkan) =>
+        Transform(
+            input,
+            output,
+            new SerializedTransformOptions(requireVulkan, null, null, null));
+
+    internal static TransformReport Transform(
+        string input,
+        string output,
+        SerializedTransformOptions options)
     {
         var resolvedInput = Path.GetFullPath(input);
         var resolvedOutput = Path.GetFullPath(output);
@@ -44,7 +59,7 @@ internal static class SerializedFileTransformer
             var file = manager.LoadAssetsFile(resolvedInput);
             manager.LoadClassDatabaseFromPackage(file.file.Metadata.UnityVersion);
 
-            var transformed = TransformLoaded(manager, file, requireVulkan);
+            var transformed = TransformLoaded(manager, file, options);
             using (var stream = File.Create(partPath))
             using (var writer = new AssetsFileWriter(stream))
             {
@@ -53,7 +68,7 @@ internal static class SerializedFileTransformer
 
             var report = transformed.Report;
             manager.UnloadAll();
-            Verify(partPath, report, requireVulkan);
+            Verify(partPath, report, options);
             File.Move(partPath, resolvedOutput, overwrite: true);
             return report;
         }
@@ -71,10 +86,58 @@ internal static class SerializedFileTransformer
         }
     }
 
+    internal static TransformReport Inspect(string input)
+    {
+        var manager = new AssetsManager();
+        try
+        {
+            manager.LoadClassPackage(ClassDataPath);
+            var file = manager.LoadAssetsFile(Path.GetFullPath(input));
+            manager.LoadClassDatabaseFromPackage(file.file.Metadata.UnityVersion);
+            var shadersSeen = 0;
+            var vulkanShaders = 0;
+            var missingVulkanShaders = 0;
+            foreach (var asset in file.file.GetAssetsOfType(AssetClassID.Shader))
+            {
+                shadersSeen++;
+                var shader = manager.GetBaseField(file, asset);
+                if (shader is not null && HasVulkan(shader))
+                {
+                    vulkanShaders++;
+                }
+                else
+                {
+                    missingVulkanShaders++;
+                }
+            }
+
+            var target = checked((int)file.file.Metadata.TargetPlatform);
+            return new TransformReport(
+                shadersSeen,
+                vulkanShaders,
+                missingVulkanShaders,
+                target,
+                target);
+        }
+        finally
+        {
+            manager.UnloadAll();
+        }
+    }
+
     internal static LoadedTransformResult TransformLoaded(
         AssetsManager manager,
         AssetsFileInstance file,
-        bool requireVulkan)
+        bool requireVulkan) =>
+        TransformLoaded(
+            manager,
+            file,
+            new SerializedTransformOptions(requireVulkan, null, null, null));
+
+    internal static LoadedTransformResult TransformLoaded(
+        AssetsManager manager,
+        AssetsFileInstance file,
+        SerializedTransformOptions options)
     {
         var shadersSeen = 0;
         var vulkanShaders = 0;
@@ -107,10 +170,22 @@ internal static class SerializedFileTransformer
             }
         }
 
-        if (requireVulkan && missingVulkanShaders > 0)
+        if (options.RequireVulkan && missingVulkanShaders > 0)
         {
             throw new InvalidDataException(
                 $"{missingVulkanShaders} shader(s) have no verifiable Vulkan slice");
+        }
+
+        if (options.GraphicsApis is not null ||
+            options.BuildSettingsVersion is not null)
+        {
+            changed |= RewriteBuildSettings(manager, file, options);
+        }
+        if (options.UnityVersion is not null &&
+            file.file.Metadata.UnityVersion != options.UnityVersion)
+        {
+            file.file.Metadata.UnityVersion = options.UnityVersion;
+            changed = true;
         }
 
         if (file.file.Metadata.TargetPlatform != AndroidBuildTarget)
@@ -132,7 +207,7 @@ internal static class SerializedFileTransformer
     private static void Verify(
         string path,
         TransformReport expected,
-        bool requireVulkan)
+        SerializedTransformOptions options)
     {
         var manager = new AssetsManager();
         try
@@ -178,15 +253,113 @@ internal static class SerializedFileTransformer
                 throw new InvalidDataException(
                     "Serialized-file verification report differs from the transformation report");
             }
-            if (requireVulkan && missingVulkanShaders > 0)
+            if (options.RequireVulkan && missingVulkanShaders > 0)
             {
                 throw new InvalidDataException(
                     $"Serialized-file verification found {missingVulkanShaders} shader(s) without Vulkan");
+            }
+            VerifyBuildSettings(manager, file, options);
+            if (options.UnityVersion is not null &&
+                file.file.Metadata.UnityVersion != options.UnityVersion)
+            {
+                throw new InvalidDataException(
+                    $"Serialized-file verification found Unity version " +
+                    $"{file.file.Metadata.UnityVersion}, expected {options.UnityVersion}");
             }
         }
         finally
         {
             manager.UnloadAll();
+        }
+    }
+
+    private static bool RewriteBuildSettings(
+        AssetsManager manager,
+        AssetsFileInstance file,
+        SerializedTransformOptions options)
+    {
+        var buildSettingsAssets = file.file
+            .GetAssetsOfType(AssetClassID.BuildSettings)
+            .ToList();
+        if (buildSettingsAssets.Count != 1)
+        {
+            throw new InvalidDataException(
+                $"Expected one BuildSettings asset, found {buildSettingsAssets.Count}");
+        }
+        var info = buildSettingsAssets[0];
+        var buildSettings = manager.GetBaseField(file, info) ?? throw new InvalidDataException(
+            "BuildSettings could not be deserialized");
+        var changed = false;
+
+        if (options.GraphicsApis is not null)
+        {
+            var graphicsApis = buildSettings["m_GraphicsAPIs"]["Array"];
+            var before = graphicsApis.Children.Select(element => element.AsInt).ToArray();
+            if (!before.SequenceEqual(options.GraphicsApis))
+            {
+                graphicsApis.Children.Clear();
+                foreach (var graphicsApi in options.GraphicsApis)
+                {
+                    var element = ValueBuilder.DefaultValueFieldFromArrayTemplate(graphicsApis);
+                    element.AsInt = graphicsApi;
+                    graphicsApis.Children.Add(element);
+                }
+                graphicsApis.AsArray = new AssetTypeArrayInfo(graphicsApis.Children.Count);
+                changed = true;
+            }
+        }
+
+        if (options.BuildSettingsVersion is not null &&
+            buildSettings["m_Version"].AsString != options.BuildSettingsVersion)
+        {
+            buildSettings["m_Version"].AsString = options.BuildSettingsVersion;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            info.SetNewData(buildSettings);
+        }
+        return changed;
+    }
+
+    private static void VerifyBuildSettings(
+        AssetsManager manager,
+        AssetsFileInstance file,
+        SerializedTransformOptions options)
+    {
+        if (options.GraphicsApis is null && options.BuildSettingsVersion is null)
+        {
+            return;
+        }
+
+        var buildSettingsAssets = file.file
+            .GetAssetsOfType(AssetClassID.BuildSettings)
+            .ToList();
+        if (buildSettingsAssets.Count != 1)
+        {
+            throw new InvalidDataException(
+                $"Serialized-file verification expected one BuildSettings asset, " +
+                $"found {buildSettingsAssets.Count}");
+        }
+        var buildSettings = manager.GetBaseField(file, buildSettingsAssets[0]) ??
+            throw new InvalidDataException(
+                "Serialized-file verification could not deserialize BuildSettings");
+        if (options.GraphicsApis is not null)
+        {
+            var actual = buildSettings["m_GraphicsAPIs"]["Array"].Children
+                .Select(element => element.AsInt);
+            if (!actual.SequenceEqual(options.GraphicsApis))
+            {
+                throw new InvalidDataException(
+                    "Serialized-file verification found unexpected graphics APIs");
+            }
+        }
+        if (options.BuildSettingsVersion is not null &&
+            buildSettings["m_Version"].AsString != options.BuildSettingsVersion)
+        {
+            throw new InvalidDataException(
+                "Serialized-file verification found an unexpected BuildSettings version");
         }
     }
 
