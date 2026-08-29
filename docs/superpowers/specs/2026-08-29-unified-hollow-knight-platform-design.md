@@ -45,10 +45,12 @@ available game distributions:
   is ARM64. The emulator cannot execute the existing native pipeline or game
   unchanged.
 
-The latest Hollow Knight Linux build may replace `1.5.12612` as the supported
-profile after its completed archive passes the same manifest and Vulkan
-checks. Builds are never assembled by mixing files or assemblies from
-different game versions or operating systems.
+Hollow Knight Linux `1.5.12620` is the current implementation target. Its
+source remains fail-closed until the completed archive passes the exact
+manifest and Vulkan checks. Version `1.5.12612` is retained only as a
+backward-compatibility reference; it is not the preferred production target.
+Builds are never assembled by mixing files or assemblies from different game
+versions or operating systems.
 
 ## Goals
 

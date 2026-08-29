@@ -16,7 +16,7 @@ approved local-first POC exception permits independent Tasks 5–7.
 | Evidence: Windows Hollow Knight is unsuitable | Baseline | COMPLETE | Design evidence records Direct3D 11 and no Vulkan slices | None | Validator returns `WINDOWS_SOURCE` for a synthetic Windows fixture |
 | Evidence: production ABI is ARM64 only | Baseline | COMPLETE | Design and repository build configuration both specify `arm64-v8a` | None | APK/native artifact ABI inspection at release |
 | Evidence: x86-64 emulator cannot prove the native pipeline | Baseline | COMPLETE | Design records the ABI mismatch and limits emulator evidence to fakes | None | No release row cites x86-64 as native/device proof |
-| Candidate Hollow Knight 1.5.12620 support | 2 | NOT-STARTED | Candidate archive has not passed the new exact-manifest converter | Tasks 5–7 | Full read-only census, exact manifest, zero missing Vulkan, media/plugin report |
+| Current Hollow Knight 1.5.12620 source acceptance | 2 | NOT-STARTED | Profile targets 1.5.12620, but its encrypted archive has not passed the new exact-manifest converter | Tasks 5–7 and archive access | Full read-only census, exact manifest, zero missing Vulkan, media/plugin report |
 | Goal 1: one launcher APK and package identity | 4 | NOT-STARTED | Launcher selection milestone has not begun | Profiles and generations | Both profiles launch from one installed package |
 | Goal 2: choose game before Unity | 4 | NOT-STARTED | Launcher selection milestone has not begun | Selected profile store | Robolectric selector test plus both switch directions on Thor |
 | Goal 3: independent provision/validate/build/repair/reset/launch | 3–4 | NOT-STARTED | Build coordinator and switching have not begun | Profiles, manifests, generations | Isolation and reset matrix passes for both profiles |
@@ -36,7 +36,7 @@ approved local-first POC exception permits independent Tasks 5–7.
 | Non-goal: add x86-64 production pipeline | Boundary | COMPLETE | First implementation remains ARM64-only | None | No production x86-64 native artifacts are introduced |
 | Architecture: dedicated launcher and one cold Unity process | 4 | NOT-STARTED | Process switching has not begun | Profile generations | Live-process mismatch is rejected without timeout |
 | Architecture: launch request contains only profile ID | 4 | NOT-STARTED | Launcher integration has not begun | Selected profile store | Intent and startup-profile tests pass |
-| Architecture: exact declarative game profiles | 1–3 | NOT-STARTED | Profile implementation has not begun | Task 2 | Registry and fail-closed lookup tests pass |
+| Architecture: exact declarative game profiles | 1–3 | COMPLETE | `GameProfilesTest` covers both IDs, layouts, platforms, Unity versions, current versions, compatibility references, and fail-closed lookup | Exact source manifests remain Task 7 | `:app:testDebugUnitTest --tests dev.silksong.launcher.profiles.GameProfilesTest` passes |
 | Architecture: profile owns validation/toolchain/conversion/patch/save/features | 2–6 | NOT-STARTED | Contracts are introduced incrementally | Profile skeleton | Each field/adapter is linked to its owning milestone test |
 | Architecture: unknown versions fail closed | 2 | NOT-STARTED | Exact validator has not begun | Profile manifests | Unknown fixture returns `UNKNOWN_VERSION` with exact property |
 | Architecture: toolchains shared by content hash/version | 3 | NOT-STARTED | Toolchain registry has not begun | Exact descriptors | Wrong hash cannot affect another toolchain directory |
@@ -68,7 +68,8 @@ approved local-first POC exception permits independent Tasks 5–7.
 | Recovery: logs identify profile/stage/artifact without credentials | 3 | NOT-STARTED | Structured logging has not begun | Coordinator | Redaction and structured-event tests pass |
 | Recovery: reset is profile-scoped | 3–4 | NOT-STARTED | Reset refactor has not begun | Profile paths | Reset matrix preserves other game/library/saves/credentials |
 | Recovery: encrypted Steam credential boundary is retained | 1–4 | NOT-STARTED | Profile refactor has not been regression-tested | Existing encrypted store | Login survives refactor without plaintext storage/logging |
-| Host test: profile selection and manifest validation | 1–2 | NOT-STARTED | Behavior tests have not begun | Tasks 2 and 7 | Registry, selection, and exact-manifest suites pass |
+| Host test: profile registry | 1 | COMPLETE | `GameProfilesTest` passes for registry, current/compatibility versions, and unknown IDs | None | Targeted GameProfiles test suite passes |
+| Host test: selected-profile persistence and manifest validation | 1–2 | NOT-STARTED | Persistence and exact-manifest tests have not begun | Tasks 3 and 7 | Selection-store and exact-manifest suites pass |
 | Host test: platform/version rejection | 1–2 | NOT-STARTED | Behavior tests have not begun | Tasks 2 and 7 | Windows and unknown-version cases pass |
 | Host test: classic discovery/sidecars | 2 | NOT-STARTED | Converter tests have not begun | Task 6 | Legal synthetic fixture suite passes |
 | Host test: Vulkan coverage/target rewrite | 2 | NOT-STARTED | Transformer tests have not begun | Task 5 | Synthetic missing-Vulkan and output-reopen tests pass |

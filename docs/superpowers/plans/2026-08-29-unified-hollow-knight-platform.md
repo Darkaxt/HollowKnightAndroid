@@ -214,7 +214,7 @@ git commit -m "docs: initialize design traceability"
 - Create: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/profiles/HollowKnightProfile.kt`
 - Test: `src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/GameProfilesTest.kt`
 
-- [ ] **Step 1: Write failing registry tests**
+- [x] **Step 1: Write failing registry tests**
 
 ```kotlin
 package dev.silksong.launcher.profiles
@@ -238,7 +238,7 @@ class GameProfilesTest {
 }
 ```
 
-- [ ] **Step 2: Run the targeted test and observe the missing symbols**
+- [x] **Step 2: Run the targeted test and observe the missing symbols**
 
 Run:
 
@@ -250,7 +250,7 @@ java -classpath "$AP/Tools/gradle/lib/gradle-launcher-8.11.jar" \
 
 Expected: compilation fails because `GameProfiles` is absent.
 
-- [ ] **Step 3: Add the profile contract and registry**
+- [x] **Step 3: Add the profile contract and registry**
 
 ```kotlin
 package dev.silksong.launcher.profiles
@@ -276,14 +276,14 @@ with its current app/depot constants and `ADDRESSABLES`. Define Hollow Knight
 with its verified Linux executable/data paths, Unity `6000.0.61f1`, and
 `CLASSIC_PLAYER`. Keep accepted source platform to `LinuxPlayer` for both.
 
-- [ ] **Step 4: Run all host tests**
+- [x] **Step 4: Run all host tests**
 
 Run `make test`.
 
 Expected: all JUnit tests pass and the converter test project is either green
 or contains no tests until Task 6.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/profiles \
@@ -629,13 +629,15 @@ or write into the depot.
 
 - [ ] **Step 4: Generate and review the current Linux manifest locally**
 
-Treat Linux `1.5.12620` as an unregistered candidate. Extract it into a unique
-directory under `D:\Temp`, run the full layout, manifest, Vulkan, media, and
-plugin checks, and compare it with the already verified `1.5.12612` evidence.
-Only after it passes may the implementation name/register
-`hollow-knight-1.5.12620.json` and update the design evidence. Review the JSON
-for absence of paths outside the game root and proprietary contents, then
-remove only that exact temporary extraction using a validated absolute path.
+Linux `1.5.12620` is the current profile target but remains unaccepted as a
+source until its exact manifest exists. Extract it into a unique directory
+under `D:\Temp`, run the full layout, manifest, Vulkan, media, and plugin
+checks, and compare it with `1.5.12612` strictly as backward-compatibility
+evidence. Only after the current build passes may the validator accept
+`hollow-knight-1.5.12620.json` and the design record claim current-build
+support. Review the JSON for absence of paths outside the game root and
+proprietary contents, then remove only that exact temporary extraction using a
+validated absolute path.
 
 - [ ] **Step 5: Test and commit**
 
