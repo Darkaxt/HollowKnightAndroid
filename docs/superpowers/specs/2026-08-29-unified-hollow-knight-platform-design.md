@@ -1,6 +1,7 @@
 # Unified Hollow Knight and Silksong Android Platform
 
-**Status:** Approved for implementation planning; implementation is paused.
+**Status:** Approved; implementation resumed on 2026-08-30 with a local-first
+POC before the ARM64 device gates.
 
 **Date:** 2026-08-29
 
@@ -355,6 +356,14 @@ records any intentional design change, checks that no proprietary content was
 introduced, and confirms that the previous working Silksong and profile
 generations remain recoverable. Design changes are made in this specification
 before code begins to depend on them.
+
+The initial host-only POC may implement the profile/storage primitives and the
+classic converter/source validator before the Silksong device regression. It
+is an independent workstream, not a completed milestone: the ledger records
+the missing Silksong regression as a blocker, Tasks 5–7 may touch only new
+profile/converter boundaries plus legal fixtures and read-only source copies,
+and no device/toolchain-dependent milestone may begin until the normal gates
+for Milestones 1 and 2 close.
 
 ## Error handling and recovery
 

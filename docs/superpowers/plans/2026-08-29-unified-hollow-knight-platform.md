@@ -10,7 +10,8 @@
 
 ---
 
-**Execution state:** Documentation only. Do not execute any checkbox until the user explicitly resumes implementation.
+**Execution state:** Implementation resumed on 2026-08-30. Begin with a
+host-runnable POC; retain the milestone gates and device acceptance criteria.
 
 **Design reference:** `docs/superpowers/specs/2026-08-29-unified-hollow-knight-platform-design.md`
 
@@ -81,6 +82,18 @@ The stage does not close while any requirement planned for that stage remains
 work may proceed only when the ledger explains why it cannot conceal, worsen,
 or bypass the blocker.
 
+### Local-first POC exception
+
+The initial implementation slice may complete Tasks 1–3 and then work on
+Tasks 5–7 as an independent host-only converter POC before Task 4's device
+regression. Before Task 5 begins, the traceability ledger must record Task 4
+as a `BLOCKER`, including its missing Silksong regression evidence and exact
+unblock command/device test. This exception closes neither Milestone 1 nor
+Milestone 2 and does not permit Task 8 or any other device/toolchain-dependent
+work to begin. Tasks 5–7 operate only on synthetic fixtures and read-only
+copies of user-supplied Hollow Knight data, so they cannot alter or conceal
+the existing Silksong runtime path.
+
 ## Milestone 1: Profile foundation without Silksong regression
 
 ### Task 1: Add repeatable host-side tests
@@ -92,7 +105,7 @@ or bypass the blocker.
 - Create: `docs/verification/design-traceability.md`
 - Modify: `tools/silksong-patches/check.ps1`
 
-- [ ] **Step 1: Add JUnit and Robolectric dependencies**
+- [x] **Step 1: Add JUnit and Robolectric dependencies**
 
 Add the following to the existing `dependencies` block:
 
@@ -110,22 +123,14 @@ android {
 }
 ```
 
-- [ ] **Step 2: Write the first host test**
+- [x] **Step 2: Write the first host test**
 
-```kotlin
-package dev.silksong.launcher
+Use `RobolectricTestRunner` and `ApplicationProvider` to load
+`R.string.launcher_app_name`, proving JUnit, Robolectric, and Android resource
+loading all work. Before invoking Gradle, the test target must fail with an
+actionable message if the pinned launcher JAR is absent under `AP`.
 
-import org.junit.Assert.assertEquals
-import org.junit.Test
-
-class TestEnvironmentTest {
-    @Test fun arithmetic_proves_the_runner_executes_tests() {
-        assertEquals(4, 2 + 2)
-    }
-}
-```
-
-- [ ] **Step 3: Add a deterministic test target**
+- [x] **Step 3: Add a deterministic test target**
 
 Add a `test` target to `Makefile` that invokes the Gradle installation carried
 by the fetched Unity Android player:
@@ -139,7 +144,7 @@ test: ## Run host-side launcher and converter tests
 
 Add `test` to `.PHONY`.
 
-- [ ] **Step 4: Remove cancellation timeouts from patch checking**
+- [x] **Step 4: Remove cancellation timeouts from patch checking**
 
 Replace the `WaitForExit(180000)` branch in
 `tools/silksong-patches/check.ps1` with an unbounded wait and normal exit-code
@@ -163,10 +168,13 @@ $taskTempRoot = if ($env:DUALSOULS_TEMP_ROOT) {
 } else {
     [System.IO.Path]::GetTempPath()
 }
-$work = Join-Path $taskTempRoot 'dualsouls-patch-check'
+$work = Join-Path $taskTempRoot ("dualsouls-patch-check-{0}" -f [Guid]::NewGuid().ToString('N'))
 ```
 
-- [ ] **Step 5: Run the test and existing compile check**
+Clean only that unique, resolved child in a `finally` block after verifying it
+is beneath the selected task temp root.
+
+- [x] **Step 5: Run the test and existing compile check**
 
 Run:
 
@@ -177,14 +185,14 @@ make check
 
 Expected: the JUnit test passes; the patch source check ends with `[check] OK`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Makefile tools/silksong-patches/check.ps1 src/SilksongLauncher.Launcher/app
 git commit -m "test: add repeatable host verification"
 ```
 
-- [ ] **Step 7: Create the initial design traceability ledger**
+- [x] **Step 7: Create the initial design traceability ledger**
 
 Populate one row for every numbered design goal, non-goal boundary,
 architecture subsection, recovery rule, test tier, and release gate. Mark only
@@ -315,8 +323,8 @@ Expected: compilation fails for `ProfilePaths` and `SelectedGameStore`.
 - [ ] **Step 3: Implement focused path and preference classes**
 
 ```kotlin
-data class ProfilePaths(val filesDir: File, val gameId: String) {
-    val root = File(filesDir, "profiles/$gameId")
+data class ProfilePaths(val filesDir: File, val profile: GameProfile) {
+    val root = File(filesDir, "profiles/${profile.id}")
     val generations = File(root, "generations")
     val staging = File(root, "staging")
     val logs = File(root, "logs")
@@ -324,6 +332,11 @@ data class ProfilePaths(val filesDir: File, val gameId: String) {
     val sourcePointer = File(root, "source.pointer")
 }
 ```
+
+Resolve paths with normalized `Path` containment rather than string-prefix
+checks. Add rejection tests for `..`, both directory separators, absolute
+identifiers, and sibling-prefix collisions; only registered profile IDs are
+accepted.
 
 `SelectedGameStore` uses a dedicated `SharedPreferences` file named
 `selected-game`, accepts IDs only through `GameProfiles.find`, and exposes
@@ -421,10 +434,12 @@ The test project references `BundleSurgery.csproj`, xUnit `2.9.2`, and
 [Fact]
 public void Transform_requires_a_vulkan_slice_when_a_shader_is_present()
 {
-    var file = SyntheticAssetFactory.WithShaderPlatforms(15);
+    using var fixture = SyntheticAssetFactory.WithShaderPlatforms(15);
+    var output = Path.Combine(fixture.OutputRoot, "converted.assets");
     var error = Assert.Throws<InvalidDataException>(() =>
-        SerializedFileTransformer.Transform(file, requireVulkan: true));
+        SerializedFileTransformer.Transform(fixture.InputPath, output, requireVulkan: true));
     Assert.Contains("Vulkan", error.Message);
+    Assert.False(File.Exists(output));
 }
 ```
 
@@ -435,7 +450,8 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("BundleSurgery.Tests")]
 ```
 
-Add the converter test project to the `Makefile` test target:
+Set `<AssemblyName>BundleSurgery.Tests</AssemblyName>` explicitly, then add the
+converter test project to the `Makefile` test target:
 
 ```make
 	dotnet test tools/bundle-surgery-tests/BundleSurgery.Tests.csproj -c Release
@@ -523,18 +539,28 @@ internal sealed record ClassicPlayerLayout(
     IReadOnlyList<string> Errors);
 ```
 
-Sort numeric filenames numerically, not lexically. Treat `.resS` and
-`.resource` as opaque sidecars and validate that every discovered path remains
-under the selected data root.
+Sort numeric filenames numerically, not lexically. Required serialized-file
+membership comes from the exact profile manifest; do not infer a universal
+`levelN` to `sharedassetsN.assets` pairing rule. Treat `.resS` and `.resource`
+as opaque sidecars, associate them through serialized references or a
+documented basename rule, and validate normalized containment under the
+selected data root. Reject source/output overlap and reparse points.
 
 - [ ] **Step 3: Add classic-tree commands**
 
-The command accepts source and output roots, transforms every serialized file,
-copies sidecars without rewriting them, writes a JSON report, and resumes by
-matching input SHA-256 plus transformer version. It never writes inside the
-source root. Add `manifest-classic-tree` with source-root and output-JSON
-arguments; it performs the same discovery and shader census without producing
-converted game data.
+Add these exact commands:
+
+```text
+retarget-classic-tree <source-root> <output-root> <profile-manifest.json> <report.json>
+manifest-classic-tree <source-root> <report.json>
+```
+
+The first transforms every manifest-selected serialized file, copies sidecars
+without rewriting them, and writes a versioned JSON report. Resume identity
+includes input SHA-256, transformer version, transformation options, profile
+ID, and game version; reuse also verifies the existing output hash. It never
+writes inside the source root. `manifest-classic-tree` performs discovery and
+the shader/media/plugin census without producing converted game data.
 
 Run:
 
@@ -576,28 +602,40 @@ data class ProfileManifest(
     val gameVersion: String,
     val unityVersion: String,
     val platform: String,
-    val requiredPaths: Map<String, Long>,
-    val assemblySha256: String,
-    val shaderCount: Int,
+    val requiredFiles: List<ManifestFile>,
+    val converterReportSchema: Int,
+    val manifestSha256: String,
+)
+
+data class ManifestFile(
+    val relativePath: String,
+    val size: Long,
+    val sha256: String,
 )
 ```
 
-The committed JSON contains only path names, sizes, version identifiers,
-counts, and hashes. It contains no game bytes or extracted strings.
+The committed JSON contains only normalized relative paths, sizes, version
+identifiers, counts, and hashes. It contains no game bytes or extracted
+strings. Exact per-file hashes make mixed-build classification deterministic.
 
 - [ ] **Step 3: Implement read-only validation**
 
-The validator reads `app.info`, serialized metadata, required files, and the
-Assembly-CSharp hash. It calls BundleSurgery's report mode for shader coverage.
-It must not change timestamps, add markers, or write into the depot.
+The C# tool produces a typed, versioned report and has its own converter tests.
+Pure Kotlin validation consumes that report through an injected reporter
+interface so Robolectric tests use a fake. A later Android adapter invokes the
+on-device BundleSurgery executable. Validation reads `app.info`, serialized
+metadata, and required-file hashes. It must not change timestamps, add markers,
+or write into the depot.
 
 - [ ] **Step 4: Generate and review the current Linux manifest locally**
 
-Extract the completed Linux `1.5.12620` archive into a unique directory under
-`D:\Temp`, run `manifest-classic-tree` with that game directory and the
-committed JSON path as arguments, review the JSON for absence of paths outside
-the game root and absence of proprietary contents, then remove only that exact
-temporary extraction using a validated absolute path.
+Treat Linux `1.5.12620` as an unregistered candidate. Extract it into a unique
+directory under `D:\Temp`, run the full layout, manifest, Vulkan, media, and
+plugin checks, and compare it with the already verified `1.5.12612` evidence.
+Only after it passes may the implementation name/register
+`hollow-knight-1.5.12620.json` and update the design evidence. Review the JSON
+for absence of paths outside the game root and proprietary contents, then
+remove only that exact temporary extraction using a validated absolute path.
 
 - [ ] **Step 5: Test and commit**
 
