@@ -40,7 +40,8 @@ approved local-first POC exception permits independent Tasks 5–7.
 | Architecture: profile owns validation/toolchain/conversion/patch/save/features | 2–6 | NOT-STARTED | Contracts are introduced incrementally | Profile skeleton | Each field/adapter is linked to its owning milestone test |
 | Architecture: unknown versions fail closed | 2 | NOT-STARTED | Exact validator has not begun | Profile manifests | Unknown fixture returns `UNKNOWN_VERSION` with exact property |
 | Architecture: toolchains shared by content hash/version | 3 | NOT-STARTED | Toolchain registry has not begun | Exact descriptors | Wrong hash cannot affect another toolchain directory |
-| Architecture: all game-specific storage is namespaced | 1 | NOT-STARTED | Profile path implementation has not begun | Task 3 | Containment and cross-profile path tests pass |
+| Architecture: profile path construction is isolated and contained | 1 | COMPLETE | `ProfilePathsTest` proves distinct roots, normalized containment, traversal rejection, absolute-ID rejection, and sibling-prefix safety | None | Targeted ProfilePaths test suite passes |
+| Architecture: existing game pipeline uses only profile-scoped storage | 1 | BLOCKER | Path primitives exist, but Task 4 has not routed the current Silksong pipeline through them | Task 4 regression | Silksong builds/launches through `profiles/silksong` without touching a Hollow Knight root |
 | Architecture: source depot remains untouched | 2–3 | NOT-STARTED | Validator/converter have not begun | Read-only adapters | Before/after source tree manifest and timestamps agree |
 | Architecture: atomic generation publication and rollback | 3 | NOT-STARTED | Generation publisher has not begun | Profile paths | Injected-failure tests retain previous current generation |
 | Architecture: shared provisioning state machine | 3 | NOT-STARTED | Build coordinator has not begun | Profiles, validator, converters | Structured stages execute and report profile-scoped evidence |
@@ -69,7 +70,8 @@ approved local-first POC exception permits independent Tasks 5–7.
 | Recovery: reset is profile-scoped | 3–4 | NOT-STARTED | Reset refactor has not begun | Profile paths | Reset matrix preserves other game/library/saves/credentials |
 | Recovery: encrypted Steam credential boundary is retained | 1–4 | NOT-STARTED | Profile refactor has not been regression-tested | Existing encrypted store | Login survives refactor without plaintext storage/logging |
 | Host test: profile registry | 1 | COMPLETE | `GameProfilesTest` passes for registry, current/compatibility versions, and unknown IDs | None | Targeted GameProfiles test suite passes |
-| Host test: selected-profile persistence and manifest validation | 1–2 | NOT-STARTED | Persistence and exact-manifest tests have not begun | Tasks 3 and 7 | Selection-store and exact-manifest suites pass |
+| Host test: selected-profile persistence | 1 | COMPLETE | `SelectedGameStoreTest` covers default, recreation, unknown stored IDs, and unregistered-profile rejection | None | Targeted SelectedGameStore suite passes |
+| Host test: exact source-manifest validation | 2 | NOT-STARTED | Exact-manifest tests have not begun | Task 7 | Supported, platform, incomplete, mixed, missing-Vulkan, and unknown cases pass |
 | Host test: platform/version rejection | 1–2 | NOT-STARTED | Behavior tests have not begun | Tasks 2 and 7 | Windows and unknown-version cases pass |
 | Host test: classic discovery/sidecars | 2 | NOT-STARTED | Converter tests have not begun | Task 6 | Legal synthetic fixture suite passes |
 | Host test: Vulkan coverage/target rewrite | 2 | NOT-STARTED | Transformer tests have not begun | Task 5 | Synthetic missing-Vulkan and output-reopen tests pass |

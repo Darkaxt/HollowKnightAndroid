@@ -299,7 +299,7 @@ git commit -m "feat: define versioned game profiles"
 - Test: `src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/ProfilePathsTest.kt`
 - Test: `src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/SelectedGameStoreTest.kt`
 
-- [ ] **Step 1: Write failing path-isolation tests**
+- [x] **Step 1: Write failing path-isolation tests**
 
 ```kotlin
 @Test fun profiles_never_share_generated_paths() {
@@ -314,13 +314,13 @@ git commit -m "feat: define versioned game profiles"
 Add store tests that verify the default is `silksong`, a valid selection
 survives recreation, and an unknown stored ID falls back to `silksong`.
 
-- [ ] **Step 2: Run the tests and observe missing classes**
+- [x] **Step 2: Run the tests and observe missing classes**
 
 Run `make test`.
 
 Expected: compilation fails for `ProfilePaths` and `SelectedGameStore`.
 
-- [ ] **Step 3: Implement focused path and preference classes**
+- [x] **Step 3: Implement focused path and preference classes**
 
 ```kotlin
 data class ProfilePaths(val filesDir: File, val profile: GameProfile) {
@@ -342,7 +342,7 @@ accepted.
 `selected-game`, accepts IDs only through `GameProfiles.find`, and exposes
 `get()` and `set(GameProfile)`.
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run `make test`; expect all tests to pass.
 
