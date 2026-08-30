@@ -11,6 +11,7 @@ or `PLAYER_ROOT`).
 
 ```sh
 make surgery      # build bundle-surgery; Gradle stages it into the APK
+make weaver       # build mod-weaver; Gradle stages it into the APK
 make player       # fetch Unity's Android player module (~642 MB, once)
 ```
 
@@ -127,6 +128,27 @@ on the device. Two things to know:
   never called.
 - Changing a patch forces the conversion and native compile to run again, so
   allow a few minutes.
+
+## Mods
+
+BepInEx 5 plugins are woven into the game at build time, not loaded at runtime
+-- there is no IL left once il2cpp has run. Three pieces:
+
+- `tools/mod-weaver/` — a Cecil tool that resolves each `[HarmonyPatch]`
+  against the staged assemblies and writes the prefix/postfix calls into the
+  game's IL. Runs between `PackageCompiler` and il2cpp, and reports per plugin.
+- `tools/bepinex-shim/src/` — our `BepInEx.dll` and `0Harmony.dll`, compiled on
+  the device like the patches. `Harmony.PatchAll` is a no-op; logging, config
+  and `AccessTools` are real.
+- `Mods.kt` — the folder (`<external files>/mods`), the enable/disable list,
+  and a content stamp so an unchanged folder skips the rebuild. The stamp
+  covers what is IN the folder, not what is switched on: every plugin is woven
+  and each of its calls is wrapped in a gate field (`<ModGate>.Enabled`) that
+  the chainloader opens at startup. So adding or replacing a file is a
+  rebuild; a toggle is a line in `mods/disabled-assemblies.txt`.
+
+Transpilers, runtime-computed targets and `Reflection.Emit` cannot work. The
+weaver says so per plugin before the native compile starts.
 
 ### Check before you build
 

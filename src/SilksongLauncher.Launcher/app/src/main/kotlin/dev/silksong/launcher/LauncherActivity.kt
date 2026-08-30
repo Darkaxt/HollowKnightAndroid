@@ -471,6 +471,64 @@ class LauncherActivity : Activity() {
 
     // ── Launch the game ────────────────────────────────────────────────
 
+    private fun onLaunchClicked() {
+        // Before anything else, because it is the one thing here that changes
+        // what the player is about to run rather than what it will read.
+        if (modsNeedBuilding()) {
+            askAboutMods()
+            return
+        }
+        continueLaunch()
+    }
+
+    /**
+     * Whether the mods folder has moved on from the build that exists.
+     *
+     * Only the folder's contents, never the switches: turning a mod on or off
+     * is applied at startup by the gate the weaver wove around it, so it is
+     * already true of the build sitting on disk. Asking about that would be
+     * offering a twenty-minute rebuild for something that has already
+     * happened.
+     */
+    private fun modsNeedBuilding(): Boolean = try {
+        val out = Il2cppConverter.rootFor(this)
+        Il2cppConverter.isPresent(out) && Mods.isStale(Mods.dir(this), out, assets)
+    } catch (t: Throwable) {
+        // A folder that cannot be read is not a reason to refuse to play.
+        LauncherLog.log("Could not check the mods folder: $t")
+        false
+    }
+
+    /**
+     * The offer, not the decision.
+     *
+     * "No" launches: a build is twenty minutes and somebody who has just sat
+     * down to play has every right to leave a newly dropped mod until later.
+     * The mod is simply not in the game until they say yes, which is what the
+     * dialog says rather than implies.
+     */
+    private fun askAboutMods() {
+        val mods = Mods.dir(this)
+        val found = try { Mods.all(mods).size } catch (t: Throwable) { 0 }
+        val what = if (found == 1) "A mod has" else "Mods have"
+        android.app.AlertDialog.Builder(this)
+            .setTitle("New mods detected")
+            .setMessage(
+                "$what been added, replaced or removed since the game was last built.\n\n" +
+                    "Mods are compiled into the game, so applying the change means rebuilding. " +
+                    "That takes several minutes — less than the first build, because only what " +
+                    "actually changed is compiled again.\n\n" +
+                    "Rebuild now, or play the build you already have?",
+            )
+            .setPositiveButton("Rebuild") { _, _ ->
+                startActivity(Intent(this, SetupActivity::class.java))
+                finish()
+            }
+            .setNegativeButton("Play anyway") { _, _ -> continueLaunch() }
+            .setCancelable(true)
+            .show()
+    }
+
     /**
      * Launch button handler. Steam-style: if auto-pull is on and we're
      * logged in, sync the latest cloud saves DOWN first (resolving any
@@ -479,7 +537,7 @@ class LauncherActivity : Activity() {
      * launch. With auto-pull off or not logged in, we launch straight
      * away.
      */
-    private fun onLaunchClicked() {
+    private fun continueLaunch() {
         val c = creds
         if (c == null || !settings.autoPull) {
             launchGame()

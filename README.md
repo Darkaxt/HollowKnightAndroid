@@ -18,6 +18,7 @@ Steam integration for game files and cloud saves.
 - **High performance**: Compiles to native arm64 via IL2CPP and uses Vulkan shaders
 - **Fully open source and legal**: Supply your own game files either manually or through Steam sign-in (the app downloads them for you)
 - **Compilation on device**: Just download the APK and supply the game files, porting happens on device (20–30 min on a Snapdragon 8 Gen 2)
+- **Mods**: BepInEx 5 plugins, woven into the game at build time (see [Mods](#mods))
 - **QoL settings**: Skip intro, set resolution, auto upload/download cloud saves etc.
 - **Any device**: Any Android device works, single screen as well. Android 13 only for now (Android 15 is not supported at the moment)
 
@@ -68,6 +69,29 @@ silksong/                          <-- pick THIS one
 is never copied into the app: it is read from that folder every time you play, and every
 app update that rebuilds the game reads it too. Deleting or moving the folder stops the
 game from starting. The app leaves a `SILKSONG-DO-NOT-DELETE.txt` in there saying so.
+
+## Mods
+
+BepInEx 5 plugins work, with one catch: they are compiled **into** the game
+rather than loaded by it, so installing or removing a mod means rebuilding.
+Turning one off does not — every plugin in the folder is built in, and the
+switch decides at startup which of them run. Config files are read at startup,
+so those you can change freely.
+
+1. Put plugin DLLs in `Android/data/com.jakobkhansen.silksong/files/mods`.
+   A mod distributed as a folder can go in whole; the launcher looks inside.
+2. Rebuild from the launcher. Settings → Mods lists what it found.
+3. Config files appear in `mods/config` after the first launch.
+
+The rebuild only redoes the conversion and the native compile, and only when
+the folder actually changed — and the compile is incremental, so it is a few
+minutes rather than the twenty the first build took. Drop a mod in and press
+Launch and the launcher offers to rebuild, or to play the build you have.
+
+**What does not work**: transpilers, patch targets computed at runtime,
+`Reflection.Emit`, and loading a DLL discovered at runtime. There is no IL left
+by the time the game runs, so nothing can be patched then. The mods screen
+names every patch a plugin could not apply, before the build starts.
 
 ## Steam Cloud Saves
 

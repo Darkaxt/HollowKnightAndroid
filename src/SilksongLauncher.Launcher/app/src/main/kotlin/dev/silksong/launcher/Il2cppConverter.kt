@@ -98,11 +98,12 @@ object Il2cppConverter {
     /**
      * Whether the conversion is older than what it was made from.
      *
-     * Only our own assemblies are checked, because only they change without
-     * anything else changing: the depot is fixed and the Input System is
-     * rebuilt from a pinned version, but the port's own code is edited between
-     * builds. Without this a changed patch compiles happily, is copied into
-     * the assembly set, and is then skipped by a conversion that thinks it has
+     * Only our own assemblies and the mods folder are checked, because only
+     * they change without anything else changing: the depot is fixed and the
+     * Input System is rebuilt from a pinned version, but the port's own code
+     * is edited between builds and a plugin can be dropped in at any time.
+     * Without this a changed patch compiles happily, is copied into the
+     * assembly set, and is then skipped by a conversion that thinks it has
      * nothing to do -- so the player keeps running the previous version and
      * nothing says otherwise.
      *
@@ -114,8 +115,14 @@ object Il2cppConverter {
      * build. An assembly of ours that is missing from the staged set counts as
      * stale for the same reason: that is exactly what an upgrade looks like.
      */
-    fun isStale(root: File): Boolean {
-        val ours = listOf(PackageCompiler.patchAssembly(root), PackageCompiler.ioAssembly(root))
+    fun isStale(
+        root: File,
+        mods: File? = null,
+        assets: android.content.res.AssetManager? = null,
+    ): Boolean {
+        if (mods != null && Mods.isStale(mods, root, assets)) return true
+        val ours = listOf(PackageCompiler.patchAssembly(root), PackageCompiler.ioAssembly(root)) +
+            PackageCompiler.shimAssemblies(root)
         for (built in ours) {
             if (!built.isFile) continue
             val staged = File(asmDir(root), built.name)
@@ -158,7 +165,14 @@ object Il2cppConverter {
 
     // ── the run ────────────────────────────────────────────────────────────
 
-    fun convert(unity: File, depot: File, context: android.content.Context, root: File): Flow<Progress> = channelFlow {
+    fun convert(
+        unity: File,
+        depot: File,
+        context: android.content.Context,
+        root: File,
+        mods: File? = null,
+        assets: android.content.res.AssetManager? = null,
+    ): Flow<Progress> = channelFlow {
         val bcl = bclDir(unity)
         val engine = engineManagedDir(unity)
         val deploy = deployDir(unity)
@@ -176,10 +190,34 @@ object Il2cppConverter {
         if (!File(deploy, "il2cpp.dll").isFile) throw IOException("il2cpp.dll is missing: $deploy")
 
         send(Progress("Preparing the converter", -1f, "assemblies"))
-        val assemblies = stageAssemblies(bcl, engine, managed, PackageCompiler.outputDir(root), asmDir(root))
+        var assemblies = stageAssemblies(bcl, engine, managed, PackageCompiler.outputDir(root), asmDir(root))
         LauncherLog.log("il2cpp input: ${assemblies.size} assemblies")
 
         redirectSaveCalls(context, root)
+
+        // The chainloader, run here rather than at game startup: this is the
+        // last moment the game exists as IL, so it is the only moment a
+        // Harmony patch can be applied. Plugins are woven into the staged set
+        // and then converted along with everything else, which is why the
+        // assembly list is taken again afterwards -- a plugin il2cpp is not
+        // handed is a plugin that is not in the game.
+        //
+        // Every plugin present is woven, not only the enabled ones. Which are
+        // on is decided at startup by the gate each weave is wrapped in, so a
+        // toggle costs nothing and only adding or removing a file is a
+        // rebuild. See Mods.gates.
+        if (mods != null && assets != null) {
+            val plugins = Mods.all(mods)
+            if (plugins.isNotEmpty()) {
+                send(Progress("Weaving mods", -1f, "${plugins.size} plugin(s)"))
+                Mods.weave(context, root, mods, asmDir(root), assets) { line ->
+                    trySend(Progress("Weaving mods", -1f, line.take(80)))
+                }
+                assemblies = asmDir(root).listFiles().orEmpty()
+                    .filter { it.name.endsWith(".dll") }.sortedBy { it.name }
+                LauncherLog.log("il2cpp input after weaving: ${assemblies.size} assemblies")
+            }
+        }
 
         prepareTool(deploy)
 
@@ -307,6 +345,9 @@ object Il2cppConverter {
         LauncherLog.log(
             "il2cpp: ${seconds}s, $cpp cpp + $c c, metadata ${metadata(root).length()} bytes",
         )
+        // Only now: the stamp says "this build contains that mod set", and it
+        // would be a lie if the conversion had failed anywhere above.
+        if (mods != null) Mods.markCurrent(mods, root, assets)
         send(Progress("Converted", 1f, "$cpp C++ files in ${seconds}s"))
     }.flowOn(Dispatchers.IO)
 

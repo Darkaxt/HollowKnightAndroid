@@ -312,6 +312,88 @@ object PackageCompiler {
         return out
     }
 
+    // ── the BepInEx shims ──────────────────────────────────────────────────
+
+    private const val SHIM_ASSETS = "ondevice/bepinex"
+
+    /**
+     * The two assemblies a published BepInEx plugin references by name.
+     *
+     * Ours, not BepInEx's: a plugin DLL carries references to "BepInEx" and
+     * "0Harmony" and will not resolve without them, but the real ones assume a
+     * runtime loader and a JIT to patch into, neither of which exists here.
+     * What these provide is the vocabulary (attributes the weaver reads at
+     * build time) and the parts that genuinely do work at runtime -- logging,
+     * config, reflection.
+     *
+     * Compiled from source on the device for the same reason the patches are:
+     * against the depot's own assemblies, so a plugin and the game agree about
+     * what UnityEngine.MonoBehaviour is.
+     */
+    private val SHIMS = listOf("0Harmony" to "harmony", "BepInEx" to "bepinex")
+
+    fun shimAssemblies(root: File): List<File> = SHIMS.map { File(outputDir(root), "${it.first}.dll") }
+
+    fun shimsPresent(root: File): Boolean = shimAssemblies(root).all { it.length() > 0 }
+
+    fun compileShims(
+        unity: File,
+        depot: File,
+        context: android.content.Context,
+        root: File,
+        assets: android.content.res.AssetManager,
+    ): Flow<Progress> = channelFlow {
+        send(Progress("Compiling the mod loader", -1f, ""))
+        val csc = stageRoslyn(root) { done, total ->
+            trySend(Progress("Fetching Roslyn", done.toFloat() / total, ToolchainFetcher.mb(done, total)))
+        }
+        val src = File(root, "bepinex").apply { deleteRecursively(); mkdirs() }
+        copyAssets(assets, SHIM_ASSETS, src)
+
+        val refs = patchReferences(unity, depot)
+        for ((assembly, folder) in SHIMS) {
+            val dir = File(src, folder)
+            val cs = dir.walkTopDown()
+                .filter { it.isFile && it.extension == "cs" }
+                .map { it.absolutePath }
+                .toList()
+            if (cs.isEmpty()) throw IOException("no $assembly sources in the APK")
+
+            val out = File(outputDir(root), "$assembly.dll")
+            out.parentFile.mkdirs()
+            val rsp = File(root, "$assembly.rsp")
+            rsp.printWriter().use { w ->
+                w.println("-target:library")
+                w.println("-out:\"${out.absolutePath}\"")
+                w.println("-optimize+")
+                w.println("-nostdlib+")
+                w.println("-noconfig")
+                w.println("-langversion:9.0")
+                w.println("-deterministic+")
+                w.println("-nowarn:0169,0414,0649,0067")
+                w.println("-define:UNITY_ANDROID;ENABLE_INPUT_SYSTEM")
+                for (r in refs) w.println("-reference:\"${r.absolutePath}\"")
+                for (f in cs) w.println("\"$f\"")
+            }
+
+            val result = MonoRuntime.exec(context, csc, listOf("@${rsp.absolutePath}"), cwd = root) { line ->
+                val t = line.trimEnd()
+                if (t.isNotEmpty()) LauncherLog.log("csc: $t")
+            }
+            if (!result.ok || out.length() <= 0) {
+                val errors = result.output.lineSequence().filter { it.contains("error CS") }.toList()
+                val detail = errors.firstOrNull()
+                    ?: result.output.trim().lines().takeLast(3).joinToString(" | ")
+                        .ifBlank { "exit ${result.code}" }
+                throw IOException(
+                    "$assembly did not compile (${errors.size} errors): ${detail.trim().take(400)}",
+                )
+            }
+            LauncherLog.log("$assembly.dll: ${out.length()} bytes from ${cs.size} sources")
+        }
+        send(Progress("Mod loader ready", 1f, ""))
+    }.flowOn(Dispatchers.IO)
+
     /**
      * The patches see everything: class library, Android engine, and the
      * depot.

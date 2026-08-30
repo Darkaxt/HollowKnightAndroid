@@ -19,6 +19,7 @@
     <string name="action_push_saves_busy">Upload saves</string>
     <string name="action_settings">Settings</string>
     <string name="action_logs">View logs</string>
+    <string name="action_mods">Mods</string>
     <string name="action_launch">Launch game</string>
 
     <!-- Settings screen. -->
