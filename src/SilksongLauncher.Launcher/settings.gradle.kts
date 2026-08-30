@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "silksong-launcher"
 include(":app")
+include(":emulator-test-app")

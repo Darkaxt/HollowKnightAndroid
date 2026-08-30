@@ -1,7 +1,7 @@
 # Dual Souls Emulator Test Instance
 
-**Status:** Recommended approach approved on 2026-08-30; written design review
-pending before implementation planning.
+**Status:** Implementation in progress; Stages 1–4 are reconciled and the
+dedicated AVD plus Android instrumentation remain open.
 
 **Date:** 2026-08-30
 

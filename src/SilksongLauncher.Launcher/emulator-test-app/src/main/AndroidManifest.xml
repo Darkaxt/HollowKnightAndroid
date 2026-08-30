@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:name="io.github.darkaxt.dualsouls.lab.LabApplication"
+        android:label="@string/lab_app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+        tools:replace="android:name">
+
+        <meta-data
+            android:name="io.github.darkaxt.dualsouls.LAUNCHER_RUNTIME"
+            android:value="io.github.darkaxt.dualsouls.lab.LabLauncherRuntime" />
+
+        <activity
+            android:name="dev.silksong.launcher.SetupActivity"
+            android:exported="false"
+            android:process=":launcher" />
+
+        <activity
+            android:name="dev.silksong.launcher.LogActivity"
+            android:exported="false"
+            android:process=":launcher" />
+
+        <activity
+            android:name="io.github.darkaxt.dualsouls.lab.LabGameActivity"
+            android:exported="false"
+            android:process=":game"
+            android:screenOrientation="sensorLandscape" />
+
+        <service
+            android:name="dev.silksong.launcher.MonoService"
+            tools:node="remove" />
+        <service
+            android:name="dev.silksong.launcher.MonoServiceAlt"
+            tools:node="remove" />
+    </application>
+</manifest>

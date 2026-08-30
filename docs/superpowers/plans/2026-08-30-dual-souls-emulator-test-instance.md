@@ -313,11 +313,11 @@ git commit -m "feat: select both games in the shared launcher"
 - Create: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/skins/SkinRotationStateMachine.kt`
 - Create: `src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/skins/SkinRotationStateMachineTest.kt`
 
-- [ ] **Step 1: Write failing lab runtime tests**
+- [x] **Step 1: Write failing lab runtime tests**
 
 Test deterministic generation IDs, successful publication, injected failure before publish retaining the previous generation, exact-profile reset, launch intent profile/generation extras, and clean exit state. In the shared library, separately test that death selects a different eligible skin, repeated death does not reselect, and only stable respawn commits the pending skin; disabled rotation, zero/one-pack catalogs, and apply failure retain the last valid skin.
 
-- [ ] **Step 2: Run the lab unit test and verify RED**
+- [x] **Step 2: Run the lab unit test and verify RED**
 
 ```powershell
 .\gradlew.bat :emulator-test-app:testDebugUnitTest --tests io.github.darkaxt.dualsouls.lab.LabLauncherRuntimeTest
@@ -325,17 +325,17 @@ Test deterministic generation IDs, successful publication, injected failure befo
 
 Expected: the module/task does not exist.
 
-- [ ] **Step 3: Add the application module and packaging guards**
+- [x] **Step 3: Add the application module and packaging guards**
 
 Apply `com.android.application`; use namespace/application ID `io.github.darkaxt.dualsouls.emutest`, minSdk 26, targetSdk 35, debug only, and `implementation(project(":app"))`. Disable every non-debug variant with `androidComponents.beforeVariants`. Exclude `**/arm64-v8a/**` from lab JNI packaging and reuse the existing checked-in icon resource directory at `tools/depot-to-apk/shell/res` without copying, editing, or generating artwork.
 
 The manifest replaces the production `Application`, removes both Mono builder services, declares runtime metadata pointing at `LabLauncherRuntime`, and declares `LabGameActivity` in `:game`. The visible label is `Dual Souls Lab`.
 
-- [ ] **Step 4: Implement deterministic lab behavior**
+- [x] **Step 4: Implement deterministic lab behavior**
 
 Use `GenerationPublisher` and synthetic UTF-8 manifests only. Generation ID is `lab-<profile-id>-<monotonic-sequence>` persisted per profile. Failure injection is an explicit lab-only intent extra/state flag and is disabled by default. Implement `SkinRotationStateMachine` as a pure shared state machine with `onDeath(eligibleIds)`, `onStableRespawn(apply)`, and `reset`; it never touches Android or game types. `LabGameActivity` displays profile, generation, enabled mod/skin IDs, and lifecycle; its death/stable-respawn/exit buttons use that shared state machine, never game-specific code.
 
-- [ ] **Step 5: Run lab tests and inspect the APK contract**
+- [x] **Step 5: Run lab tests and inspect the APK contract**
 
 ```powershell
 .\gradlew.bat :emulator-test-app:testDebugUnitTest :emulator-test-app:assembleDebug
@@ -343,7 +343,7 @@ Use `GenerationPublisher` and synthetic UTF-8 manifests only. Generation ID is `
 
 Inspect with SDK `aapt2`, `apkanalyzer`, and `zipinfo`; require the exact package/label/debuggable/metadata, no `lib/arm64-v8a`, and no `libmonohost`, `libunity`, `libil2cpp`, or Mono BCL asset.
 
-- [ ] **Step 6: Reconcile Stage 4 and commit**
+- [x] **Step 6: Reconcile Stage 4 and commit**
 
 Update traceability with lab packaging and synthetic-runtime evidence. Actual game execution, real adapter signals, mods, skins, and rotation remain classified accurately unless their shared implementations exist and their tests ran.
 

@@ -62,7 +62,7 @@ android {
     // monohost in lib/arm64-v8a/, and the class library rides in assets --
     // build.sh copies both out of the AAR into the APK it assembles.
     sourceSets {
-        getByName("main") {
+        getByName("release") {
             jniLibs.srcDir(layout.buildDirectory.dir("mono/jniLibs"))
             assets.srcDir(layout.buildDirectory.dir("mono/assets"))
         }
@@ -312,7 +312,9 @@ val fetchMonoRuntime by tasks.registering {
         logger.lifecycle("mono runtime $monoVersion: $libs native libs, $bcl assemblies, $jars jar(s)")
     }
 }
-tasks.named("preBuild") { dependsOn(fetchMonoRuntime) }
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    dependsOn(fetchMonoRuntime)
+}
 // The crypto jar it stages is dexed by way of runtime-deps, so that task
 // cannot run before this one has produced it.
 tasks.named("collectRuntimeDeps") { dependsOn(fetchMonoRuntime) }

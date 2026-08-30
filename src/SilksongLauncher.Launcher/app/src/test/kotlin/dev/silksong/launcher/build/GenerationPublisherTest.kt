@@ -109,6 +109,19 @@ class GenerationPublisherTest {
     }
 
     @Test
+    fun `clearing staged jobs preserves the other profile staging`() {
+        val hollowKnight = GenerationPublisher(hollowKnightPaths)
+        val silksong = GenerationPublisher(silksongPaths)
+        hollowKnight.begin("hk-job", "hk-gen")
+        silksong.begin("ss-job", "ss-gen")
+
+        hollowKnight.clearStaged()
+
+        assertFalse(hollowKnightPaths.staging.exists())
+        assertTrue(File(silksongPaths.staging, "ss-job/.generation-id").isFile)
+    }
+
+    @Test
     fun `identifiers cannot escape their owned roots`() {
         val publisher = GenerationPublisher(hollowKnightPaths)
 

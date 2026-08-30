@@ -92,6 +92,11 @@ class GenerationPublisher(
         return removed
     }
 
+    fun clearStaged(): Long {
+        if (!paths.staging.exists() && !Files.isSymbolicLink(paths.staging.toPath())) return 0L
+        return removeOwnedTree(paths.staging.toPath(), paths.root.toPath())
+    }
+
     private fun validateManifest(root: File, generationId: String) {
         val manifestFile = File(root, MANIFEST_NAME)
         check(manifestFile.isFile) { "Generation manifest is missing: $manifestFile" }

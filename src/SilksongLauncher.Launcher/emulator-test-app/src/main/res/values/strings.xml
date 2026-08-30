@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lab_app_name">Dual Souls Lab</string>
+    <string name="lab_runtime_banner">TEST RUNTIME · EMULATOR-FAKE</string>
+    <string name="lab_death">Simulate death</string>
+    <string name="lab_respawn">Stable respawn</string>
+    <string name="lab_exit">Exit to launcher</string>
+</resources>
