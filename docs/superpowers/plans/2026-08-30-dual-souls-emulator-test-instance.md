@@ -115,7 +115,7 @@ git commit -m "feat: publish atomic profile generations"
 - Create: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/runtime/LauncherRuntimeProvider.kt`
 - Create: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/runtime/ProductionLauncherRuntime.kt`
 
-- [ ] **Step 1: Write failing provider tests**
+- [x] **Step 1: Write failing provider tests**
 
 Assert that no metadata yields `ProductionLauncherRuntime`; the exact lab package plus an implementation name loads it; the production package plus lab metadata throws; the lab package with missing/malformed/unassignable class throws; and no ABI, model, or debuggable flag participates in selection.
 
@@ -131,7 +131,7 @@ Assert that no metadata yields `ProductionLauncherRuntime`; the exact lab packag
 }
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 ```powershell
 .\gradlew.bat :app:testDebugUnitTest --tests dev.silksong.launcher.runtime.LauncherRuntimeProviderTest
@@ -139,7 +139,7 @@ Assert that no metadata yields `ProductionLauncherRuntime`; the exact lab packag
 
 Expected: compilation fails because the runtime contract/provider do not exist.
 
-- [ ] **Step 3: Implement the contract and provider**
+- [x] **Step 3: Implement the contract and provider**
 
 ```kotlin
 enum class EvidenceKind { ARM64_DEVICE, EMULATOR_FAKE }
@@ -171,14 +171,14 @@ interface LauncherRuntime {
 
 Use manifest key `io.github.darkaxt.dualsouls.LAUNCHER_RUNTIME`. Alternate loading is legal only for package `io.github.darkaxt.dualsouls.emutest`; otherwise throw. Default directly to a production singleton.
 
-- [ ] **Step 4: Run focused and full host tests**
+- [x] **Step 4: Run focused and full host tests**
 
 ```powershell
 .\gradlew.bat :app:testDebugUnitTest --tests dev.silksong.launcher.runtime.LauncherRuntimeProviderTest
 .\gradlew.bat :app:testDebugUnitTest
 ```
 
-- [ ] **Step 5: Reconcile Stage 2 and commit**
+- [x] **Step 5: Reconcile Stage 2 and commit**
 
 Verify that the fake implementation is not present in `:app` and production cannot fall back to it. Record any production pipeline extraction still required by Stage 3 as a `BLOCKER`, not a completed seam.
 
@@ -493,10 +493,10 @@ git push fork design/unified-hollow-knight-platform
 |---|---:|---|---|
 | Dedicated API 35 x86-64 AVD on `D:` | 5 | NOT-STARTED | Exact definition, API/ABI/name/serial evidence |
 | Exact emulator targeting; Thor excluded | 5 | NOT-STARTED | Script tests plus resolved serial evidence |
-| Real launcher/profile/storage code in lab | 2–4 | NOT-STARTED | Shared-module dependency and activity tests |
-| Fake only native Unity/Mono/IL2CPP boundary | 2–4 | NOT-STARTED | Runtime selection and APK-content inspection |
+| Real launcher/profile/storage code in lab | 2–4 | DEFERRED | Runtime contract is shared; activity routing and lab module are Stages 3–4 |
+| Fake only native Unity/Mono/IL2CPP boundary | 2–4 | DEFERRED | Fail-closed exact-package provider is complete; lab implementation and APK inspection are Stage 4 |
 | Both profile selection and persistence | 3–5 | NOT-STARTED | Robolectric plus instrumentation |
-| Atomic synthetic generations/recovery | 1, 4–5 | IN-PROGRESS | Publisher API has 6 green host tests; lab and Android integration remain Stages 4–5 |
+| Atomic synthetic generations/recovery | 1, 4–5 | DEFERRED | Publisher API has 6 green host tests; lab and Android integration remain Stages 4–5 |
 | Profile-scoped reset/settings isolation | 3–5 | NOT-STARTED | Host and Android isolation matrix |
 | Synthetic cold game process switching | 4–5 | NOT-STARTED | Recorded old/new PID ordering |
 | Visible `EMULATOR-FAKE` identity | 3–5 | NOT-STARTED | Rendered UI and log/report evidence |

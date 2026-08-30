@@ -1,7 +1,7 @@
 # Unified Platform Design Traceability
 
-Last cross-check: 2026-08-30, emulator Stage 1 atomic-generation API after the
-Task 8 evidence-boundary correction and Task 16 signed checkpoint.
+Last cross-check: 2026-08-30, emulator Stage 2 fail-closed runtime selection
+after the Stage 1 atomic-generation API and Task 16 signed checkpoint.
 
 States follow the design contract: `COMPLETE`, `BLOCKER`, `DEFERRED`, and
 `NOT-STARTED`. `NOT-STARTED` means the planned milestone has not begun. The
@@ -45,6 +45,7 @@ close an ARM64-device gate.
 | Non-goal: add x86-64 production pipeline | Boundary | COMPLETE | First implementation remains ARM64-only | None | No production x86-64 native artifacts are introduced |
 | Architecture: dedicated launcher and one cold Unity process | 4 | NOT-STARTED | Process switching has not begun | Profile generations | Live-process mismatch is rejected without timeout |
 | Architecture: launch request contains only profile ID | 4 | NOT-STARTED | Launcher integration has not begun | Selected profile store | Intent and startup-profile tests pass |
+| Architecture: alternate runtime requires exact lab identity | Lab | COMPLETE | `LauncherRuntimeProvider` defaults to `ProductionLauncherRuntime`, requires both exact package `io.github.darkaxt.dualsouls.emutest` and explicit manifest class metadata for an alternate, and fails closed on absent/missing/unassignable classes; 6 provider tests pass | None | Focused provider suite passes and production package cannot request the fake runtime |
 | Architecture: exact declarative game profiles | 1–3 | COMPLETE | Registry tests plus the 1,748-entry semantic manifest pin current versions, platforms, Unity versions, actions, ownership, sizes, and hashes | Toolchain/build fields remain later milestones | Registry, manifest-asset, and real-source integration tests pass |
 | Architecture: profile owns validation/toolchain/conversion/patch/save/features | 2–6 | BLOCKER | Profiles now own identity, source layout, exact manifest, conversion action, storage, and selection metadata; toolchain, patch, save, skin, mod, and renderer adapters remain incomplete | Tasks 8–15 | Each remaining field/adapter is linked to its owning milestone test |
 | Architecture: unknown versions fail closed | 2 | COMPLETE | Exact source validation returns `UNKNOWN_VERSION` for wrong app version, build revision, Unity version, and manifest identity with precise diagnostics | None | Full `HollowKnightSourceValidatorTest` suite passes |
@@ -90,7 +91,7 @@ close an ARM64-device gate.
 | Host test: launcher/settings/reset isolation | 1–4 | BLOCKER | Task 4 covers generated-path/reset isolation and profile-id handoff; selector navigation and per-profile settings isolation remain unimplemented | Tasks 9 and 11 | Robolectric selector, settings, generation, and reset matrix passes |
 | Emulator: Robolectric covers fakeable UI/state behavior | 1–5 | COMPLETE | The host runner loads real Android resources; the Task 16 gate passes 38 tests with 37 passed and one intentional skip, including the final launcher label contract | Pinned Gradle/Android player module | `:app:testDebugUnitTest` passes on the host |
 | Emulator: x86-64 is not native evidence | Boundary | COMPLETE | Design and plan explicitly exclude it as release proof | None | Traceability cites no x86 native/device claims |
-| Emulator: dedicated fake-runtime integration instance | Lab | NOT-STARTED | The approved direction is specified in `docs/superpowers/specs/2026-08-30-dual-souls-emulator-test-instance-design.md`; no AVD tooling, lab APK, runtime seam, or instrumentation exists yet | Written design review and staged implementation plan | Exact `DualSoulsLabApi35` AVD runs the separately identified lab APK and passes launcher/profile/storage/recovery integration without claiming native proof |
+| Emulator: dedicated fake-runtime integration instance | Lab | BLOCKER | The written design/plan, atomic publisher, runtime contract, and exact-package provider exist; the shared activities are not routed through the seam and no lab APK, AVD tooling, or instrumentation exists yet | Emulator Stages 3–5 | Exact `DualSoulsLabApi35` AVD runs the separately identified lab APK and passes launcher/profile/storage/recovery integration without claiming native proof |
 | Device gate 1: clean provisioning for both Linux sources | Release | NOT-STARTED | Device matrix has not begun | Both profiles | Clean source-to-ready run passes per profile |
 | Device gate 2: exact toolchain and on-device IL2CPP | Release | NOT-STARTED | Device matrix has not begun | Toolchain registry | Logs and artifact hashes prove exact components |
 | Device gate 3: menu and representative gameplay | Release | NOT-STARTED | Device matrix has not begun | Playable generations | Both profiles enter gameplay |
