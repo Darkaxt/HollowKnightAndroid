@@ -36,7 +36,6 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -58,6 +57,14 @@ jobs:
             exit 1
           fi
 
+          core="${version%%-*}"
+          IFS='.' read -r major minor patch <<< "$core"
+          if (( 10#$minor >= 100 || 10#$patch >= 100 )); then
+            echo "::error::VERSION '$version' has a minor or patch component above 99"
+            exit 1
+          fi
+          version_code=$((10#$major * 10000 + 10#$minor * 100 + 10#$patch))
+
           case "${{ inputs.prerelease }}" in
             "true")  pre=true ;;
             "false") pre=false ;;
@@ -66,6 +73,7 @@ jobs:
 
           {
             echo "version=$version"
+            echo "version_code=$version_code"
             echo "tag=v$version"
             echo "prerelease=$pre"
           } >> "$GITHUB_OUTPUT"
@@ -75,6 +83,7 @@ jobs:
             echo ""
             echo "- prerelease: \`$pre\`"
             echo "- dry run: \`${{ inputs.dry_run }}\`"
+            echo "- versionCode: \`$version_code\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check for an existing release
@@ -215,12 +224,21 @@ jobs:
                     -maxdepth 2 -name aapt -type f 2>/dev/null | sort -V | tail -1)"
           [[ -x "$aapt" ]] || { echo "::error::no aapt under $ANDROID_HOME/build-tools"; exit 1; }
           badging="$("$aapt" dump badging "$apk")"
+          package="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<< "$badging" | head -1)"
           name="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<< "$badging" | head -1)"
           code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$badging" | head -1)"
 
-          echo "manifest: versionName=$name versionCode=$code"
+          echo "manifest: package=$package versionName=$name versionCode=$code"
+          if [[ "$package" != "com.jakobkhansen.silksong" ]]; then
+            echo "::error::APK package is '$package', expected 'com.jakobkhansen.silksong'"
+            exit 1
+          fi
           if [[ "$name" != "${{ steps.version.outputs.version }}" ]]; then
             echo "::error::APK says '$name', VERSION says '${{ steps.version.outputs.version }}'"
+            exit 1
+          fi
+          if [[ "$code" != "${{ steps.version.outputs.version_code }}" ]]; then
+            echo "::error::APK versionCode is '$code', expected '${{ steps.version.outputs.version_code }}'"
             exit 1
           fi
           if grep -q "application-debuggable" <<< "$badging"; then
@@ -256,6 +274,34 @@ jobs:
           name: ${{ steps.apk.outputs.asset }}
           path: ${{ steps.apk.outputs.asset }}
           retention-days: 14
+
+      - name: Download the uploaded artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.asset }}
+          path: ${{ runner.temp }}/fresh-download
+
+      - name: Reverify the downloaded artefact
+        run: |
+          set -euo pipefail
+          apk="$RUNNER_TEMP/fresh-download/${{ steps.apk.outputs.asset }}"
+          [[ -f "$apk" ]] || { echo "::error::downloaded APK is missing"; exit 1; }
+
+          sha="$(sha256sum "$apk" | cut -d' ' -f1)"
+          if [[ "$sha" != "${{ steps.apk.outputs.sha256 }}" ]]; then
+            echo "::error::downloaded APK SHA-256 is '$sha', expected '${{ steps.apk.outputs.sha256 }}'"
+            exit 1
+          fi
+
+          expected_cert="$(tr -d '[:space:]' < signing/hollowknightandroid-release.sha256)"
+          python3 tools/ci/verify_apk_signing.py \
+            --apk "$apk" \
+            --expected-certificate-sha256 "$expected_cert"
+
+          {
+            echo "- downloaded artefact SHA-256: \`$sha\`"
+            echo "- downloaded signer certificate SHA-256: \`$expected_cert\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # ── Publish ───────────────────────────────────────────────────────────
       - name: Create the release

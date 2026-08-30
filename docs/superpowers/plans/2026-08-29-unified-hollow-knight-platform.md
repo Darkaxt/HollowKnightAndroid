@@ -1258,10 +1258,11 @@ ANDROID_KEY_PASSWORD
 ANDROID_KEY_ALIAS
 ```
 
-Change the generated dry-run key alias and distinguished name to Dual Souls,
-rename the release artifact to `DualSouls-${VERSION_NAME}.apk`, and fail a publishing
-run when any signing secret is absent. A dry run may use an ephemeral key and
-must remain unpublished.
+Every run, including a dry run, requires the repository's stable signing
+identity; there is no ephemeral-key fallback. This makes a dry-run artifact a
+valid predecessor for later update-in-place testing. When Task 16 establishes
+the final product identity, rename the release artifact to
+`DualSouls-${VERSION_NAME}.apk`. A dry run must remain unpublished.
 
 - [ ] **Step 4: Verify version and artifact alignment**
 

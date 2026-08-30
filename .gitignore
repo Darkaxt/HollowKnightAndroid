@@ -36,6 +36,11 @@ logs-*/
 # somebody else ship to every user who has this app. Never in a commit.
 *.jks
 *.keystore
+*.p12
+
+# Python verification helpers are run locally and in CI.
+__pycache__/
+*.pyc
 
 # Machine-specific paths for the depot-to-apk dev loop, and the signing
 # passwords that go with them.
