@@ -96,36 +96,35 @@ jobs:
       # ── Signing key ───────────────────────────────────────────────────────
       #
       # The signing key IS the app's identity: Android refuses an update signed
-      # by a different one, so a key that changes between releases strands
-      # everyone who installed the last. Ephemeral is fine for a dry run and
-      # unacceptable for a publish, which is how it is treated here.
+      # by a different one, so every build, including a dry run, requires the
+      # stable HollowKnightAndroid identity configured in repository secrets.
       #
       # One-time setup:
-      #   keytool -genkeypair -v -keystore release.jks -alias silksong \
-      #     -keyalg RSA -keysize 4096 -validity 10000
-      #   base64 -w0 release.jks    -> secret ANDROID_KEYSTORE_BASE64
+      #   base64 -w0 signing.p12    -> secret ANDROID_KEYSTORE_BASE64
       # plus ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_PASSWORD, ANDROID_KEY_ALIAS.
-      # Back release.jks up somewhere safe: losing it means never being able to
-      # ship an update to anyone who installed this app.
+      # The public signer pin is signing/hollowknightandroid-release.sha256.
+      # The private recovery key must remain outside the repository.
       - name: Prepare signing key
         id: signing
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           set -euo pipefail
-          if [[ -n "${KEYSTORE_B64:-}" ]]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            echo "Using the configured release keystore."
-          elif [[ "${{ inputs.dry_run }}" == "true" ]]; then
-            keytool -genkeypair -v -keystore "$RUNNER_TEMP/release.jks" \
-              -storepass android -keypass android -alias silksong \
-              -keyalg RSA -keysize 2048 -validity 30 \
-              -dname "CN=SilksongAndroid dry run, OU=CI, O=SilksongAndroid, C=US" >/dev/null
-            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret; generated a throwaway key. Fine for a dry run, never for a release."
-          else
-            echo "::error::No ANDROID_KEYSTORE_BASE64 secret. A published APK needs a stable signing key or nobody can update in place. See the comment in this workflow."
-            exit 1
-          fi
+          for name in KEYSTORE_B64 KS_PASS KEY_PASS KEY_ALIAS; do
+            [[ -n "${!name:-}" ]] || { echo "::error::Required signing secret for $name is missing"; exit 1; }
+          done
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/release.p12"
+          [[ -s "$RUNNER_TEMP/release.p12" ]] || { echo "::error::Decoded keystore is empty"; exit 1; }
+          keytool -list -storetype PKCS12 \
+            -keystore "$RUNNER_TEMP/release.p12" \
+            -alias "$KEY_ALIAS" -storepass:env KS_PASS >/dev/null
+          echo "Using the configured HollowKnightAndroid release identity."
+
+      - name: Test release verification helper
+        run: python3 -m unittest discover tools/ci/tests -v
 
       # ── Build ─────────────────────────────────────────────────────────────
       #
@@ -168,26 +167,24 @@ jobs:
 
       - name: Build the APK
         env:
-          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || 'android' }}
-          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD || 'android' }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'silksong' }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           set -euo pipefail
           mkdir -p .ci-cache/unity-player .ci-cache/nuget .ci-cache/build
-          cp "$RUNNER_TEMP/release.jks" .ci-cache/release.jks
 
           docker run --rm \
             -v "$PWD:/workspace" \
             -v "$PWD/.ci-cache/unity-player:/opt/unity-player" \
             -v "$PWD/.ci-cache/nuget:/root/.nuget/packages" \
             -v "$PWD/.ci-cache/build:/root/.cache/silksong" \
+            --mount "type=bind,src=$RUNNER_TEMP/release.p12,dst=/run/secrets/release.p12,readonly" \
             -e GRADLE_DAEMON=0 \
             -e DEBUGGABLE=0 \
-            -e KEYSTORE=/workspace/.ci-cache/release.jks \
+            -e KEYSTORE=/run/secrets/release.p12 \
             -e KS_PASS -e KEY_PASS -e KEY_ALIAS \
             silksong-apk:latest apk
-
-          rm -f .ci-cache/release.jks
 
           # The container runs as root, so everything it wrote into the bind
           # mounts is root-owned -- including the caches actions/cache has to
@@ -231,6 +228,11 @@ jobs:
             exit 1
           fi
 
+          expected_cert="$(tr -d '[:space:]' < signing/hollowknightandroid-release.sha256)"
+          python3 tools/ci/verify_apk_signing.py \
+            --apk "$apk" \
+            --expected-certificate-sha256 "$expected_cert"
+
           out="SilksongAndroid-${{ steps.version.outputs.version }}.apk"
           # The build already names it this, but not if APK_NAME was overridden
           # somewhere; copying only when they differ keeps both cases working
@@ -243,6 +245,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           {
             echo "- versionCode: \`$code\`"
+            echo "- signer certificate SHA-256: \`$expected_cert\`"
             echo "- size: \`$(du -h "$out" | cut -f1)\`"
             echo "- sha256: \`$sha\`"
           } >> "$GITHUB_STEP_SUMMARY"
