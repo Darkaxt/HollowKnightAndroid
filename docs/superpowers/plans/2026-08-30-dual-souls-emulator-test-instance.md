@@ -39,11 +39,12 @@
 ### Task 1: Publish and recover exact generations
 
 **Files:**
+- Modify: `src/SilksongLauncher.Launcher/.gitignore`
 - Create: `src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/build/GenerationPublisherTest.kt`
 - Create: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/build/InstalledGeneration.kt`
 - Create: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/build/GenerationPublisher.kt`
 
-- [ ] **Step 1: Write failing generation tests**
+- [x] **Step 1: Write failing generation tests**
 
 Cover these concrete behaviors with real temporary directories: a verified staged directory becomes `generations/<id>` and atomically replaces `current`; a missing `generation.json` is rejected; an existing different generation is never overwritten; a failed publish retains the previous pointer; exact-job discard does not touch a sibling; clearing Hollow Knight generations preserves Silksong.
 
@@ -58,7 +59,7 @@ Cover these concrete behaviors with real temporary directories: a verified stage
 }
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run from `src/SilksongLauncher.Launcher`:
 
@@ -68,7 +69,7 @@ Run from `src/SilksongLauncher.Launcher`:
 
 Expected: compilation fails because `GenerationPublisher` and `InstalledGeneration` do not exist.
 
-- [ ] **Step 3: Implement the generation API**
+- [x] **Step 3: Implement the generation API**
 
 Use registered-profile paths only, identifiers matching `[a-z0-9][a-z0-9._-]{0,63}`, a required UTF-8 `generation.json`, same-filesystem `Files.move(..., ATOMIC_MOVE)`, and a temporary `current.next` pointer moved atomically over `current`. If atomic move is unsupported, fail without changing `current`; do not silently downgrade. Recursive removal must reject symbolic links as directories and operate only below the exact profile staging/generation roots.
 
@@ -84,7 +85,7 @@ class GenerationPublisher(private val paths: ProfilePaths) {
 }
 ```
 
-- [ ] **Step 4: Run focused and full host tests**
+- [x] **Step 4: Run focused and full host tests**
 
 ```powershell
 .\gradlew.bat :app:testDebugUnitTest --tests dev.silksong.launcher.build.GenerationPublisherTest
@@ -93,7 +94,7 @@ class GenerationPublisher(private val paths: ProfilePaths) {
 
 Expected: all tests pass.
 
-- [ ] **Step 5: Reconcile Stage 1 and commit**
+- [x] **Step 5: Reconcile Stage 1 and commit**
 
 Re-read the specification sections “Synthetic provisioning and generations,” “Recovery integration,” and “Failure and safety behavior.” Update the emulator row and atomic-generation rows in `docs/verification/design-traceability.md`; unresolved production adoption remains `BLOCKER` and production publisher integration is a `DEFERRED` dependency of the parent Task 9.
 
@@ -495,7 +496,7 @@ git push fork design/unified-hollow-knight-platform
 | Real launcher/profile/storage code in lab | 2–4 | NOT-STARTED | Shared-module dependency and activity tests |
 | Fake only native Unity/Mono/IL2CPP boundary | 2–4 | NOT-STARTED | Runtime selection and APK-content inspection |
 | Both profile selection and persistence | 3–5 | NOT-STARTED | Robolectric plus instrumentation |
-| Atomic synthetic generations/recovery | 1, 4–5 | NOT-STARTED | Publisher unit tests plus Android integration |
+| Atomic synthetic generations/recovery | 1, 4–5 | IN-PROGRESS | Publisher API has 6 green host tests; lab and Android integration remain Stages 4–5 |
 | Profile-scoped reset/settings isolation | 3–5 | NOT-STARTED | Host and Android isolation matrix |
 | Synthetic cold game process switching | 4–5 | NOT-STARTED | Recorded old/new PID ordering |
 | Visible `EMULATOR-FAKE` identity | 3–5 | NOT-STARTED | Rendered UI and log/report evidence |
