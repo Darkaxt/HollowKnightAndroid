@@ -2,6 +2,7 @@ package dev.silksong.launcher.runtime
 
 import android.content.Intent
 import dev.silksong.launcher.BuildReset
+import dev.silksong.launcher.build.GenerationPublisher
 import java.io.File
 
 class ProductionLauncherRuntime : LauncherRuntime {
@@ -13,12 +14,30 @@ class ProductionLauncherRuntime : LauncherRuntime {
     override val evidenceKind = EvidenceKind.ARM64_DEVICE
 
     override fun inspect(request: RuntimeRequest): RuntimeState {
-        val built = File(request.paths.packageDir, ".built").isFile &&
-            File(request.paths.packageDir, "lib/arm64/libil2cpp.so").length() > 0L
+        val publishedResult = runCatching {
+            GenerationPublisher(request.paths.profilePaths).current()
+        }
+        if (publishedResult.isFailure && request.paths.profilePaths.currentPointer.isFile) {
+            return RuntimeState(
+                ready = false,
+                generationId = null,
+                detail = "Current production generation is invalid: " +
+                    (publishedResult.exceptionOrNull()?.message ?: "unknown error"),
+            )
+        }
+        val published = publishedResult.getOrNull()
+        val packageDir = published?.let { File(it.root, "pkg") } ?: request.paths.packageDir
+        val built = File(packageDir, ".built").isFile &&
+            File(packageDir, "lib/arm64/libil2cpp.so").length() > 0L &&
+            File(packageDir, "data.apk").length() > 0L
         return RuntimeState(
             ready = built,
-            generationId = null,
-            detail = if (built) "Production build is present" else "Production build is not ready",
+            generationId = published?.id,
+            detail = if (built) {
+                "Production generation ${published?.id ?: "legacy"} is present"
+            } else {
+                "Production build is not ready"
+            },
         )
     }
 

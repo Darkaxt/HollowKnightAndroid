@@ -4,9 +4,10 @@ import java.io.File
 import java.nio.file.Path
 
 /**
- * Mutable build paths for one game profile before atomic generations are
- * introduced. Internal executable/package state and large external build
- * state are both namespaced by the registered profile identifier.
+ * Build paths for one game profile. Published packages live in immutable
+ * [ProfilePaths.generations]; [packageDir] is retained only for adopting and
+ * launching installs made before atomic generations existed. Large reusable
+ * build state remains external and profile-scoped.
  */
 class ProfileBuildPaths(
     filesDir: File,

@@ -86,7 +86,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not capture the rendered lab launcher hi
 $launcherUi = (& $adb -s $serial shell cat $uiDump) -join "`n"
 & $adb -s $serial shell rm $uiDump
 foreach ($requiredText in @(
-    'TEST RUNTIME · EMULATOR-FAKE',
+    'TEST RUNTIME',
+    'EMULATOR-FAKE',
     'Hollow Knight',
     'Hollow Knight: Silksong',
     'Import saves',
@@ -96,7 +97,7 @@ foreach ($requiredText in @(
         throw "Rendered lab launcher is missing: $requiredText"
     }
 }
-foreach ($removedText in @('↓  Download saves', '↑  Upload saves')) {
+foreach ($removedText in @('Download saves', 'Upload saves')) {
     if ($launcherUi.Contains($removedText)) {
         throw "Rendered lab launcher retains the removed transfer label: $removedText"
     }

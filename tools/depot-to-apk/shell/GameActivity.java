@@ -41,6 +41,47 @@ public class GameActivity extends PlayerActivity
         return new java.io.File(getFilesDir(), "profiles/" + profileId());
     }
 
+    private java.io.File legacyPackageDir()
+    {
+        return new java.io.File(profileFilesDir(), "pkg");
+    }
+
+    // A generation becomes visible only when the launcher atomically replaces
+    // this profile's current pointer. Invalid or incomplete pointers never
+    // escape the profile-owned generations directory; older installs retain
+    // their pre-generation pkg directory as a compatibility fallback.
+    private java.io.File profilePackageDir()
+    {
+        java.io.File pointer = new java.io.File(profileFilesDir(), "current");
+        if (pointer.isFile())
+        {
+            try
+            {
+                java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(new java.io.FileInputStream(pointer), "UTF-8"));
+                String generation;
+                try { generation = reader.readLine(); }
+                finally { reader.close(); }
+                if (generation != null && generation.matches("[a-z0-9][a-z0-9._-]{0,63}"))
+                {
+                    java.io.File generations = new java.io.File(profileFilesDir(), "generations")
+                        .getCanonicalFile();
+                    java.io.File root = new java.io.File(generations, generation).getCanonicalFile();
+                    java.io.File manifest = new java.io.File(root, "generation.json");
+                    java.io.File pkg = new java.io.File(root, "pkg");
+                    if (root.getParentFile().equals(generations) && manifest.isFile() && pkg.isDirectory())
+                        return pkg;
+                }
+            }
+            catch (Exception e)
+            {
+                android.util.Log.e(TAG, "could not resolve current generation: " + e);
+            }
+            throw new IllegalStateException("current generation is invalid for " + profileId());
+        }
+        return legacyPackageDir();
+    }
+
     private String profileRuntimeKey()
     {
         if (profileId().equals("silksong")) return "ss";
@@ -79,17 +120,17 @@ public class GameActivity extends PlayerActivity
     // So the list is extended, in place, to include app storage.
     private static final String ABI = "arm64";
 
-    // <files>/profiles/<id>/pkg/lib/arm64 -- mirrors <apk dir>/lib/<abi>.
+    // <generation>/pkg/lib/arm64 -- mirrors <apk dir>/lib/<abi>.
     private java.io.File externalLibDir()
     {
-        return new java.io.File(profileFilesDir(), "pkg/lib/" + ABI);
+        return new java.io.File(profilePackageDir(), "lib/" + ABI);
     }
 
     // The game's data, as a zip, once it is built on the device rather than
     // shipped in the APK. Named .apk because that is what it stands in for.
     private java.io.File externalDataApk()
     {
-        return new java.io.File(profileFilesDir(), "pkg/data.apk");
+        return new java.io.File(profilePackageDir(), "data.apk");
     }
 
     // Unity's own name for the same thing. The engine looks for
@@ -130,7 +171,10 @@ public class GameActivity extends PlayerActivity
         java.io.File[] libs = src.listFiles();
         if (libs == null) return;
 
-        java.io.File dst = externalLibDir();
+        // Never mutate an already-published generation. This compatibility
+        // installer is only for downloads made by pre-generation builds.
+        java.io.File legacy = legacyPackageDir();
+        java.io.File dst = new java.io.File(legacy, "lib/" + ABI);
         if (!dst.isDirectory() && !dst.mkdirs())
         {
             android.util.Log.e(TAG, "could not create " + dst);
@@ -141,7 +185,8 @@ public class GameActivity extends PlayerActivity
             boolean isLib = so.getName().endsWith(".so");
             boolean isData = so.getName().equals("data.apk");
             if (!isLib && !isData) continue;
-            java.io.File out = isData ? externalDataApk() : new java.io.File(dst, so.getName());
+            java.io.File out = isData ? new java.io.File(legacy, "data.apk") :
+                new java.io.File(dst, so.getName());
             // Everything staged is installed. This used to skip when the sizes
             // matched, which is not a safe question -- two builds of this game
             // came to exactly 315563224 bytes, so a rebuilt engine was dropped

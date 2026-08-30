@@ -754,13 +754,13 @@ git commit -m "feat: resolve Unity toolchains by profile"
 - Modify: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/PlayerImage.kt`
 - Test: `src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/build/GenerationPublisherTest.kt`
 
-- [ ] **Step 1: Write publication and interruption tests**
+- [x] **Step 1: Write publication and interruption tests**
 
 Assert that an incomplete staging directory never becomes current, publishing
 generation B preserves current generation A until B verifies, a cancellation
 removes only its job directory, and pointer replacement is atomic.
 
-- [ ] **Step 2: Implement the generation model**
+- [x] **Step 2: Implement the generation model**
 
 ```kotlin
 data class InstalledGeneration(
@@ -777,7 +777,7 @@ Write the manifest last inside staging. Reopen every published file, check
 hashes and ZIP readability, rename staging to generations, then atomically
 replace the `current` pointer.
 
-- [ ] **Step 3: Move current build orchestration behind the coordinator**
+- [x] **Step 3: Move current build orchestration behind the coordinator**
 
 Represent stages as a sealed class and emit structured progress:
 
@@ -798,7 +798,7 @@ Cancellation is cooperative between stages and while processing file batches;
 atomic file publication is allowed to finish. Do not introduce elapsed-time
 cancellation.
 
-- [ ] **Step 4: Run injected-failure tests and commit**
+- [x] **Step 4: Run injected-failure tests and commit**
 
 ```bash
 make test

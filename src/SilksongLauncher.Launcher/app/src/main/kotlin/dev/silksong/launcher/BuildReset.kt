@@ -49,6 +49,7 @@ package dev.silksong.launcher
 import android.content.Context
 import dev.silksong.launcher.profiles.ProfileBuildPaths
 import dev.silksong.launcher.profiles.ProfileSettingsStore
+import dev.silksong.launcher.build.GenerationPublisher
 import java.io.File
 
 object BuildReset {
@@ -80,6 +81,7 @@ object BuildReset {
      * retained.
      */
     fun clearGenerated(paths: ProfileBuildPaths): Long {
+        val publisher = GenerationPublisher(paths.profilePaths)
         val generated = listOf(
             paths.buildRoot,
             paths.installStaging,
@@ -87,7 +89,7 @@ object BuildReset {
             paths.packageDir,
             paths.contentLink,
         )
-        return generated.sumOf(::remove)
+        return publisher.clearStaged() + publisher.clearPublished() + generated.sumOf(::remove)
     }
 
     /**
@@ -135,7 +137,8 @@ object BuildReset {
 
     /** True once there is something worth clearing. */
     fun hasBuild(paths: ProfileBuildPaths): Boolean =
-        File(paths.packageDir, ".built").isFile || paths.buildRoot.isDirectory
+        paths.profilePaths.currentPointer.isFile || paths.profilePaths.generations.isDirectory ||
+            File(paths.packageDir, ".built").isFile || paths.buildRoot.isDirectory
 
     private fun remove(target: File): Long {
         val tally = Tally()

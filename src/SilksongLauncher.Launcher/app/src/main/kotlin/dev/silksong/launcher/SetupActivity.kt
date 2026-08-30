@@ -57,7 +57,14 @@ import java.io.File
 import dev.silksong.launcher.profiles.ContentLayout
 import dev.silksong.launcher.profiles.LegacySilksongAdopter
 import dev.silksong.launcher.profiles.ProfileBuildPaths
+import dev.silksong.launcher.profiles.ProfileManifestLoader
 import dev.silksong.launcher.profiles.SelectedGameStore
+import dev.silksong.launcher.build.BuildStage
+import dev.silksong.launcher.build.GenerationMetadata
+import dev.silksong.launcher.build.GenerationProvenance
+import dev.silksong.launcher.build.GenerationPublisher
+import dev.silksong.launcher.build.ProfileBuildCoordinator
+import dev.silksong.launcher.build.ProfileBuildRequest
 import dev.silksong.launcher.build.UnityToolchainRegistry
 import dev.silksong.launcher.runtime.EvidenceKind
 import dev.silksong.launcher.runtime.LauncherRuntimeProvider
@@ -66,6 +73,7 @@ import dev.silksong.launcher.runtime.ProvisionSource
 import dev.silksong.launcher.runtime.RuntimeProgress
 import dev.silksong.launcher.runtime.RuntimeRequest
 import dev.silksong.launcher.runtime.ProductionBuildSignature
+import java.util.UUID
 
 class SetupActivity : Activity() {
 
@@ -123,9 +131,15 @@ class SetupActivity : Activity() {
     }
     private val runtime by lazy { LauncherRuntimeProvider.from(this) }
     private val runtimeRequest by lazy { RuntimeRequest(this, profile, buildPaths) }
+    private val generationPublisher by lazy { GenerationPublisher(buildPaths.profilePaths) }
 
-    // <files>/pkg mirrors an installed package: lib/<abi> beside assets/.
-    private val pkgDir: File get() = buildPaths.packageDir
+    // The current immutable generation mirrors an installed package:
+    // lib/<abi> beside data.apk. The legacy package path remains readable so
+    // existing Silksong installs survive adoption until the first rebuild.
+    private val pkgDir: File
+        get() = generationPublisher.current()
+            ?.let { File(it.root, "pkg") }
+            ?: buildPaths.packageDir
     private val engineDir: File get() = File(pkgDir, "lib/$ABI")
     // The player image and catalog, as one zip laid out like an APK. Only the
     // zip counts: the engine opens "jar:file://<package path>!/assets" and
@@ -235,7 +249,7 @@ class SetupActivity : Activity() {
      * build is. Answering yes would send the user to a Play button that starts
      * a world with nothing in it.
      */
-    private fun isBuilt(): Boolean =
+    private fun isBuilt(): Boolean = runCatching {
         if (runtime.evidenceKind == EvidenceKind.EMULATOR_FAKE) {
             runtime.inspect(runtimeRequest).ready
         } else {
@@ -244,6 +258,10 @@ class SetupActivity : Activity() {
                 haveGameFiles() &&
                 runCatching { builtMarker.readText() }.getOrNull() == buildSignature
         }
+    }.getOrElse {
+        LauncherLog.log("Current generation is not usable", it)
+        false
+    }
 
     /** The game's own files are on this device, however they got here. */
     private fun haveGameFiles(): Boolean =
@@ -715,13 +733,14 @@ class SetupActivity : Activity() {
      * is deleted once it is in, so the only way to find one here is for it to
      * be new.
      */
-    private fun moveStaged() {
+    private fun moveStaged(destinationPackageDir: File = buildPaths.packageDir) {
         val src = stagingDir ?: return
+        val destinationEngineDir = File(destinationPackageDir, "lib/$ABI")
         for (f in src.listFiles().orEmpty()) {
             val name = f.name
             val dst = when {
-                name.endsWith(".so") -> File(engineDir, name)
-                name == "data.apk" -> File(pkgDir, "data.apk")
+                name.endsWith(".so") -> File(destinationEngineDir, name)
+                name == "data.apk" -> File(destinationPackageDir, "data.apk")
                 else -> continue
             }
             dst.parentFile?.mkdirs()
@@ -924,101 +943,170 @@ class SetupActivity : Activity() {
                     }
                 }
 
-                // ── Step 2: the supporting tools ──────────────────────────
-                setStep(toolsStep, "Downloading supporting tools")
-                if (!UnityFetcher.isPresent(unityDescriptor, unity)) {
-                    UnityFetcher.fetch(unityDescriptor, unity, buildPaths.installStaging)
-                        .collect { setBusy(true, it.step, it.fraction, it.detail) }
-                }
-                // The player's Java classes arrive with the module as ordinary
-                // Java bytecode, which ART cannot load. Dexing them here is
-                // what lets the APK ship none of them; it takes a couple of
-                // seconds. Injection happens at process start, so this only
-                // has to be on disk before the game is launched.
-                if (!UnityDex.isBuilt(this@SetupActivity, unityDescriptor, unity)) {
-                    setBusy(true, "preparing the engine", -1f, "")
-                    withContext(Dispatchers.IO) {
-                        UnityDex.build(this@SetupActivity, unityDescriptor, unity)
-                    }
-                }
-                // Unconditionally, because the fetch above is skipped once the
-                // module is on disk -- and the engine libraries are installed
-                // from it rather than being part of it. Anything that removes
-                // the installed copies without removing the 640 MB module (the
-                // reset in BuildReset, by design) would otherwise leave them
-                // gone for good, and the game dies at startup saying only that
-                // the hardware is unsupported. No-op when they are current.
-                stagingDir?.let { staging ->
-                    withContext(Dispatchers.IO) {
-                        UnityFetcher.ensureEngineStaged(unityDescriptor, unity, staging)
-                    }
-                }
-                if (stagingDir?.listFiles()?.isNotEmpty() == true) {
-                    setBusy(true, "installing the engine", -1f, "")
-                    withContext(Dispatchers.IO) { moveStaged() }
-                }
-                if (!ToolchainFetcher.isPresent(tools)) {
-                    ToolchainFetcher.fetch(tools).collect { setBusy(true, it.step, it.fraction, it.detail) }
-                }
-                MonoRuntime.stage(this@SetupActivity).collect { setBusy(true, it.step, it.fraction, it.detail) }
-
-                if (PlayerImage.depotData(depot) == null) {
-                    throw java.io.IOException("the game's files are not on this device")
-                }
-                PlayerImage.wrongBuildProblem(depot)?.let { throw java.io.IOException(it) }
-
-                // ── Step 3: building ──────────────────────────────────────
-                setStep(buildStep, "Building Silksong")
-                if (!PackageCompiler.isPresent(out)) {
-                    PackageCompiler.compile(unity, depot, this@SetupActivity, out).collect { setBusy(true, it.step, it.fraction, it.detail) }
-                }
-                // Always rebuilt: these are ours and change with the app, and
-                // they are a few seconds to compile.
-                // Ordered before the patches deliberately, as an experiment
-                // turned permanent: see below.
-                PackageCompiler.compileIo(unity, depot, this@SetupActivity, out, assets)
-                    .collect { setBusy(true, it.step, it.fraction, it.detail) }
-                PackageCompiler.compilePatches(unity, depot, this@SetupActivity, out, assets)
-                    .collect { setBusy(true, it.step, it.fraction, it.detail) }
-                if (!Il2cppConverter.isPresent(out) || Il2cppConverter.isStale(out)) {
-                    Il2cppConverter.convert(unity, depot, this@SetupActivity, out).collect { setBusy(true, it.step, it.fraction, it.detail) }
-                }
-                NativeBuild.build(unity, tools, out, assets, install = engineDir)
-                    .collect { setBusy(true, it.step, it.fraction, it.detail) }
-                // Both of these are skipped when the image already matches
-                // what they would produce, which is every build where the
-                // conversion had nothing to do. Together they are a full
-                // re-copy of the depot's serialized data and a 55 MB zip.
-                if (PlayerImage.isCurrent(profile, out, pkgDir, depot)) {
-                    LauncherLog.log("player image is current; not rebuilding or repacking")
-                } else {
-                    PlayerImage.build(
-                        profile,
-                        unity,
-                        depot,
-                        this@SetupActivity,
-                        out,
+                val exactSourceManifest = if (profile.contentLayout == ContentLayout.CLASSIC_PLAYER) {
+                    ProfileManifestLoader.load(
                         assets,
-                        PlayerImage.contentRootFor(packageName, buildPaths),
-                    )
-                        .collect { setBusy(true, it.step, it.fraction, it.detail) }
-                    setBusy(true, "packing the player image", -1f, "")
-                    withContext(Dispatchers.IO) {
-                        PlayerImage.install(out, pkgDir, buildPaths, depot)
-                        PlayerImage.markCurrent(profile, out, depot)
+                        "profiles/${profile.id}-${profile.currentGameVersion}.json",
+                    ).manifestSha256
+                } else {
+                    null
+                }
+                val request = ProfileBuildRequest(
+                    jobId = "job-${UUID.randomUUID()}",
+                    generationId = "gen-${UUID.randomUUID()}",
+                    metadata = GenerationMetadata(
+                        sourceManifestSha256 = GenerationProvenance.sourceManifestSha256(
+                            profile,
+                            exactSourceManifest,
+                        ),
+                        toolchainId = unityDescriptor.contentHash,
+                        patchManifestSha256 = ProductionBuildSignature.computeSha256(
+                            this@SetupActivity,
+                        ),
+                    ),
+                )
+                val coordinator = ProfileBuildCoordinator(generationPublisher)
+                coordinator.run(
+                    request,
+                    emit = { progress ->
+                        when (progress.stage) {
+                            BuildStage.ValidateSource,
+                            BuildStage.ResolveToolchain ->
+                                setStep(toolsStep, "Preparing supporting tools")
+                            else -> setStep(buildStep, "Building ${profile.displayName}")
+                        }
+                        setBusy(
+                            true,
+                            progress.stage.javaClass.simpleName,
+                            progress.index.toFloat() / progress.count,
+                            "",
+                        )
+                    },
+                ) { stage, workspace ->
+                    when (stage) {
+                        BuildStage.ValidateSource -> {
+                            if (PlayerImage.depotData(depot) == null) {
+                                throw java.io.IOException("the game's files are not on this device")
+                            }
+                            PlayerImage.wrongBuildProblem(depot)?.let {
+                                throw java.io.IOException(it)
+                            }
+                        }
+
+                        BuildStage.ResolveToolchain -> {
+                            if (!UnityFetcher.isPresent(unityDescriptor, unity)) {
+                                UnityFetcher.fetch(
+                                    unityDescriptor,
+                                    unity,
+                                    buildPaths.installStaging,
+                                ).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                            }
+                            if (!UnityDex.isBuilt(this@SetupActivity, unityDescriptor, unity)) {
+                                setBusy(true, "preparing the engine", -1f, "")
+                                withContext(Dispatchers.IO) {
+                                    UnityDex.build(this@SetupActivity, unityDescriptor, unity)
+                                }
+                            }
+                            withContext(Dispatchers.IO) {
+                                UnityFetcher.ensureEngineStaged(
+                                    unityDescriptor,
+                                    unity,
+                                    workspace.engineDir,
+                                )
+                            }
+                            if (!ToolchainFetcher.isPresent(tools)) {
+                                ToolchainFetcher.fetch(tools).collect {
+                                    setBusy(true, it.step, it.fraction, it.detail)
+                                }
+                            }
+                            MonoRuntime.stage(this@SetupActivity).collect {
+                                setBusy(true, it.step, it.fraction, it.detail)
+                            }
+                        }
+
+                        BuildStage.CompilePatches -> {
+                            if (!PackageCompiler.isPresent(out)) {
+                                PackageCompiler.compile(unity, depot, this@SetupActivity, out)
+                                    .collect { setBusy(true, it.step, it.fraction, it.detail) }
+                            }
+                            PackageCompiler.compileIo(
+                                unity,
+                                depot,
+                                this@SetupActivity,
+                                out,
+                                assets,
+                            ).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                            PackageCompiler.compilePatches(
+                                unity,
+                                depot,
+                                this@SetupActivity,
+                                out,
+                                assets,
+                            ).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                        }
+
+                        BuildStage.ConvertIl2Cpp -> {
+                            if (!Il2cppConverter.isPresent(out) || Il2cppConverter.isStale(out)) {
+                                Il2cppConverter.convert(
+                                    unity,
+                                    depot,
+                                    this@SetupActivity,
+                                    out,
+                                ).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                            }
+                        }
+
+                        BuildStage.CompileNative -> {
+                            NativeBuild.build(
+                                unity,
+                                tools,
+                                out,
+                                assets,
+                                install = workspace.engineDir,
+                            ).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                        }
+
+                        BuildStage.ConvertContent -> {
+                            PlayerImage.build(
+                                profile,
+                                unity,
+                                depot,
+                                this@SetupActivity,
+                                out,
+                                assets,
+                                PlayerImage.contentRootFor(packageName, buildPaths),
+                            ).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                            setBusy(true, "packing the player image", -1f, "")
+                            withContext(Dispatchers.IO) {
+                                PlayerImage.install(out, workspace.packageDir, buildPaths, depot)
+                                PlayerImage.markCurrent(profile, out, depot)
+                                DepotLocation.relink(buildPaths, depot)
+                            }
+                            PlayerImage.retargetContent(
+                                profile,
+                                depot,
+                                this@SetupActivity,
+                                out,
+                                assets,
+                            ).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                        }
+
+                        BuildStage.Verify -> withContext(Dispatchers.IO) {
+                            val targetMarker = File(workspace.packageDir, ".built")
+                            targetMarker.writeText(buildSignature)
+                            check(File(workspace.packageDir, "data.apk").length() > 0L) {
+                                "player image was not produced"
+                            }
+                            for (library in listOf("libunity.so", "libmain.so", "libil2cpp.so")) {
+                                check(File(workspace.engineDir, library).length() > 0L) {
+                                    "$library was not produced"
+                                }
+                            }
+                        }
+
+                        BuildStage.Publish -> Unit
                     }
                 }
-                // Always: the link is in internal storage, so it can go missing
-                // without anything about the image having changed. The game's
-                // process is left the same answer, so it can remake the link
-                // itself if it comes back and finds it gone.
-                withContext(Dispatchers.IO) { DepotLocation.relink(buildPaths, depot) }
-                PlayerImage.retargetContent(profile, depot, this@SetupActivity, out, assets)
-                    .collect { setBusy(true, it.step, it.fraction, it.detail) }
-
-                // Last, and only on the way out of a run that got here: this
-                // is what makes the build count as finished.
-                withContext(Dispatchers.IO) { builtMarker.writeText(buildSignature) }
 
                 readyToPort = false
                 pendingCreds = null

@@ -5,6 +5,10 @@ import java.security.MessageDigest
 
 object ProductionBuildSignature {
     fun compute(context: Context): String {
+        return "1|" + computeSha256(context).take(16)
+    }
+
+    fun computeSha256(context: Context): String {
         val digest = MessageDigest.getInstance("SHA-256")
         fun walk(path: String) {
             val names = runCatching { context.assets.list(path) }.getOrNull().orEmpty().sorted()
@@ -15,6 +19,6 @@ object ProductionBuildSignature {
             for (name in names) walk("$path/$name")
         }
         walk("ondevice")
-        return "1|" + digest.digest().joinToString("") { "%02x".format(it) }.take(16)
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }

@@ -3,6 +3,8 @@ package dev.silksong.launcher.build
 import dev.silksong.launcher.profiles.GameProfiles
 import dev.silksong.launcher.profiles.ProfilePaths
 import java.io.File
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -34,11 +36,17 @@ class GenerationPublisherTest {
     fun `publish replaces current only after verification`() {
         val publisher = GenerationPublisher(hollowKnightPaths)
         val staged = publisher.begin("job-1", "gen-1")
-        writeManifest(staged, "hollow-knight", "gen-1")
+        File(staged, "payload.bin").writeText("verified")
+        publisher.finalizeGeneration("job-1", "gen-1", metadata())
 
         val installed = publisher.publish("job-1", "gen-1")
 
         assertEquals("gen-1", installed.id)
+        assertEquals("hollow-knight", installed.profileId)
+        assertEquals(SOURCE_SHA, installed.sourceManifestSha256)
+        assertEquals(TOOLCHAIN_ID, installed.toolchainId)
+        assertEquals(PATCH_SHA, installed.patchManifestSha256)
+        assertTrue(installed.files.containsKey("payload.bin"))
         assertEquals(File(hollowKnightPaths.generations, "gen-1"), installed.root)
         assertEquals("gen-1", hollowKnightPaths.currentPointer.readText())
         assertFalse(File(hollowKnightPaths.staging, "job-1").exists())
@@ -47,7 +55,9 @@ class GenerationPublisherTest {
     @Test
     fun `missing manifest retains previous current generation`() {
         val publisher = GenerationPublisher(hollowKnightPaths)
-        writeManifest(publisher.begin("job-1", "gen-1"), "hollow-knight", "gen-1")
+        val first = publisher.begin("job-1", "gen-1")
+        File(first, "payload.bin").writeText("first")
+        publisher.finalizeGeneration("job-1", "gen-1", metadata())
         publisher.publish("job-1", "gen-1")
         publisher.begin("job-2", "gen-2")
 
@@ -64,13 +74,13 @@ class GenerationPublisherTest {
     fun `existing generation is never overwritten`() {
         val publisher = GenerationPublisher(hollowKnightPaths)
         val first = publisher.begin("job-1", "gen-1")
-        writeManifest(first, "hollow-knight", "gen-1")
         File(first, "payload.bin").writeText("first")
+        publisher.finalizeGeneration("job-1", "gen-1", metadata())
         publisher.publish("job-1", "gen-1")
 
         val second = publisher.begin("job-2", "gen-1")
-        writeManifest(second, "hollow-knight", "gen-1")
         File(second, "payload.bin").writeText("second")
+        publisher.finalizeGeneration("job-2", "gen-1", metadata())
 
         assertThrows(IllegalStateException::class.java) {
             publisher.publish("job-2", "gen-1")
@@ -95,8 +105,10 @@ class GenerationPublisherTest {
     fun `clearing one profile preserves the other profile`() {
         val hollowKnight = GenerationPublisher(hollowKnightPaths)
         val silksong = GenerationPublisher(silksongPaths)
-        writeManifest(hollowKnight.begin("hk-job", "hk-gen"), "hollow-knight", "hk-gen")
-        writeManifest(silksong.begin("ss-job", "ss-gen"), "silksong", "ss-gen")
+        File(hollowKnight.begin("hk-job", "hk-gen"), "payload.bin").writeText("hk")
+        File(silksong.begin("ss-job", "ss-gen"), "payload.bin").writeText("ss")
+        hollowKnight.finalizeGeneration("hk-job", "hk-gen", metadata())
+        silksong.finalizeGeneration("ss-job", "ss-gen", metadata())
         hollowKnight.publish("hk-job", "hk-gen")
         silksong.publish("ss-job", "ss-gen")
 
@@ -133,9 +145,82 @@ class GenerationPublisherTest {
         }
     }
 
-    private fun writeManifest(root: File, profileId: String, generationId: String) {
-        File(root, "generation.json").writeText(
-            """{"profileId":"$profileId","generationId":"$generationId"}""",
-        )
+    @Test
+    fun `payload mutation after manifest finalization retains previous generation`() {
+        val publisher = GenerationPublisher(hollowKnightPaths)
+        val first = publisher.begin("job-1", "gen-1")
+        File(first, "payload.bin").writeText("first")
+        publisher.finalizeGeneration("job-1", "gen-1", metadata())
+        publisher.publish("job-1", "gen-1")
+
+        val second = publisher.begin("job-2", "gen-2")
+        File(second, "payload.bin").writeText("before")
+        publisher.finalizeGeneration("job-2", "gen-2", metadata())
+        File(second, "payload.bin").writeText("after")
+
+        assertThrows(IllegalStateException::class.java) {
+            publisher.publish("job-2", "gen-2")
+        }
+        assertEquals("gen-1", hollowKnightPaths.currentPointer.readText())
+        assertFalse(File(hollowKnightPaths.generations, "gen-2").exists())
+    }
+
+    @Test
+    fun `corrupt zip payload is rejected before publication`() {
+        val publisher = GenerationPublisher(hollowKnightPaths)
+        val staged = publisher.begin("job-1", "gen-1")
+        File(staged, "pkg/data.apk").apply {
+            parentFile.mkdirs()
+            writeText("not a zip")
+        }
+        publisher.finalizeGeneration("job-1", "gen-1", metadata())
+
+        assertThrows(IllegalStateException::class.java) {
+            publisher.publish("job-1", "gen-1")
+        }
+        assertFalse(hollowKnightPaths.currentPointer.exists())
+    }
+
+    @Test
+    fun `payload added after manifest finalization is rejected`() {
+        val publisher = GenerationPublisher(hollowKnightPaths)
+        val staged = publisher.begin("job-1", "gen-1")
+        File(staged, "payload.bin").writeText("listed")
+        publisher.finalizeGeneration("job-1", "gen-1", metadata())
+        File(staged, "extra.bin").writeText("unlisted")
+
+        assertThrows(IllegalStateException::class.java) {
+            publisher.publish("job-1", "gen-1")
+        }
+        assertFalse(hollowKnightPaths.currentPointer.exists())
+    }
+
+    @Test
+    fun `valid zip is reopened and published`() {
+        val publisher = GenerationPublisher(hollowKnightPaths)
+        val staged = publisher.begin("job-1", "gen-1")
+        val zip = File(staged, "pkg/data.apk").apply { parentFile.mkdirs() }
+        ZipOutputStream(zip.outputStream()).use { output ->
+            output.putNextEntry(ZipEntry("assets/bin/Data/settings.xml"))
+            output.write("ok".toByteArray())
+            output.closeEntry()
+        }
+        publisher.finalizeGeneration("job-1", "gen-1", metadata())
+
+        val installed = publisher.publish("job-1", "gen-1")
+
+        assertTrue(File(installed.root, "pkg/data.apk").isFile)
+    }
+
+    private fun metadata() = GenerationMetadata(
+        sourceManifestSha256 = SOURCE_SHA,
+        toolchainId = TOOLCHAIN_ID,
+        patchManifestSha256 = PATCH_SHA,
+    )
+
+    private companion object {
+        const val SOURCE_SHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        const val TOOLCHAIN_ID = "unity-6000.0.61f1-test"
+        const val PATCH_SHA = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     }
 }

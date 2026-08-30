@@ -2,6 +2,7 @@ package io.github.darkaxt.dualsouls.lab
 
 import android.content.Context
 import android.content.Intent
+import dev.silksong.launcher.build.GenerationMetadata
 import dev.silksong.launcher.build.GenerationPublisher
 import dev.silksong.launcher.runtime.EvidenceKind
 import dev.silksong.launcher.runtime.LauncherRuntime
@@ -83,9 +84,6 @@ class LabLauncherRuntime : LauncherRuntime {
         val publisher = GenerationPublisher(runtime.paths.profilePaths)
         emit(RuntimeProgress("synthetic", 0.25f, "Creating $generationId"))
         val staging = publisher.begin(jobId, generationId)
-        File(staging, "generation.json").writeText(
-            """{"profileId":"${runtime.profile.id}","generationId":"$generationId"}""",
-        )
         File(staging, "synthetic-content.txt").writeText(
             "Dual Souls emulator fixture for ${runtime.profile.id}\n",
         )
@@ -94,6 +92,15 @@ class LabLauncherRuntime : LauncherRuntime {
         check(!controls.getBoolean(failureKey(runtime.profile.id), false)) {
             "Injected lab failure before publication"
         }
+        publisher.finalizeGeneration(
+            jobId,
+            generationId,
+            GenerationMetadata(
+                sourceManifestSha256 = "0".repeat(64),
+                toolchainId = "synthetic-emulator",
+                patchManifestSha256 = "1".repeat(64),
+            ),
+        )
         emit(RuntimeProgress("synthetic", 0.75f, "Publishing $generationId"))
         val installed = publisher.publish(jobId, generationId)
         emit(RuntimeProgress("synthetic", 1f, "Published ${installed.id}"))

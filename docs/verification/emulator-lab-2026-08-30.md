@@ -119,8 +119,8 @@ following parent-platform gaps remain classified rather than hidden:
   update/adoption evidence;
 - `BLOCKER`: final aligned tag, release candidate, reproducibility, install,
   update, and publication gates; and
-- `NOT-STARTED`: shared mod catalog, skin scanner/registry/activation, full
-  production coordinator, and shared renderer stages.
+- `NOT-STARTED`: shared mod catalog, skin scanner/registry/activation, and
+  shared renderer stages.
 
 ## Stage 6 production and release isolation
 
@@ -141,11 +141,10 @@ Its 251 entries include 10 JNI libraries, all under `jni/arm64-v8a`, and 169
 Mono BCL DLLs. The lab APK is 18,821,586 bytes with the SHA-256 above; its 290
 entries contain zero ARM64 JNI and zero `assets/mono-bcl` files.
 
-The unused duplicate `ProductionProvisioner` was removed. The already-proven
-production build remains owned by `SetupActivity`, while
-`ProductionLauncherRuntime.provision` explicitly rejects the synthetic path.
-The shared `ProductionBuildSignature` utility remains in its own source file.
-This closes the Stage 3 deferral without switching the production pipeline.
+The unused duplicate `ProductionProvisioner` was removed. At this historical
+Stage 6 checkpoint the production build still remained directly owned by
+`SetupActivity`; parent Task 9 subsequently moved that orchestration behind the
+shared atomic coordinator without enabling synthetic production provisioning.
 
 Nine CI contract tests pass. Release selection now fails unless `build/`
 contains exactly `DualSouls-<VERSION>.apk`, rejects every extra APK, requires
@@ -160,3 +159,13 @@ matches among either the 251 production AAR entries or 290 lab APK entries.
 The emulator specification is closed with `blockers = 0` and
 `tracked_deferrals = 0`. Parent-platform blockers listed above remain open and
 are not relabeled as emulator evidence.
+
+## Task 9 rerun — 2026-08-31
+
+The guarded wrapper passed again on `emulator-5554` (API 35, x86-64): 84 app
+host tests, six fake-runtime host tests, and all three instrumentation tests.
+The fake runtime now writes the same complete, manifest-last generation schema
+as production. The rendered launcher still proves both profiles, the explicit
+`TEST RUNTIME` / `EMULATOR-FAKE` identity, and arrow-free `Import saves` /
+`Export saves`; profile-scoped storage still retains Silksong after resetting
+Hollow Knight. This remains emulator-fake evidence only.
