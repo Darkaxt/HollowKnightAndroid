@@ -60,6 +60,7 @@ internal sealed record ClassicInventoryReport(
     string Command,
     string Status,
     string SourceTreeSha256,
+    ClassicSourceIdentity? Identity,
     IReadOnlyList<ClassicFileReport> Files,
     ClassicCensus Census,
     IReadOnlyList<ClassicDiagnostic> Diagnostics);
@@ -276,6 +277,7 @@ internal static class ClassicTreeConverter
             "manifest-classic-tree",
             "INVENTORIED",
             inventory.SourceTreeSha256,
+            inventory.Identity,
             files,
             CreateCensus(inventory, files),
             inventory.Diagnostics);

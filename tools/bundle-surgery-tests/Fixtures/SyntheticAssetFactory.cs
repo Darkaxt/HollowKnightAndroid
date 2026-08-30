@@ -46,11 +46,31 @@ internal static class SyntheticAssetFactory
             buildVersion);
     }
 
+    internal static SyntheticSerializedFile WithShaderBuildSettingsAndPlayerSettings(
+        int[] shaderPlatforms,
+        int[] graphicsApis,
+        string buildVersion,
+        string gameVersion)
+    {
+        var blobValue = 0;
+        return WithShaderPlatformChunksAndTarget(
+            LinuxBuildTarget,
+            shaderPlatforms
+                .Select(platform => (
+                    Platform: platform,
+                    Chunks: new[] { checked((byte)++blobValue) }))
+                .ToArray(),
+            graphicsApis,
+            buildVersion,
+            gameVersion);
+    }
+
     private static SyntheticSerializedFile WithShaderPlatformChunksAndTarget(
         uint targetPlatform,
         (int Platform, byte[] Chunks)[] platforms,
         int[]? graphicsApis = null,
-        string? buildVersion = null)
+        string? buildVersion = null,
+        string? gameVersion = null)
     {
         var fixture = SyntheticSerializedFile.Create();
         var manager = new AssetsManager();
@@ -113,6 +133,10 @@ internal static class SyntheticAssetFactory
                 file,
                 graphicsApis,
                 buildVersion ?? UnityVersion);
+        }
+        if (gameVersion is not null)
+        {
+            AddPlayerSettings(manager, file, gameVersion);
         }
 
         using (var writer = new AssetsFileWriter(fixture.InputPath))
@@ -203,6 +227,31 @@ internal static class SyntheticAssetFactory
             false);
         buildSettingsInfo.SetNewData(buildSettings);
         file.Metadata.AddAssetInfo(buildSettingsInfo);
+    }
+
+    private static void AddPlayerSettings(
+        AssetsManager manager,
+        AssetsFile file,
+        string gameVersion)
+    {
+        var playerSettingsType = manager.ClassDatabase.FindAssetClassByID(
+            (int)AssetClassID.PlayerSettings) ?? throw new InvalidOperationException(
+                "PlayerSettings class is absent from the class database");
+        var template = new AssetTypeTemplateField();
+        template.FromClassDatabase(manager.ClassDatabase, playerSettingsType, false);
+        var playerSettings = ValueBuilder.DefaultValueFieldFromTemplate(template);
+        playerSettings["companyName"].AsString = "Team Cherry";
+        playerSettings["productName"].AsString = "Hollow Knight";
+        playerSettings["bundleVersion"].AsString = gameVersion;
+
+        var info = AssetFileInfo.Create(
+            file,
+            3,
+            (int)AssetClassID.PlayerSettings,
+            manager.ClassDatabase,
+            false);
+        info.SetNewData(playerSettings);
+        file.Metadata.AddAssetInfo(info);
     }
 
     private static void PopulatePerPlatformUIntArrays(

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using AssetsTools.NET;
 using AssetsTools.NET.Extra;
@@ -39,7 +40,17 @@ internal sealed record ClassicPlayerInventory(
     string SourceRoot,
     string SourceTreeSha256,
     IReadOnlyList<ClassicFileEntry> Files,
-    IReadOnlyList<ClassicDiagnostic> Diagnostics);
+    IReadOnlyList<ClassicDiagnostic> Diagnostics,
+    ClassicSourceIdentity? Identity = null);
+
+internal sealed record ClassicSourceIdentity(
+    string? CompanyName,
+    string? ProductName,
+    string? GameVersion,
+    string UnityVersion,
+    string Platform,
+    string? BuildBranch,
+    int? BuildRevision);
 
 internal sealed record ClassicManifestFile(
     string RelativePath,
@@ -113,7 +124,7 @@ internal static partial class ClassicPlayerTree
         foreach (var path in EnumerateContainedFiles(root, diagnostics))
         {
             var relativePath = ToRelativePath(root, path);
-            var kind = Classify(path);
+            var kind = Classify(path, relativePath);
             files.Add(new ClassicFileEntry(
                 relativePath,
                 kind,
@@ -156,7 +167,19 @@ internal static partial class ClassicPlayerTree
                 $"Expected exactly one globalgamemanagers serialized file, found {globalManagers}"));
         }
 
-        return CreateInventory(root, files, diagnostics);
+        ClassicSourceIdentity? identity = null;
+        if (globalManagers == 1)
+        {
+            var globalManagersPath = files.Single(file =>
+                file.Kind == ClassicFileKind.Serialized &&
+                string.Equals(
+                    Path.GetFileName(file.RelativePath),
+                    "globalgamemanagers",
+                    StringComparison.OrdinalIgnoreCase));
+            identity = ReadSourceIdentity(root, globalManagersPath, diagnostics);
+        }
+
+        return CreateInventory(root, files, diagnostics, identity);
     }
 
     internal static ClassicValidationResult Validate(
@@ -185,11 +208,15 @@ internal static partial class ClassicPlayerTree
                 "NON_LINUX_MANIFEST",
                 $"Manifest platform must be linux, found {manifest.Platform}"));
         }
-        if (!IsSha256(manifest.ManifestSha256))
+        if (!IsSha256(manifest.ManifestSha256) ||
+            !string.Equals(
+                manifest.ManifestSha256,
+                ComputeManifestSha256(manifest),
+                StringComparison.OrdinalIgnoreCase))
         {
             diagnostics.Add(new ClassicDiagnostic(
                 "INVALID_MANIFEST_HASH",
-                "Manifest SHA-256 must contain exactly 64 hexadecimal characters"));
+                "Manifest SHA-256 does not match its canonical content"));
         }
 
         foreach (var manifestFile in manifest.RequiredFiles)
@@ -282,10 +309,46 @@ internal static partial class ClassicPlayerTree
             diagnostics);
     }
 
+    internal static string ComputeManifestSha256(ClassicProfileManifest manifest)
+    {
+        var canonical = new StringBuilder()
+            .Append(manifest.SchemaVersion).Append('\n')
+            .Append(manifest.ProfileId).Append('\n')
+            .Append(manifest.GameVersion).Append('\n')
+            .Append(manifest.UnityVersion).Append('\n')
+            .Append(manifest.Platform.ToLowerInvariant()).Append('\n')
+            .Append(manifest.ConverterReportSchema).Append('\n');
+        foreach (var file in manifest.RequiredFiles
+                     .OrderBy(
+                         file => file.RelativePath.ToLowerInvariant(),
+                         StringComparer.Ordinal)
+                     .ThenBy(file => file.RelativePath, StringComparer.Ordinal))
+        {
+            canonical
+                .Append(file.RelativePath).Append('\0')
+                .Append(file.Size.ToString(CultureInfo.InvariantCulture)).Append('\0')
+                .Append(file.Sha256.ToLowerInvariant()).Append('\0')
+                .Append(file.Action switch
+                {
+                    ClassicManifestAction.Transform => "TRANSFORM",
+                    ClassicManifestAction.Copy => "COPY",
+                    ClassicManifestAction.Exclude => "EXCLUDE",
+                    ClassicManifestAction.ReplaceAtAssembly => "REPLACE_AT_ASSEMBLY",
+                    _ => throw new InvalidDataException(
+                        $"Unsupported manifest action: {file.Action}"),
+                }).Append('\0')
+                .Append(file.OwnerRelativePath ?? string.Empty).Append('\n');
+        }
+        return Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString())))
+            .ToLowerInvariant();
+    }
+
     private static ClassicPlayerInventory CreateInventory(
         string root,
         List<ClassicFileEntry> files,
-        List<ClassicDiagnostic> diagnostics)
+        List<ClassicDiagnostic> diagnostics,
+        ClassicSourceIdentity? identity = null)
     {
         var canonical = new StringBuilder();
         foreach (var file in files)
@@ -299,7 +362,122 @@ internal static partial class ClassicPlayerTree
         var treeHash = Convert.ToHexString(
             SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString())))
             .ToLowerInvariant();
-        return new ClassicPlayerInventory(root, treeHash, files, diagnostics);
+        return new ClassicPlayerInventory(root, treeHash, files, diagnostics, identity);
+    }
+
+    private static ClassicSourceIdentity? ReadSourceIdentity(
+        string root,
+        ClassicFileEntry globalManagers,
+        List<ClassicDiagnostic> diagnostics)
+    {
+        var manager = new AssetsManager();
+        try
+        {
+            manager.LoadClassPackage(Path.Combine(AppContext.BaseDirectory, "classdata.tpk"));
+            var path = Path.Combine(
+                root,
+                globalManagers.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+            var file = manager.LoadAssetsFile(path);
+            string? playerCompanyName = null;
+            string? playerProductName = null;
+            string? gameVersion = null;
+            try
+            {
+                manager.LoadClassDatabaseFromPackage(file.file.Metadata.UnityVersion);
+                var playerSettingsInfo = file.file
+                    .GetAssetsOfType(AssetClassID.PlayerSettings)
+                    .SingleOrDefault();
+                if (playerSettingsInfo is not null)
+                {
+                    var playerSettings = manager.GetBaseField(file, playerSettingsInfo);
+                    if (playerSettings is not null)
+                    {
+                        playerCompanyName = playerSettings["companyName"].AsString;
+                        playerProductName = playerSettings["productName"].AsString;
+                        gameVersion = playerSettings["bundleVersion"].AsString;
+                    }
+                }
+            }
+            catch (Exception error) when (
+                error is EndOfStreamException or InvalidDataException)
+            {
+                // Some exact Unity patch releases have a PlayerSettings layout
+                // newer than the nearest class-database template. Header target,
+                // Unity version, app.info, BuildMetadata, and exact file hashes
+                // remain authoritative; a guessed layout must not block them.
+            }
+
+            string? companyName = null;
+            string? productName = null;
+            var appInfoPath = Path.Combine(root, "app.info");
+            if (File.Exists(appInfoPath))
+            {
+                var lines = File.ReadAllLines(appInfoPath);
+                companyName = lines.ElementAtOrDefault(0)?.Trim();
+                productName = lines.ElementAtOrDefault(1)?.Trim();
+            }
+            companyName ??= playerCompanyName;
+            productName ??= playerProductName;
+
+            string? buildBranch = null;
+            int? buildRevision = null;
+            var metadataPath = Path.Combine(
+                root,
+                "StreamingAssets",
+                "BuildMetadata.json");
+            if (File.Exists(metadataPath))
+            {
+                using var metadata = JsonDocument.Parse(File.ReadAllText(metadataPath));
+                if (metadata.RootElement.TryGetProperty("branchName", out var branch))
+                {
+                    buildBranch = branch.GetString();
+                }
+                if (metadata.RootElement.TryGetProperty("revision", out var revision))
+                {
+                    if (revision.ValueKind == JsonValueKind.Number &&
+                        revision.TryGetInt32(out var numericRevision))
+                    {
+                        buildRevision = numericRevision;
+                    }
+                    else if (revision.ValueKind == JsonValueKind.String &&
+                        int.TryParse(
+                            revision.GetString(),
+                            NumberStyles.None,
+                            CultureInfo.InvariantCulture,
+                            out var stringRevision))
+                    {
+                        buildRevision = stringRevision;
+                    }
+                }
+            }
+
+            var platform = file.file.Metadata.TargetPlatform switch
+            {
+                LinuxBuildTarget => "LinuxPlayer",
+                19 => "WindowsPlayer",
+                var target => $"BuildTarget:{target}",
+            };
+            return new ClassicSourceIdentity(
+                companyName,
+                productName,
+                gameVersion,
+                file.file.Metadata.UnityVersion,
+                platform,
+                buildBranch,
+                buildRevision);
+        }
+        catch (Exception error)
+        {
+            diagnostics.Add(new ClassicDiagnostic(
+                "SOURCE_IDENTITY_INVALID",
+                $"Classic source identity could not be read: {error.Message}",
+                globalManagers.RelativePath));
+            return null;
+        }
+        finally
+        {
+            manager.UnloadAll();
+        }
     }
 
     private static IEnumerable<string> EnumerateContainedFiles(
@@ -357,16 +535,21 @@ internal static partial class ClassicPlayerTree
         }
     }
 
-    private static ClassicFileKind Classify(string path)
+    private static ClassicFileKind Classify(string path, string relativePath)
     {
         if (IsSidecar(path)) return ClassicFileKind.Sidecar;
-        if (AssetsFile.IsAssetsFile(path)) return ClassicFileKind.Serialized;
-
         var name = Path.GetFileName(path);
         if (name.Equals("unity default resources", StringComparison.OrdinalIgnoreCase) ||
             name.Equals("unity_builtin_extra", StringComparison.OrdinalIgnoreCase))
         {
             return ClassicFileKind.ReplacementRequired;
+        }
+        if (AssetsFile.IsAssetsFile(path)) return ClassicFileKind.Serialized;
+
+        if (relativePath.StartsWith("Managed/", StringComparison.OrdinalIgnoreCase) &&
+            Path.GetExtension(path).Equals(".dll", StringComparison.OrdinalIgnoreCase))
+        {
+            return ClassicFileKind.PassThrough;
         }
 
         return Path.GetExtension(path).ToLowerInvariant() switch

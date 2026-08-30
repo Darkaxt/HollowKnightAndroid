@@ -107,6 +107,53 @@ public sealed class ClassicPlayerTreeTests
     }
 
     [Fact]
+    public void Discover_marks_parseable_unity_builtins_for_android_replacement()
+    {
+        using var fixture = SyntheticAssetFactory.WithShaderPlatforms(18);
+        var dataRoot = CreateDataRoot(fixture, "globalgamemanagers");
+        var resourcesRoot = Path.Combine(dataRoot, "Resources");
+        Directory.CreateDirectory(resourcesRoot);
+        File.Copy(
+            fixture.InputPath,
+            Path.Combine(resourcesRoot, "unity default resources"));
+
+        var inventory = ClassicPlayerTree.Discover(dataRoot);
+
+        var builtin = Assert.Single(
+            inventory.Files,
+            file => file.RelativePath == "Resources/unity default resources");
+        Assert.Equal(ClassicFileKind.ReplacementRequired, builtin.Kind);
+        Assert.DoesNotContain(inventory.Diagnostics, diagnostic =>
+            diagnostic.RelativePath == builtin.RelativePath);
+    }
+
+    [Fact]
+    public void Discover_does_not_classify_managed_assemblies_as_native_plugins()
+    {
+        using var fixture = SyntheticAssetFactory.WithShaderPlatforms(18);
+        var dataRoot = CreateDataRoot(fixture, "globalgamemanagers");
+        var managedRoot = Path.Combine(dataRoot, "Managed");
+        Directory.CreateDirectory(managedRoot);
+        File.WriteAllBytes(Path.Combine(managedRoot, "Assembly-CSharp.dll"), [1]);
+        var pluginsRoot = Path.Combine(dataRoot, "Plugins");
+        Directory.CreateDirectory(pluginsRoot);
+        File.WriteAllBytes(Path.Combine(pluginsRoot, "desktop.dll"), [2]);
+
+        var inventory = ClassicPlayerTree.Discover(dataRoot);
+
+        Assert.Equal(
+            ClassicFileKind.PassThrough,
+            Assert.Single(
+                inventory.Files,
+                file => file.RelativePath == "Managed/Assembly-CSharp.dll").Kind);
+        Assert.Equal(
+            ClassicFileKind.NativePlugin,
+            Assert.Single(
+                inventory.Files,
+                file => file.RelativePath == "Plugins/desktop.dll").Kind);
+    }
+
+    [Fact]
     public void Validate_rejects_a_manifest_required_missing_file()
     {
         using var fixture = SyntheticAssetFactory.WithShaderPlatforms(18);
@@ -182,6 +229,29 @@ public sealed class ClassicPlayerTreeTests
         Assert.Null(result.Layout);
         Assert.Contains(result.Diagnostics, diagnostic =>
             diagnostic.Code == "DUPLICATE_MANIFEST_PATH");
+    }
+
+    [Fact]
+    public void Validate_rejects_manifest_policy_changed_without_a_new_hash()
+    {
+        using var fixture = SyntheticAssetFactory.WithShaderPlatforms(18);
+        var dataRoot = CreateDataRoot(fixture, "globalgamemanagers");
+        var inventory = ClassicPlayerTree.Discover(dataRoot);
+        var manifest = ManifestFor(inventory);
+        var tampered = manifest with
+        {
+            RequiredFiles = manifest.RequiredFiles
+                .Select(file => file.RelativePath == "globalgamemanagers"
+                    ? file with { Action = ClassicManifestAction.Exclude }
+                    : file)
+                .ToArray(),
+        };
+
+        var result = ClassicPlayerTree.Validate(inventory, tampered);
+
+        Assert.Null(result.Layout);
+        Assert.Contains(result.Diagnostics, diagnostic =>
+            diagnostic.Code == "INVALID_MANIFEST_HASH");
     }
 
     [Fact]
@@ -428,6 +498,152 @@ public sealed class ClassicPlayerTreeTests
             census.GetProperty("media")
                 .EnumerateArray()
                 .Select(item => item.GetString()));
+    }
+
+    [Fact]
+    public void Manifest_command_reports_app_build_and_serialized_identity()
+    {
+        using var fixture =
+            SyntheticAssetFactory.WithShaderBuildSettingsAndPlayerSettings(
+                [18],
+                [17, 21],
+                "6000.0.61f1",
+                "1.5.12620");
+        var dataRoot = CreateDataRoot(fixture, "globalgamemanagers");
+        File.WriteAllText(
+            Path.Combine(dataRoot, "app.info"),
+            "Team Cherry\nHollow Knight\n");
+        var streamingAssets = Path.Combine(dataRoot, "StreamingAssets");
+        Directory.CreateDirectory(streamingAssets);
+        File.WriteAllText(
+            Path.Combine(streamingAssets, "BuildMetadata.json"),
+            """{"branchName":"release-1","revision":"12620"}""");
+        var reportPath = Path.Combine(fixture.Root, "inventory.json");
+
+        var exitCode = Program.Main(
+            ["manifest-classic-tree", dataRoot, reportPath]);
+
+        Assert.Equal(0, exitCode);
+        using var report = JsonDocument.Parse(File.ReadAllText(reportPath));
+        var identity = report.RootElement.GetProperty("identity");
+        Assert.Equal("Team Cherry", identity.GetProperty("companyName").GetString());
+        Assert.Equal("Hollow Knight", identity.GetProperty("productName").GetString());
+        Assert.Equal("1.5.12620", identity.GetProperty("gameVersion").GetString());
+        Assert.Equal("6000.0.61f1", identity.GetProperty("unityVersion").GetString());
+        Assert.Equal("LinuxPlayer", identity.GetProperty("platform").GetString());
+        Assert.Equal("release-1", identity.GetProperty("buildBranch").GetString());
+        Assert.Equal(12620, identity.GetProperty("buildRevision").GetInt32());
+    }
+
+    [Fact]
+    public void Create_profile_manifest_command_writes_valid_exact_actions()
+    {
+        using var fixture =
+            SyntheticAssetFactory.WithShaderBuildSettingsAndPlayerSettings(
+                [18],
+                [17, 21],
+                "6000.0.61f1",
+                "1.5.12620");
+        var dataRoot = CreateDataRoot(
+            fixture,
+            "globalgamemanagers",
+            "sharedassets0.assets");
+        File.WriteAllBytes(
+            Path.Combine(dataRoot, "sharedassets0.assets.resS"),
+            [1, 2]);
+        var managedRoot = Path.Combine(dataRoot, "Managed");
+        Directory.CreateDirectory(managedRoot);
+        File.WriteAllBytes(Path.Combine(managedRoot, "Assembly-CSharp.dll"), [3]);
+        var pluginsRoot = Path.Combine(dataRoot, "Plugins");
+        Directory.CreateDirectory(pluginsRoot);
+        File.WriteAllBytes(Path.Combine(pluginsRoot, "libsteam_api.so"), [4]);
+        var resourcesRoot = Path.Combine(dataRoot, "Resources");
+        Directory.CreateDirectory(resourcesRoot);
+        File.Copy(
+            fixture.InputPath,
+            Path.Combine(resourcesRoot, "unity default resources"));
+        File.WriteAllText(
+            Path.Combine(dataRoot, "app.info"),
+            "Team Cherry\nHollow Knight\n");
+        var streamingAssets = Path.Combine(dataRoot, "StreamingAssets");
+        Directory.CreateDirectory(streamingAssets);
+        File.WriteAllText(
+            Path.Combine(streamingAssets, "BuildMetadata.json"),
+            """{"branchName":"release-1","revision":"12620"}""");
+        var manifestPath = Path.Combine(fixture.Root, "profile-manifest.json");
+
+        var exitCode = Program.Main(
+            [
+                "create-classic-profile-manifest",
+                dataRoot,
+                "hollow-knight",
+                "1.5.12620",
+                "6000.0.61f1",
+                manifestPath,
+            ]);
+
+        Assert.Equal(0, exitCode);
+        Assert.True(File.Exists(manifestPath));
+        Assert.False(File.Exists(manifestPath + ".part"));
+        var manifestText = File.ReadAllText(manifestPath);
+        Assert.DoesNotContain('\r', manifestText);
+        Assert.EndsWith("\n", manifestText, StringComparison.Ordinal);
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+        };
+        var manifest = JsonSerializer.Deserialize<ClassicProfileManifest>(
+            File.ReadAllText(manifestPath),
+            options);
+        Assert.NotNull(manifest);
+        var inventory = ClassicPlayerTree.Discover(dataRoot);
+        Assert.NotNull(ClassicPlayerTree.Validate(inventory, manifest!).Layout);
+        var actions = manifest.RequiredFiles.ToDictionary(
+            file => file.RelativePath,
+            file => file.Action,
+            StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(ClassicManifestAction.Transform, actions["globalgamemanagers"]);
+        Assert.Equal(ClassicManifestAction.Copy, actions["Managed/Assembly-CSharp.dll"]);
+        Assert.Equal(ClassicManifestAction.Copy, actions["sharedassets0.assets.resS"]);
+        Assert.Equal(ClassicManifestAction.Exclude, actions["Plugins/libsteam_api.so"]);
+        Assert.Equal(
+            ClassicManifestAction.ReplaceAtAssembly,
+            actions["Resources/unity default resources"]);
+    }
+
+    [Fact]
+    public void Create_hollow_knight_manifest_rejects_a_wrong_build_revision()
+    {
+        using var fixture =
+            SyntheticAssetFactory.WithShaderBuildSettingsAndPlayerSettings(
+                [18],
+                [17, 21],
+                "6000.0.61f1",
+                "1.5.12620");
+        var dataRoot = CreateDataRoot(fixture, "globalgamemanagers");
+        File.WriteAllText(
+            Path.Combine(dataRoot, "app.info"),
+            "Team Cherry\nHollow Knight\n");
+        var streamingAssets = Path.Combine(dataRoot, "StreamingAssets");
+        Directory.CreateDirectory(streamingAssets);
+        File.WriteAllText(
+            Path.Combine(streamingAssets, "BuildMetadata.json"),
+            """{"branchName":"release-1","revision":"12620"}""");
+        var manifestPath = Path.Combine(fixture.Root, "profile-manifest.json");
+
+        var exitCode = Program.Main(
+            [
+                "create-classic-profile-manifest",
+                dataRoot,
+                "hollow-knight",
+                "1.5.12612",
+                "6000.0.61f1",
+                manifestPath,
+            ]);
+
+        Assert.Equal(3, exitCode);
+        Assert.False(File.Exists(manifestPath));
     }
 
     [Fact]
@@ -712,7 +928,7 @@ public sealed class ClassicPlayerTreeTests
                 file.OwnerRelativePath))
             .Concat(additionalFiles)
             .ToArray();
-        return new ClassicProfileManifest(
+        var manifest = new ClassicProfileManifest(
             1,
             "hollow-knight",
             "1.5.12620",
@@ -720,6 +936,10 @@ public sealed class ClassicPlayerTreeTests
             "linux",
             files,
             1,
-            new string('1', 64));
+            string.Empty);
+        return manifest with
+        {
+            ManifestSha256 = ClassicPlayerTree.ComputeManifestSha256(manifest),
+        };
     }
 }
