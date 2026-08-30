@@ -1182,7 +1182,7 @@ git commit -m "feat: share the Vulkan dual-screen runtime"
 - Create: `tools/depot-to-apk/shell/res/mipmap-*/ic_launcher_round.png`
 - Create: `docs/icon-source/ATTRIBUTION.md`
 
-- [ ] **Step 1: Set a non-colliding package identity**
+- [x] **Step 1: Set a non-colliding package identity**
 
 Change build defaults to:
 
@@ -1206,7 +1206,7 @@ generative image tools. Verify the unchanged composition under circle,
 squircle, rounded-square, and OEM adaptive masks. Retain the other supplied
 components for possible launcher UI use and record their provenance.
 
-- [ ] **Step 3: Verify packaged identity and icon resources**
+- [x] **Step 3: Verify packaged identity and icon resources**
 
 Run `make dev`, then:
 
@@ -1219,7 +1219,7 @@ Expected: package `io.github.darkaxt.dualsouls`, label `Dual Souls`, matching
 version, non-debuggable release output when `DEBUGGABLE=0`, and a verified
 signature.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tools/depot-to-apk src/SilksongLauncher.Launcher/app/src/main/res \
@@ -1231,9 +1231,9 @@ git commit -m "feat: establish Dual Souls product identity"
 
 **Partial execution note (2026-08-30):** The user requested the GitHub signing
 slice early. The stable identity, certificate pin, no-timeout release job,
-current package/version assertions, upload/redownload verification, and dry-run
-proof are complete. Continuous `check.yml`, final Task 16 product naming, full
-legal/build documentation, warning cleanup, and release/device gates remain.
+final package/version assertions, upload/redownload verification, and dry-run
+proof are complete. Continuous `check.yml`, full legal/build documentation,
+warning cleanup, aligned release-tag proof, and release/device gates remain.
 
 **Files:**
 - Create: `.github/workflows/check.yml`
@@ -1255,7 +1255,7 @@ Remove `timeout-minutes` from `release.yml` and do not add it to `check.yml`.
 Retain `concurrency.cancel-in-progress: false` for releases. Workflow progress
 is visible through step logs and job heartbeats rather than cancellation.
 
-- [ ] **Step 3: Adapt release identity and signing documentation**
+- [x] **Step 3: Adapt release identity and signing documentation**
 
 Keep the existing stable-keystore contract with these secrets:
 

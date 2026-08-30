@@ -15,7 +15,8 @@ The new fork identity is:
 
 ```text
 policy: hollowknightandroid
-current package: com.jakobkhansen.silksong
+package at this original proof: com.jakobkhansen.silksong
+final product package: io.github.darkaxt.dualsouls
 alias: hollowknightandroid-release
 certificate SHA-256: 324b3a3e854b69d567d1527ae52e96a1051adf13550b485e320f8ce8cf678c38
 ```
@@ -60,7 +61,8 @@ The job completed successfully in 4 minutes 46 seconds. It proved:
 - the APK signer matches the committed certificate pin;
 - the uploaded GitHub artifact downloads into a fresh runner directory;
 - the downloaded hash and signer still match; and
-- the publish step is skipped, leaving tag/release `v1.0.3` absent.
+- the publish step is skipped and creates no release or new tag. The inherited
+  `v1.0.3` tag was later confirmed to point to upstream commit `d504275`.
 
 The artifact was then downloaded independently from the completed run into a
 unique `D:\Temp` verification root and checked with local Android SDK tools:
@@ -87,12 +89,9 @@ Unity-player, or private-keystore entries among the APK's 252 ZIP entries.
   migration that preserves generated state, saves, source selection, and
   encrypted credentials is still required before Task 4 can close. Two
   sequential fork-signed builds must then prove update-in-place.
-- **BLOCKER — final release contract:** no tag or release was published, and the
-  artifact was deliberately not installed or exercised. Task 18 retains those
-  gates.
-- **BLOCKER — final product alignment:** Task 16 has not changed the package,
-  label, and artifact name to the final combined product identity. The current
-  workflow pins the existing package so an accidental identity change fails.
+- **BLOCKER — final release contract:** no new tag or release was published,
+  and the artifact was deliberately not installed or exercised. Task 18
+  retains those gates.
 - **BLOCKER — identical-input reproducibility:** two successful artifacts came
   from different commits, so their differing whole-file hashes do not test
   deterministic rebuilding of one exact revision. Repeat the same commit twice
@@ -109,3 +108,16 @@ Unity-player, or private-keystore entries among the APK's 252 ZIP entries.
 Task 8 remains forbidden while Task 4's device regression is blocked. This
 signing slice changes the available migration identity; it does not substitute
 for that regression.
+
+## Product-identity follow-up
+
+Task 16 later established and signed the final `io.github.darkaxt.dualsouls`
+package, `Dual Souls` label, and `DualSouls-1.0.3.apk` artifact in dry run
+`33305033556`. The original final-product-alignment blocker is therefore
+resolved at the packaged APK level; see
+`docs/verification/product-identity-2026-08-30.md`.
+
+Publication remains blocked. The inherited `v1.0.3` tag points to upstream
+commit `d504275`, not the product-identity commit, and no GitHub release exists.
+The new non-colliding package also does not by itself adopt the installed
+upstream package's data or prove device behavior.
