@@ -1227,6 +1227,12 @@ git commit -m "feat: establish Dual Souls product identity"
 
 ### Task 17: Add continuous checks and adapt the signed release workflow
 
+**Partial execution note (2026-08-30):** The user requested the GitHub signing
+slice early. The stable identity, certificate pin, no-timeout release job,
+current package/version assertions, upload/redownload verification, and dry-run
+proof are complete. Continuous `check.yml`, final Task 16 product naming, full
+legal/build documentation, warning cleanup, and release/device gates remain.
+
 **Files:**
 - Create: `.github/workflows/check.yml`
 - Modify: `.github/workflows/release.yml`
@@ -1241,7 +1247,7 @@ runs `make test`, builds the launcher APK with an ephemeral debug key, verifies
 that no forbidden game filenames or extensions are tracked, and uploads test
 reports. It does not download a game depot.
 
-- [ ] **Step 2: Remove elapsed-time cancellation from workflows**
+- [x] **Step 2: Remove elapsed-time cancellation from workflows**
 
 Remove `timeout-minutes` from `release.yml` and do not add it to `check.yml`.
 Retain `concurrency.cancel-in-progress: false` for releases. Workflow progress
@@ -1278,7 +1284,7 @@ requirements, emulator limits, on-device build flow, mod/skin formats,
 dual-screen device gate, signing backup requirement, and the prohibition on
 committing game/Unity content.
 
-- [ ] **Step 6: Run a dry release and commit**
+- [x] **Step 6: Run a dry release and commit**
 
 Dispatch `Release APK` with `dry_run=true`. Expected: checks pass, a signed
 artifact is downloadable from the workflow, no tag or GitHub release is
