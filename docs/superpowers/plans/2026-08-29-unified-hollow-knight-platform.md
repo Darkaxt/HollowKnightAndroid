@@ -362,13 +362,13 @@ git commit -m "feat: isolate profile storage and selection"
 - Modify: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/PlayerImage.kt`
 - Test: `src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/SilksongRegressionTest.kt`
 
-- [ ] **Step 1: Write regression tests for current constants**
+- [x] **Step 1: Write regression tests for current constants**
 
 Assert that `SilksongProfile` carries the existing Steam depot ID, Unity
 version, data directory, executable, and Addressables root expected by
 `PlayerImage`.
 
-- [ ] **Step 2: Replace hard-coded game constants with a profile parameter**
+- [x] **Step 2: Replace hard-coded game constants with a profile parameter**
 
 Change entry points to accept `GameProfile` and `ProfilePaths`, for example:
 
@@ -394,6 +394,14 @@ Silksong profile or rebuilt without touching the source depot.
 
 - [ ] **Step 4: Device smoke test on `bfa98654`**
 
+Blocked on 2026-08-30 before any data migration: Android rejected the locally
+signed 1.0.3 update because the existing upstream-signed 1.0.3 uses a different
+certificate. The upstream private key is not present locally and the public
+fork has no signing secrets configured. Do not bypass this by uninstalling the
+working app; unblock with a matching key or an explicitly approved one-time
+migration to a stable fork signing identity, then run the commands below and
+exercise Play.
+
 Run:
 
 ```bash
@@ -404,7 +412,7 @@ adb -s bfa98654 shell monkey -p com.jakobkhansen.silksong 1
 Expected: launcher opens, the Silksong profile is selected, and Play starts
 the same game path as the base revision.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/SilksongLauncher.Launcher/app/src/main/kotlin \

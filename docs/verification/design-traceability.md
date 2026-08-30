@@ -1,11 +1,15 @@
 # Unified Platform Design Traceability
 
-Last cross-check: 2026-08-30, Task 7 exact Hollow Knight source validation.
+Last cross-check: 2026-08-30, Task 4 Silksong profile-routing host gate and
+device-install attempt.
 
 States follow the design contract: `COMPLETE`, `BLOCKER`, `DEFERRED`, and
 `NOT-STARTED`. `NOT-STARTED` means the planned milestone has not begun. The
-Task 4 blocker prevents either Milestone 1 or Milestone 2 from closing, but the
-approved local-first POC exception permits independent Tasks 5–7.
+Task 4 is host-complete but device-blocked: the existing installation uses the
+upstream release certificate and the matching private key is not available.
+That prevents either Milestone 1 or Milestone 2 from closing. The approved
+local-first POC exception permitted independent Tasks 5–7 only; it does not
+permit Task 8 to begin.
 
 | Requirement | Planned milestone | State | Evidence or gap | Dependency | Acceptance test |
 |---|---:|---|---|---|---|
@@ -41,12 +45,12 @@ approved local-first POC exception permits independent Tasks 5–7.
 | Architecture: unknown versions fail closed | 2 | NOT-STARTED | Exact validator has not begun | Profile manifests | Unknown fixture returns `UNKNOWN_VERSION` with exact property |
 | Architecture: toolchains shared by content hash/version | 3 | NOT-STARTED | Toolchain registry has not begun | Exact descriptors | Wrong hash cannot affect another toolchain directory |
 | Architecture: profile path construction is isolated and contained | 1 | COMPLETE | `ProfilePathsTest` proves distinct roots, normalized containment, traversal rejection, absolute-ID rejection, and sibling-prefix safety | None | Targeted ProfilePaths test suite passes |
-| Architecture: existing game pipeline uses only profile-scoped storage | 1 | BLOCKER | Path primitives exist, but Task 4 has not routed the current Silksong pipeline through them | Task 4 regression | Silksong builds/launches through `profiles/silksong` without touching a Hollow Knight root |
+| Architecture: existing game pipeline uses only profile-scoped storage | 1 | BLOCKER | Task 4 routes setup, download, build, package, reset, shell libraries, and logs through `profiles/silksong`; the catalog link alone uses unique compact namespace `p/ss` to fit its fixed 56-byte field. Ten Robolectric regressions and the APK build pass, but the installed legacy generation could not be adopted because Android rejected the differently signed update | Matching upstream key or an explicitly approved one-time migration to the fork signing identity | Install the matching-signed APK, prove legacy roots move only to the Silksong profile, then launch without touching the Hollow Knight root |
 | Architecture: source depot remains untouched | 2–3 | COMPLETE | Repeated read-only current-source inventories retain tree SHA-256 `1319a0ea…daa42f8`; the generator writes only the disjoint manifest path | None for validation/generation | Before/after current-source content and timestamp manifests agree |
 | Architecture: atomic generation publication and rollback | 3 | NOT-STARTED | Generation publisher has not begun | Profile paths | Injected-failure tests retain previous current generation |
 | Architecture: shared provisioning state machine | 3 | NOT-STARTED | Build coordinator has not begun | Profiles, validator, converters | Structured stages execute and report profile-scoped evidence |
 | Architecture: cooperative cancellation, no elapsed-time cancellation | 3 | NOT-STARTED | Coordinator has not begun | Atomic staging jobs | Cancellation test removes only its owned staging job |
-| Architecture: Silksong Addressables conversion preserved | 1 | BLOCKER | Task 4 regression has not run; independent converter POC cannot close this gate | Existing Silksong Linux depot and Thor | `make test`, `make check`, launcher build/install, then force-stop/monkey and Play on `bfa98654` reproduce base path |
+| Architecture: Silksong Addressables conversion preserved | 1 | BLOCKER | Android tests and all 36 converter tests pass; 32 patch sources compile against the encrypted current Linux archive; a 67 MB APK builds. `adb install -r` fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE` because installed cert `16a868fe…dd9e` differs from local debug cert `06197430…a934`, so launch equivalence is not yet proven | Matching upstream key or explicitly approved signing-identity migration | Matching-signed install, force-stop/monkey, selected-profile check, and Play on `bfa98654` reproduce the base game path |
 | Architecture: Hollow Knight classic discovery by content | 2 | COMPLETE | Task 6 discovers extensionless serialized files by header, sorts numeric names within directories, binds exact sidecars, and emits deterministic hashes; live reparse-fixture coverage is a tracked deferral because project policy forbids symlinks | Non-symlink reparse integration fixture before promotion | 24 focused legal-synthetic tests pass, then the integration fixture rejects a reparse path |
 | Architecture: every serialized file becomes Android/Vulkan | 2 | BLOCKER | Task 6 traverses and rewrites every manifest-selected synthetic serialized file to target 13/Vulkan; current 1.5.12620 coverage is unproven | Task 7 and current archive access | Current full report shows target 13 and zero missing Vulkan |
 | Architecture: built-ins replaced and sidecars preserved | 2–3 | BLOCKER | Task 6 preserves sidecar bytes and reports desktop built-ins as `REPLACEMENT_REQUIRED`; Android built-in assembly is deliberately absent | Task 10 | Sidecar hashes match and Android built-ins are installed |
@@ -67,8 +71,8 @@ approved local-first POC exception permits independent Tasks 5–7.
 | Recovery: resume/discard exact staging job only | 2–3 | NOT-STARTED | Resume/coordinator work has not begun | Content hashes and job IDs | Interruption test preserves source and other jobs |
 | Recovery: unsupported/corrupt input fails before replacement | 2–3 | NOT-STARTED | Validators have not begun | Exact manifests | Error matrix retains previous generation |
 | Recovery: logs identify profile/stage/artifact without credentials | 3 | NOT-STARTED | Structured logging has not begun | Coordinator | Redaction and structured-event tests pass |
-| Recovery: reset is profile-scoped | 3–4 | NOT-STARTED | Reset refactor has not begun | Profile paths | Reset matrix preserves other game/library/saves/credentials |
-| Recovery: encrypted Steam credential boundary is retained | 1–4 | NOT-STARTED | Profile refactor has not been regression-tested | Existing encrypted store | Login survives refactor without plaintext storage/logging |
+| Recovery: reset is profile-scoped | 3–4 | BLOCKER | `BuildReset.clearGenerated` removes only the selected profile package/build/staging/link and its test preserves the other profile, source pointer/depot, Unity, and toolchain; settings remain shared until the planned isolation work | Tasks 9 and 11 settings/generation model | Full reset matrix preserves the other game, shared library, saves, credentials, and previous valid generation |
+| Recovery: encrypted Steam credential boundary is retained | 1–4 | BLOCKER | Task 4 does not change `TokenStore`, but the signing mismatch prevents an in-place device regression proving the existing encrypted login survives | Matching-signed update | Existing login remains usable after the Task 4 APK update without plaintext storage or logging |
 | Host test: profile registry | 1 | COMPLETE | `GameProfilesTest` passes for registry, current/compatibility versions, and unknown IDs | None | Targeted GameProfiles test suite passes |
 | Host test: selected-profile persistence | 1 | COMPLETE | `SelectedGameStoreTest` covers default, recreation, unknown stored IDs, and unregistered-profile rejection | None | Targeted SelectedGameStore suite passes |
 | Host test: exact source-manifest validation | 2 | COMPLETE | Kotlin covers all six statuses, semantic hash/action tampering, extra files, and the real 1.5.12620 report with no skip | None | Full Android host suite passes 28/28 with real evidence variables set |
@@ -78,7 +82,7 @@ approved local-first POC exception permits independent Tasks 5–7.
 | Host test: atomic generation/recovery | 3 | NOT-STARTED | Publisher tests have not begun | Task 9 | Injected-failure suite passes |
 | Host test: mod/skin manifests and safe mode | 5 | NOT-STARTED | Library tests have not begun | Tasks 12–14 | Compatibility/collision/safe-mode suites pass |
 | Host test: death-to-respawn rotation | 5 | NOT-STARTED | Rotation tests have not begun | Task 13 | State-transition suite passes |
-| Host test: launcher/settings/reset isolation | 1–4 | NOT-STARTED | Storage and launcher tests have not begun | Tasks 3, 9, 11 | Robolectric isolation suite passes |
+| Host test: launcher/settings/reset isolation | 1–4 | BLOCKER | Task 4 covers generated-path/reset isolation and profile-id handoff; selector navigation and per-profile settings isolation remain unimplemented | Tasks 9 and 11 | Robolectric selector, settings, generation, and reset matrix passes |
 | Emulator: Robolectric covers fakeable UI/state behavior | 1–5 | COMPLETE | The host runner loads real Android resources and runs current profile/path/selection suites; later features add their own rows and tests | Pinned Gradle/Android player module | `:app:testDebugUnitTest` passes on the host |
 | Emulator: x86-64 is optional and not native evidence | Boundary | COMPLETE | Design and plan explicitly exclude it as release proof | None | Traceability cites no x86 native/device claims |
 | Device gate 1: clean provisioning for both Linux sources | Release | NOT-STARTED | Device matrix has not begun | Both profiles | Clean source-to-ready run passes per profile |
@@ -93,6 +97,6 @@ approved local-first POC exception permits independent Tasks 5–7.
 | Device gate 10: update/rollback without loss | Release | NOT-STARTED | Generation/update work has not begun | Atomic publisher | Update and rollback preservation matrix passes |
 | Release gate: repository/APK contain no proprietary content | 7 | NOT-STARTED | Baseline repository is clean; APK gate has not begun | Final artifact | Tracked-file and APK scans pass |
 | Release gate: clean CI builds and tests | 7 | NOT-STARTED | Unified CI has not begun | Non-proprietary harness | Clean-checkout workflow passes |
-| Release gate: signing secrets stay out of source/logs | 7 | NOT-STARTED | Signing adaptation has not begun | Repository secrets | Published workflow logs/artifacts pass secret scan |
+| Release gate: signing secrets stay out of source/logs | 7 | BLOCKER | The workflow supports repository secrets but the public fork has none configured; no matching Silksong release keystore was found locally, and the upstream private key cannot be derived from its APK certificate | Generate and secure a stable fork key plus explicitly choose the one-time transition from the upstream identity | Published workflow uses the stable fork certificate, logs reveal no secret, and subsequent releases update in place |
 | Release gate: numeric identifiers all agree | 7 | NOT-STARTED | Unified versioning has not begun | Release workflow | APK/tag/title/filename assertions pass |
 | Release gate: downloaded APK is reverified and exercised | 7 | NOT-STARTED | Publication has not begun | Signed release | Fresh-download hash/signature/update/both-profile smoke passes |
