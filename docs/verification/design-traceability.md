@@ -1,7 +1,7 @@
 # Unified Platform Design Traceability
 
-Last cross-check: 2026-08-30, emulator Stage 4 non-publishable lab APK,
-synthetic runtime, atomic recovery, and shared death-rotation state machine.
+Last cross-check: 2026-08-30, emulator Stage 5 dedicated-AVD tooling after
+the Stage 4 lab APK and shared synthetic-runtime slice.
 
 States follow the design contract: `COMPLETE`, `BLOCKER`, `DEFERRED`, and
 `NOT-STARTED`. `NOT-STARTED` means the planned milestone has not begun. The
@@ -92,7 +92,7 @@ close an ARM64-device gate.
 | Host test: launcher/settings/reset isolation | 1–4 | BLOCKER | The combined host gate passes 74 tests with zero failures/errors and one intentional skip, including 68 shared-library tests and 6 lab-runtime tests. Atomic production generations and cold Android switching remain absent | Emulator Stage 5 and parent Tasks 9/11 | Full generation and process-switch matrix passes |
 | Emulator: Robolectric covers fakeable UI/state behavior | 1–5 | COMPLETE | The host runner loads real Android resources; the Task 16 gate passes 38 tests with 37 passed and one intentional skip, including the final launcher label contract | Pinned Gradle/Android player module | `:app:testDebugUnitTest` passes on the host |
 | Emulator: x86-64 is not native evidence | Boundary | COMPLETE | Design and plan explicitly exclude it as release proof | None | Traceability cites no x86 native/device claims |
-| Emulator: dedicated fake-runtime integration instance | Lab | BLOCKER | The debug-only `io.github.darkaxt.dualsouls.emutest` APK now packages the real launcher with explicit fake-runtime metadata and existing user artwork. Its inspected 18,821,586-byte APK contains zero ARM64 entries and zero Mono BCL assets; the production release AAR still contains 11 ARM64 and 172 Mono BCL entries. Dedicated AVD tooling and instrumentation remain open | Emulator Stage 5 | Exact `DualSoulsLabApi35` AVD runs the separately identified lab APK and passes launcher/profile/storage/recovery integration without claiming native proof |
+| Emulator: dedicated fake-runtime integration instance | Lab | BLOCKER | Script contracts pass for exact image/device/home/create arguments, mismatched-definition rejection, exact-name serial resolution, no first-device fallback, and Thor refusal. The persistent AVD validates and boots as `DualSoulsLabApi35`, `emulator-5554`, API 35, x86_64, while `bfa98654` remains excluded. APK installation and instrumentation remain open | Emulator Stage 5 instrumentation | The separately identified lab APK passes launcher/profile/storage/recovery integration without claiming native proof |
 | Device gate 1: clean provisioning for both Linux sources | Release | NOT-STARTED | Device matrix has not begun | Both profiles | Clean source-to-ready run passes per profile |
 | Device gate 2: exact toolchain and on-device IL2CPP | Release | NOT-STARTED | Device matrix has not begun | Toolchain registry | Logs and artifact hashes prove exact components |
 | Device gate 3: menu and representative gameplay | Release | NOT-STARTED | Device matrix has not begun | Playable generations | Both profiles enter gameplay |

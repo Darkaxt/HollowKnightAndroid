@@ -365,7 +365,7 @@ git commit -m "feat: add non-publishable Dual Souls lab app"
 - Create: `tools/emulator/Get-DualSoulsLabDevice.ps1`
 - Create: `tools/emulator/Test-DualSoulsLabScripts.ps1`
 
-- [ ] **Step 1: Write failing script contract tests**
+- [x] **Step 1: Write failing script contract tests**
 
 The tests import the module with fake command adapters and prove: exact system-image/device/AVD arguments, `ANDROID_AVD_HOME=D:\Android\avd`, mismatched existing AVD rejection, exact AVD-name serial selection, no fallback to the first device, and refusal to return serial `bfa98654`.
 
@@ -375,18 +375,18 @@ pwsh -NoProfile -File tools\emulator\Test-DualSoulsLabScripts.ps1
 
 Expected: failure because `DualSoulsLab.psm1` does not exist.
 
-- [ ] **Step 2: Implement exact AVD tooling**
+- [x] **Step 2: Implement exact AVD tooling**
 
 Use the installed SDK tools, `pixel_6`, and `system-images;android-35;google_apis;x86_64`. Create `D:\Android\avd` directly, with no symlink. Existing matching definitions validate without reset; mismatches fail. Start only the exact named AVD. Determine its serial by enumerating emulator serials and querying each with `adb -s <serial> emu avd name`; print heartbeats while boot properties are not ready and never cancel by elapsed time.
 
-- [ ] **Step 3: Run script tests and create the AVD**
+- [x] **Step 3: Run script tests and create the AVD**
 
 ```powershell
 pwsh -NoProfile -File tools\emulator\Test-DualSoulsLabScripts.ps1
 pwsh -NoProfile -File tools\emulator\New-DualSoulsLabAvd.ps1
 ```
 
-- [ ] **Step 4: Start and validate the exact AVD**
+- [x] **Step 4: Start and validate the exact AVD**
 
 ```powershell
 pwsh -NoProfile -File tools\emulator\Start-DualSoulsLabAvd.ps1
@@ -395,7 +395,7 @@ pwsh -NoProfile -File tools\emulator\Get-DualSoulsLabDevice.ps1
 
 Require Android API 35, ABI `x86_64`, AVD name `DualSoulsLabApi35`, and a serial different from `bfa98654`.
 
-- [ ] **Step 5: Reconcile Stage 5 tooling and commit**
+- [x] **Step 5: Reconcile Stage 5 tooling and commit**
 
 ```powershell
 git add tools/emulator docs/verification/design-traceability.md
