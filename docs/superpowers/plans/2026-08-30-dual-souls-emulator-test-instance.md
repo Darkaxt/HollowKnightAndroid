@@ -410,11 +410,11 @@ git commit -m "test: add dedicated Dual Souls Android lab"
 - Create: `tools/emulator/Test-DualSoulsLab.ps1`
 - Create: `docs/verification/emulator-lab-2026-08-30.md`
 
-- [ ] **Step 1: Write failing instrumentation tests**
+- [x] **Step 1: Write failing instrumentation tests**
 
 Use ActivityScenario/Espresso and Android package APIs to prove both profiles render, selection persists after recreation, each profile provisions independently, failure retains the previous generation, one reset preserves the other, the banner is visible, and switch order records the old `:game` PID gone before the new profile launches.
 
-- [ ] **Step 2: Run instrumentation and verify RED**
+- [x] **Step 2: Run instrumentation and verify RED**
 
 ```powershell
 pwsh -NoProfile -File tools\emulator\Test-DualSoulsLab.ps1
@@ -422,11 +422,11 @@ pwsh -NoProfile -File tools\emulator\Test-DualSoulsLab.ps1
 
 Expected: instrumentation fails because the integration behavior/test hooks are incomplete.
 
-- [ ] **Step 3: Implement only the missing integration behavior**
+- [x] **Step 3: Implement only the missing integration behavior**
 
 Use Espresso idling resources backed by runtime state transitions; do not add fixed sleeps. The wrapper builds the debug APK/test APK, resolves the exact AVD serial, installs with `adb -s`, runs the exact instrumentation runner, captures package/process/storage evidence, and labels the report `EMULATOR-FAKE`.
 
-- [ ] **Step 4: Run the complete lab gate**
+- [x] **Step 4: Run the complete lab gate**
 
 ```powershell
 pwsh -NoProfile -File tools\emulator\Test-DualSoulsLab.ps1
@@ -434,7 +434,7 @@ pwsh -NoProfile -File tools\emulator\Test-DualSoulsLab.ps1
 
 Expected: script/unit/host/instrumentation/package checks all pass with zero test failures.
 
-- [ ] **Step 5: Reconcile Stage 5 and commit**
+- [x] **Step 5: Reconcile Stage 5 and commit**
 
 Update `docs/verification/emulator-lab-2026-08-30.md` with commands, exact AVD/serial/API/ABI, APK SHA-256, test counts, and scoped claims. Update every applicable traceability row; leave all ARM64/gameplay/Thor/release rows open.
 
@@ -498,19 +498,19 @@ git push fork design/unified-hollow-knight-platform
 
 | Requirement | Stage | Initial state | Completion evidence |
 |---|---:|---|---|
-| Dedicated API 35 x86-64 AVD on `D:` | 5 | NOT-STARTED | Exact definition, API/ABI/name/serial evidence |
-| Exact emulator targeting; Thor excluded | 5 | NOT-STARTED | Script tests plus resolved serial evidence |
-| Real launcher/profile/storage code in lab | 2–4 | DEFERRED | Runtime contract is shared; activity routing and lab module are Stages 3–4 |
-| Fake only native Unity/Mono/IL2CPP boundary | 2–4 | DEFERRED | Fail-closed exact-package provider is complete; lab implementation and APK inspection are Stage 4 |
-| Both profile selection and persistence | 3–5 | DEFERRED | 5 selector/setup Robolectric tests pass; rendered Android instrumentation remains Stage 5 |
-| Atomic synthetic generations/recovery | 1, 4–5 | DEFERRED | Publisher API has 6 green host tests; lab and Android integration remain Stages 4–5 |
-| Profile-scoped reset/settings isolation | 3–5 | DEFERRED | Host tests prove settings migration and reset isolation; Android integration remains Stage 5 |
-| Synthetic cold game process switching | 4–5 | NOT-STARTED | Recorded old/new PID ordering |
-| Visible `EMULATOR-FAKE` identity | 3–5 | NOT-STARTED | Rendered UI and log/report evidence |
+| Dedicated API 35 x86-64 AVD on `D:` | 5 | COMPLETE | `DualSoulsLabApi35`, API 35/x86-64, persists under `D:\Android\avd` |
+| Exact emulator targeting; Thor excluded | 5 | COMPLETE | Script contracts plus real `emulator-5554` resolution; `bfa98654` refused |
+| Real launcher/profile/storage code in lab | 2–4 | COMPLETE | Merged real activity/profile/path/publisher code passes Android sandbox integration |
+| Fake only native Unity/Mono/IL2CPP boundary | 2–4 | COMPLETE | Fail-closed provider plus APK inspection prove exact lab metadata and zero ARM64 JNI entries |
+| Both profile selection and persistence | 3–5 | COMPLETE | Host tests plus rendered Android instrumentation and launcher-process restart pass |
+| Atomic synthetic generations/recovery | 1, 4–5 | COMPLETE | Seven publisher, six lab-runtime, and Android failure-retention/exact-discard tests pass |
+| Profile-scoped reset/settings isolation | 3–5 | COMPLETE | Host tests plus Android sandbox evidence prove sibling generation/current preservation |
+| Synthetic cold game process switching | 4–5 | COMPLETE | Android instrumentation proves old PID gone and new PID differs |
+| Visible `EMULATOR-FAKE` identity | 3–5 | COMPLETE | Runtime assertion plus clean post-instrumentation rendered UI dump pass |
 | No proprietary inputs or production-data access | 4–6 | NOT-STARTED | APK/source scan and lab runtime tests |
-| Existing user artwork only | 4 | NOT-STARTED | Resource provenance; no generated/edited image |
-| Production AAR/APK behavior unchanged | 3–6 | NOT-STARTED | Full host/build regression and artifact inspection |
+| Existing user artwork only | 4 | COMPLETE | Lab reuses the checked-in approved resources; no image generation/editing is present |
+| Production AAR/APK behavior unchanged | 3–6 | DEFERRED | Current host tests pass; fresh release AAR/APK regression and inspection are Stage 6 |
 | Production setup runtime delegation | 3, 6 | DEFERRED | Extracted implementation compiles; proven direct production path retained until final equivalence/remediation |
-| Lab cannot be signed or published | 4, 6 | NOT-STARTED | Disabled variant plus CI guard tests |
+| Lab cannot be signed or published | 4, 6 | DEFERRED | Lab has no release variant/signing config; explicit workflow/asset guards are Stage 6 |
 | Stage-by-stage design reconciliation | 1–6 | IN-PROGRESS | Traceability updates after every stage |
 | ARM64/device claims remain open | 1–6 | BLOCKER | Parent ledger retains device gates; lab cannot close them |

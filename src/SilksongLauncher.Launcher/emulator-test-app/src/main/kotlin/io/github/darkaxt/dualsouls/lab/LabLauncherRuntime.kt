@@ -11,6 +11,8 @@ import dev.silksong.launcher.runtime.RuntimeProgress
 import dev.silksong.launcher.runtime.RuntimeRequest
 import dev.silksong.launcher.runtime.RuntimeState
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 class LabLauncherRuntime : LauncherRuntime {
     companion object {
@@ -22,17 +24,28 @@ class LabLauncherRuntime : LauncherRuntime {
         fun failureKey(profileId: String): String = "fail-before-publish.$profileId"
 
         fun recordCleanExit(context: Context, profileId: String, generationId: String) {
-            check(
-                context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
-                    .edit()
-                    .putString("clean-exit.$profileId", generationId)
-                    .commit(),
-            ) { "Could not persist the lab game clean-exit marker" }
+            val marker = cleanExitFile(context, profileId)
+            marker.parentFile?.mkdirs()
+            val pending = File(marker.parentFile, "${marker.name}.next")
+            pending.writeText(generationId)
+            Files.move(
+                pending.toPath(),
+                marker.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
         }
 
         fun lastCleanExit(context: Context, profileId: String): String? =
-            context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
-                .getString("clean-exit.$profileId", null)
+            cleanExitFile(context, profileId).takeIf(File::isFile)?.readText()
+
+        fun clearCleanExit(context: Context, profileId: String): Boolean =
+            cleanExitFile(context, profileId).delete()
+
+        private fun cleanExitFile(context: Context, profileId: String): File {
+            require(profileId.matches(Regex("[a-z0-9-]+"))) { "Invalid lab profile ID" }
+            return File(context.filesDir, "lab-runtime/clean-exits/$profileId")
+        }
     }
 
     override val evidenceKind = EvidenceKind.EMULATOR_FAKE
@@ -89,7 +102,10 @@ class LabLauncherRuntime : LauncherRuntime {
 
     override fun reset(request: RuntimeRequest): Long {
         val publisher = GenerationPublisher(request.paths.profilePaths)
-        return publisher.clearStaged() + publisher.clearPublished()
+        val exitBytes = cleanExitFile(request.context, request.profile.id)
+            .takeIf(File::isFile)?.length() ?: 0L
+        clearCleanExit(request.context, request.profile.id)
+        return publisher.clearStaged() + publisher.clearPublished() + exitBytes
     }
 
     override fun gameIntent(request: RuntimeRequest): Intent {

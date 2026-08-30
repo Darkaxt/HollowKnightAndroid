@@ -15,10 +15,10 @@
     <!-- Main launcher action buttons. -->
     <string name="action_log_in">Log in</string>
     <string name="action_log_in_as">Steam · Log out</string>
-    <string name="action_pull_saves">&#8595;  Download saves</string>
-    <string name="action_pull_saves_busy">Download saves</string>
-    <string name="action_push_saves">&#8593;  Upload saves</string>
-    <string name="action_push_saves_busy">Upload saves</string>
+    <string name="action_pull_saves">Import saves</string>
+    <string name="action_pull_saves_busy">Import saves</string>
+    <string name="action_push_saves">Export saves</string>
+    <string name="action_push_saves_busy">Export saves</string>
     <string name="action_settings">Settings</string>
     <string name="action_logs">View logs</string>
     <string name="action_launch">Launch game</string>

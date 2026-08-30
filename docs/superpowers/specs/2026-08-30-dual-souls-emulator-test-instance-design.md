@@ -1,7 +1,7 @@
 # Dual Souls Emulator Test Instance
 
-**Status:** Implementation in progress; Stages 1–4 are reconciled and the
-dedicated AVD plus Android instrumentation remain open.
+**Status:** Implementation in progress; Stages 1–5 are reconciled and the
+production-regression/release-isolation stage remains open.
 
 **Date:** 2026-08-30
 

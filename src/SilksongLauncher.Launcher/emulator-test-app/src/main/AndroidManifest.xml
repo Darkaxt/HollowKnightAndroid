@@ -26,9 +26,27 @@
 
         <activity
             android:name="io.github.darkaxt.dualsouls.lab.LabGameActivity"
-            android:exported="false"
+            android:exported="true"
             android:process=":game"
             android:screenOrientation="sensorLandscape" />
+
+        <receiver
+            android:name="io.github.darkaxt.dualsouls.lab.LabGameControlReceiver"
+            android:exported="true"
+            android:process=":game">
+            <intent-filter>
+                <action android:name="io.github.darkaxt.dualsouls.lab.CLEAN_EXIT" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name="io.github.darkaxt.dualsouls.lab.LabLauncherControlReceiver"
+            android:exported="true"
+            android:process=":launcher">
+            <intent-filter>
+                <action android:name="io.github.darkaxt.dualsouls.lab.CLEAN_LAUNCHER_EXIT" />
+            </intent-filter>
+        </receiver>
 
         <service
             android:name="dev.silksong.launcher.MonoService"
