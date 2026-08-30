@@ -103,7 +103,7 @@ resolved at load time. The token is stored once and referenced by every
 location, so replacing that one string moves the entire content set:
 
 ```bash
-BundleSurgery patch-catalog-path catalog.bin out/catalog.bin /data/user/0/<pkg>/files/aa
+BundleSurgery patch-catalog-path catalog.bin out/catalog.bin /data/user/0/<pkg>/files/p/ss/aa
 ```
 
 Strings in the binary catalog are length-prefixed rather than terminated, so a

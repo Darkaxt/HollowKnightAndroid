@@ -2,6 +2,7 @@ package dev.silksong.launcher.profiles
 
 internal val HollowKnightProfile = GameProfile(
     id = "hollow-knight",
+    runtimeStorageKey = "hk",
     displayName = "Hollow Knight",
     steamAppId = 367520,
     steamDepotId = 367522,

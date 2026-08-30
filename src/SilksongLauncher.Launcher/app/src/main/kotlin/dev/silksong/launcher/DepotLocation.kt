@@ -39,6 +39,9 @@ import android.net.Uri
 import android.os.Environment
 import android.provider.DocumentsContract
 import java.io.File
+import dev.silksong.launcher.profiles.ProfileBuildPaths
+import dev.silksong.launcher.profiles.GameProfile
+import dev.silksong.launcher.profiles.GameProfiles
 
 object DepotLocation {
 
@@ -100,9 +103,29 @@ object DepotLocation {
     fun candidates(context: Context): List<File> =
         listOfNotNull(picked(context)) + appDirs(context)
 
+    fun candidates(context: Context, paths: ProfileBuildPaths): List<File> =
+        (listOfNotNull(picked(paths)) + appDirs(context, paths.profile) +
+            legacyAppDirs(context, paths.profile)).distinctBy { it.absolutePath }
+
+    private fun legacyAppDirs(context: Context, profile: GameProfile): List<File> =
+        if (profile.id == "silksong") {
+            context.getExternalFilesDirs(null).filterNotNull().map { File(it, "depot") }
+        } else {
+            emptyList()
+        }
+
     /** The app's own depot directory on each volume. Where a download goes. */
     fun appDirs(context: Context): List<File> =
         context.getExternalFilesDirs(null).filterNotNull().map { File(it, "depot") }
+
+    fun appDirs(context: Context, profile: GameProfile): List<File> {
+        require(GameProfiles.find(profile.id) == profile) {
+            "Depot paths require an exact registered profile: ${profile.id}"
+        }
+        return context.getExternalFilesDirs(null).filterNotNull().map {
+            File(it, "profiles/${profile.id}/depot")
+        }
+    }
 
     /**
      * The depot to use, or the primary app directory when there is none.
@@ -120,6 +143,10 @@ object DepotLocation {
         candidates(context).firstOrNull { usable(it) }
             ?: appDirs(context).firstOrNull()
 
+    fun resolve(context: Context, paths: ProfileBuildPaths): File? =
+        candidates(context, paths).firstOrNull { usable(paths.profile, it) }
+            ?: appDirs(context, paths.profile).firstOrNull()
+
     /**
      * Where a Steam download is written. Always ours, never the user's.
      *
@@ -128,12 +155,24 @@ object DepotLocation {
      */
     fun downloadTarget(context: Context): File? = appDirs(context).firstOrNull()
 
+    fun downloadTarget(paths: ProfileBuildPaths): File = paths.downloadDepot
+
     /** True when the game's files are somewhere this app can reach them. */
     fun present(context: Context): Boolean = candidates(context).any { usable(it) }
+
+    fun present(context: Context, paths: ProfileBuildPaths): Boolean =
+        candidates(context, paths).any { usable(paths.profile, it) }
 
     /** A folder holding a copy of the game this port can actually be built from. */
     private fun usable(dir: File): Boolean =
         PlayerImage.depotData(dir) != null && PlayerImage.foreignBuild(dir) == null
+
+    private fun usable(profile: GameProfile, dir: File): Boolean {
+        val data = PlayerImage.depotData(dir) ?: return false
+        return data.name == profile.dataDirectoryName &&
+            profile.executableNames.any { File(data.parentFile, it).isFile } &&
+            PlayerImage.foreignBuild(dir) == null
+    }
 
     // ── the pointer ────────────────────────────────────────────────────────
 
@@ -147,6 +186,12 @@ object DepotLocation {
         return path.takeIf { it.isNotEmpty() }?.let(::File)
     }
 
+    fun picked(paths: ProfileBuildPaths): File? {
+        val f = paths.profilePaths.sourcePointer.takeIf { it.isFile } ?: return null
+        val path = runCatching { f.readText().trim() }.getOrNull().orEmpty()
+        return path.takeIf { it.isNotEmpty() }?.let(::File)?.absoluteFile
+    }
+
     /**
      * Remembers a picked folder, for this process and for the game's.
      *
@@ -155,7 +200,16 @@ object DepotLocation {
      */
     fun remember(context: Context, dir: File) {
         val out = pointerFile(context) ?: return
-        val tmp = File(out.parentFile, "$POINTER.part")
+        writePointer(out, dir)
+    }
+
+    fun remember(paths: ProfileBuildPaths, dir: File) {
+        writePointer(paths.profilePaths.sourcePointer, dir)
+    }
+
+    private fun writePointer(out: File, dir: File) {
+        out.parentFile?.mkdirs()
+        val tmp = File(out.parentFile, "${out.name}.part")
         try {
             tmp.writeText(dir.absolutePath)
             if (!tmp.renameTo(out)) {
@@ -186,6 +240,11 @@ object DepotLocation {
         context.getExternalFilesDir(null)?.let { File(it, CONTENT_POINTER).delete() }
     }
 
+    fun forget(paths: ProfileBuildPaths) {
+        paths.profilePaths.sourcePointer.delete()
+        paths.contentPointer.delete()
+    }
+
     /**
      * Points the game's process at the content tree, and links it here.
      *
@@ -212,6 +271,25 @@ object DepotLocation {
             // The link above is what the game reads; this only helps it repair
             // that link on its own, so a failure here is not fatal.
             LauncherLog.log("could not record the content path", t)
+        }
+    }
+
+    fun relink(paths: ProfileBuildPaths, depot: File) {
+        PlayerImage.linkContent(paths, depot)
+        val content = contentDir(paths.profile, depot) ?: return
+        val out = paths.contentPointer
+        try {
+            if (out.isFile && out.readText().trim() == content.absolutePath) return
+            out.parentFile?.mkdirs()
+            val tmp = File(out.parentFile, "${out.name}.part")
+            tmp.writeText(content.absolutePath)
+            if (!tmp.renameTo(out)) {
+                tmp.delete()
+                throw java.io.IOException("rename to $out")
+            }
+            LauncherLog.log("content for ${paths.profile.id}: $content")
+        } catch (t: Throwable) {
+            LauncherLog.log("could not record the content path for ${paths.profile.id}", t)
         }
     }
 
@@ -309,9 +387,38 @@ object DepotLocation {
         return null
     }
 
+    fun problemWith(profile: GameProfile, dir: File): String? {
+        if (!dir.isDirectory) {
+            return "that folder cannot be read. If it is on a memory card or a USB stick, " +
+                "try a folder in internal storage instead."
+        }
+        PlayerImage.wrongBuildProblem(dir)?.let {
+            return "$it.\n\nIn Steam, install ${profile.displayName} for Linux, or download depot " +
+                "${profile.steamDepotId} and choose that folder instead."
+        }
+        val data = PlayerImage.depotData(dir)
+        if (data == null || data.name != profile.dataDirectoryName ||
+            profile.executableNames.none { File(data.parentFile, it).isFile }) {
+            return "no game files in there: ${PlayerImage.depotProblem(dir)}.\n\n" +
+                "What has to be in the folder is \"${profile.dataDirectoryName}\" and " +
+                "everything beside it, from the game's Linux files."
+        }
+        if (!isWritable(contentDir(profile, dir) ?: dir)) {
+            return "that folder cannot be written to, and the game's content has to be " +
+                "converted in place. Some devices keep memory cards read-only for apps; " +
+                "if that folder is on one, copy the game to internal storage instead."
+        }
+        return null
+    }
+
     /** The Addressables tree, which is what the retarget rewrites. */
     private fun contentDir(depot: File): File? =
         PlayerImage.depotData(depot)?.let { File(it, "StreamingAssets/aa") }?.takeIf { it.isDirectory }
+
+    private fun contentDir(profile: GameProfile, depot: File): File? =
+        PlayerImage.depotData(depot)
+            ?.let { PlayerImage.addressablesContainer(profile, it) }
+            ?.takeIf { it.isDirectory }
 
     /**
      * Whether we may write in a directory, asked by writing in it.

@@ -32,6 +32,8 @@ import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import dev.silksong.launcher.profiles.GameProfile
+import dev.silksong.launcher.profiles.GameProfiles
 
 object DepotFetcher {
 
@@ -97,7 +99,17 @@ object DepotFetcher {
      * reason -- "some of it is on disk" is not the question anyone is asking.
      */
     fun isPresent(installDir: File): Boolean =
-        completeMarker(installDir).isFile && isPresentOnDisk(installDir)
+        isPresent(GameProfiles.require("silksong"), installDir)
+
+    fun isPresent(profile: GameProfile, installDir: File): Boolean {
+        val marker = completeMarker(installDir)
+        if (runCatching { marker.readText().trim() }.getOrNull() != profile.steamDepotId.toString()) {
+            return false
+        }
+        val data = PlayerImage.depotData(installDir) ?: return false
+        if (data.name != profile.dataDirectoryName) return false
+        return profile.executableNames.any { File(data.parentFile, it).isFile }
+    }
 
     /** The tree looks right, regardless of whether a run ever finished. */
     private fun isPresentOnDisk(installDir: File): Boolean =
@@ -148,6 +160,7 @@ object DepotFetcher {
      * matters for an 8 GB download on a connection that may well drop.
      */
     fun download(
+        profile: GameProfile,
         credentials: TokenStore.Credentials,
         installDir: File,
         stagingDir: File,
@@ -168,7 +181,7 @@ object DepotFetcher {
         // discarded. It is the only view into what the downloader is doing.
         LogManager.addListener(logForwarder)
 
-        LauncherLog.log("Downloading depot $DEPOT_ID to ${installDir.absolutePath}")
+        LauncherLog.log("Downloading ${profile.id} depot ${profile.steamDepotId} to ${installDir.absolutePath}")
         try {
             SteamSession().use { session ->
                 session.logOn(credentials)
@@ -225,14 +238,14 @@ object DepotFetcher {
 
                     downloader.add(
                         AppItem(
-                            appId = APP_ID,
+                            appId = profile.steamAppId,
                             installDirectory = installDir.absolutePath,
                             branch = BRANCH,
                             // Without this the downloader picks the depots for
                             // the platform it is running on, which here is
                             // Android and is not a platform this game ships.
                             os = "linux",
-                            depot = listOf(DEPOT_ID),
+                            depot = listOf(profile.steamDepotId),
                         )
                     )
                     downloader.finishAdding()
@@ -246,12 +259,15 @@ object DepotFetcher {
                 }
 
                 failure.get()?.let { throw RuntimeException("depot download failed: $it", it) }
-                if (!isPresentOnDisk(installDir))
-                    throw RuntimeException("depot downloaded but $DATA_DIR is missing")
+                val data = PlayerImage.depotData(installDir)
+                if (data == null || data.name != profile.dataDirectoryName ||
+                    profile.executableNames.none { File(data.parentFile, it).isFile }) {
+                    throw RuntimeException("depot downloaded but ${profile.dataDirectoryName} is missing")
+                }
 
                 // Only now, and only here: everything above has to have run
                 // without throwing for the depot to be worth trusting later.
-                completeMarker(installDir).writeText(DEPOT_ID.toString())
+                completeMarker(installDir).writeText(profile.steamDepotId.toString())
                 LauncherLog.log("Depot download complete")
                 send(Event.Done)
             }

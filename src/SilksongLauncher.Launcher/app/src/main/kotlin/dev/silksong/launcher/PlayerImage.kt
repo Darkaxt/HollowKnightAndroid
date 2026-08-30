@@ -47,6 +47,10 @@ import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.coroutines.coroutineContext
+import dev.silksong.launcher.profiles.ProfileBuildPaths
+import dev.silksong.launcher.profiles.ContentLayout
+import dev.silksong.launcher.profiles.GameProfile
+import dev.silksong.launcher.profiles.GameProfiles
 
 object PlayerImage {
 
@@ -57,13 +61,6 @@ object PlayerImage {
 
     /** 21 = Vulkan. Android has no OpenGLCore, which is what a Linux build leaves. */
     private const val GRAPHICS_APIS = "21"
-
-    /**
-     * The version the stock engine reports. The depot is stamped with an
-     * internal branch build of the same numeric version, which the engine will
-     * not load, so every serialized file is normalised to this.
-     */
-    private val UNITY_VERSION get() = UnityFetcher.UNITY_VERSION
 
     /**
      * Where the assembled image goes.
@@ -93,6 +90,32 @@ object PlayerImage {
      */
     fun contentRootFor(context: android.content.Context): String =
         "/data/user/0/${context.packageName}/files/aa"
+
+    fun contentRootFor(packageName: String, paths: ProfileBuildPaths): String {
+        val root = "/data/user/0/$packageName/files/p/${paths.profile.runtimeStorageKey}/aa"
+        require(root.toByteArray(Charsets.UTF_8).size <= 56) {
+            "Addressables content root exceeds the catalog field: $root"
+        }
+        return root
+    }
+
+    fun addressablesContainer(profile: GameProfile, dataDir: File): File {
+        require(GameProfiles.find(profile.id) == profile) {
+            "Addressables require an exact registered profile: ${profile.id}"
+        }
+        require(profile.contentLayout == ContentLayout.ADDRESSABLES) {
+            "${profile.id} does not use Addressables"
+        }
+        val groupRoot = requireNotNull(profile.addressablesRoot) {
+            "${profile.id} has no Addressables root"
+        }.replace('\\', '/')
+        val container = groupRoot.substringBeforeLast('/', missingDelimiterValue = "")
+        require(container.isNotEmpty() && !container.startsWith('/') &&
+            container.split('/').none { it == ".." }) {
+            "Unsafe Addressables root for ${profile.id}: $groupRoot"
+        }
+        return File(dataDir, container)
+    }
 
     fun isPresent(root: File): Boolean =
         File(imageDir(root), "globalgamemanagers").isFile &&
@@ -132,11 +155,11 @@ object PlayerImage {
      * or repaired one is copied straight into the image, and a stale image
      * fails much later and much less clearly than a redundant rebuild does.
      */
-    private fun imageStamp(root: File, depot: File): String {
+    private fun imageStamp(profile: GameProfile, root: File, depot: File): String {
         val metadata = File(Il2cppConverter.dataDir(root), "Metadata/global-metadata.dat")
         val ggm = depotData(depot)?.let { File(it, "globalgamemanagers") }
         return buildString {
-            append(UNITY_VERSION).append('\n')
+            append(profile.unityVersion).append('\n')
             append(GRAPHICS_APIS).append('\n')
             append(metadata.length()).append('/').append(metadata.lastModified()).append('\n')
             append(ggm?.length() ?: 0).append('/').append(ggm?.lastModified() ?: 0).append('\n')
@@ -151,13 +174,13 @@ object PlayerImage {
      * by the same step, and a current image says nothing about whether the
      * engine can actually read it -- data.apk is what it opens.
      */
-    fun isCurrent(root: File, pkgDir: File, depot: File): Boolean =
+    fun isCurrent(profile: GameProfile, root: File, pkgDir: File, depot: File): Boolean =
         isPresent(root) &&
             File(pkgDir, "data.apk").length() > 0 &&
-            imageStampFile(root).takeIf { it.isFile }?.readText() == imageStamp(root, depot)
+            imageStampFile(root).takeIf { it.isFile }?.readText() == imageStamp(profile, root, depot)
 
-    fun markCurrent(root: File, depot: File) {
-        imageStampFile(root).writeText(imageStamp(root, depot))
+    fun markCurrent(profile: GameProfile, root: File, depot: File) {
+        imageStampFile(root).writeText(imageStamp(profile, root, depot))
     }
 
     private fun contentStampFile(root: File) = File(root, "content.stamp")
@@ -209,6 +232,7 @@ object PlayerImage {
      * named directly.
      */
     fun build(
+        profile: GameProfile,
         unity: File,
         depot: File,
         context: android.content.Context,
@@ -279,11 +303,11 @@ object PlayerImage {
             val f = File(img, name)
             if (!f.isFile) continue
             coroutineContext.ensureActive()
-            run(surgery, context, listOf("set-unity-version", f.absolutePath, UNITY_VERSION))
+            run(surgery, context, listOf("set-unity-version", f.absolutePath, profile.unityVersion))
             retargetToAndroid(f)
         }
         File(img, "Resources/unity_builtin_extra").takeIf { it.isFile }?.let {
-            run(surgery, context, listOf("set-unity-version", it.absolutePath, UNITY_VERSION))
+            run(surgery, context, listOf("set-unity-version", it.absolutePath, profile.unityVersion))
             retargetToAndroid(it)
         }
 
@@ -291,7 +315,7 @@ object PlayerImage {
         // the editor-only PlayerSettings table.
         val ggm = File(img, "globalgamemanagers")
         run(surgery, context, listOf("set-graphics-apis", ggm.absolutePath, GRAPHICS_APIS))
-        run(surgery, context, listOf("set-build-version", ggm.absolutePath, UNITY_VERSION))
+        run(surgery, context, listOf("set-build-version", ggm.absolutePath, profile.unityVersion))
 
         setScriptingBackend(File(img, "boot.config"))
         registerPatches(img, root)
@@ -304,7 +328,7 @@ object PlayerImage {
         // settings.json resolves it through Addressables.RuntimePath directly
         // rather than through the token, so it has to be somewhere the player
         // reads without any redirection. Only its content root is rewritten.
-        val aaSrc = File(data, "StreamingAssets/aa")
+        val aaSrc = addressablesContainer(profile, data)
         val aaOut = catalogDir(root)
         aaOut.deleteRecursively()
         val catalog = File(aaSrc, "catalog.bin")
@@ -317,8 +341,11 @@ object PlayerImage {
             // Idempotent: the token is gone after the first pass, which is
             // what makes a re-run safe rather than an error.
             val patched = File(aaOut, "catalog.bin")
-            val r = tryRun(surgery, context, listOf("patch-catalog-path", patched.absolutePath, patched.absolutePath, contentRoot))
-            if (!r.ok) LauncherLog.log("catalog: already repointed, or ${r.output.trim().take(160)}")
+            run(
+                surgery,
+                context,
+                listOf("patch-catalog-path", patched.absolutePath, patched.absolutePath, contentRoot),
+            )
         } else {
             LauncherLog.log("no catalog.bin under $aaSrc -- Addressables content will not resolve")
         }
@@ -347,7 +374,7 @@ object PlayerImage {
      * the depot, reached through a link at the short path the catalog was
      * repointed at.
      */
-    fun install(root: File, pkgDir: File, filesDir: File, depot: File) {
+    fun install(root: File, pkgDir: File, paths: ProfileBuildPaths, depot: File) {
         val out = File(pkgDir, "data.apk")
         pkgDir.mkdirs()
 
@@ -381,7 +408,7 @@ object PlayerImage {
         // The catalog's content root is a fixed 56-byte field, which fits an
         // internal path and not the depot's real one -- the game's directory
         // name alone is most of the budget. So the short path is a link.
-        linkContent(filesDir, depot)
+        linkContent(paths, depot)
         LauncherLog.log("packed $entries file(s) into $out (${out.length()} bytes)")
     }
 
@@ -398,6 +425,16 @@ object PlayerImage {
             val content = File(data, "StreamingAssets/aa")
             if (content.isDirectory) {
                 ToolchainFetcher.symlink(content.absolutePath, File(filesDir, "aa"))
+            }
+        }
+    }
+
+    fun linkContent(paths: ProfileBuildPaths, depot: File) {
+        depotData(depot)?.let { data ->
+            val content = addressablesContainer(paths.profile, data)
+            if (content.isDirectory) {
+                paths.contentLink.parentFile?.mkdirs()
+                ToolchainFetcher.symlink(content.absolutePath, paths.contentLink)
             }
         }
     }
@@ -449,13 +486,14 @@ object PlayerImage {
      * retarget-tree does the parallelism and the resume itself.
      */
     fun retargetContent(
+        profile: GameProfile,
         depot: File,
         context: android.content.Context,
         root: File,
         assets: android.content.res.AssetManager,
     ): Flow<Progress> = channelFlow {
         val data = depotData(depot) ?: throw IOException("no player data under $depot")
-        val aa = File(data, "StreamingAssets/aa")
+        val aa = addressablesContainer(profile, data)
         if (!aa.isDirectory) throw IOException("no Addressables content at $aa")
 
         // Said before the first walk rather than after it.

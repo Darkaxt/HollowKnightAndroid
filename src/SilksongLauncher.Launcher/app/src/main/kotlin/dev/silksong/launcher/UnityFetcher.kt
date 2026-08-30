@@ -34,6 +34,8 @@ import java.security.DigestInputStream
 import java.security.MessageDigest
 import java.util.zip.InflaterInputStream
 import kotlin.coroutines.coroutineContext
+import dev.silksong.launcher.profiles.GameProfile
+import dev.silksong.launcher.profiles.GameProfiles
 
 object UnityFetcher {
 
@@ -66,7 +68,24 @@ object UnityFetcher {
 
     /** Everything lands under here, and is skipped if already present. */
     fun rootFor(context: android.content.Context): File =
-        File(context.getExternalFilesDir(null), "unity")
+        rootFor(
+            requireNotNull(context.getExternalFilesDir(null)) { "No external files directory" },
+            GameProfiles.require("silksong"),
+        )
+
+    fun rootFor(externalFilesDir: File, profile: GameProfile): File {
+        requireSupported(profile)
+        return File(externalFilesDir, "unity")
+    }
+
+    private fun requireSupported(profile: GameProfile) {
+        require(GameProfiles.find(profile.id) == profile) {
+            "Unity fetch requires an exact registered profile: ${profile.id}"
+        }
+        require(profile.unityVersion == UNITY_VERSION) {
+            "Unity ${profile.unityVersion} is not registered yet for ${profile.id}"
+        }
+    }
 
     data class Progress(
         val step: String,
@@ -80,6 +99,11 @@ object UnityFetcher {
         File(root, "editor/Editor/Data/il2cpp/build/deploy/il2cpp.dll").isFile &&
             File(packageDir(root), "InputSystem/Unity.InputSystem.asmdef").isFile &&
             engineLibsIn(File(root, "android")) != null
+
+    fun isPresent(profile: GameProfile, root: File): Boolean {
+        requireSupported(profile)
+        return isPresent(root)
+    }
 
     /**
      * Where the Android module's arm64 libraries ended up.
@@ -105,7 +129,8 @@ object UnityFetcher {
      * already extracted, so an interrupted first run is resumed by running it
      * again rather than starting over.
      */
-    fun fetch(root: File): Flow<Progress> = channelFlow {
+    fun fetch(profile: GameProfile, root: File, staging: File): Flow<Progress> = channelFlow {
+        requireSupported(profile)
         root.mkdirs()
 
         // Progress arrives on whatever thread is reading the socket, which is
@@ -138,7 +163,7 @@ object UnityFetcher {
         // Putting it where GameActivity looks for arriving libraries means
         // this and a hand-staged copy take exactly the same route in.
         send(Progress("Unity", -1f, "staging the engine"))
-        stageEngine(root, File(root.parentFile, "staging"))
+        stageEngine(root, staging)
 
         send(Progress("Unity", 1f, "ready"))
     }.flowOn(Dispatchers.IO)
@@ -165,6 +190,11 @@ object UnityFetcher {
      * install step downstream skips files that already match.
      */
     fun ensureEngineStaged(root: File, staging: File) {
+        stageEngine(root, staging)
+    }
+
+    fun ensureEngineStaged(profile: GameProfile, root: File, staging: File) {
+        requireSupported(profile)
         stageEngine(root, staging)
     }
 

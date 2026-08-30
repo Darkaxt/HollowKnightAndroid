@@ -210,7 +210,8 @@ To the on-device compile:
 
 ## Logs
 
-On the device, under `/sdcard/Android/data/<pkg>/files/build/`:
+On the device, under
+`/sdcard/Android/data/<pkg>/files/profiles/<game-id>/build/`:
 
 | | |
 | --- | --- |

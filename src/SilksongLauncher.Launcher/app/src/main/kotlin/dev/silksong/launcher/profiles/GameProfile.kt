@@ -7,6 +7,7 @@ enum class ContentLayout {
 
 data class GameProfile(
     val id: String,
+    val runtimeStorageKey: String,
     val displayName: String,
     val steamAppId: Int,
     val steamDepotId: Int,

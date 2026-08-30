@@ -29,6 +29,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
 import android.widget.Switch
+import dev.silksong.launcher.profiles.ProfileBuildPaths
+import dev.silksong.launcher.profiles.SelectedGameStore
 
 class SettingsActivity : Activity() {
 
@@ -39,6 +41,13 @@ class SettingsActivity : Activity() {
     private lateinit var swSkipIntro: Switch
     private lateinit var swDualScreen: Switch
     private lateinit var btnClearBuild: Button
+    private val buildPaths by lazy {
+        ProfileBuildPaths(
+            filesDir,
+            requireNotNull(getExternalFilesDir(null)) { "No external files directory" },
+            SelectedGameStore(this).get(),
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,7 +101,7 @@ class SettingsActivity : Activity() {
         btnClearBuild.setOnClickListener { confirmClearBuild() }
         // Offered only when there is a build to clear. A destructive-looking
         // button that does nothing is worse than no button.
-        btnClearBuild.isEnabled = BuildReset.hasBuild(this)
+        btnClearBuild.isEnabled = BuildReset.hasBuild(buildPaths)
         btnClearBuild.alpha = if (btnClearBuild.isEnabled) 1f else 0.4f
 
         // The same screen the porting flow offers, because the person who
@@ -130,7 +139,7 @@ class SettingsActivity : Activity() {
         Thread({
             var error: Throwable? = null
             try {
-                BuildReset.clear(this)
+                BuildReset.clear(this, buildPaths)
             } catch (t: Throwable) {
                 error = t
                 LauncherLog.log("could not clear the build", t)

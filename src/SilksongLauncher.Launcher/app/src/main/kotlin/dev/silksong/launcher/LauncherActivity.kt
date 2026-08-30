@@ -24,6 +24,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import dev.silksong.launcher.profiles.ContentLayout
+import dev.silksong.launcher.profiles.LegacySilksongAdopter
+import dev.silksong.launcher.profiles.ProfileBuildPaths
+import dev.silksong.launcher.profiles.SelectedGameStore
 
 class LauncherActivity : Activity() {
 
@@ -32,11 +36,27 @@ class LauncherActivity : Activity() {
         // Unity's own activity: dev.silksong.shell.GameActivity owns the
         // window and points the engine's library lookup at app storage.
         private const val UNITY_ACTIVITY_CLASS = "dev.silksong.shell.GameActivity"
+        private const val PROFILE_ID_EXTRA = "dev.silksong.launcher.PROFILE_ID"
 
         private const val REQ_LOGIN = 1
     }
 
     private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    private val profile by lazy {
+        SelectedGameStore(this).get().also {
+            require(it.contentLayout == ContentLayout.ADDRESSABLES) {
+                "The existing launcher supports only Addressables profiles: ${it.id}"
+            }
+        }
+    }
+    private val buildPaths by lazy {
+        ProfileBuildPaths(
+            filesDir,
+            requireNotNull(getExternalFilesDir(null)) { "No external files directory" },
+            profile,
+        )
+    }
 
     // Panels.
     private lateinit var launchPanel: LinearLayout
@@ -79,6 +99,17 @@ class LauncherActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val adoption = LegacySilksongAdopter.adopt(
+            filesDir,
+            requireNotNull(getExternalFilesDir(null)) { "No external files directory" },
+            buildPaths,
+        )
+        if (adoption.moved.isNotEmpty()) {
+            LauncherLog.log("adopted legacy Silksong state: ${adoption.moved.joinToString()}")
+        }
+        if (adoption.conflicts.isNotEmpty()) {
+            LauncherLog.log("legacy Silksong state kept beside existing profile state: ${adoption.conflicts.joinToString()}")
+        }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_launcher)
 
@@ -501,13 +532,13 @@ class LauncherActivity : Activity() {
         // catalog can point nowhere else. So a depot that has been deleted or
         // moved is checked for here rather than being discovered by the engine
         // as an empty world, and the link is remade in case it moved.
-        val depot = DepotLocation.resolve(this)?.takeIf { PlayerImage.depotData(it) != null }
+        val depot = DepotLocation.resolve(this, buildPaths)?.takeIf { PlayerImage.depotData(it) != null }
         if (depot == null) {
             LauncherLog.log("Launch aborted: the game's files are not on this device")
             missingGameFiles()
             return
         }
-        runCatching { DepotLocation.relink(this, depot) }
+        runCatching { DepotLocation.relink(buildPaths, depot) }
             .onFailure { LauncherLog.log("could not relink the content", it) }
         try {
             LauncherLog.log("Launching $UNITY_ACTIVITY_CLASS")
@@ -520,6 +551,7 @@ class LauncherActivity : Activity() {
             // resume of the still-living launcher.
             val intent = Intent().apply {
                 setClassName(packageName, UNITY_ACTIVITY_CLASS)
+                putExtra(PROFILE_ID_EXTRA, profile.id)
             }
             // Written here rather than when the user changes a setting: this
             // is the moment the game will read them, so it is the moment they

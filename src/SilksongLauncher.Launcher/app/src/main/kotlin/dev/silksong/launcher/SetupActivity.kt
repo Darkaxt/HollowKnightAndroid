@@ -54,6 +54,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import dev.silksong.launcher.profiles.ContentLayout
+import dev.silksong.launcher.profiles.LegacySilksongAdopter
+import dev.silksong.launcher.profiles.ProfileBuildPaths
+import dev.silksong.launcher.profiles.SelectedGameStore
 
 class SetupActivity : Activity() {
 
@@ -100,8 +104,23 @@ class SetupActivity : Activity() {
     private var stepCount = 3
     private var stepTitle = ""
 
+    private val profile by lazy {
+        SelectedGameStore(this).get().also {
+            require(it.contentLayout == ContentLayout.ADDRESSABLES) {
+                "The existing setup pipeline supports only Addressables profiles: ${it.id}"
+            }
+        }
+    }
+    private val buildPaths by lazy {
+        ProfileBuildPaths(
+            filesDir,
+            requireNotNull(getExternalFilesDir(null)) { "No external files directory" },
+            profile,
+        )
+    }
+
     // <files>/pkg mirrors an installed package: lib/<abi> beside assets/.
-    private val pkgDir: File get() = File(filesDir, "pkg")
+    private val pkgDir: File get() = buildPaths.packageDir
     private val engineDir: File get() = File(pkgDir, "lib/$ABI")
     // The player image and catalog, as one zip laid out like an APK. Only the
     // zip counts: the engine opens "jar:file://<package path>!/assets" and
@@ -110,7 +129,7 @@ class SetupActivity : Activity() {
     private val dataApk: File get() = File(pkgDir, "data.apk")
 
     // Where a download leaves things for us to install.
-    private val stagingDir: File? get() = getExternalFilesDir(null)?.let { File(it, "staging") }
+    private val stagingDir: File? get() = buildPaths.installStaging
 
     // The depot lands on external storage: it is ~8 GB of data, not code, and
     // nothing has to execute out of it.
@@ -118,9 +137,9 @@ class SetupActivity : Activity() {
     // Every volume is considered, not just the primary one, and so is a folder
     // the user picked. DepotLocation owns that order and the reasons for it;
     // this screen asks rather than knowing.
-    private val depotDirs: List<File> get() = DepotLocation.candidates(this)
-    private val depotDir: File? get() = DepotLocation.resolve(this)
-    private val depotStagingDir: File? get() = getExternalFilesDir(null)?.let { File(it, "depot-staging") }
+    private val depotDirs: List<File> get() = DepotLocation.candidates(this, buildPaths)
+    private val depotDir: File? get() = DepotLocation.resolve(this, buildPaths)
+    private val depotStagingDir: File? get() = buildPaths.depotStaging
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -131,6 +150,17 @@ class SetupActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val adoption = LegacySilksongAdopter.adopt(
+            filesDir,
+            requireNotNull(getExternalFilesDir(null)) { "No external files directory" },
+            buildPaths,
+        )
+        if (adoption.moved.isNotEmpty()) {
+            LauncherLog.log("adopted legacy Silksong state: ${adoption.moved.joinToString()}")
+        }
+        if (adoption.conflicts.isNotEmpty()) {
+            LauncherLog.log("legacy Silksong state kept beside existing profile state: ${adoption.conflicts.joinToString()}")
+        }
         setContentView(buildUi())
         // Forks a process, so it cannot be answered from refresh(). Warmed
         // once here; every later ask reads the cached result.
@@ -210,7 +240,7 @@ class SetupActivity : Activity() {
      */
     private fun isBuilt(): Boolean =
         dataApk.isFile && File(engineDir, "libil2cpp.so").length() > 0 &&
-            UnityDex.isBuilt(this, UnityFetcher.rootFor(this)) &&
+            UnityDex.isBuilt(this, UnityFetcher.rootFor(requireNotNull(getExternalFilesDir(null)), profile)) &&
             haveGameFiles() &&
             runCatching { builtMarker.readText() }.getOrNull() == buildSignature
 
@@ -380,7 +410,7 @@ class SetupActivity : Activity() {
     private fun updateReset(built: Boolean = isBuilt()) {
         val offer = !busy && !built
         resetBuild.visibility =
-            if (offer && BuildReset.hasBuild(this)) View.VISIBLE else View.GONE
+            if (offer && BuildReset.hasBuild(buildPaths)) View.VISIBLE else View.GONE
         // Not while the big "choose folder" button is up: the same action
         // twice on one screen is a question about which one is different.
         changeFolder.visibility =
@@ -606,14 +636,14 @@ class SetupActivity : Activity() {
             sayWhereToCopy("That folder is not on this device's own storage.")
             return
         }
-        val problem = DepotLocation.problemWith(dir)
+        val problem = DepotLocation.problemWith(profile, dir)
         if (problem != null) {
             LauncherLog.log("rejected ${dir.name}: ${PlayerImage.depotProblemSummary(dir)}")
             say("That folder cannot be used.")
             detail.text = "$dir\n\n$problem"
             return
         }
-        DepotLocation.remember(this, dir)
+        DepotLocation.remember(buildPaths, dir)
         DepotLocation.writeMarker(dir)
         // A different folder is a different content tree, and the built game
         // reads that tree directly rather than a copy. It has almost certainly
@@ -624,7 +654,7 @@ class SetupActivity : Activity() {
         // and skips everything else.
         if (before != null && before.absolutePath != dir.absolutePath) {
             LauncherLog.log("depot moved from $before; the content will be retargeted again")
-            PlayerImage.invalidateContent(Il2cppConverter.rootFor(this))
+            PlayerImage.invalidateContent(buildPaths.buildRoot)
             builtMarker.delete()
         }
         message = null
@@ -639,7 +669,7 @@ class SetupActivity : Activity() {
      * device does about anything else.
      */
     private fun sayWhereToCopy(why: String) {
-        val where = DepotLocation.appDirs(this).firstOrNull()
+        val where = DepotLocation.appDirs(this, profile).firstOrNull()
         if (where == null) {
             say("No external storage to look in.")
             return
@@ -730,7 +760,7 @@ class SetupActivity : Activity() {
         setBusy(true, "Resetting", -1f, "deleting what the build produced")
         scope.launch {
             val failure = withContext(Dispatchers.IO) {
-                runCatching { BuildReset.clear(this@SetupActivity) }.exceptionOrNull()
+                runCatching { BuildReset.clear(this@SetupActivity, buildPaths) }.exceptionOrNull()
             }
             setBusy(false)
             if (failure != null) {
@@ -739,10 +769,7 @@ class SetupActivity : Activity() {
             } else if (haveGameFiles()) {
                 say("Reset. The game will be built again.")
             } else {
-                // The reset forgets which folder the game was in, so this is
-                // now the "where is it" screen and the message has to agree
-                // with the button under it.
-                say("Reset. Choose the folder with the game's files again.")
+                say("Reset. The selected game source is no longer available.")
             }
             refresh()
         }
@@ -845,15 +872,15 @@ class SetupActivity : Activity() {
      * honest about which part of the job is running.
      */
     private fun run(download: TokenStore.Credentials?) {
-        val unity = UnityFetcher.rootFor(this)
+        val unity = UnityFetcher.rootFor(requireNotNull(getExternalFilesDir(null)), profile)
         val tools = ToolchainFetcher.rootFor(this)
-        val out = Il2cppConverter.rootFor(this)
+        val out = buildPaths.buildRoot
         // A download goes to the app's own directory and never to a folder the
         // user picked: the resume path deletes files it did not write (see
         // DepotFetcher.dropUnwritten), which is only ever safe somewhere
         // nothing else lives. When the game is already on the device, that
         // copy is used wherever it is.
-        val depot = if (download != null) DepotLocation.downloadTarget(this) else depotDir
+        val depot = if (download != null) DepotLocation.downloadTarget(buildPaths) else depotDir
         val staging = depotStagingDir
         if (depot == null || staging == null) {
             say("No external storage to work in.")
@@ -875,9 +902,9 @@ class SetupActivity : Activity() {
         scope.launch {
             try {
                 // ── Step 1: the game ──────────────────────────────────────
-                if (download != null && !DepotFetcher.isPresent(depot)) {
+                if (download != null && !DepotFetcher.isPresent(profile, depot)) {
                     setStep(1, "Downloading game files from Steam")
-                    DepotFetcher.download(download, depot, staging).collect { event ->
+                    DepotFetcher.download(profile, download, depot, staging).collect { event ->
                         when (event) {
                             is DepotFetcher.Event.Progress ->
                                 setBusy(true, "", event.fraction, "${event.bytes / 1024 / 1024} MB")
@@ -890,8 +917,9 @@ class SetupActivity : Activity() {
 
                 // ── Step 2: the supporting tools ──────────────────────────
                 setStep(toolsStep, "Downloading supporting tools")
-                if (!UnityFetcher.isPresent(unity)) {
-                    UnityFetcher.fetch(unity).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                if (!UnityFetcher.isPresent(profile, unity)) {
+                    UnityFetcher.fetch(profile, unity, buildPaths.installStaging)
+                        .collect { setBusy(true, it.step, it.fraction, it.detail) }
                 }
                 // The player's Java classes arrive with the module as ordinary
                 // Java bytecode, which ART cannot load. Dexing them here is
@@ -910,7 +938,9 @@ class SetupActivity : Activity() {
                 // gone for good, and the game dies at startup saying only that
                 // the hardware is unsupported. No-op when they are current.
                 stagingDir?.let { staging ->
-                    withContext(Dispatchers.IO) { UnityFetcher.ensureEngineStaged(unity, staging) }
+                    withContext(Dispatchers.IO) {
+                        UnityFetcher.ensureEngineStaged(profile, unity, staging)
+                    }
                 }
                 if (stagingDir?.listFiles()?.isNotEmpty() == true) {
                     setBusy(true, "installing the engine", -1f, "")
@@ -948,23 +978,31 @@ class SetupActivity : Activity() {
                 // what they would produce, which is every build where the
                 // conversion had nothing to do. Together they are a full
                 // re-copy of the depot's serialized data and a 55 MB zip.
-                if (PlayerImage.isCurrent(out, pkgDir, depot)) {
+                if (PlayerImage.isCurrent(profile, out, pkgDir, depot)) {
                     LauncherLog.log("player image is current; not rebuilding or repacking")
                 } else {
-                    PlayerImage.build(unity, depot, this@SetupActivity, out, assets, PlayerImage.contentRootFor(this@SetupActivity))
+                    PlayerImage.build(
+                        profile,
+                        unity,
+                        depot,
+                        this@SetupActivity,
+                        out,
+                        assets,
+                        PlayerImage.contentRootFor(packageName, buildPaths),
+                    )
                         .collect { setBusy(true, it.step, it.fraction, it.detail) }
                     setBusy(true, "packing the player image", -1f, "")
                     withContext(Dispatchers.IO) {
-                        PlayerImage.install(out, pkgDir, filesDir, depot)
-                        PlayerImage.markCurrent(out, depot)
+                        PlayerImage.install(out, pkgDir, buildPaths, depot)
+                        PlayerImage.markCurrent(profile, out, depot)
                     }
                 }
                 // Always: the link is in internal storage, so it can go missing
                 // without anything about the image having changed. The game's
                 // process is left the same answer, so it can remake the link
                 // itself if it comes back and finds it gone.
-                withContext(Dispatchers.IO) { DepotLocation.relink(this@SetupActivity, depot) }
-                PlayerImage.retargetContent(depot, this@SetupActivity, out, assets)
+                withContext(Dispatchers.IO) { DepotLocation.relink(buildPaths, depot) }
+                PlayerImage.retargetContent(profile, depot, this@SetupActivity, out, assets)
                     .collect { setBusy(true, it.step, it.fraction, it.detail) }
 
                 // Last, and only on the way out of a run that got here: this

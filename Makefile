@@ -28,11 +28,13 @@ APK_DIR ?= build
 export SILKSONG_CACHE BUILD_ROOT PLAYER_ROOT APK_DIR
 # Kept in step with dev.sh; only used by the targets that talk to the device.
 PKG     ?= com.jakobkhansen.silksong
+PROFILE ?= silksong
 # The APK is named for the project and its version, not the application id, so
 # that a downloaded file says what it is. Same VERSION file build.sh reads.
 VERSION ?= $(shell tr -d ' \t\r\n' < VERSION 2>/dev/null)
 APK     ?= $(APK_DIR)/SilksongAndroid-$(VERSION).apk
 FILES   := /sdcard/Android/data/$(PKG)/files
+PROFILE_FILES := $(FILES)/profiles/$(PROFILE)
 
 .PHONY: help dev dev-fast device-wipe install logcat game-logcat build-log \
         game-reset check test surgery player devices clean \
@@ -97,7 +99,9 @@ docker-shell: ## Open a shell in the build container
 # build it again; the compiler, .NET, Unity's tools and the Steam depot are all
 # left alone, so it is minutes rather than the full run.
 game-reset: ## Make the app rebuild the game (keeps tools and depot)
-	$(ADB) shell run-as $(PKG) rm -f files/pkg/.built files/pkg/data.apk files/pkg/lib/arm64/libil2cpp.so
+	$(ADB) shell run-as $(PKG) rm -f files/profiles/$(PROFILE)/pkg/.built \
+		files/profiles/$(PROFILE)/pkg/data.apk \
+		files/profiles/$(PROFILE)/pkg/lib/arm64/libil2cpp.so
 	@echo "Press Start porting in the app."
 
 logcat: ## Stream our logs
@@ -107,7 +111,7 @@ game-logcat: ## Stream Unity's logs from the running game
 	$(ADB) logcat -v brief Unity:V *:S
 
 build-log: ## Show the on-device compile log
-	$(ADB) shell cat $(FILES)/build/compile.log
+	$(ADB) shell cat $(PROFILE_FILES)/build/compile.log
 
 devices: ## List connected devices
 	$(ADB) devices -l

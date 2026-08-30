@@ -27,6 +27,8 @@ package dev.silksong.launcher
 
 import android.content.Context
 import android.util.Log
+import dev.silksong.launcher.profiles.ProfileBuildPaths
+import dev.silksong.launcher.profiles.SelectedGameStore
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -113,15 +115,21 @@ object LauncherLog {
      * is the full session and both of its generations follow, because the
      * context around a fault is worth having when it is still there.
      */
-    fun gameLogs(context: Context): List<File> =
-        context.getExternalFilesDir(null)?.let {
-            listOf(
-                File(it, "$ERROR_LOG_NAME.prev"),
-                File(it, ERROR_LOG_NAME),
-                File(it, "$GAME_LOG_NAME.prev"),
-                File(it, GAME_LOG_NAME),
-            )
-        }.orEmpty()
+    fun gameLogs(context: Context): List<File> {
+        val external = context.getExternalFilesDir(null) ?: return emptyList()
+        val paths = ProfileBuildPaths(context.filesDir, external, SelectedGameStore(context).get())
+        val profileLogs = File(paths.externalRoot, "logs")
+        fun files(root: File) = listOf(
+            File(root, "$ERROR_LOG_NAME.prev"),
+            File(root, ERROR_LOG_NAME),
+            File(root, "$GAME_LOG_NAME.prev"),
+            File(root, GAME_LOG_NAME),
+        )
+        // New profile-scoped logs first. Keep the old root as a read-only
+        // fallback so the update that introduces profiles does not hide the
+        // launch evidence that led someone to this screen.
+        return files(profileLogs) + files(external)
+    }
 
     /**
      * Starts writing to disk. Safe to call more than once and from any process.

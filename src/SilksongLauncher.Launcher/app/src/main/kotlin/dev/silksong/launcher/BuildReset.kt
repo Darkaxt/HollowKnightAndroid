@@ -12,7 +12,6 @@
 //                           libil2cpp.so, the player image, and the stamps
 //                           that say those are current
 //           pkg/            the packaged player the engine actually loads
-//           unity-dex/      the player's Java classes, dexed; seconds to redo
 //           aa              the symlink to the content tree, remade every run
 //           staging/        transient, and only ever holds a partial copy
 //           depot-staging/
@@ -20,11 +19,12 @@
 //                           frame cap -- and the marker that says the
 //                           first-run resolution has been decided
 //           the launcher's settings
-//           the remembered depot folder   the PATH ONLY. See clear() for why.
 //
 //   kept    depot/          the game, ~8 GB, and the user's own property
 //           the game's files wherever the user put them, untouched
+//           source.pointer  the selected profile's path to those game files
 //           unity/          Unity's Android player module, ~640 MB
+//           unity-dex/      shared dex output for that player module
 //           toolchain/      clang and .NET, several hundred MB
 //           default/        THE SAVES
 //           the Steam sign-in
@@ -47,15 +47,10 @@
 package dev.silksong.launcher
 
 import android.content.Context
+import dev.silksong.launcher.profiles.ProfileBuildPaths
 import java.io.File
 
 object BuildReset {
-
-    /** Under the app's external files dir. */
-    private val EXTERNAL = listOf("build", "staging", "depot-staging")
-
-    /** Under filesDir, on internal storage. */
-    private val INTERNAL = listOf("pkg", "unity-dex", "aa")
 
     /**
      * Deletes the build. Returns roughly how many bytes it freed.
@@ -63,32 +58,35 @@ object BuildReset {
      * Slow -- the build is gigabytes across thousands of small files -- so
      * this must not be called on the main thread.
      */
-    fun clear(context: Context): Long {
-        var freed = 0L
-
-        val external = context.getExternalFilesDir(null)
-        if (external != null) {
-            for (name in EXTERNAL) freed += remove(File(external, name))
-        } else {
-            LauncherLog.log("clear: no external files dir; the build may be left behind")
-        }
-
-        for (name in INTERNAL) freed += remove(File(context.filesDir, name))
-
-        // Where the game is, but never the game. A reset is what someone does
-        // when the port came out wrong, and one of the things that can be
-        // wrong is the copy it was built from -- an interrupted transfer, or
-        // the wrong folder picked. Keeping the path would rebuild from exactly
-        // the same files without ever asking; forgetting it puts the question
-        // back on screen, with the folder still sitting there to be chosen
-        // again. Costs a few taps and nothing else: a depot this app
-        // downloaded itself is found by looking, so it is unaffected.
-        DepotLocation.forget(context)
-
+    fun clear(context: Context, paths: ProfileBuildPaths): Long {
+        val freed = clearGenerated(paths)
         clearPreferences(context)
 
-        LauncherLog.log("clear: freed ${freed / 1024 / 1024} MB; the game will be built again")
+        LauncherLog.log(
+            "clear: ${paths.profile.id} freed ${freed / 1024 / 1024} MB; " +
+                "the game will be built again",
+        )
         return freed
+    }
+
+    /**
+     * Removes only generated state owned by one profile.
+     *
+     * The source pointer and downloaded depot are deliberately excluded. A
+     * reset rebuilds the selected game from the same validated source; it must
+     * not affect another profile or force the user to find the depot again.
+     * Shared Unity/toolchain state is outside [ProfileBuildPaths] and is also
+     * retained.
+     */
+    fun clearGenerated(paths: ProfileBuildPaths): Long {
+        val generated = listOf(
+            paths.buildRoot,
+            paths.installStaging,
+            paths.depotStaging,
+            paths.packageDir,
+            paths.contentLink,
+        )
+        return generated.sumOf(::remove)
     }
 
     /**
@@ -131,11 +129,8 @@ object BuildReset {
     }
 
     /** True once there is something worth clearing. */
-    fun hasBuild(context: Context): Boolean {
-        if (File(File(context.filesDir, "pkg"), ".built").isFile) return true
-        val external = context.getExternalFilesDir(null) ?: return false
-        return File(external, "build").isDirectory
-    }
+    fun hasBuild(paths: ProfileBuildPaths): Boolean =
+        File(paths.packageDir, ".built").isFile || paths.buildRoot.isDirectory
 
     private fun remove(target: File): Long {
         val tally = Tally()

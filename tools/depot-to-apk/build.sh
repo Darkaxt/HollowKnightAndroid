@@ -43,6 +43,8 @@ APK_DIR="${APK_DIR:-$REPO_ROOT/build}"
 STEPS="${STEPS:-5,6}"
 
 PKG="${PKG:-com.jakobkhansen.silksong}"
+PROFILE_ID="${PROFILE_ID:-silksong}"
+CONTENT_KEY="${CONTENT_KEY:-ss}"
 APP_LABEL="${APP_LABEL:-Hollow Knight: Silksong}"
 # The version the stock engine reports. The depot is stamped with an internal
 # branch build of the same numeric version and must be normalised to this.
@@ -81,7 +83,7 @@ DEBUGGABLE="${DEBUGGABLE:-0}"
 # content root as a single length-prefixed string, stored once and shared by
 # every location, so repointing that one string in step 4 moves the whole
 # content set -- which is far too large to ship inside the APK.
-CONTENT_ROOT="${CONTENT_ROOT:-/data/user/0/$PKG/files/aa}"
+CONTENT_ROOT="${CONTENT_ROOT:-/data/user/0/$PKG/files/p/$CONTENT_KEY/aa}"
 
 log()  { printf '\033[36m[forge]\033[0m %s\n' "$*" >&2; }
 warn() { printf '\033[33m[forge] WARN:\033[0m %s\n' "$*" >&2; }

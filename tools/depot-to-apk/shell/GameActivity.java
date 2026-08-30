@@ -25,6 +25,38 @@ import android.view.WindowManager;
 public class GameActivity extends PlayerActivity
 {
     private static final String TAG = "SilksongShell";
+    private static final String PROFILE_ID_EXTRA = "dev.silksong.launcher.PROFILE_ID";
+
+    private String profileId()
+    {
+        String id = getIntent() == null ? null : getIntent().getStringExtra(PROFILE_ID_EXTRA);
+        if (id == null || id.isEmpty()) id = "silksong";
+        if (!id.equals("silksong"))
+            throw new IllegalArgumentException("unsupported game profile: " + id);
+        return id;
+    }
+
+    private java.io.File profileFilesDir()
+    {
+        return new java.io.File(getFilesDir(), "profiles/" + profileId());
+    }
+
+    private String profileRuntimeKey()
+    {
+        if (profileId().equals("silksong")) return "ss";
+        throw new IllegalArgumentException("unsupported runtime profile: " + profileId());
+    }
+
+    private java.io.File profileContentLink()
+    {
+        return new java.io.File(getFilesDir(), "p/" + profileRuntimeKey() + "/aa");
+    }
+
+    private java.io.File profileExternalDir()
+    {
+        java.io.File ext = getExternalFilesDir(null);
+        return ext == null ? null : new java.io.File(ext, "profiles/" + profileId());
+    }
 
     // The engine does not dlopen its libraries by path, and does not go
     // looking for them on disk. It asks Java:
@@ -47,17 +79,17 @@ public class GameActivity extends PlayerActivity
     // So the list is extended, in place, to include app storage.
     private static final String ABI = "arm64";
 
-    // <files>/pkg/lib/arm64 -- mirrors <apk dir>/lib/<abi>.
+    // <files>/profiles/<id>/pkg/lib/arm64 -- mirrors <apk dir>/lib/<abi>.
     private java.io.File externalLibDir()
     {
-        return new java.io.File(getFilesDir(), "pkg/lib/" + ABI);
+        return new java.io.File(profileFilesDir(), "pkg/lib/" + ABI);
     }
 
     // The game's data, as a zip, once it is built on the device rather than
     // shipped in the APK. Named .apk because that is what it stands in for.
     private java.io.File externalDataApk()
     {
-        return new java.io.File(getFilesDir(), "pkg/data.apk");
+        return new java.io.File(profileFilesDir(), "pkg/data.apk");
     }
 
     // Unity's own name for the same thing. The engine looks for
@@ -92,10 +124,9 @@ public class GameActivity extends PlayerActivity
     // because two copies of the engine is 334 MB.
     private void installEngine()
     {
-        java.io.File ext = getExternalFilesDir(null);
+        java.io.File ext = profileExternalDir();
         if (ext == null) return;
         java.io.File src = new java.io.File(ext, "staging");
-        if (!src.isDirectory()) src = new java.io.File(ext, "engine");
         java.io.File[] libs = src.listFiles();
         if (libs == null) return;
 
@@ -395,8 +426,8 @@ public class GameActivity extends PlayerActivity
     // correct for a depot the app downloaded itself.
     private void linkContent()
     {
-        java.io.File link = new java.io.File(getFilesDir(), "aa");
-        java.io.File ext = getExternalFilesDir(null);
+        java.io.File link = profileContentLink();
+        java.io.File ext = profileExternalDir();
         if (ext == null) return;
 
         // The launcher's answer first, then where a download leaves the
@@ -405,7 +436,6 @@ public class GameActivity extends PlayerActivity
         java.io.File[] candidates = {
             recordedContentDir(ext),
             new java.io.File(ext, "depot/Hollow Knight Silksong_Data/StreamingAssets/aa"),
-            new java.io.File(ext, "aa"),
         };
         java.io.File target = null;
         for (java.io.File c : candidates)
@@ -533,10 +563,12 @@ public class GameActivity extends PlayerActivity
 
     private void startLogCapture()
     {
-        final java.io.File ext = getExternalFilesDir(null);
+        final java.io.File ext = profileExternalDir();
         if (ext == null) return;
-        final java.io.File out = new java.io.File(ext, GAME_LOG);
-        final java.io.File prev = new java.io.File(ext, GAME_LOG + ".prev");
+        final java.io.File logs = new java.io.File(ext, "logs");
+        if (!logs.isDirectory() && !logs.mkdirs()) return;
+        final java.io.File out = new java.io.File(logs, GAME_LOG);
+        final java.io.File prev = new java.io.File(logs, GAME_LOG + ".prev");
         rotate(out, prev);
 
         Thread t = new Thread(new Runnable()
@@ -570,14 +602,16 @@ public class GameActivity extends PlayerActivity
         java.io.Writer saveW = null;
         try
         {
-            final java.io.File ext = getExternalFilesDir(null);
-            final java.io.File saveOut = (ext == null) ? null : new java.io.File(ext, ERROR_LOG);
+            final java.io.File ext = profileExternalDir();
+            final java.io.File logs = (ext == null) ? null : new java.io.File(ext, "logs");
+            if (logs != null) logs.mkdirs();
+            final java.io.File saveOut = (logs == null) ? null : new java.io.File(logs, ERROR_LOG);
             // Trimmed at the door rather than mid-stream: this file grows by a
             // handful of lines per session, so it reaching the cap at all is
             // already unusual and one previous generation is ample.
             if (saveOut != null && saveOut.length() > ERROR_LOG_MAX_BYTES)
             {
-                rotate(saveOut, new java.io.File(ext, ERROR_LOG + ".prev"));
+                rotate(saveOut, new java.io.File(logs, ERROR_LOG + ".prev"));
             }
 
             String header = "=== " + new java.text.SimpleDateFormat(
@@ -682,8 +716,11 @@ public class GameActivity extends PlayerActivity
 
     private java.io.File extFile(String name)
     {
-        java.io.File ext = getExternalFilesDir(null);
-        return (ext == null) ? null : new java.io.File(ext, name);
+        java.io.File ext = profileExternalDir();
+        if (ext == null) return null;
+        java.io.File logs = new java.io.File(ext, "logs");
+        if (!logs.isDirectory()) logs.mkdirs();
+        return new java.io.File(logs, name);
     }
 
     /** Straight to the file, not via logcat: a dying process may not get a turn. */
