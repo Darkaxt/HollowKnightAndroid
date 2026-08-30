@@ -33,6 +33,19 @@ available game distributions:
 - All 503 Hollow Knight serialized `.assets` files were parsed without error.
   The 125 shaders found across them all contained Vulkan slices. No shader
   lacked Vulkan data.
+- Hollow Knight Linux `1.5.12620` was subsequently inventoried from its exact
+  current archive. Its identity is Team Cherry/Hollow Knight, branch
+  `release-1`, revision `12620`, Unity `6000.0.61f1`, and Linux target 24.
+  The data root contains 1,748 files: 1,005 serialized files, 610 resource
+  sidecars, 118 managed assemblies, four Linux native plugins, and two Unity
+  built-ins requiring Android replacements. All 125 shaders have Vulkan
+  slices; none is missing Vulkan data.
+- The complete `1.5.12620` manifest has semantic SHA-256
+  `8035cad22a9cfb209e1e15d3ff27d0db901faf7b85d0cb3225a873d073f5074f`.
+  Kotlin validation accepted its real C# inventory report with no diagnostic.
+- The compatibility-only `1.5.12612` scan has the same 1,748-path layout and
+  Vulkan counts. Forty file hashes differ and 1,708 are unchanged; no older
+  file was used to construct the current manifest.
 - Representative Hollow Knight `level0` and `level1` files parsed and
   retargeted to Android successfully when treated as serialized files.
 - The Hollow Knight Windows build records Direct3D 11 and contains no Vulkan
@@ -46,9 +59,10 @@ available game distributions:
   unchanged.
 
 Hollow Knight Linux `1.5.12620` is the current implementation target. Its
-source remains fail-closed until the completed archive passes the exact
-manifest and Vulkan checks. Version `1.5.12612` is retained only as a
-backward-compatibility reference; it is not the preferred production target.
+source has passed the exact manifest, identity, layout, and Vulkan checks, but
+converted Android output and gameplay remain fail-closed until later build and
+device gates pass. Version `1.5.12612` is retained only as a backward-
+compatibility reference; it is not a production input.
 Builds are never assembled by mixing files or assemblies from different game
 versions or operating systems.
 

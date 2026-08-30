@@ -619,13 +619,13 @@ git commit -m "feat: convert classic Unity player trees"
 - Test: `src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightSourceValidatorTest.kt`
 - Create: `src/SilksongLauncher.Launcher/app/src/main/assets/profiles/hollow-knight-1.5.12620.json`
 
-- [ ] **Step 1: Write source-validation tests**
+- [x] **Step 1: Write source-validation tests**
 
 Use a temporary synthetic file tree. Assert these results: `SUPPORTED`,
 `WINDOWS_SOURCE`, `INCOMPLETE`, `MIXED_BUILD`, `MISSING_VULKAN`, and
 `UNKNOWN_VERSION`. Each result includes the exact offending path or property.
 
-- [ ] **Step 2: Define the manifest schema**
+- [x] **Step 2: Define the manifest schema**
 
 ```kotlin
 data class ProfileManifest(
@@ -651,9 +651,11 @@ The committed JSON contains only normalized relative paths, sizes, version
 identifiers, counts, and hashes. It contains no game bytes or extracted
 strings. `ManifestAction` is `TRANSFORM`, `COPY`, `EXCLUDE`, or
 `REPLACE_AT_ASSEMBLY`. Exact per-file hashes make mixed-build classification
-deterministic.
+deterministic. `manifestSha256` is the SHA-256 of the canonical semantic
+manifest fields with the hash field excluded, so action changes invalidate
+resume identity without a self-referential JSON hash.
 
-- [ ] **Step 3: Implement read-only validation**
+- [x] **Step 3: Implement read-only validation**
 
 The C# tool produces a typed, versioned report and has its own converter tests.
 Pure Kotlin validation consumes that report through an injected reporter
@@ -662,7 +664,7 @@ on-device BundleSurgery executable. Validation reads `app.info`, serialized
 metadata, and required-file hashes. It must not change timestamps, add markers,
 or write into the depot.
 
-- [ ] **Step 4: Generate and review the current Linux manifest locally**
+- [x] **Step 4: Generate and review the current Linux manifest locally**
 
 Linux `1.5.12620` is the current profile target but remains unaccepted as a
 source until its exact manifest exists. Extract it into a unique directory
@@ -674,7 +676,7 @@ support. Review the JSON for absence of paths outside the game root and
 proprietary contents, then remove only that exact temporary extraction using a
 validated absolute path.
 
-- [ ] **Step 5: Test and commit**
+- [x] **Step 5: Test and commit**
 
 ```bash
 make test
