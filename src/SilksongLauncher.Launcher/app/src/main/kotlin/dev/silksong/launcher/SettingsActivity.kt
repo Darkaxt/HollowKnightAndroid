@@ -52,7 +52,7 @@ class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
-        settings = SettingsStore(this)
+        settings = SettingsStore(this, buildPaths.profile)
 
         swAutoPull = findViewById(R.id.sw_auto_pull)
         swAutoPush = findViewById(R.id.sw_auto_push)

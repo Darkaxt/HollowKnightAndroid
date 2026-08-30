@@ -26,6 +26,48 @@
         android:visibility="gone">
 
         <TextView
+            android:id="@+id/txt_runtime_banner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp"
+            android:background="@color/surface_panel"
+            android:gravity="center"
+            android:padding="6dp"
+            android:text="@string/runtime_test_banner"
+            android:textColor="@color/text_primary"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <RadioGroup
+            android:id="@+id/game_selector"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/radio_hollow_knight"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="@color/text_primary" />
+
+            <RadioButton
+                android:id="@+id/radio_silksong"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="@color/text_primary" />
+        </RadioGroup>
+
+        <TextView
+            android:id="@+id/txt_selected_game_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:textColor="@color/text_muted"
+            android:textSize="12sp" />
+
+        <TextView
             android:id="@+id/txt_login_status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

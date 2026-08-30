@@ -48,6 +48,7 @@ package dev.silksong.launcher
 
 import android.content.Context
 import dev.silksong.launcher.profiles.ProfileBuildPaths
+import dev.silksong.launcher.profiles.ProfileSettingsStore
 import java.io.File
 
 object BuildReset {
@@ -60,7 +61,7 @@ object BuildReset {
      */
     fun clear(context: Context, paths: ProfileBuildPaths): Long {
         val freed = clearGenerated(paths)
-        clearPreferences(context)
+        clearPreferences(context, paths)
 
         LauncherLog.log(
             "clear: ${paths.profile.id} freed ${freed / 1024 / 1024} MB; " +
@@ -107,11 +108,15 @@ object BuildReset {
      * what makes a re-port feel like a first one. It does NOT hold saves; those
      * are files under the external files dir and are not touched by any of this.
      */
-    private fun clearPreferences(context: Context) {
+    private fun clearPreferences(context: Context, paths: ProfileBuildPaths) {
         // Unity's own naming. Matches the file seen on device:
         // shared_prefs/<package>.v2.playerprefs.xml
         clear(context, "${context.packageName}.v2.playerprefs", "the game's settings")
-        clear(context, "launcher_settings", "the launcher's settings")
+        clear(
+            context,
+            ProfileSettingsStore.preferenceName(paths.profile),
+            "${paths.profile.displayName} launcher settings",
+        )
     }
 
     private fun clear(context: Context, name: String, what: String) {

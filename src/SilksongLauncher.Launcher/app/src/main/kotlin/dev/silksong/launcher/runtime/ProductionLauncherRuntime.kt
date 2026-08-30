@@ -25,9 +25,7 @@ class ProductionLauncherRuntime : LauncherRuntime {
     override suspend fun provision(
         request: ProvisionRequest,
         emit: suspend (RuntimeProgress) -> Unit,
-    ): RuntimeState {
-        throw IllegalStateException("Production provisioning has not been attached to the runtime seam")
-    }
+    ): RuntimeState = ProductionProvisioner().provision(request, emit)
 
     override fun reset(request: RuntimeRequest): Long =
         BuildReset.clear(request.context, request.paths)

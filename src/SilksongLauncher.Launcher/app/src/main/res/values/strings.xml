@@ -7,6 +7,8 @@
     <string name="launcher_status_idle">Ready.</string>
     <string name="launcher_status_starting">Starting game…</string>
     <string name="launcher_status_error">Couldn\'t start the game: %1$s</string>
+    <string name="runtime_test_banner">TEST RUNTIME · EMULATOR-FAKE</string>
+    <string name="selected_game_status">Selected: %1$s</string>
 
     <!-- First-run extraction screen. -->
 
@@ -20,6 +22,7 @@
     <string name="action_settings">Settings</string>
     <string name="action_logs">View logs</string>
     <string name="action_launch">Launch game</string>
+    <string name="action_prepare_game">Prepare %1$s</string>
 
     <!-- Settings screen. -->
     <string name="settings_title">Launcher settings</string>

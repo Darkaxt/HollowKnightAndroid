@@ -58,6 +58,13 @@ import dev.silksong.launcher.profiles.ContentLayout
 import dev.silksong.launcher.profiles.LegacySilksongAdopter
 import dev.silksong.launcher.profiles.ProfileBuildPaths
 import dev.silksong.launcher.profiles.SelectedGameStore
+import dev.silksong.launcher.runtime.EvidenceKind
+import dev.silksong.launcher.runtime.LauncherRuntimeProvider
+import dev.silksong.launcher.runtime.ProvisionRequest
+import dev.silksong.launcher.runtime.ProvisionSource
+import dev.silksong.launcher.runtime.RuntimeProgress
+import dev.silksong.launcher.runtime.RuntimeRequest
+import dev.silksong.launcher.runtime.ProductionBuildSignature
 
 class SetupActivity : Activity() {
 
@@ -104,13 +111,7 @@ class SetupActivity : Activity() {
     private var stepCount = 3
     private var stepTitle = ""
 
-    private val profile by lazy {
-        SelectedGameStore(this).get().also {
-            require(it.contentLayout == ContentLayout.ADDRESSABLES) {
-                "The existing setup pipeline supports only Addressables profiles: ${it.id}"
-            }
-        }
-    }
+    private val profile by lazy { SelectedGameStore(this).get() }
     private val buildPaths by lazy {
         ProfileBuildPaths(
             filesDir,
@@ -118,6 +119,8 @@ class SetupActivity : Activity() {
             profile,
         )
     }
+    private val runtime by lazy { LauncherRuntimeProvider.from(this) }
+    private val runtimeRequest by lazy { RuntimeRequest(this, profile, buildPaths) }
 
     // <files>/pkg mirrors an installed package: lib/<abi> beside assets/.
     private val pkgDir: File get() = buildPaths.packageDir
@@ -150,23 +153,27 @@ class SetupActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val adoption = LegacySilksongAdopter.adopt(
-            filesDir,
-            requireNotNull(getExternalFilesDir(null)) { "No external files directory" },
-            buildPaths,
-        )
-        if (adoption.moved.isNotEmpty()) {
-            LauncherLog.log("adopted legacy Silksong state: ${adoption.moved.joinToString()}")
-        }
-        if (adoption.conflicts.isNotEmpty()) {
-            LauncherLog.log("legacy Silksong state kept beside existing profile state: ${adoption.conflicts.joinToString()}")
+        if (profile.id == "silksong") {
+            val adoption = LegacySilksongAdopter.adopt(
+                filesDir,
+                requireNotNull(getExternalFilesDir(null)) { "No external files directory" },
+                buildPaths,
+            )
+            if (adoption.moved.isNotEmpty()) {
+                LauncherLog.log("adopted legacy Silksong state: ${adoption.moved.joinToString()}")
+            }
+            if (adoption.conflicts.isNotEmpty()) {
+                LauncherLog.log("legacy Silksong state kept beside existing profile state: ${adoption.conflicts.joinToString()}")
+            }
         }
         setContentView(buildUi())
         // Forks a process, so it cannot be answered from refresh(). Warmed
         // once here; every later ask reads the cached result.
-        scope.launch {
-            withContext(Dispatchers.IO) { Toolchain.canExecute(Toolchain.rootFor(this@SetupActivity)) }
-            if (!busy) refresh()
+        if (runtime.evidenceKind == EvidenceKind.ARM64_DEVICE) {
+            scope.launch {
+                withContext(Dispatchers.IO) { Toolchain.canExecute(Toolchain.rootFor(this@SetupActivity)) }
+                if (!busy) refresh()
+            }
         }
     }
 
@@ -215,19 +222,7 @@ class SetupActivity : Activity() {
      * a good build and charge the user twenty minutes to get an identical one
      * back.
      */
-    private val buildSignature: String by lazy {
-        val md = java.security.MessageDigest.getInstance("SHA-256")
-        fun walk(path: String) {
-            val names = runCatching { assets.list(path) }.getOrNull().orEmpty().sorted()
-            if (names.isEmpty()) {
-                runCatching { assets.open(path).use { md.update(it.readBytes()) } }
-                return
-            }
-            for (n in names) walk("$path/$n")
-        }
-        walk("ondevice")
-        "1|" + md.digest().joinToString("") { "%02x".format(it) }.take(16)
-    }
+    private val buildSignature: String by lazy { ProductionBuildSignature.compute(this) }
 
     /**
      * The game is built and ready to play.
@@ -239,16 +234,21 @@ class SetupActivity : Activity() {
      * a world with nothing in it.
      */
     private fun isBuilt(): Boolean =
-        dataApk.isFile && File(engineDir, "libil2cpp.so").length() > 0 &&
-            UnityDex.isBuilt(this, UnityFetcher.rootFor(requireNotNull(getExternalFilesDir(null)), profile)) &&
-            haveGameFiles() &&
-            runCatching { builtMarker.readText() }.getOrNull() == buildSignature
+        if (runtime.evidenceKind == EvidenceKind.EMULATOR_FAKE) {
+            runtime.inspect(runtimeRequest).ready
+        } else {
+            dataApk.isFile && File(engineDir, "libil2cpp.so").length() > 0 &&
+                UnityDex.isBuilt(this, UnityFetcher.rootFor(requireNotNull(getExternalFilesDir(null)), profile)) &&
+                haveGameFiles() &&
+                runCatching { builtMarker.readText() }.getOrNull() == buildSignature
+        }
 
     /** The game's own files are on this device, however they got here. */
     private fun haveGameFiles(): Boolean =
-        depotDir?.let {
-            PlayerImage.depotData(it) != null && PlayerImage.foreignBuild(it) == null
-        } == true
+        runtime.evidenceKind == EvidenceKind.EMULATOR_FAKE ||
+            depotDir?.let {
+                PlayerImage.depotData(it) != null && PlayerImage.foreignBuild(it) == null
+            } == true
 
     /**
      * The wrong platform's copy, and where it is, or null when there is none.
@@ -760,7 +760,7 @@ class SetupActivity : Activity() {
         setBusy(true, "Resetting", -1f, "deleting what the build produced")
         scope.launch {
             val failure = withContext(Dispatchers.IO) {
-                runCatching { BuildReset.clear(this@SetupActivity, buildPaths) }.exceptionOrNull()
+                runCatching { runtime.reset(runtimeRequest) }.exceptionOrNull()
             }
             setBusy(false)
             if (failure != null) {
@@ -872,6 +872,13 @@ class SetupActivity : Activity() {
      * honest about which part of the job is running.
      */
     private fun run(download: TokenStore.Credentials?) {
+        if (runtime.evidenceKind == EvidenceKind.EMULATOR_FAKE) {
+            runSynthetic()
+            return
+        }
+        require(profile.contentLayout == ContentLayout.ADDRESSABLES) {
+            "The production setup pipeline does not yet support ${profile.contentLayout}: ${profile.id}"
+        }
         val unity = UnityFetcher.rootFor(requireNotNull(getExternalFilesDir(null)), profile)
         val tools = ToolchainFetcher.rootFor(this)
         val out = buildPaths.buildRoot
@@ -1014,6 +1021,32 @@ class SetupActivity : Activity() {
                 say("The game is ready.")
             } catch (t: Throwable) {
                 LauncherLog.log("Setup failed", t)
+                say("Failed: ${t.message}")
+            } finally {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                setBusy(false)
+                refresh()
+            }
+        }
+    }
+
+    private fun runSynthetic() {
+        stepCount = 1
+        setStep(1, "Preparing ${profile.displayName}")
+        setBusy(true, "", -1f, "")
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        scope.launch {
+            try {
+                val state = runtime.provision(
+                    ProvisionRequest(runtimeRequest, ProvisionSource.Synthetic),
+                ) { progress: RuntimeProgress ->
+                    setBusy(true, progress.stage, progress.fraction, progress.detail)
+                }
+                readyToPort = false
+                pendingCreds = null
+                say(state.detail)
+            } catch (t: Throwable) {
+                LauncherLog.log("Synthetic setup failed", t)
                 say("Failed: ${t.message}")
             } finally {
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

@@ -202,11 +202,11 @@ git commit -m "feat: add fail-closed launcher runtime seam"
 - Modify: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/SettingsStore.kt`
 - Modify: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/SettingsActivity.kt`
 
-- [ ] **Step 1: Write failing isolation and production-delegation tests**
+- [x] **Step 1: Write failing isolation and production-delegation tests**
 
 Test independent Hollow Knight/Silksong launcher settings, one-time adoption of legacy `launcher_settings` into Silksong only, runtime reset preserving the other profile, and a recording runtime receiving the exact selected `RuntimeRequest` from setup orchestration.
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 ```powershell
 .\gradlew.bat :app:testDebugUnitTest --tests dev.silksong.launcher.profiles.ProfileSettingsStoreTest
@@ -228,20 +228,27 @@ class ProductionProvisioner {
 
 `ProductionLauncherRuntime` delegates inspect, provision, reset, and launch to production implementations. The lab runtime is the only runtime allowed to bypass real source acquisition.
 
-- [ ] **Step 4: Implement profile-scoped settings**
+- [x] **Step 4: Implement profile-scoped settings**
 
 Use preference name `launcher_settings.<profile-id>`. On first Silksong access, copy each known key from legacy `launcher_settings`, commit the new file, and write a migration marker; Hollow Knight never reads the legacy file. Update `SettingsActivity` and `LauncherActivity` to construct settings for the selected registered profile.
 
-- [ ] **Step 5: Run focused, full host, and production AAR tests**
+- [x] **Step 5: Run focused, full host, and production AAR tests**
 
 ```powershell
 .\gradlew.bat :app:testDebugUnitTest
 .\gradlew.bat :app:assembleRelease :app:collectRuntimeDeps
 ```
 
-- [ ] **Step 6: Reconcile Stage 3 and commit**
+- [x] **Step 6: Reconcile Stage 3 and commit**
 
 Cross-check production behavior, credentials, source immutability, settings isolation, and reset. Any changed production output or missing setup path is a stage blocker.
+
+Tracked deferral to Stage 6: `ProductionProvisioner` implements the runtime
+operation, but `SetupActivity` deliberately retains its proven production
+pipeline while routing the fake runtime through the seam. Before final
+reconciliation, either route production through the extracted implementation
+with equivalence evidence or remove the unused extraction and narrow the seam
+without weakening the lab/production isolation contract.
 
 ```powershell
 git add src/SilksongLauncher.Launcher/app docs/verification/design-traceability.md
@@ -256,28 +263,28 @@ git commit -m "refactor: route setup through launcher runtime"
 - Modify: `src/SilksongLauncher.Launcher/app/src/main/res/values/strings.xml`
 - Modify: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/LauncherActivity.kt`
 
-- [ ] **Step 1: Write failing Robolectric selector tests**
+- [x] **Step 1: Write failing Robolectric selector tests**
 
 Assert that both registered games render before launch, the persisted selection is checked, choosing the other game persists then recreates/rebinds the activity, a non-production runtime shows `TEST RUNTIME · EMULATOR-FAKE`, the launch button opens setup when not ready, and a ready runtime receives the exact selected profile in `gameIntent`.
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 ```powershell
 .\gradlew.bat :app:testDebugUnitTest --tests dev.silksong.launcher.LauncherProfileSelectionTest
 ```
 
-- [ ] **Step 3: Implement the shared selector**
+- [x] **Step 3: Implement the shared selector**
 
 Add a hidden `txt_runtime_banner`, a `RadioGroup` with `radio_hollow_knight` and `radio_silksong`, and a `txt_selected_game_status` above the existing actions. Bind exclusively from `GameProfiles.all`/`SelectedGameStore`; do not hard-code a third profile registry. Disable cloud actions for profiles whose save adapter is not implemented. Route readiness, setup, reset, and launch through `LauncherRuntime`.
 
-- [ ] **Step 4: Run focused and full host tests**
+- [x] **Step 4: Run focused and full host tests**
 
 ```powershell
 .\gradlew.bat :app:testDebugUnitTest --tests dev.silksong.launcher.LauncherProfileSelectionTest
 .\gradlew.bat :app:testDebugUnitTest
 ```
 
-- [ ] **Step 5: Reconcile Stage 3 UI and commit**
+- [x] **Step 5: Reconcile Stage 3 UI and commit**
 
 Verify both-game selection, one launcher, evidence banner, settings isolation, and the unchanged supplied icon resources. Keep actual Hollow Knight boot and game adapters `NOT-STARTED`/`BLOCKER` in the parent ledger.
 
@@ -495,14 +502,15 @@ git push fork design/unified-hollow-knight-platform
 | Exact emulator targeting; Thor excluded | 5 | NOT-STARTED | Script tests plus resolved serial evidence |
 | Real launcher/profile/storage code in lab | 2–4 | DEFERRED | Runtime contract is shared; activity routing and lab module are Stages 3–4 |
 | Fake only native Unity/Mono/IL2CPP boundary | 2–4 | DEFERRED | Fail-closed exact-package provider is complete; lab implementation and APK inspection are Stage 4 |
-| Both profile selection and persistence | 3–5 | NOT-STARTED | Robolectric plus instrumentation |
+| Both profile selection and persistence | 3–5 | DEFERRED | 5 selector/setup Robolectric tests pass; rendered Android instrumentation remains Stage 5 |
 | Atomic synthetic generations/recovery | 1, 4–5 | DEFERRED | Publisher API has 6 green host tests; lab and Android integration remain Stages 4–5 |
-| Profile-scoped reset/settings isolation | 3–5 | NOT-STARTED | Host and Android isolation matrix |
+| Profile-scoped reset/settings isolation | 3–5 | DEFERRED | Host tests prove settings migration and reset isolation; Android integration remains Stage 5 |
 | Synthetic cold game process switching | 4–5 | NOT-STARTED | Recorded old/new PID ordering |
 | Visible `EMULATOR-FAKE` identity | 3–5 | NOT-STARTED | Rendered UI and log/report evidence |
 | No proprietary inputs or production-data access | 4–6 | NOT-STARTED | APK/source scan and lab runtime tests |
 | Existing user artwork only | 4 | NOT-STARTED | Resource provenance; no generated/edited image |
 | Production AAR/APK behavior unchanged | 3–6 | NOT-STARTED | Full host/build regression and artifact inspection |
+| Production setup runtime delegation | 3, 6 | DEFERRED | Extracted implementation compiles; proven direct production path retained until final equivalence/remediation |
 | Lab cannot be signed or published | 4, 6 | NOT-STARTED | Disabled variant plus CI guard tests |
 | Stage-by-stage design reconciliation | 1–6 | IN-PROGRESS | Traceability updates after every stage |
 | ARM64/device claims remain open | 1–6 | BLOCKER | Parent ledger retains device gates; lab cannot close them |

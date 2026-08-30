@@ -16,6 +16,8 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import kotlinx.coroutines.CoroutineScope
@@ -24,32 +26,24 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import dev.silksong.launcher.profiles.ContentLayout
+import dev.silksong.launcher.profiles.GameProfiles
 import dev.silksong.launcher.profiles.LegacySilksongAdopter
 import dev.silksong.launcher.profiles.ProfileBuildPaths
 import dev.silksong.launcher.profiles.SelectedGameStore
+import dev.silksong.launcher.runtime.EvidenceKind
+import dev.silksong.launcher.runtime.LauncherRuntimeProvider
+import dev.silksong.launcher.runtime.RuntimeRequest
 
 class LauncherActivity : Activity() {
 
     private companion object {
-        // The game is the depot-built player in this same package. It is not
-        // Unity's own activity: dev.silksong.shell.GameActivity owns the
-        // window and points the engine's library lookup at app storage.
-        private const val UNITY_ACTIVITY_CLASS = "dev.silksong.shell.GameActivity"
-        private const val PROFILE_ID_EXTRA = "dev.silksong.launcher.PROFILE_ID"
-
         private const val REQ_LOGIN = 1
     }
 
     private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private val profile by lazy {
-        SelectedGameStore(this).get().also {
-            require(it.contentLayout == ContentLayout.ADDRESSABLES) {
-                "The existing launcher supports only Addressables profiles: ${it.id}"
-            }
-        }
-    }
+    private val selectedGameStore by lazy { SelectedGameStore(this) }
+    private val profile by lazy { selectedGameStore.get() }
     private val buildPaths by lazy {
         ProfileBuildPaths(
             filesDir,
@@ -57,9 +51,16 @@ class LauncherActivity : Activity() {
             profile,
         )
     }
+    private val runtime by lazy { LauncherRuntimeProvider.from(this) }
+    private val runtimeRequest by lazy { RuntimeRequest(this, profile, buildPaths) }
 
     // Panels.
     private lateinit var launchPanel: LinearLayout
+    private lateinit var runtimeBanner: TextView
+    private lateinit var gameSelector: RadioGroup
+    private lateinit var radioHollowKnight: RadioButton
+    private lateinit var radioSilksong: RadioButton
+    private lateinit var selectedGameStatus: TextView
 
     // Launch-panel widgets.
     private lateinit var txtLoginStatus: TextView
@@ -99,21 +100,28 @@ class LauncherActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val adoption = LegacySilksongAdopter.adopt(
-            filesDir,
-            requireNotNull(getExternalFilesDir(null)) { "No external files directory" },
-            buildPaths,
-        )
-        if (adoption.moved.isNotEmpty()) {
-            LauncherLog.log("adopted legacy Silksong state: ${adoption.moved.joinToString()}")
-        }
-        if (adoption.conflicts.isNotEmpty()) {
-            LauncherLog.log("legacy Silksong state kept beside existing profile state: ${adoption.conflicts.joinToString()}")
+        if (profile.id == "silksong") {
+            val adoption = LegacySilksongAdopter.adopt(
+                filesDir,
+                requireNotNull(getExternalFilesDir(null)) { "No external files directory" },
+                buildPaths,
+            )
+            if (adoption.moved.isNotEmpty()) {
+                LauncherLog.log("adopted legacy Silksong state: ${adoption.moved.joinToString()}")
+            }
+            if (adoption.conflicts.isNotEmpty()) {
+                LauncherLog.log("legacy Silksong state kept beside existing profile state: ${adoption.conflicts.joinToString()}")
+            }
         }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_launcher)
 
         launchPanel = findViewById(R.id.launch_panel)
+        runtimeBanner = findViewById(R.id.txt_runtime_banner)
+        gameSelector = findViewById(R.id.game_selector)
+        radioHollowKnight = findViewById(R.id.radio_hollow_knight)
+        radioSilksong = findViewById(R.id.radio_silksong)
+        selectedGameStatus = findViewById(R.id.txt_selected_game_status)
         txtLoginStatus = findViewById(R.id.txt_login_status)
         btnLogin = findViewById(R.id.btn_login)
         btnPull = findViewById(R.id.btn_pull)
@@ -130,8 +138,9 @@ class LauncherActivity : Activity() {
         txtLog.text = LauncherLog.snapshot().joinToString("\n")
         LauncherLog.addListener(logListener)
 
+        bindProfileControls()
         tokenStore = TokenStore(this)
-        settings = SettingsStore(this)
+        settings = SettingsStore(this, profile)
         creds = tokenStore.read()
         refreshLoginUi()
         LauncherLog.log("Launcher ready. Logged in: ${creds != null}")
@@ -167,6 +176,28 @@ class LauncherActivity : Activity() {
 
     private fun showLaunchPanel() {
         launchPanel.visibility = View.VISIBLE
+    }
+
+    private fun bindProfileControls() {
+        val hollowKnight = GameProfiles.require("hollow-knight")
+        val silksong = GameProfiles.require("silksong")
+        radioHollowKnight.text = hollowKnight.displayName
+        radioSilksong.text = silksong.displayName
+        gameSelector.check(if (profile.id == hollowKnight.id) R.id.radio_hollow_knight else R.id.radio_silksong)
+        selectedGameStatus.text = getString(R.string.selected_game_status, profile.displayName)
+        runtimeBanner.visibility =
+            if (runtime.evidenceKind == EvidenceKind.EMULATOR_FAKE) View.VISIBLE else View.GONE
+        gameSelector.setOnCheckedChangeListener { _, checkedId ->
+            val selected = when (checkedId) {
+                R.id.radio_hollow_knight -> hollowKnight
+                R.id.radio_silksong -> silksong
+                else -> return@setOnCheckedChangeListener
+            }
+            if (selected.id != profile.id) {
+                selectedGameStore.set(selected)
+                recreate()
+            }
+        }
     }
 
     override fun onResume() {
@@ -219,6 +250,7 @@ class LauncherActivity : Activity() {
 
     private fun refreshLoginUi() {
         val c = creds
+        val cloudSupported = profile.id == "silksong"
         if (c == null) {
             txtLoginStatus.text = ""
             btnLogin.text = getString(R.string.action_log_in)
@@ -227,8 +259,8 @@ class LauncherActivity : Activity() {
         } else {
             txtLoginStatus.text = "Signed in as ${c.accountName}"
             btnLogin.text = getString(R.string.action_log_in_as)
-            btnPull.isEnabled = true
-            btnPush.isEnabled = true
+            btnPull.isEnabled = cloudSupported
+            btnPush.isEnabled = cloudSupported
         }
     }
 
@@ -511,6 +543,11 @@ class LauncherActivity : Activity() {
      * away.
      */
     private fun onLaunchClicked() {
+        if (!runtime.inspect(runtimeRequest).ready) {
+            btnLaunch.text = getString(R.string.action_prepare_game, profile.displayName)
+            startActivity(Intent(this, SetupActivity::class.java))
+            return
+        }
         val c = creds
         if (c == null || !settings.autoPull) {
             launchGame()
@@ -532,16 +569,19 @@ class LauncherActivity : Activity() {
         // catalog can point nowhere else. So a depot that has been deleted or
         // moved is checked for here rather than being discovered by the engine
         // as an empty world, and the link is remade in case it moved.
-        val depot = DepotLocation.resolve(this, buildPaths)?.takeIf { PlayerImage.depotData(it) != null }
-        if (depot == null) {
-            LauncherLog.log("Launch aborted: the game's files are not on this device")
-            missingGameFiles()
-            return
+        if (runtime.evidenceKind == EvidenceKind.ARM64_DEVICE) {
+            val depot = DepotLocation.resolve(this, buildPaths)?.takeIf { PlayerImage.depotData(it) != null }
+            if (depot == null) {
+                LauncherLog.log("Launch aborted: the game's files are not on this device")
+                missingGameFiles()
+                return
+            }
+            runCatching { DepotLocation.relink(buildPaths, depot) }
+                .onFailure { LauncherLog.log("could not relink the content", it) }
         }
-        runCatching { DepotLocation.relink(buildPaths, depot) }
-            .onFailure { LauncherLog.log("could not relink the content", it) }
         try {
-            LauncherLog.log("Launching $UNITY_ACTIVITY_CLASS")
+            val intent = runtime.gameIntent(runtimeRequest)
+            LauncherLog.log("Launching ${intent.component?.className} for ${profile.id}")
             // No FLAG_ACTIVITY_NEW_TASK / CLEAR_TASK and no finish()
             // here — we want Unity's activity ON TOP of ours in the
             // same task so the system back stack returns to us on
@@ -549,10 +589,6 @@ class LauncherActivity : Activity() {
             // when Unity calls System.exit(0) on quit, so the
             // returning activity transition is just an OS-driven
             // resume of the still-living launcher.
-            val intent = Intent().apply {
-                setClassName(packageName, UNITY_ACTIVITY_CLASS)
-                putExtra(PROFILE_ID_EXTRA, profile.id)
-            }
             // Written here rather than when the user changes a setting: this
             // is the moment the game will read them, so it is the moment they
             // cannot be stale.
@@ -588,7 +624,7 @@ class LauncherActivity : Activity() {
         android.app.AlertDialog.Builder(this)
             .setTitle("The game's files are missing")
             .setMessage(
-                "Silksong reads its content straight out of the folder you supplied. " +
+                "${profile.displayName} reads its content straight out of the folder you supplied. " +
                     "That folder is no longer there, so the game cannot start.\n\n" +
                     "Put it back, or point the app at it again. Everything else that was " +
                     "built is still here, so it will not have to be done again.",

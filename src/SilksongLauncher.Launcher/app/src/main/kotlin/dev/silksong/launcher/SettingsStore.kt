@@ -15,12 +15,18 @@ package dev.silksong.launcher
 
 import android.content.Context
 import android.content.SharedPreferences
+import dev.silksong.launcher.profiles.GameProfile
+import dev.silksong.launcher.profiles.ProfileSettingsStore
+import dev.silksong.launcher.profiles.SelectedGameStore
 import java.io.File
 
-class SettingsStore(context: Context) {
+class SettingsStore(
+    context: Context,
+    profile: GameProfile = SelectedGameStore(context).get(),
+) {
 
     private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        ProfileSettingsStore(context, profile).preferences
 
     var autoPull: Boolean
         get() = prefs.getBoolean(KEY_AUTO_PULL, false)
@@ -112,7 +118,6 @@ class SettingsStore(context: Context) {
     }
 
     private companion object {
-        const val PREFS_NAME = "launcher_settings"
         const val KEY_AUTO_PULL = "auto_pull"
         const val KEY_AUTO_PUSH = "auto_push"
         const val KEY_PERF_OVERLAY = "perf_overlay"
