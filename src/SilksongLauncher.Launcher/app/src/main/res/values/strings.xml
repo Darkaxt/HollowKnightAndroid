@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Visible in the app drawer. Overrides the Unity-set label. -->
-    <string name="launcher_app_name">Silksong Launcher</string>
+    <string name="launcher_app_name">Dual Souls</string>
 
-    <string name="launcher_title">Silksong</string>
+    <string name="launcher_title">Dual Souls</string>
     <string name="launcher_status_idle">Ready.</string>
     <string name="launcher_status_starting">Starting game…</string>
     <string name="launcher_status_error">Couldn\'t start the game: %1$s</string>

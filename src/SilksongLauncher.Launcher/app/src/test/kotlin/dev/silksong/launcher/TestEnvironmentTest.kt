@@ -13,6 +13,6 @@ class TestEnvironmentTest {
     fun robolectric_loads_launcher_resources() {
         val context = ApplicationProvider.getApplicationContext<Context>()
 
-        assertEquals("Silksong Launcher", context.getString(R.string.launcher_app_name))
+        assertEquals("Dual Souls", context.getString(R.string.launcher_app_name))
     }
 }

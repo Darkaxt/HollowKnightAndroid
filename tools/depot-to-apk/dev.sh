@@ -97,7 +97,7 @@ export ANDROID_SDK AP JDK
 export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK}"
 
 export STEPS="${STEPS:-5,6}"
-PKG="${PKG:-com.jakobkhansen.silksong}"
+PKG="${PKG:-io.github.darkaxt.dualsouls}"
 # The Makefile exports this, but the script has to stand on its own: under
 # `set -u` an unset APK_DIR aborts AFTER the APK is built, throwing away a
 # two-minute build over a variable. Same default as the Makefile.
@@ -107,7 +107,7 @@ APK_DIR="${APK_DIR:-$REPO_ROOT/build}"
 # two cannot disagree about what the build just produced. Exported for the same
 # reason: build.sh takes the override if one is set here.
 VERSION_NAME="${VERSION_NAME:-$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION" 2>/dev/null || echo 0.0.0)}"
-APK_NAME="${APK_NAME:-SilksongAndroid-$VERSION_NAME.apk}"
+APK_NAME="${APK_NAME:-DualSouls-$VERSION_NAME.apk}"
 
 OUT="${OUT:-$BUILD_ROOT/mk/apk2}"
 export PKG OUT VERSION_NAME APK_NAME

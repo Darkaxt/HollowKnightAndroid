@@ -229,8 +229,8 @@ jobs:
           code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$badging" | head -1)"
 
           echo "manifest: package=$package versionName=$name versionCode=$code"
-          if [[ "$package" != "com.jakobkhansen.silksong" ]]; then
-            echo "::error::APK package is '$package', expected 'com.jakobkhansen.silksong'"
+          if [[ "$package" != "io.github.darkaxt.dualsouls" ]]; then
+            echo "::error::APK package is '$package', expected 'io.github.darkaxt.dualsouls'"
             exit 1
           fi
           if [[ "$name" != "${{ steps.version.outputs.version }}" ]]; then
@@ -251,7 +251,7 @@ jobs:
             --apk "$apk" \
             --expected-certificate-sha256 "$expected_cert"
 
-          out="SilksongAndroid-${{ steps.version.outputs.version }}.apk"
+          out="DualSouls-${{ steps.version.outputs.version }}.apk"
           # The build already names it this, but not if APK_NAME was overridden
           # somewhere; copying only when they differ keeps both cases working
           # and avoids cp refusing to copy a file onto itself.
@@ -346,7 +346,7 @@ jobs:
           # still there, so it is minutes.
           notes="$RUNNER_TEMP/notes.md"
           cat > "$notes" <<EOF
-          ## Hollow Knight: Silksong Android ${{ steps.version.outputs.version }}
+          ## Dual Souls ${{ steps.version.outputs.version }}
 
           **Note when updating from a previous version**: This will trigger the porting process again, but it is heavily cached, so should only take a few minutes.
 
