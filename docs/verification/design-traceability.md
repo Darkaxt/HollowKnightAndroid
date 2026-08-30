@@ -1,7 +1,7 @@
 # Unified Platform Design Traceability
 
-Last cross-check: 2026-08-30, Task 16 final product-identity slice and signed
-dry-run APK manifest, signer, artifact, and icon inspection.
+Last cross-check: 2026-08-30, dedicated emulator-test-instance design and
+Task 8 evidence-boundary correction after the Task 16 signed checkpoint.
 
 States follow the design contract: `COMPLETE`, `BLOCKER`, `DEFERRED`, and
 `NOT-STARTED`. `NOT-STARTED` means the planned milestone has not begun. The
@@ -11,7 +11,10 @@ non-colliding and signed by the stable fork identity. The two packages can
 coexist, but no preservation/adoption migration into the new package has
 occurred. That prevents either Milestone 1 or Milestone 2 from closing. The
 independently authorized identity/signing slice cannot conceal that blocker
-and does not permit Task 8 to begin.
+and does not permit native execution, migration, or release claims. Independent
+host work on Task 8 descriptors, exact hashes, and cache isolation may proceed,
+as may a separately identified fake-runtime emulator workstream; neither can
+close an ARM64-device gate.
 
 | Requirement | Planned milestone | State | Evidence or gap | Dependency | Acceptance test |
 |---|---:|---|---|---|---|
@@ -86,7 +89,8 @@ and does not permit Task 8 to begin.
 | Host test: death-to-respawn rotation | 5 | NOT-STARTED | Rotation tests have not begun | Task 13 | State-transition suite passes |
 | Host test: launcher/settings/reset isolation | 1–4 | BLOCKER | Task 4 covers generated-path/reset isolation and profile-id handoff; selector navigation and per-profile settings isolation remain unimplemented | Tasks 9 and 11 | Robolectric selector, settings, generation, and reset matrix passes |
 | Emulator: Robolectric covers fakeable UI/state behavior | 1–5 | COMPLETE | The host runner loads real Android resources; the Task 16 gate passes 38 tests with 37 passed and one intentional skip, including the final launcher label contract | Pinned Gradle/Android player module | `:app:testDebugUnitTest` passes on the host |
-| Emulator: x86-64 is optional and not native evidence | Boundary | COMPLETE | Design and plan explicitly exclude it as release proof | None | Traceability cites no x86 native/device claims |
+| Emulator: x86-64 is not native evidence | Boundary | COMPLETE | Design and plan explicitly exclude it as release proof | None | Traceability cites no x86 native/device claims |
+| Emulator: dedicated fake-runtime integration instance | Lab | NOT-STARTED | The approved direction is specified in `docs/superpowers/specs/2026-08-30-dual-souls-emulator-test-instance-design.md`; no AVD tooling, lab APK, runtime seam, or instrumentation exists yet | Written design review and staged implementation plan | Exact `DualSoulsLabApi35` AVD runs the separately identified lab APK and passes launcher/profile/storage/recovery integration without claiming native proof |
 | Device gate 1: clean provisioning for both Linux sources | Release | NOT-STARTED | Device matrix has not begun | Both profiles | Clean source-to-ready run passes per profile |
 | Device gate 2: exact toolchain and on-device IL2CPP | Release | NOT-STARTED | Device matrix has not begun | Toolchain registry | Logs and artifact hashes prove exact components |
 | Device gate 3: menu and representative gameplay | Release | NOT-STARTED | Device matrix has not begun | Playable generations | Both profiles enter gameplay |

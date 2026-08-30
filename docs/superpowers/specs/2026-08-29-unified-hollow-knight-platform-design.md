@@ -438,9 +438,11 @@ The production APK cannot run on the existing x86-64 emulator because its
 launcher runtime, fetched tools, Unity player, and IL2CPP output are ARM64.
 Robolectric host tests cover launcher navigation, profile state, storage,
 manifest parsing, import flows, error reporting, and lifecycle behavior through
-fakes. An x86-64 emulator shell would require a deliberately separate test
-artifact with the native pipeline replaced by fakes; it is optional and is not
-accepted as evidence for the production pipeline.
+fakes. The separately specified `Dual Souls Lab` x86-64 shell deliberately
+replaces the native pipeline with deterministic test implementations. Its
+scope and acceptance criteria are defined in
+`2026-08-30-dual-souls-emulator-test-instance-design.md`; it is not accepted
+as evidence for the production pipeline.
 
 An ARM64 Android environment may run broader integration tests if it supports
 the required executable-files policy and Vulkan features. Emulator-only

@@ -89,10 +89,13 @@ Tasks 5–7 as an independent host-only converter POC before Task 4's device
 regression. Before Task 5 begins, the traceability ledger must record Task 4
 as a `BLOCKER`, including its missing Silksong regression evidence and exact
 unblock command/device test. This exception closes neither Milestone 1 nor
-Milestone 2 and does not permit Task 8 or any other device/toolchain-dependent
-work to begin. Tasks 5–7 operate only on synthetic fixtures and read-only
-copies of user-supplied Hollow Knight data, so they cannot alter or conceal
-the existing Silksong runtime path.
+Milestone 2. Task 8 descriptor, exact-hash, and cache-isolation work may proceed
+as independent host work, and the separately specified fake-runtime emulator
+workstream may proceed after its own written design and implementation plan are
+approved. Neither permits production component execution, the Task 8 ARM64
+spike, or any native/device claim. Tasks 5–7 operate only on synthetic fixtures
+and read-only copies of user-supplied Hollow Knight data, so they cannot alter
+or conceal the existing Silksong runtime path.
 
 ## Milestone 1: Profile foundation without Silksong regression
 
