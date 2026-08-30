@@ -21,7 +21,7 @@
 - `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/runtime/LauncherRuntime.kt`: shared runtime request/state/progress contract.
 - `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/runtime/LauncherRuntimeProvider.kt`: fail-closed production/lab selection from exact package and manifest metadata.
 - `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/runtime/ProductionLauncherRuntime.kt`: current device behavior behind the runtime contract.
-- `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/runtime/ProductionProvisioner.kt`: current `SetupActivity` build pipeline extracted without behavior changes.
+- `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/runtime/ProductionBuildSignature.kt`: production build-input signature shared with the authoritative setup path.
 - `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/profiles/ProfileSettingsStore.kt`: profile-scoped launcher settings with one-time Silksong legacy adoption.
 - `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/LauncherActivity.kt`: common game selector, runtime banner, readiness, and launch routing.
 - `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/SetupActivity.kt`: common setup UI using the runtime contract.
@@ -197,7 +197,7 @@ git commit -m "feat: add fail-closed launcher runtime seam"
 - Create: `src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/ProfileSettingsStoreTest.kt`
 - Create: `src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/runtime/ProductionLauncherRuntimeTest.kt`
 - Create: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/profiles/ProfileSettingsStore.kt`
-- Create: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/runtime/ProductionProvisioner.kt`
+- Create: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/runtime/ProductionBuildSignature.kt`
 - Modify: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/SetupActivity.kt`
 - Modify: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/SettingsStore.kt`
 - Modify: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/SettingsActivity.kt`
@@ -213,20 +213,23 @@ Test independent Hollow Knight/Silksong launcher settings, one-time adoption of 
 .\gradlew.bat :app:testDebugUnitTest --tests dev.silksong.launcher.runtime.ProductionLauncherRuntimeTest
 ```
 
-- [ ] **Step 3: Extract the existing production build body**
+- [x] **Step 3: Resolve production build ownership**
 
-Move the current `SetupActivity.run` operations in their existing order into `ProductionProvisioner.provision`. Pass the resolved depot, optional credentials, assets, package name, and a structured progress callback. `SetupActivity` retains source selection and consent UI, then calls the selected runtime. Preserve the current catch/finally behavior, screen-on flag, exact source checks, and final `.built` marker contract.
+The extraction was evaluated through Stage 5 but was not the authoritative
+production path. Stage 6 chose the plan's safe alternative: retain the proven
+`SetupActivity` operation order/catch/finally/screen-on/source/`.built`
+contract, remove the unused duplicate, keep `ProductionBuildSignature` as a
+separate shared utility, and make production runtime provisioning explicitly
+reject the lab-only synthetic request.
 
 ```kotlin
-class ProductionProvisioner {
-    suspend fun provision(
-        request: ProvisionRequest,
-        emit: suspend (RuntimeProgress) -> Unit,
-    ): RuntimeState
-}
+override suspend fun provision(...): RuntimeState =
+    throw UnsupportedOperationException("Production setup remains owned by SetupActivity")
 ```
 
-`ProductionLauncherRuntime` delegates inspect, provision, reset, and launch to production implementations. The lab runtime is the only runtime allowed to bypass real source acquisition.
+`ProductionLauncherRuntime` owns production inspect, reset, and launch routing.
+Only the exact lab runtime implements the synthetic provisioning operation;
+production source acquisition remains in its established activity path.
 
 - [x] **Step 4: Implement profile-scoped settings**
 
@@ -243,12 +246,9 @@ Use preference name `launcher_settings.<profile-id>`. On first Silksong access, 
 
 Cross-check production behavior, credentials, source immutability, settings isolation, and reset. Any changed production output or missing setup path is a stage blocker.
 
-Tracked deferral to Stage 6: `ProductionProvisioner` implements the runtime
-operation, but `SetupActivity` deliberately retains its proven production
-pipeline while routing the fake runtime through the seam. Before final
-reconciliation, either route production through the extracted implementation
-with equivalence evidence or remove the unused extraction and narrow the seam
-without weakening the lab/production isolation contract.
+Stage 6 resolution: the unused extraction was removed, the authoritative
+production setup path remains unchanged, and the fake-runtime seam remains
+available only through the exact lab package/metadata contract.
 
 ```powershell
 git add src/SilksongLauncher.Launcher/app docs/verification/design-traceability.md
@@ -455,21 +455,21 @@ git commit -m "test: verify Dual Souls launcher on Android emulator"
 - Modify: `docs/verification/design-traceability.md`
 - Modify: `docs/superpowers/specs/2026-08-30-dual-souls-emulator-test-instance-design.md`
 
-- [ ] **Step 1: Write failing CI guard tests**
+- [x] **Step 1: Write failing CI guard tests**
 
 Assert release asset discovery accepts only `DualSouls-<numeric-version>.apk`, rejects package suffix `.emutest`, and never invokes `:emulator-test-app` from the signing workflow.
 
-- [ ] **Step 2: Run CI tests and verify RED**
+- [x] **Step 2: Run CI tests and verify RED**
 
 ```powershell
 python -m unittest tools.ci.test_release_pipeline
 ```
 
-- [ ] **Step 3: Add explicit release isolation guards**
+- [x] **Step 3: Add explicit release isolation guards**
 
 Keep lab build/test in a separate non-signing job or out of release workflow. Release signing continues to consume only the hand-assembled ARM64 production APK and the existing pinned production certificate contract.
 
-- [ ] **Step 4: Run fresh end-to-end verification**
+- [x] **Step 4: Run fresh end-to-end verification**
 
 ```powershell
 pwsh -NoProfile -File tools\emulator\Test-DualSoulsLab.ps1
@@ -482,11 +482,11 @@ git diff --check
 
 Inspect production AAR/APK inputs and lab APK again. Record exact hashes and counts.
 
-- [ ] **Step 5: Final specification reconciliation**
+- [x] **Step 5: Final specification reconciliation**
 
 Re-read every section and all nine acceptance criteria in the emulator specification. The emulator-spec ledger must have `blockers = 0` and `tracked_deferrals = 0`. Parent-platform game/native/device/release requirements remain separately open and must not be relabeled as emulator completion.
 
-- [ ] **Step 6: Commit and push the completed lab stage**
+- [x] **Step 6: Commit and push the completed lab stage**
 
 ```powershell
 git add .github/workflows/release.yml tools/ci/test_release_pipeline.py docs/verification docs/superpowers/specs/2026-08-30-dual-souls-emulator-test-instance-design.md
@@ -507,10 +507,10 @@ git push fork design/unified-hollow-knight-platform
 | Profile-scoped reset/settings isolation | 3–5 | COMPLETE | Host tests plus Android sandbox evidence prove sibling generation/current preservation |
 | Synthetic cold game process switching | 4–5 | COMPLETE | Android instrumentation proves old PID gone and new PID differs |
 | Visible `EMULATOR-FAKE` identity | 3–5 | COMPLETE | Runtime assertion plus clean post-instrumentation rendered UI dump pass |
-| No proprietary inputs or production-data access | 4–6 | NOT-STARTED | APK/source scan and lab runtime tests |
+| No proprietary inputs or production-data access | 4–6 | COMPLETE | 213 tracked paths plus 251 AAR and 290 lab-APK entries scan clean; lab accepts synthetic requests only |
 | Existing user artwork only | 4 | COMPLETE | Lab reuses the checked-in approved resources; no image generation/editing is present |
-| Production AAR/APK behavior unchanged | 3–6 | DEFERRED | Current host tests pass; fresh release AAR/APK regression and inspection are Stage 6 |
-| Production setup runtime delegation | 3, 6 | DEFERRED | Extracted implementation compiles; proven direct production path retained until final equivalence/remediation |
-| Lab cannot be signed or published | 4, 6 | DEFERRED | Lab has no release variant/signing config; explicit workflow/asset guards are Stage 6 |
-| Stage-by-stage design reconciliation | 1–6 | IN-PROGRESS | Traceability updates after every stage |
+| Production AAR/APK behavior unchanged | 3–6 | COMPLETE | Fresh host/release-AAR/runtime-dependency build passes; production setup remains authoritative |
+| Production setup runtime delegation | 3, 6 | COMPLETE | Unused duplicate removed; production rejects synthetic setup while the existing direct path remains proven |
+| Lab cannot be signed or published | 4, 6 | COMPLETE | No release variant/signing config; exact asset/package guards and no workflow lab invocation pass 4 tests |
+| Stage-by-stage design reconciliation | 1–6 | COMPLETE | All six stages cross-checked; emulator blockers 0, deferrals 0; parent gaps remain separately classified |
 | ARM64/device claims remain open | 1–6 | BLOCKER | Parent ledger retains device gates; lab cannot close them |

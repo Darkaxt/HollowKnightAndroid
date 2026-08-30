@@ -25,7 +25,9 @@ class ProductionLauncherRuntime : LauncherRuntime {
     override suspend fun provision(
         request: ProvisionRequest,
         emit: suspend (RuntimeProgress) -> Unit,
-    ): RuntimeState = ProductionProvisioner().provision(request, emit)
+    ): RuntimeState = throw UnsupportedOperationException(
+        "Production setup remains owned by SetupActivity; runtime provisioning is lab-only",
+    )
 
     override fun reset(request: RuntimeRequest): Long =
         BuildReset.clear(request.context, request.paths)

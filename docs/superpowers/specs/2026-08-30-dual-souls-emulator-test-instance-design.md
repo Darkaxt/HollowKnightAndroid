@@ -1,7 +1,7 @@
 # Dual Souls Emulator Test Instance
 
-**Status:** Implementation in progress; Stages 1–5 are reconciled and the
-production-regression/release-isolation stage remains open.
+**Status:** Complete; Stages 1–6 are reconciled with zero emulator-spec
+blockers and zero emulator-spec tracked deferrals.
 
 **Date:** 2026-08-30
 
@@ -321,3 +321,27 @@ The emulator-test-instance stage is complete only when:
 8. release automation cannot sign or publish the lab APK; and
 9. the traceability ledger records every remaining native, device, gameplay,
    feature, adoption, signing, and release requirement with its proper state.
+
+## Final acceptance reconciliation — 2026-08-31
+
+| Criterion | State | Evidence |
+|---:|---|---|
+| 1 | COMPLETE | Checked-in tooling creates/validates `DualSoulsLabApi35` under `D:\Android\avd` |
+| 2 | COMPLETE | Exact-name serial resolution returns `emulator-5554` and refuses `bfa98654` |
+| 3 | COMPLETE | Lab installs and cold-launches on API 35 x86-64 |
+| 4 | COMPLETE | Both profiles render; Hollow Knight selection survives activity and launcher-process restart |
+| 5 | COMPLETE | Three Android tests cover publication, failure retention, exact discard, reset isolation, and cold PID switching |
+| 6 | COMPLETE | Package/UI/runtime evidence identifies `Dual Souls Lab` and `EMULATOR-FAKE` |
+| 7 | COMPLETE | 69 shared host tests, 6 lab host tests, release AAR, and runtime-dependency collection pass |
+| 8 | COMPLETE | Exact release asset/package helper rejects lab artifacts; workflow never invokes the lab module |
+| 9 | COMPLETE | Parent native/gameplay/feature/device/adoption/signing/release gaps remain classified in traceability |
+
+```text
+emulator-spec blockers: 0
+emulator-spec tracked deferrals: 0
+```
+
+The parent platform remains incomplete. In particular, no result here proves
+real Hollow Knight or Silksong execution, ARM64 IL2CPP, Vulkan/gameplay,
+mods/skins in either real game, Thor display/input behavior, adoption/update,
+or a publishable release.

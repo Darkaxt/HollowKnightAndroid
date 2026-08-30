@@ -55,7 +55,7 @@ was tested only through compileSdk 35 while the existing project compiles with
 
 ```text
 file:        emulator-test-app-debug.apk
-SHA-256:     927dade1e201d7d9a3a116f9c5ac02b1dc59d1d1595c26b09873690949799623
+SHA-256:     2bbd3304d3a973cc343ce3a13c1e41fcbaa77aef5643a0f64f3abcd93a59cbf0
 package:     io.github.darkaxt.dualsouls.emutest
 label:       Dual Souls Lab
 version:     0.1-lab / 1
@@ -122,6 +122,41 @@ following parent-platform gaps remain classified rather than hidden:
 - `NOT-STARTED`: shared mod catalog, skin scanner/registry/activation, full
   production coordinator, and shared renderer stages.
 
-Stage 6 still must prove the lab cannot enter the signed release pipeline and
-repeat the production build/regression gates before the emulator specification
-itself can be closed.
+## Stage 6 production and release isolation
+
+The final regression used the pinned Gradle 8.11 launcher because this checkout
+does not contain a Gradle wrapper:
+
+```text
+:app:testDebugUnitTest
+:app:assembleRelease
+:app:collectRuntimeDeps
+:emulator-test-app:testDebugUnitTest
+:emulator-test-app:assembleDebug
+```
+
+All tasks passed. The production release AAR is 12,726,684 bytes with SHA-256
+`be02c43c1f0ba7f0f150f7890dbcf1db344b9ae76fc7674e844738cb18d6fd6b`.
+Its 251 entries include 10 JNI libraries, all under `jni/arm64-v8a`, and 169
+Mono BCL DLLs. The lab APK is 18,821,586 bytes with the SHA-256 above; its 290
+entries contain zero ARM64 JNI and zero `assets/mono-bcl` files.
+
+The unused duplicate `ProductionProvisioner` was removed. The already-proven
+production build remains owned by `SetupActivity`, while
+`ProductionLauncherRuntime.provision` explicitly rejects the synthetic path.
+The shared `ProductionBuildSignature` utility remains in its own source file.
+This closes the Stage 3 deferral without switching the production pipeline.
+
+Nine CI contract tests pass. Release selection now fails unless `build/`
+contains exactly `DualSouls-<VERSION>.apk`, rejects every extra APK, requires
+package `io.github.darkaxt.dualsouls`, and rejects `.emutest`. The signing
+workflow contains no `:emulator-test-app` invocation. The lab module still has
+no release variant or release signing configuration.
+
+The Stage 6 boundary scan found zero forbidden APK/archive/private-keystore
+paths among 213 tracked files and zero game-content/private-key signature
+matches among either the 251 production AAR entries or 290 lab APK entries.
+
+The emulator specification is closed with `blockers = 0` and
+`tracked_deferrals = 0`. Parent-platform blockers listed above remain open and
+are not relabeled as emulator evidence.

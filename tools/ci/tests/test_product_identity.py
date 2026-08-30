@@ -38,9 +38,13 @@ class ProductIdentityContractTest(unittest.TestCase):
 
     def test_release_workflow_asserts_and_names_the_product_identity(self):
         workflow = read(".github/workflows/release.yml")
+        contract = read("tools/ci/release_contract.py")
 
-        self.assertIn(f'if [[ "$package" != "{PACKAGE_ID}" ]]', workflow)
-        self.assertIn(f'expected \'{PACKAGE_ID}\'', workflow)
+        self.assertIn(f'PRODUCTION_PACKAGE = "{PACKAGE_ID}"', contract)
+        self.assertIn(
+            'tools/ci/release_contract.py check-package --package "$package"',
+            workflow,
+        )
         self.assertIn(
             f'out="{APK_STEM}-${{{{ steps.version.outputs.version }}}}.apk"',
             workflow,

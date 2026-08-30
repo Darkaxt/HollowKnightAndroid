@@ -64,8 +64,8 @@ class ProductionLauncherRuntimeTest {
     }
 
     @Test
-    fun `production runtime rejects synthetic provisioning`() {
-        assertThrows(IllegalArgumentException::class.java) {
+    fun `production runtime has no synthetic provisioning path`() {
+        assertThrows(UnsupportedOperationException::class.java) {
             kotlinx.coroutines.runBlocking {
                 runtime.provision(ProvisionRequest(request, ProvisionSource.Synthetic)) { }
             }
