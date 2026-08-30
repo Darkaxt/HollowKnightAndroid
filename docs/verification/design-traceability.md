@@ -1,7 +1,7 @@
 # Unified Platform Design Traceability
 
-Last cross-check: 2026-08-30, early Task 17 GitHub signing slice and signed
-dry-run artifact verification.
+Last cross-check: 2026-08-30, Task 16 shape-only unified icon slice and signed
+dry-run APK resource inspection.
 
 States follow the design contract: `COMPLETE`, `BLOCKER`, `DEFERRED`, and
 `NOT-STARTED`. `NOT-STARTED` means the planned milestone has not begun. The
@@ -66,7 +66,7 @@ slice cannot conceal that blocker and does not permit Task 8 to begin.
 | Architecture: shared Unity Vulkan multi-display renderer | 6 | NOT-STARTED | Renderer extraction has not begun | Shared patch core | Display 1, touch attribution, diagnostics tests pass |
 | Architecture: game adapters supply screens/state only | 6 | NOT-STARTED | Adapters have not begun | Renderer boundary | Shared runtime references no game-specific types |
 | Architecture: single-display fallback remains usable | 6 | NOT-STARTED | Fallback has not begun | Renderer abstraction | Host decision test and device fallback smoke pass |
-| Branding: vertically split combined identity and adaptive safe zone | 7 | NOT-STARTED | Visual task has not begun | Licensed/original artwork | Circle/squircle/rounded/OEM plus monochrome review passes |
+| Branding: unchanged vertically split combined identity in Android launcher shapes | 7 | COMPLETE | `docs/verification/icon-2026-08-30.md` pins the supplied composition hash, reviews four masks, and proves all 15 packaged PNGs pixel-identical to repository resources in signed dry run `33289053710` | None for icon slice; product package identity remains Task 16 Step 1 | Source hash, circle/squircle/rounded/OEM preview, AAPT compile, and packaged pixel comparisons pass |
 | Recovery: validation never writes to source | 2 | COMPLETE | Current-source scans and manifest generation use disjoint report/asset paths and retain the exact source tree hash | None | Before/after content and timestamp manifests agree |
 | Recovery: generated artifacts stage and verify before publish | 3 | NOT-STARTED | Generation publisher has not begun | Atomic writer | Injected failures never update current pointer |
 | Recovery: resume/discard exact staging job only | 2–3 | NOT-STARTED | Resume/coordinator work has not begun | Content hashes and job IDs | Interruption test preserves source and other jobs |

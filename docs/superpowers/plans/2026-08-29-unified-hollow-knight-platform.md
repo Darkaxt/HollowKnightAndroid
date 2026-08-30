@@ -1196,7 +1196,7 @@ Keep Java/Kotlin namespaces unchanged in this task; Android permits the
 application ID to differ from code namespaces, avoiding a risky mechanical
 rename.
 
-- [ ] **Step 2: Produce the approved adaptive icon**
+- [x] **Step 2: Produce the approved adaptive icon**
 
 Use the corrected combined image exactly as supplied; its vertical split and
 internal layout are final. Adapt only its Android shape through deterministic
