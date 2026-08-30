@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 2,
+  "design": "unchanged supplied composition with vertical center split",
+  "sourceSha256": "bbe7417aa56b2aa5282d8e4da40208bfbb816a64acca5962dfb4c7e004f20d9f",
+  "adaptiveMasterSha256": "dbf0780981039566010d0b148afc16c3f0d3b531914af676ec3f03923a29c8b1",
+  "allowedTransformations": [
+    "square resize",
+    "rounded-rectangle alpha mask",
+    "circle alpha mask",
+    "Android adaptive launcher mask",
+    "PNG resource encoding"
+  ],
+  "componentPolicy": "Separate supplied components are retained for possible launcher UI use and are not used to reconstruct the APK icon.",
+  "maskReview": [
+    "Circle",
+    "Squircle",
+    "Rounded square",
+    "OEM teardrop"
+  ],
+  "previewSha256": "df99e0d56596d278d23204958195933508c87e4d7cacb8ef974e024b1fdd9a12",
+  "outputs": [
+    {
+      "density": "mdpi",
+      "kind": "legacy-rounded",
+      "path": "tools/depot-to-apk/shell/res/mipmap-mdpi/ic_launcher.png",
+      "width": 48,
+      "height": 48,
+      "sha256": "2795876160af0b74b9bbb3c8ccfa4f132c6ea4cc8709f70c8f83ed035c3c588d"
+    },
+    {
+      "density": "mdpi",
+      "kind": "legacy-round",
+      "path": "tools/depot-to-apk/shell/res/mipmap-mdpi/ic_launcher_round.png",
+      "width": 48,
+      "height": 48,
+      "sha256": "5915d384e191982a1bcb91ddae617d4416b19da10988c1d85d30d55ff1dc83c6"
+    },
+    {
+      "density": "mdpi",
+      "kind": "adaptive-source",
+      "path": "tools/depot-to-apk/shell/res/mipmap-mdpi/ic_launcher_bg.png",
+      "width": 108,
+      "height": 108,
+      "sha256": "e4a01db33d4656b65d8e323a60d9f43209030ff97ef8b45aeec5b7de7249beb9"
+    },
+    {
+      "density": "hdpi",
+      "kind": "legacy-rounded",
+      "path": "tools/depot-to-apk/shell/res/mipmap-hdpi/ic_launcher.png",
+      "width": 72,
+      "height": 72,
+      "sha256": "487829ffa5107727f04bac5805b3db8a6a4fb94fff5223ad92c4cd2903822c4f"
+    },
+    {
+      "density": "hdpi",
+      "kind": "legacy-round",
+      "path": "tools/depot-to-apk/shell/res/mipmap-hdpi/ic_launcher_round.png",
+      "width": 72,
+      "height": 72,
+      "sha256": "fc629bc4a3998fcf807c31a09d3a599563307102c6e21fdcdda5553855c92d23"
+    },
+    {
+      "density": "hdpi",
+      "kind": "adaptive-source",
+      "path": "tools/depot-to-apk/shell/res/mipmap-hdpi/ic_launcher_bg.png",
+      "width": 162,
+      "height": 162,
+      "sha256": "9fda6622ef0ae0ebce70838418c57a47ac49fb6e6e864cf895f04a339be2fdfe"
+    },
+    {
+      "density": "xhdpi",
+      "kind": "legacy-rounded",
+      "path": "tools/depot-to-apk/shell/res/mipmap-xhdpi/ic_launcher.png",
+      "width": 96,
+      "height": 96,
+      "sha256": "5deee4f18bf556b2b16558948c032bf3bf680e78cf99e2f33c98f3393eb9d688"
+    },
+    {
+      "density": "xhdpi",
+      "kind": "legacy-round",
+      "path": "tools/depot-to-apk/shell/res/mipmap-xhdpi/ic_launcher_round.png",
+      "width": 96,
+      "height": 96,
+      "sha256": "2f3020f219bba8bdbbfd477c1faa7a37c71cc0fe1bfea47164e76d336ab69cba"
+    },
+    {
+      "density": "xhdpi",
+      "kind": "adaptive-source",
+      "path": "tools/depot-to-apk/shell/res/mipmap-xhdpi/ic_launcher_bg.png",
+      "width": 216,
+      "height": 216,
+      "sha256": "69649b41abcbfadcefc03ddf56cdb947c8e3b17cbb17d3bf63a6edb8df5c620e"
+    },
+    {
+      "density": "xxhdpi",
+      "kind": "legacy-rounded",
+      "path": "tools/depot-to-apk/shell/res/mipmap-xxhdpi/ic_launcher.png",
+      "width": 144,
+      "height": 144,
+      "sha256": "16e49b61424c8f287775c14ba4a4c32471bb7e266db22f120eec28963765545d"
+    },
+    {
+      "density": "xxhdpi",
+      "kind": "legacy-round",
+      "path": "tools/depot-to-apk/shell/res/mipmap-xxhdpi/ic_launcher_round.png",
+      "width": 144,
+      "height": 144,
+      "sha256": "c986252d47816ec74a80eb83589e3091f0a7da382b0c6201f9631c4ff08c8119"
+    },
+    {
+      "density": "xxhdpi",
+      "kind": "adaptive-source",
+      "path": "tools/depot-to-apk/shell/res/mipmap-xxhdpi/ic_launcher_bg.png",
+      "width": 324,
+      "height": 324,
+      "sha256": "5ae9327d90f4a86c2e81d15de1ef7d410a633ddb1669eed69427de05e8462281"
+    },
+    {
+      "density": "xxxhdpi",
+      "kind": "legacy-rounded",
+      "path": "tools/depot-to-apk/shell/res/mipmap-xxxhdpi/ic_launcher.png",
+      "width": 192,
+      "height": 192,
+      "sha256": "ffecfe2ff38ec7dab774a3c6b12d7a726354c1d1f04d740a6ecd6d220522549c"
+    },
+    {
+      "density": "xxxhdpi",
+      "kind": "legacy-round",
+      "path": "tools/depot-to-apk/shell/res/mipmap-xxxhdpi/ic_launcher_round.png",
+      "width": 192,
+      "height": 192,
+      "sha256": "8f9975970c15804e768ccad42787c961b9efaa1de78b7012d02d633e930ed0b1"
+    },
+    {
+      "density": "xxxhdpi",
+      "kind": "adaptive-source",
+      "path": "tools/depot-to-apk/shell/res/mipmap-xxxhdpi/ic_launcher_bg.png",
+      "width": 432,
+      "height": 432,
+      "sha256": "210094534d04cf0d9fc18cb014023345c04615f5762477c9ed981df2ea44f33d"
+    }
+  ]
+}

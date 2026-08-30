@@ -349,15 +349,17 @@ primary display without creating an unusable invisible UI path.
 ### Branding and launcher icon
 
 The installed application must not reuse the Silksong-only icon. The final
-adaptive icon combines Hollow Knight and Silksong visual identities in two
-halves separated by a diagonal running from the bottom-left corner to the
-top-right corner. Foreground artwork must remain legible within Android's
-adaptive-icon safe zone under circle, squircle, rounded-square, and OEM masks.
+icon is the user-supplied combined composition, with Hollow Knight and
+Silksong visual identities separated by a straight vertical line through the
+exact center. Its internal elements must not be reconstructed, repositioned,
+or reinterpreted.
 
-Implementation must use original or appropriately licensed source artwork and
-record attribution. The monochrome themed icon should communicate the same
-two-part diagonal composition. Icon generation is a separately reviewed
-visual task and is not part of this documentation change.
+APK adaptation is limited to deterministic resizing, uniform padding when
+required, Android launcher masking, transparency, and resource encoding. The
+exact composition must be reviewed under circle, squircle, rounded-square,
+and OEM masks. The five separately supplied component images are retained for
+possible launcher UI use and are not inputs for rebuilding the icon.
+Generative image tools are prohibited for this project.
 
 ## Design traceability and stage gates
 

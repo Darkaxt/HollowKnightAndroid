@@ -321,7 +321,7 @@ XML
     -->
     <application android:label="@string/app_name" android:hasCode="true"
                  android:icon="@mipmap/ic_launcher"
-                 android:roundIcon="@mipmap/ic_launcher"
+                 android:roundIcon="@mipmap/ic_launcher_round"
                  android:extractNativeLibs="true"
                  android:usesCleartextTraffic="true"
                  android:largeHeap="true"

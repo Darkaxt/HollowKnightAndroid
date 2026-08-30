@@ -1179,7 +1179,7 @@ git commit -m "feat: share the Vulkan dual-screen runtime"
 - Replace: `docs/icon.png`
 - Replace: `tools/depot-to-apk/shell/res/mipmap-*/ic_launcher.png`
 - Replace: `tools/depot-to-apk/shell/res/mipmap-*/ic_launcher_bg.png`
-- Create: `tools/depot-to-apk/shell/res/mipmap-anydpi-v33/ic_launcher_monochrome.xml`
+- Create: `tools/depot-to-apk/shell/res/mipmap-*/ic_launcher_round.png`
 - Create: `docs/icon-source/ATTRIBUTION.md`
 
 - [ ] **Step 1: Set a non-colliding package identity**
@@ -1198,11 +1198,13 @@ rename.
 
 - [ ] **Step 2: Produce the approved adaptive icon**
 
-Create original or licensed foreground artwork divided diagonally from the
-bottom-left corner to the top-right corner: Hollow Knight identity on one side
-and Silksong identity on the other. Verify the composition under circle,
-squircle, rounded-square, and OEM adaptive masks. Create a matching monochrome
-themed icon and record source licenses and attribution.
+Use the corrected combined image exactly as supplied; its vertical split and
+internal layout are final. Adapt only its Android shape through deterministic
+resizing, uniform padding if required, transparency, and launcher masks. Do
+not reconstruct it from the separately supplied components and do not use
+generative image tools. Verify the unchanged composition under circle,
+squircle, rounded-square, and OEM adaptive masks. Retain the other supplied
+components for possible launcher UI use and record their provenance.
 
 - [ ] **Step 3: Verify packaged identity and icon resources**
 
@@ -1358,8 +1360,8 @@ simultaneously true:
 - Robolectric covers launcher and state logic while the ARM64 Thor proves the
   production APK, native build, Vulkan, multi-display, input, and performance
   path; the x86-64 emulator is not claimed as production-pipeline evidence;
-- the combined diagonal Hollow Knight/Silksong icon is packaged in adaptive,
-  legacy, round, and monochrome forms;
+- the unchanged, vertically split Hollow Knight/Silksong composition is
+  packaged in adaptive, legacy, and round Android shapes;
 - the release APK contains no proprietary game or Unity content, is signed by
   the durable release key, carries aligned version identifiers, and passes
   fresh-download verification.

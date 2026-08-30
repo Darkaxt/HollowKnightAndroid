@@ -66,7 +66,7 @@ slice cannot conceal that blocker and does not permit Task 8 to begin.
 | Architecture: shared Unity Vulkan multi-display renderer | 6 | NOT-STARTED | Renderer extraction has not begun | Shared patch core | Display 1, touch attribution, diagnostics tests pass |
 | Architecture: game adapters supply screens/state only | 6 | NOT-STARTED | Adapters have not begun | Renderer boundary | Shared runtime references no game-specific types |
 | Architecture: single-display fallback remains usable | 6 | NOT-STARTED | Fallback has not begun | Renderer abstraction | Host decision test and device fallback smoke pass |
-| Branding: diagonal combined identity and adaptive safe zone | 7 | NOT-STARTED | Visual task has not begun | Licensed/original artwork | Circle/squircle/rounded/OEM plus monochrome review passes |
+| Branding: vertically split combined identity and adaptive safe zone | 7 | NOT-STARTED | Visual task has not begun | Licensed/original artwork | Circle/squircle/rounded/OEM plus monochrome review passes |
 | Recovery: validation never writes to source | 2 | COMPLETE | Current-source scans and manifest generation use disjoint report/asset paths and retain the exact source tree hash | None | Before/after content and timestamp manifests agree |
 | Recovery: generated artifacts stage and verify before publish | 3 | NOT-STARTED | Generation publisher has not begun | Atomic writer | Injected failures never update current pointer |
 | Recovery: resume/discard exact staging job only | 2–3 | NOT-STARTED | Resume/coordinator work has not begun | Content hashes and job IDs | Interruption test preserves source and other jobs |

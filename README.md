@@ -4,9 +4,9 @@
 Steam integration for game files and cloud saves.
 
 <p align="center">
-  <img src="docs/icon.png" alt="Silksong Android app icon" width="180" />
+  <img src="docs/icon.png" alt="HollowKnightAndroid combined Hollow Knight and Silksong app icon" width="220" />
   <br />
-  <em>Thanks to Kaz Kirigiri for the artwork!</em>
+  <em><a href="docs/icon-source/ATTRIBUTION.md">Icon sources and deterministic adaptation record</a></em>
 </p>
 
 <img width="2048" height="1536" alt="IMG_1639" src="https://github.com/user-attachments/assets/c9ddb25d-37a8-4e7e-877c-0f13eb13efed" />
@@ -87,8 +87,9 @@ tested on real hardware before release.
 
 ## Legal
 
-This repository and the APK contain **no game content and nothing Unity-made**. Silksong
-is © Team Cherry, and none of its code, art or audio is distributed here. The APK is a
+This repository and the APK contain **no extracted game content and nothing Unity-made**.
+Silksong is © Team Cherry, and none of its extracted code, game data, art or audio is
+distributed here. The APK is a
 build system: it downloads Unity's toolchain, takes *your* game files (supplied by hand,
 or fetched with your own Steam account), and compiles a playable build on your own device.
 
