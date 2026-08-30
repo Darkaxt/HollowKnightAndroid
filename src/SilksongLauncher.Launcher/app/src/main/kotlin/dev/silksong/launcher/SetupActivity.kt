@@ -58,6 +58,7 @@ import dev.silksong.launcher.profiles.ContentLayout
 import dev.silksong.launcher.profiles.LegacySilksongAdopter
 import dev.silksong.launcher.profiles.ProfileBuildPaths
 import dev.silksong.launcher.profiles.SelectedGameStore
+import dev.silksong.launcher.build.UnityToolchainRegistry
 import dev.silksong.launcher.runtime.EvidenceKind
 import dev.silksong.launcher.runtime.LauncherRuntimeProvider
 import dev.silksong.launcher.runtime.ProvisionRequest
@@ -112,6 +113,7 @@ class SetupActivity : Activity() {
     private var stepTitle = ""
 
     private val profile by lazy { SelectedGameStore(this).get() }
+    private val unityDescriptor by lazy { UnityToolchainRegistry.resolve(profile) }
     private val buildPaths by lazy {
         ProfileBuildPaths(
             filesDir,
@@ -238,7 +240,7 @@ class SetupActivity : Activity() {
             runtime.inspect(runtimeRequest).ready
         } else {
             dataApk.isFile && File(engineDir, "libil2cpp.so").length() > 0 &&
-                UnityDex.isBuilt(this, UnityFetcher.rootFor(requireNotNull(getExternalFilesDir(null)), profile)) &&
+                UnityDex.isBuilt(this, unityDescriptor, UnityFetcher.rootFor(filesDir, profile)) &&
                 haveGameFiles() &&
                 runCatching { builtMarker.readText() }.getOrNull() == buildSignature
         }
@@ -879,7 +881,7 @@ class SetupActivity : Activity() {
         require(profile.contentLayout == ContentLayout.ADDRESSABLES) {
             "The production setup pipeline does not yet support ${profile.contentLayout}: ${profile.id}"
         }
-        val unity = UnityFetcher.rootFor(requireNotNull(getExternalFilesDir(null)), profile)
+        val unity = UnityFetcher.rootFor(filesDir, profile)
         val tools = ToolchainFetcher.rootFor(this)
         val out = buildPaths.buildRoot
         // A download goes to the app's own directory and never to a folder the
@@ -924,8 +926,8 @@ class SetupActivity : Activity() {
 
                 // ── Step 2: the supporting tools ──────────────────────────
                 setStep(toolsStep, "Downloading supporting tools")
-                if (!UnityFetcher.isPresent(profile, unity)) {
-                    UnityFetcher.fetch(profile, unity, buildPaths.installStaging)
+                if (!UnityFetcher.isPresent(unityDescriptor, unity)) {
+                    UnityFetcher.fetch(unityDescriptor, unity, buildPaths.installStaging)
                         .collect { setBusy(true, it.step, it.fraction, it.detail) }
                 }
                 // The player's Java classes arrive with the module as ordinary
@@ -933,9 +935,11 @@ class SetupActivity : Activity() {
                 // what lets the APK ship none of them; it takes a couple of
                 // seconds. Injection happens at process start, so this only
                 // has to be on disk before the game is launched.
-                if (!UnityDex.isBuilt(this@SetupActivity, unity)) {
+                if (!UnityDex.isBuilt(this@SetupActivity, unityDescriptor, unity)) {
                     setBusy(true, "preparing the engine", -1f, "")
-                    withContext(Dispatchers.IO) { UnityDex.build(this@SetupActivity, unity) }
+                    withContext(Dispatchers.IO) {
+                        UnityDex.build(this@SetupActivity, unityDescriptor, unity)
+                    }
                 }
                 // Unconditionally, because the fetch above is skipped once the
                 // module is on disk -- and the engine libraries are installed
@@ -946,7 +950,7 @@ class SetupActivity : Activity() {
                 // the hardware is unsupported. No-op when they are current.
                 stagingDir?.let { staging ->
                     withContext(Dispatchers.IO) {
-                        UnityFetcher.ensureEngineStaged(profile, unity, staging)
+                        UnityFetcher.ensureEngineStaged(unityDescriptor, unity, staging)
                     }
                 }
                 if (stagingDir?.listFiles()?.isNotEmpty() == true) {

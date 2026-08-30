@@ -8,6 +8,7 @@ import dev.silksong.launcher.BuildReset
 import dev.silksong.launcher.LauncherLog
 import dev.silksong.launcher.PlayerImage
 import dev.silksong.launcher.UnityFetcher
+import dev.silksong.launcher.build.UnityToolchainRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -145,7 +146,7 @@ class SilksongRegressionTest {
     }
 
     @Test
-    fun `current fetchers resolve their constants from the Silksong profile`() {
+    fun `current fetchers resolve exact profile descriptors`() {
         val root = File("build/test-silksong-regression/fetchers").absoluteFile
         root.deleteRecursively()
         val externalFilesDir = File(root, "external").apply { mkdirs() }
@@ -158,7 +159,14 @@ class SilksongRegressionTest {
 
         assertTrue(DepotFetcher.isPresent(silksong, depot))
         assertFalse(DepotFetcher.isPresent(hollowKnight, depot))
-        assertEquals(File(externalFilesDir, "unity"), UnityFetcher.rootFor(externalFilesDir, silksong))
+        assertEquals(
+            UnityToolchainRegistry.rootFor(
+                externalFilesDir,
+                UnityToolchainRegistry.resolve(silksong),
+            ),
+            UnityFetcher.rootFor(externalFilesDir, silksong),
+        )
+        assertTrue(UnityFetcher.rootFor(externalFilesDir, hollowKnight) != UnityFetcher.rootFor(externalFilesDir, silksong))
         assertEquals(
             File(depot, "${silksong.dataDirectoryName}/StreamingAssets/aa"),
             PlayerImage.addressablesContainer(
@@ -166,9 +174,6 @@ class SilksongRegressionTest {
                 File(depot, silksong.dataDirectoryName),
             ),
         )
-        assertThrows(IllegalArgumentException::class.java) {
-            UnityFetcher.rootFor(externalFilesDir, hollowKnight)
-        }
         assertThrows(IllegalArgumentException::class.java) {
             PlayerImage.addressablesContainer(
                 hollowKnight,

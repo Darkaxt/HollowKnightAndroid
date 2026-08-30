@@ -30,28 +30,14 @@ import java.io.FilterInputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.DigestInputStream
 import java.security.MessageDigest
 import java.util.zip.InflaterInputStream
 import kotlin.coroutines.coroutineContext
+import dev.silksong.launcher.build.UnityToolchainDescriptor
+import dev.silksong.launcher.build.UnityToolchainRegistry
 import dev.silksong.launcher.profiles.GameProfile
-import dev.silksong.launcher.profiles.GameProfiles
 
 object UnityFetcher {
-
-    const val UNITY_VERSION = "6000.0.50f1"
-
-    // The changeset is part of every download URL. It is the hash the player
-    // reports at startup: "Version '6000.0.50f1 (f1ef1dca8bff)'".
-    private const val CHANGESET = "f1ef1dca8bff"
-    private const val DL = "https://download.unity3d.com/download_unity/$CHANGESET"
-
-    private const val IL2CPP_DLL_SHA256 =
-        "02d9d225cc8968fe39284dfbf2a9912796b3b0666d274294cfa6b90cf5e946bb"
-    private const val IL2CPP_CONFIG_SHA256 =
-        "38d4d2855d372bb2a12de7dce3cde110d1ec9780232a6a298153bee96c352259"
-    private const val MSCORLIB_SHA256 =
-        "2efab59f0bdc59e1242b40203aff1f96e529e880f752585286c2816871e4496c"
 
     /**
      * Roughly how much of the editor archive gets read before everything
@@ -61,31 +47,11 @@ object UnityFetcher {
      */
     private const val EDITOR_APPROX_BYTES = 640L * 1024 * 1024
 
-    // Unity's own value, published per artifact through its releases API. For
-    // this version the Android module is offered only as a macOS .pkg.
-    private const val ANDROID_PKG_MD5 = "8dfad5f83024fa533ac02b58a83d0898"
-    private const val ANDROID_PKG_BYTES = 673_712_656L
+    fun rootFor(filesDir: File, profile: GameProfile): File =
+        UnityToolchainRegistry.rootFor(filesDir, UnityToolchainRegistry.resolve(profile))
 
-    /** Everything lands under here, and is skipped if already present. */
-    fun rootFor(context: android.content.Context): File =
-        rootFor(
-            requireNotNull(context.getExternalFilesDir(null)) { "No external files directory" },
-            GameProfiles.require("silksong"),
-        )
-
-    fun rootFor(externalFilesDir: File, profile: GameProfile): File {
-        requireSupported(profile)
-        return File(externalFilesDir, "unity")
-    }
-
-    private fun requireSupported(profile: GameProfile) {
-        require(GameProfiles.find(profile.id) == profile) {
-            "Unity fetch requires an exact registered profile: ${profile.id}"
-        }
-        require(profile.unityVersion == UNITY_VERSION) {
-            "Unity ${profile.unityVersion} is not registered yet for ${profile.id}"
-        }
-    }
+    fun descriptorFor(profile: GameProfile): UnityToolchainDescriptor =
+        UnityToolchainRegistry.resolve(profile)
 
     data class Progress(
         val step: String,
@@ -101,7 +67,14 @@ object UnityFetcher {
             engineLibsIn(File(root, "android")) != null
 
     fun isPresent(profile: GameProfile, root: File): Boolean {
-        requireSupported(profile)
+        return isPresent(UnityToolchainRegistry.resolve(profile), root)
+    }
+
+    fun isPresent(descriptor: UnityToolchainDescriptor, root: File): Boolean {
+        UnityToolchainRegistry.resolve(descriptor.unityVersion).also {
+            require(it == descriptor) { "Unity toolchain descriptor is not registered" }
+        }
+        requireOwnedRoot(descriptor, root)
         return isPresent(root)
     }
 
@@ -129,8 +102,18 @@ object UnityFetcher {
      * already extracted, so an interrupted first run is resumed by running it
      * again rather than starting over.
      */
-    fun fetch(profile: GameProfile, root: File, staging: File): Flow<Progress> = channelFlow {
-        requireSupported(profile)
+    fun fetch(profile: GameProfile, root: File, staging: File): Flow<Progress> =
+        fetch(UnityToolchainRegistry.resolve(profile), root, staging)
+
+    fun fetch(
+        descriptor: UnityToolchainDescriptor,
+        root: File,
+        staging: File,
+    ): Flow<Progress> = channelFlow {
+        require(UnityToolchainRegistry.resolve(descriptor.unityVersion) == descriptor) {
+            "Unity toolchain descriptor is not registered"
+        }
+        requireOwnedRoot(descriptor, root)
         root.mkdirs()
 
         // Progress arrives on whatever thread is reading the socket, which is
@@ -144,7 +127,9 @@ object UnityFetcher {
         val editor = File(root, "editor")
         if (!File(editor, "Editor/Data/il2cpp/build/deploy/il2cpp.dll").isFile) {
             send(Progress("Unity IL2CPP toolchain", 0f, "connecting"))
-            fetchEditor(editor) { done, total -> report("Unity IL2CPP toolchain", done, total) }
+            fetchEditor(descriptor, editor) { done, total ->
+                report("Unity IL2CPP toolchain", done, total)
+            }
         }
 
         if (!File(packageDir(root), "InputSystem/Unity.InputSystem.asmdef").isFile) {
@@ -155,7 +140,9 @@ object UnityFetcher {
         val android = File(root, "android")
         if (engineLibsIn(android) == null) {
             send(Progress("Unity Android engine", 0f, "connecting"))
-            fetchAndroidModule(android) { done, total -> report("Unity Android engine", done, total) }
+            fetchAndroidModule(descriptor, android) { done, total ->
+                report("Unity Android engine", done, total)
+            }
         }
 
         // The engine has to end up somewhere the game can load it from, and
@@ -194,7 +181,18 @@ object UnityFetcher {
     }
 
     fun ensureEngineStaged(profile: GameProfile, root: File, staging: File) {
-        requireSupported(profile)
+        ensureEngineStaged(UnityToolchainRegistry.resolve(profile), root, staging)
+    }
+
+    fun ensureEngineStaged(
+        descriptor: UnityToolchainDescriptor,
+        root: File,
+        staging: File,
+    ) {
+        require(UnityToolchainRegistry.resolve(descriptor.unityVersion) == descriptor) {
+            "Unity toolchain descriptor is not registered"
+        }
+        requireOwnedRoot(descriptor, root)
         stageEngine(root, staging)
     }
 
@@ -217,13 +215,25 @@ object UnityFetcher {
     private fun mb(done: Long, total: Long) =
         "${done / 1024 / 1024} of ${total / 1024 / 1024} MB"
 
+    private fun requireOwnedRoot(descriptor: UnityToolchainDescriptor, root: File) {
+        val normalized = root.toPath().toAbsolutePath().normalize()
+        require(normalized.fileName?.toString() == descriptor.contentHash &&
+            normalized.parent?.fileName?.toString() == "toolchains") {
+            "Unity root does not belong to ${descriptor.unityVersion}: $normalized"
+        }
+    }
+
     // ── the editor archive ─────────────────────────────────────────────────
 
-    private suspend fun fetchEditor(dest: File, onProgress: (Long, Long) -> Unit) {
-        val tmp = File(dest.parentFile, "editor.part")
+    private suspend fun fetchEditor(
+        descriptor: UnityToolchainDescriptor,
+        dest: File,
+        onProgress: (Long, Long) -> Unit,
+    ) {
+        val tmp = File(dest.parentFile, "staging/editor")
         tmp.deleteRecursively()
 
-        open("$DL/LinuxEditorInstaller/Unity-$UNITY_VERSION.tar.xz").use { raw ->
+        open(descriptor.editorUrl).use { raw ->
             val counted = CountingInputStream(raw, EDITOR_APPROX_BYTES, onProgress)
             // Stopping early means closing the stream part-way through, so the
             // decoders are cut off mid-archive and say so. That is the
@@ -234,7 +244,7 @@ object UnityFetcher {
             }.exceptionOrNull()?.let { if (it is Enough) Unit else throw it }
         }
 
-        for ((path, want) in EDITOR_REQUIRED) {
+        for ((path, want) in descriptor.editorRequiredSha256) {
             val f = File(tmp, path)
             if (!f.isFile) {
                 tmp.deleteRecursively()
@@ -295,12 +305,6 @@ object UnityFetcher {
      * digest only for the archive as a whole, which is of no use when most of
      * it is never fetched.
      */
-    private val EDITOR_REQUIRED = mapOf(
-        "Editor/Data/il2cpp/build/deploy/il2cpp.dll" to IL2CPP_DLL_SHA256,
-        "Editor/Data/il2cpp/libil2cpp/il2cpp-config.h" to IL2CPP_CONFIG_SHA256,
-        "Editor/Data/MonoBleedingEdge/lib/mono/unityaot-linux/mscorlib.dll" to MSCORLIB_SHA256,
-    )
-
     // ── Unity packages ─────────────────────────────────────────────────────
 
     /**
@@ -378,29 +382,39 @@ object UnityFetcher {
     // xar header is fixed-size and its table of contents is deflate-compressed
     // XML, and commons-compress reads the rest.
 
-    private suspend fun fetchAndroidModule(dest: File, onProgress: (Long, Long) -> Unit) {
-        val pkg = File(dest.parentFile, "android-support.pkg")
-        if (pkg.length() != ANDROID_PKG_BYTES) {
-            pkg.parentFile?.mkdirs()
-            val part = File(dest.parentFile, "android-support.part")
-            val digest = MessageDigest.getInstance("MD5")
-            open("$DL/MacEditorTargetInstaller/UnitySetup-Android-Support-for-Editor-$UNITY_VERSION.pkg")
+    private suspend fun fetchAndroidModule(
+        descriptor: UnityToolchainDescriptor,
+        dest: File,
+        onProgress: (Long, Long) -> Unit,
+    ) {
+        val downloadStaging = File(dest.parentFile, "staging")
+        val pkg = File(downloadStaging, "android-support.pkg")
+        val validCached = UnityToolchainRegistry.verifyStagedComponent(
+            downloadStaging,
+            pkg.name,
+            descriptor.androidModuleSha256,
+        )
+        if (!validCached) {
+            downloadStaging.mkdirs()
+            val part = File(downloadStaging, "android-support.part")
+            part.delete()
+            open(descriptor.androidModuleUrl)
                 .use { raw ->
-                    val counted = CountingInputStream(raw, ANDROID_PKG_BYTES, onProgress)
-                    DigestInputStream(counted, digest).use { input ->
-                        part.outputStream().use { out -> input.copyTo(out, 1 shl 20) }
-                    }
+                    val counted = CountingInputStream(raw, descriptor.androidModuleBytes, onProgress)
+                    part.outputStream().use { out -> counted.copyTo(out, 1 shl 20) }
                 }
-            val got = digest.digest().joinToString("") { "%02x".format(it) }
-            if (got != ANDROID_PKG_MD5) {
+            val got = UnityToolchainRegistry.sha256(part)
+            if (got != descriptor.androidModuleSha256) {
                 part.delete()
                 throw java.io.IOException(
-                    "Android module: expected md5 $ANDROID_PKG_MD5 but got $got")
+                    "Android module: expected sha256 ${descriptor.androidModuleSha256} but got $got")
             }
-            part.renameTo(pkg)
+            if (!part.renameTo(pkg)) {
+                throw java.io.IOException("could not move verified Android module into staging")
+            }
         }
 
-        val tmp = File(dest.parentFile, "android.part")
+        val tmp = File(downloadStaging, "android")
         tmp.deleteRecursively()
         payloadOf(pkg).use { payload ->
             CpioArchiveInputStream(GzipCompressorInputStream(BufferedInputStream(payload, 1 shl 16)))
@@ -412,7 +426,7 @@ object UnityFetcher {
         }
         dest.deleteRecursively()
         if (!tmp.renameTo(dest)) throw java.io.IOException("could not move $tmp to $dest")
-        // 642 MB, and nothing needs it once it is unpacked. Kept until the
+        // Hundreds of MB, and nothing needs it once it is unpacked. Kept until the
         // unpack has been checked, so a bug here does not cost the download.
         pkg.delete()
     }
@@ -540,8 +554,6 @@ object UnityFetcher {
 
     private fun open(url: String, rangeEnd: Long? = null): InputStream {
         val c = URL(url).openConnection() as HttpURLConnection
-        c.connectTimeout = 30_000
-        c.readTimeout = 60_000
         c.instanceFollowRedirects = true
         if (rangeEnd != null) c.setRequestProperty("Range", "bytes=0-$rangeEnd")
         val code = c.responseCode

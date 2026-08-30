@@ -1,6 +1,9 @@
 package dev.silksong.launcher
 
 import android.content.Context
+import dev.silksong.launcher.build.UnityToolchainDescriptor
+import dev.silksong.launcher.build.UnityToolchainRegistry
+import dev.silksong.launcher.profiles.SelectedGameStore
 import dalvik.system.DexClassLoader
 import java.io.File
 
@@ -33,10 +36,12 @@ object UnityDex {
     /** The entry point d8 exposes for programmatic use. */
     private const val D8_MAIN = "com.android.tools.r8.D8"
 
-    /** Where the dexed player classes live once built. */
-    fun outputDir(context: Context): File = File(context.filesDir, "unity-dex")
+    /** Where one exact classes.jar is dexed. Different Unity players never share output. */
+    fun outputDir(filesDir: File, sourceJar: File): File =
+        File(File(filesDir, "unity-dex"), UnityToolchainRegistry.sha256(sourceJar))
 
-    private fun outputJar(context: Context): File = File(outputDir(context), "classes.jar")
+    private fun outputJar(filesDir: File, sourceJar: File): File =
+        File(outputDir(filesDir, sourceJar), "classes.jar")
 
     /**
      * The player classes as they arrive: Java bytecode, inside the module.
@@ -56,24 +61,33 @@ object UnityDex {
         return null
     }
 
-    /** True once the dex is built and is no older than the jar it came from. */
-    fun isBuilt(context: Context, unityRoot: File): Boolean {
-        val out = outputJar(context)
-        if (!out.isFile || out.length() == 0L) return false
-        val src = sourceJar(unityRoot) ?: return true
-        return out.lastModified() >= src.lastModified()
+    /** True once the dex exists under the content hash of the exact source jar. */
+    fun isBuilt(
+        context: Context,
+        descriptor: UnityToolchainDescriptor,
+        unityRoot: File,
+    ): Boolean {
+        requireRegistered(descriptor)
+        val src = sourceJar(unityRoot) ?: return false
+        val out = outputJar(context.filesDir, src)
+        return out.isFile && out.length() > 0L
     }
 
     /**
      * Dexes the player classes. Cheap enough to be unconditional, but skipped
      * when the output is already current.
      */
-    fun build(context: Context, unityRoot: File) {
-        if (isBuilt(context, unityRoot)) return
+    fun build(
+        context: Context,
+        descriptor: UnityToolchainDescriptor,
+        unityRoot: File,
+    ) {
+        requireRegistered(descriptor)
+        if (isBuilt(context, descriptor, unityRoot)) return
         val src = sourceJar(unityRoot)
             ?: throw java.io.IOException("no classes.jar in the Unity Android module")
 
-        val out = outputDir(context)
+        val out = outputDir(context.filesDir, src)
         out.deleteRecursively()
         out.mkdirs()
 
@@ -95,12 +109,12 @@ object UnityDex {
         ))
         if (!tmp.isFile || tmp.length() == 0L)
             throw java.io.IOException("d8 produced nothing for ${src.name}")
-        if (!tmp.renameTo(outputJar(context)))
+        if (!tmp.renameTo(outputJar(context.filesDir, src)))
             throw java.io.IOException("could not move $tmp into place")
 
         LauncherLog.log(
             "$TAG: dexed ${src.name} in ${System.currentTimeMillis() - started} ms " +
-                "(${outputJar(context).length() / 1024} KB)")
+                "(${outputJar(context.filesDir, src).length() / 1024} KB)")
     }
 
     /**
@@ -170,7 +184,12 @@ object UnityDex {
      * is loaded, which is why this runs from Application.attachBaseContext.
      */
     fun inject(context: Context) {
-        val jar = outputJar(context)
+        val descriptor = runCatching {
+            UnityToolchainRegistry.resolve(SelectedGameStore(context).get())
+        }.getOrNull() ?: return
+        val unityRoot = UnityToolchainRegistry.rootFor(context.filesDir, descriptor)
+        val source = sourceJar(unityRoot) ?: return
+        val jar = outputJar(context.filesDir, source)
         if (!jar.isFile) return
         val appLoader = context.classLoader ?: return
         try {
@@ -214,5 +233,11 @@ object UnityDex {
             }
         }
         return null
+    }
+
+    private fun requireRegistered(descriptor: UnityToolchainDescriptor) {
+        require(UnityToolchainRegistry.resolve(descriptor.unityVersion) == descriptor) {
+            "Unity toolchain descriptor is not registered"
+        }
     }
 }

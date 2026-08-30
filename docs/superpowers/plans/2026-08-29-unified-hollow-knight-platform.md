@@ -708,13 +708,13 @@ git commit -m "feat: validate Hollow Knight Linux sources"
 - Modify: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/UnityDex.kt`
 - Test: `src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/build/UnityToolchainRegistryTest.kt`
 
-- [ ] **Step 1: Test exact version and hash selection**
+- [x] **Step 1: Test exact version and hash selection**
 
 Assert that `6000.0.50f1` and `6000.0.61f1` resolve to different descriptors,
 unknown versions are rejected, and a cached component with a wrong hash is
 deleted from staging but not from another toolchain directory.
 
-- [ ] **Step 2: Define the descriptor**
+- [x] **Step 2: Define the descriptor**
 
 ```kotlin
 data class UnityToolchainDescriptor(
@@ -728,13 +728,13 @@ data class UnityToolchainDescriptor(
 
 Populate both verified Unity versions using primary Unity download metadata.
 
-- [ ] **Step 3: Namespace fetched and dexed output**
+- [x] **Step 3: Namespace fetched and dexed output**
 
 Store toolchains under `files/toolchains/<descriptor-content-hash>` and key
 Unity dex output by `classes.jar` hash. Update `UnityFetcher` and `UnityDex` to
 accept a descriptor rather than global constants.
 
-- [ ] **Step 4: Test, build, and commit**
+- [x] **Step 4: Test, build, and commit**
 
 ```bash
 make test
