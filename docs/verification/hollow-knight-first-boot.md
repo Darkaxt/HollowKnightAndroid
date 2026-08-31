@@ -2,11 +2,11 @@
 
 Date: 2026-08-31
 
-This began as the safe pre-install checkpoint for Task 10 and now records three
-production-path attempts on the Thor. The host and publication proofs remain
-valid, but this document still does **not** claim a first boot: attempt 3
-published and loaded the real ARM64 generation, then proved Unity's Android APK
-reader cannot consume the 5.18 GB ZIP64 player-data container.
+This began as the safe pre-install checkpoint for Task 10 and now records four
+production-path attempts on the Thor. Attempt 4 closes the first-boot gate: the
+exact current Hollow Knight 1.5.12620 source compiled, published through a
+ZIP32 base plus Unity main OBB, reached the title menu and opening room, and was
+confirmed running and playable on the target device.
 
 ## On-device attempt 1
 
@@ -108,6 +108,46 @@ reader cannot consume the 5.18 GB ZIP64 player-data container.
   1,603,332,315 bytes in the OBB, below ZIP32 and Android's 2 GiB OBB limit.
   The actual 5.18 GB split and Unity mount remain the next device gate.
 
+## On-device attempt 4
+
+- The package was updated in place from commit `c45b1a3`, preserving the exact
+  source, transformed tree, generated code, native object cache, and profile
+  state. The isolated APK is 71,675,399 bytes, SHA-256
+  `a9391355210ff5decc2a357be1ad32f0a0e2afbae2cf45165ede4db8c0ab5ba8`;
+  APK Signature Schemes v2 and v3 verify.
+- The retained native cache rebuilt zero translation units, relinked 1,390
+  objects, and reproduced the 267,628,408-byte `libil2cpp.so`. The classic
+  packer then produced a 3,575,674,865-byte ZIP32 `data.apk` and a
+  1,603,506,295-byte
+  `main.10003.io.github.darkaxt.dualsouls.hkpoc.obb`.
+- Generation `gen-5de615a4-9e62-4b5b-af71-1365992c25fe` published atomically.
+  Its manifest records `data.apk` SHA-256
+  `841615c60cc84add921de5ab32417db7ba9fc08067560212cef2e2cb7b00308d`,
+  OBB SHA-256
+  `89ba54837d5572f53986d542f30d44d507882bb6565d0ebf97db86bffb61a116`,
+  and the unchanged `libil2cpp.so` SHA-256
+  `60ef6fdb9605e9a9014320349817309f302f726d2578d869554bab42adcb028d`.
+  Independent on-device hashing matched every manifest payload.
+- The APK entry `assets/unity_obb_guid` and OBB root entry `unity_obb_guid`
+  both contain `dbbc1d59-4cf9-d07c-e825-8ad81429415a`; the APK also contains
+  `assets/bin/Data/unity_app_guid` with
+  `ef877260-e490-9107-22d5-aa0ee208b32c`. The publisher reopened both archives
+  before moving the generation and updating `current`.
+- `GameActivity` resolved both generation-local archives and libraries. Unity
+  6000.0.61f1 initialized Vulkan and AAudio, logged
+  `[DualSouls][HK] injection probe loaded`, rendered the language selector, and
+  loaded the full title menu with visible version `1.5.12620`.
+- A new slot completed the first-run scale and brightness screens, loaded
+  `Opening_Sequence`, decoded its VP8/Vorbis cinematic, skipped it through the
+  input path, and entered the first controllable room. Rendering, audio, later
+  scene/OBB access, save creation, and input were observed; the user confirmed
+  the game was running and playable.
+- The log reports `Unsupported platform for InputHander Android` when
+  classifying the active gamepad type. It did not prevent playable input and is
+  tracked for the input-adapter stage rather than as a Task 10 blocker.
+- After evidence capture the package was force-stopped, no game PID remained,
+  and the temporary stay-awake setting was restored to its original value `0`.
+
 ## Inputs and source proof
 
 - Profile: `hollow-knight`
@@ -183,7 +223,7 @@ reader cannot consume the 5.18 GB ZIP64 player-data container.
   `a9391355210ff5decc2a357be1ad32f0a0e2afbae2cf45165ede4db8c0ab5ba8`.
   Its v2/v3 signature and debug certificate
   `06197430e1a4ba85dca54f7a2ecf8a2db5cc2c2e76eb8f7516e8acf3d1e6a934`
-  verify. It has not yet been installed.
+  verify. Attempt 4 installed it in place and completed the device gate.
 
 ## Verification gates
 
@@ -217,24 +257,29 @@ reader cannot consume the 5.18 GB ZIP64 player-data container.
 - `COMPLETE`: attempt 3 closes the Addressables-root blocker, publishes the
   exact generation, and proves the Unity 6000.0.61f1 ARM64 engine and all three
   generation-owned native libraries load.
-- `BLOCKER`: Unity cannot read the published 5.18 GB ZIP64 `data.apk`. The
-  ZIP32 plus main-OBB replacement is host-covered and packaged; it must repack
-  the retained image, publish a new generation, and prove Unity mounts both
-  archives before any menu/gameplay claim.
-- `BLOCKER`: Task 10 is not complete until serial `bfa98654` (AYN Thor,
-  Android 13/API 33, ARM64) runs the isolated package, logs
-  `[DualSouls][HK] injection probe loaded`, reaches the main menu, and enters a
-  playable room with rendering, audio, and input verified.
+- `COMPLETE`: attempt 4 replaces the rejected ZIP64 container with the exact
+  ZIP32/main-OBB layout, independently verifies the published generation,
+  mounts both archives through Unity, and reaches the 1.5.12620 title menu.
+- `COMPLETE`: Task 10's Thor gate logs the Hollow Knight injection probe,
+  creates a save, loads the opening cinematic, and enters a rendered, audible,
+  user-confirmed playable room with input.
+- `BLOCKER`: the complete two-game device matrix still requires the current
+  Linux Silksong source to provision and launch through the same fork package,
+  followed by cold switching in both directions.
+- `BLOCKER`: the Android gamepad-type classification warning remains for the
+  shared input-adapter stage even though it did not prevent Hollow Knight
+  gameplay.
 - `DEFERRED`: launcher visual redesign using the already preserved supplied
   grids, heroes, logos, and icons. No image generation is permitted.
 - `DEFERRED`: pinned per-game shortcuts with direct profile launch and the
   supplied individual Hollow Knight/Silksong icons. This follows the Task 10
-  boot gate so shortcuts cannot advertise an unproven launch path.
+  completed boot gate so shortcuts cannot advertise an unproven launch path.
 - `DEFERRED`: reduce the private runtime base container from the exact Unity
   split's projected 3.58 GB toward roughly 1 GB by pairing later-scene `.resS`
   sidecars with their owners across main and patch OBBs. The installed launcher
   APK remains about 72 MB. This custom split must not replace the exact-layout
-  POC until device evidence proves Unity resolves those sidecars across mounts.
+  POC until separate device evidence proves Unity resolves those sidecars
+  across multiple expansion mounts.
 
 Local proof artifacts remain under their exact `D:\Temp\dualsouls-hk-*`
 roots for the next device run. They contain user-owned game-derived data and

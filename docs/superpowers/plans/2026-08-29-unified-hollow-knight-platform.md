@@ -859,7 +859,7 @@ IL2CPP conversion, and runtime registration. Affected gates must pass again
 before Step 4 begins. The pre-sync isolated proof APK was deliberately not
 installed and is no longer a device candidate; rebuild it after the merge.
 
-- [ ] **Step 4: Run the end-to-end ARM64 spike on the Thor**
+- [x] **Step 4: Run the end-to-end ARM64 spike on the Thor**
 
 Use `adb -s bfa98654` for every device command. Supply the untouched Hollow
 Knight Linux source through the launcher, build it on device, and capture the
@@ -912,19 +912,34 @@ contracts, shell syntax, the real Java shell compile, and the 71,675,399-byte
 isolated APK build also pass. Step 4 remains a `BLOCKER` until the retained
 image is repacked and Unity mounts the OBB through the production shell.
 
-- [ ] **Step 5: Record the spike evidence**
+**Device cross-check (attempt 4, 2026-08-31):** commit `c45b1a3` resumed the
+retained exact 1.5.12620 build, rebuilt zero translation units, relinked 1,390
+objects, and atomically published generation
+`gen-5de615a4-9e62-4b5b-af71-1365992c25fe`. The generation contains a
+3,575,674,865-byte ZIP32 `data.apk` and a 1,603,506,295-byte Unity main OBB
+with matching GUIDs; independent on-device hashes matched every manifest
+entry. The shell mounted both archives, loaded Unity 6000.0.61f1 and the
+267,628,408-byte ARM64 IL2CPP library, and logged
+`[DualSouls][HK] injection probe loaded`. The exact 1.5.12620 title menu,
+first-run calibration, new-save opening cinematic, and first controllable room
+all rendered. Audio/video initialized and the user confirmed the game was
+running and playable. The package was then force-stopped and the temporary
+stay-awake setting was restored. Step 4 is `COMPLETE`; Android gamepad-type
+classification remains a tracked Task 14 input-adapter blocker, not a first
+boot blocker.
+
+- [x] **Step 5: Record the spike evidence**
 
 Create `docs/verification/hollow-knight-first-boot.md` containing source
 manifest hash, APK commit, device serial/model, Android version, Unity version,
 build duration, relevant log excerpts, tested scene, observed defects, and
 artifact hashes. Do not include game files or credentials.
 
-`docs/verification/hollow-knight-first-boot.md` currently records the complete
-pre-install host checkpoint. Keep this step open until its device/model,
-injection log, tested scene, and observed-defect sections contain real boot
-evidence.
+`docs/verification/hollow-knight-first-boot.md` records the device/model,
+generation and archive hashes, injection log, title menu, opening sequence,
+playable room, observed input warning, and post-test shutdown evidence.
 
-- [ ] **Step 6: Commit the working spike**
+- [x] **Step 6: Commit the working spike**
 
 ```bash
 git add tools/hollow-knight-patches src/SilksongLauncher.Launcher \
