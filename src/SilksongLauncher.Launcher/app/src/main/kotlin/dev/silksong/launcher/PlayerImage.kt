@@ -104,6 +104,13 @@ object PlayerImage {
         return root
     }
 
+    /** Classic player data is packed into data.apk and has no Addressables root. */
+    fun contentRootForProfile(packageName: String, paths: ProfileBuildPaths): String? =
+        when (paths.profile.contentLayout) {
+            ContentLayout.ADDRESSABLES -> contentRootFor(packageName, paths)
+            ContentLayout.CLASSIC_PLAYER -> null
+        }
+
     fun addressablesContainer(profile: GameProfile, dataDir: File): File {
         require(GameProfiles.find(profile.id) == profile) {
             "Addressables require an exact registered profile: ${profile.id}"
@@ -231,11 +238,10 @@ object PlayerImage {
     /**
      * Builds the player image.
      *
-     * [contentRoot] is where the Addressables content will be when the game
-     * runs, which the catalog is repointed at. It has to be short: the catalog
-     * stores its content root as a single length-prefixed string of 56 bytes,
-     * so the real tree is reached through a symlink at that path rather than
-     * named directly.
+     * [contentRoot] is where Addressables content will be when an Addressables
+     * game runs. Classic player data is packed into data.apk and passes null.
+     * Addressables catalogs store the root as a single length-prefixed string
+     * of 56 bytes, so the real tree is reached through a short indirection.
      */
     fun build(
         profile: GameProfile,
@@ -244,7 +250,7 @@ object PlayerImage {
         context: android.content.Context,
         root: File,
         assets: android.content.res.AssetManager,
-        contentRoot: String,
+        contentRoot: String?,
     ): Flow<Progress> = channelFlow {
         val data = depotData(depot)
             ?: throw IOException("no *_Data directory with globalgamemanagers under $depot")
@@ -347,6 +353,9 @@ object PlayerImage {
         require(profile.contentLayout == ContentLayout.ADDRESSABLES) {
             "Unsupported content layout for ${profile.id}: ${profile.contentLayout}"
         }
+        val addressablesContentRoot = requireNotNull(contentRoot) {
+            "${profile.id} requires an Addressables content root"
+        }
         img.deleteRecursively()
         File(img, "Resources").mkdirs()
         File(img, "Managed/Metadata").mkdirs()
@@ -430,14 +439,19 @@ object PlayerImage {
             catalog.copyTo(File(aaOut, "catalog.bin"), overwrite = true)
             File(aaSrc, "settings.json").takeIf { it.isFile }
                 ?.copyTo(File(aaOut, "settings.json"), overwrite = true)
-            send(Progress("Repointing the catalog", -1f, contentRoot))
+            send(Progress("Repointing the catalog", -1f, addressablesContentRoot))
             // Idempotent: the token is gone after the first pass, which is
             // what makes a re-run safe rather than an error.
             val patched = File(aaOut, "catalog.bin")
             run(
                 surgery,
                 context,
-                listOf("patch-catalog-path", patched.absolutePath, patched.absolutePath, contentRoot),
+                listOf(
+                    "patch-catalog-path",
+                    patched.absolutePath,
+                    patched.absolutePath,
+                    addressablesContentRoot,
+                ),
             )
         } else {
             LauncherLog.log("no catalog.bin under $aaSrc -- Addressables content will not resolve")

@@ -2,11 +2,11 @@
 
 Date: 2026-08-31
 
-This began as the safe pre-install checkpoint for Task 10 and now also records
-the first production-path attempt on the Thor. The host proof remains valid,
-but this document still does **not** claim a first boot: the first device run
-found a portable-shell defect during native compilation and stopped before a
-generation could be published or launched.
+This began as the safe pre-install checkpoint for Task 10 and now records two
+production-path attempts on the Thor. The host proof remains valid, but this
+document still does **not** claim a first boot: attempt 2 completed the real
+on-device ARM64 native link, then exposed a classic-versus-Addressables setup
+defect before a generation could be published or launched.
 
 ## On-device attempt 1
 
@@ -35,14 +35,42 @@ generation could be published or launched.
   negation supported by both Bash and Android `mksh`, without adding a process
   per translation unit. CI contracts reject the former `^` syntax and any
   per-file `sed`; `bash -n` passes, and Thor itself maps `vm/Runtime.cpp` to
-  `vm_Runtime.cpp`. The replacement APK and resumed on-device compilation are
-  still required before this defect is considered closed.
+  `vm_Runtime.cpp`. Attempt 2 below verifies the replacement on the production
+  device pipeline and closes this native object-name defect.
 - The installed shell also exposed `SetupActivity` as `MAIN`/`LAUNCHER`, making
   the two-game selector unreachable, and displayed Silksong-specific setup
   copy for the selected Hollow Knight profile. Host regressions now require
   exported `LauncherActivity` to be the sole launcher entry point and require
-  profile-specific Hollow Knight setup text. Device verification awaits the
-  same replacement APK.
+  profile-specific Hollow Knight setup text. Attempt 2 below verifies both
+  fixes in the installed shell.
+
+## On-device attempt 2
+
+- The package was updated in place without clearing its profile data, using an
+  isolated APK built from commit `4c7d3d0`: 71,659,015 bytes, SHA-256
+  `2a86391921e2e1691f1ff0fe598637a4bc81dc91449438c82c849f6bf9088c3a`.
+  APK Signature Schemes v2 and v3 verify.
+- Android resolves the app icon to `LauncherActivity`. The real rendered
+  launcher exposes both game profiles and the `IMPORT SAVES` / `EXPORT SAVES`
+  actions. Selecting Hollow Knight opens profile-specific setup copy with no
+  Silksong text.
+- The retained conversion reused its 803 generated C++ and 180 generated C
+  inputs. On Thor, native phase A rebuilt 803 units in 482 seconds, phase B
+  rebuilt 180 in 11 seconds, phase C rebuilt 363 Unity runtime units in 64
+  seconds, then bdwgc, zlib, and Brotli completed in 2, 1, and 5 seconds.
+- The fixed build pruned 83 stale objects produced by the broken sanitizer and
+  linked 1,390 objects in 13 seconds. Total native duration was 587 seconds.
+  The resulting `libil2cpp.so` is 267,628,408 bytes and was staged into the
+  owned generation job.
+- The next stage failed before classic conversion with
+  `Addressables content root exceeds the catalog field`. `SetupActivity` was
+  evaluating the Silksong catalog-root constraint before `PlayerImage` could
+  branch to Hollow Knight's `CLASSIC_PLAYER` strategy.
+- The source fix makes content-root allocation profile-layout-aware: classic
+  player builds pass no Addressables root, while Addressables builds retain the
+  exact 56-byte fail-closed guard. A focused regression covers the distinction.
+  A replacement APK and resumed device run are required to publish and launch
+  the first Hollow Knight generation.
 
 ## Inputs and source proof
 
@@ -105,18 +133,18 @@ generation could be published or launched.
 - The shell now accepts the `hollow-knight` launch profile and maps its compact
   runtime key to `hk`; a regression test prevents the former Silksong-only
   rejection from returning.
-- The older pre-sync isolated debug proof package remains superseded. The
-  post-sync package used in attempt 1 is identified in the device section
-  above and must itself be superseded by a build containing the portable-shell
-  and launcher-entry fixes.
+- The older pre-sync isolated debug proof package and the attempt-1 package are
+  superseded. Attempt 2 verifies the portable-shell and launcher-entry fixes;
+  its APK must now be superseded by one containing the layout-aware classic
+  content-root fix.
 
 ## Verification gates
 
-- Android host suite: 95 tests, 93 passed, zero failures/errors, two
+- Android host suite: 98 tests, 96 passed, zero failures/errors, two
   environment-gated skips. Each skipped real-source/player-image test was
   then run explicitly against the current inputs and passed.
 - Bundle-surgery suite: 37/37 passed.
-- Python CI contracts: 19/19 passed.
+- Python CI contracts: 21/21 passed.
 - Mod-weaver build: zero warnings and zero errors.
 - Hollow Knight patch compilation against the exact game and Android player
   assemblies passed with one registered entry point.
@@ -127,8 +155,8 @@ generation could be published or launched.
   and reconciled against the dual-profile pipeline. Their BepInEx/Harmony mod
   support now uses the selected profile's build, conversion, and registration
   paths. The affected host, real-source, patch-compilation, and release-AAR
-  gates have been rerun successfully; a fresh isolated APK is still required
-  before device use.
+  gates were rerun successfully, and attempt 2 verifies the merged launcher
+  and native-build route on Thor.
 - `COMPLETE`: exact 1.5.12620 source acceptance and full real-tree conversion.
 - `COMPLETE`: exact Android built-ins and project shader transformation.
 - `COMPLETE`: Hollow Knight patch assembly, IL2CPP generation, ARM64 native
@@ -136,10 +164,13 @@ generation could be published or launched.
   reopening.
 - `COMPLETE`: a signed, isolated launcher APK containing the Hollow Knight
   profile route builds without proprietary game content.
-- `BLOCKER`: the first Thor run reached real on-device IL2CPP generation and
-  native compilation but failed on the now-fixed object-name sanitizer. A
-  replacement APK must resume the retained build and finish linking,
-  generation publication, and launch.
+- `COMPLETE`: the second Thor run verifies the portable object sanitizer and
+  the real on-device native path through a 1,390-object ARM64 link and a
+  267,628,408-byte `libil2cpp.so`.
+- `BLOCKER`: the second Thor run then failed because classic Hollow Knight was
+  evaluated against Silksong's Addressables catalog-root limit. The
+  layout-aware fix is host-covered; a replacement APK must resume the retained
+  build, assemble the classic player image, publish the generation, and launch.
 - `BLOCKER`: Task 10 is not complete until serial `bfa98654` (AYN Thor,
   Android 13/API 33, ARM64) runs the isolated package, logs
   `[DualSouls][HK] injection probe loaded`, reaches the main menu, and enters a

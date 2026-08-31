@@ -884,6 +884,19 @@ launcher entry point and profile-specific setup text. Step 4 remains a
 `BLOCKER` until a replacement APK resumes the retained device build, publishes
 the generation, and reaches the required playable-room evidence.
 
+**Device cross-check (attempt 2, 2026-08-31):** the in-place replacement from
+commit `4c7d3d0` preserved the exact Linux source and retained build. The real
+launcher displayed both profiles, Android resolved `LauncherActivity` as the
+sole launcher entry, and Hollow Knight setup copy was profile-correct. Thor
+rebuilt the generated/runtime objects, pruned 83 stale object names, linked
+1,390 ARM64 objects in 13 seconds, and produced a 267,628,408-byte
+`libil2cpp.so` after 587 seconds total native work. The following classic-player
+stage then failed because `SetupActivity` allocated an Addressables catalog
+root before `PlayerImage` branched on `CLASSIC_PLAYER`. A layout-aware content
+root contract and regression now keep the 56-byte guard only for Addressables.
+Step 4 remains a `BLOCKER` until that replacement is installed and the retained
+build publishes, launches, and reaches playable-room evidence.
+
 - [ ] **Step 5: Record the spike evidence**
 
 Create `docs/verification/hollow-knight-first-boot.md` containing source

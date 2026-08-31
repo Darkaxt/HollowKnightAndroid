@@ -1088,7 +1088,7 @@ class SetupActivity : Activity() {
                                 this@SetupActivity,
                                 out,
                                 assets,
-                                PlayerImage.contentRootFor(packageName, buildPaths),
+                                PlayerImage.contentRootForProfile(packageName, buildPaths),
                             ).collect { setBusy(true, it.step, it.fraction, it.detail) }
                             setBusy(true, "packing the player image", -1f, "")
                             withContext(Dispatchers.IO) {

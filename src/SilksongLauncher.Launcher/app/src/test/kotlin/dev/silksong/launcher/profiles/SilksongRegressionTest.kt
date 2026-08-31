@@ -53,7 +53,7 @@ class SilksongRegressionTest {
         assertEquals(File(externalFilesDir, "profiles/silksong/depot-staging"), paths.depotStaging)
         assertEquals(File(externalFilesDir, "profiles/silksong/depot"), paths.downloadDepot)
         assertEquals(File(externalFilesDir, "profiles/silksong/content-path.txt"), paths.contentPointer)
-        val contentRoot = PlayerImage.contentRootFor("dev.example", paths)
+        val contentRoot = requireNotNull(PlayerImage.contentRootForProfile("dev.example", paths))
         assertEquals("/data/user/0/dev.example/files/p/ss/aa", contentRoot)
         assertTrue(contentRoot.length <= 56)
 
@@ -64,6 +64,41 @@ class SilksongRegressionTest {
         )
         assertFalse(paths.packageDir.toPath().startsWith(hollowKnight.profilePaths.root.toPath()))
         assertFalse(paths.buildRoot.toPath().startsWith(hollowKnight.externalRoot.toPath()))
+    }
+
+    @Test
+    fun `classic player profile does not allocate an Addressables content root`() {
+        val root = File("build/test-classic-content-root").absoluteFile
+        val paths = ProfileBuildPaths(
+            File(root, "internal"),
+            File(root, "external"),
+            GameProfiles.require("hollow-knight"),
+        )
+
+        assertEquals(
+            null,
+            PlayerImage.contentRootForProfile(
+                "io.github.darkaxt.dualsouls.hkpoc",
+                paths,
+            ),
+        )
+    }
+
+    @Test
+    fun `Addressables profile retains the catalog content-root limit`() {
+        val root = File("build/test-addressables-content-root").absoluteFile
+        val paths = ProfileBuildPaths(
+            File(root, "internal"),
+            File(root, "external"),
+            GameProfiles.require("silksong"),
+        )
+
+        assertThrows(IllegalArgumentException::class.java) {
+            PlayerImage.contentRootForProfile(
+                "io.github.darkaxt.dualsouls.hkpoc",
+                paths,
+            )
+        }
     }
 
     @Test
