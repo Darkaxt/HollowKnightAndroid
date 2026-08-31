@@ -33,9 +33,14 @@ public class DsShell
     readonly List<Entry> _entries = new List<Entry>();
     readonly RectTransform _root;
     readonly int _w, _h;
+    const float ModsButtonW = 176f;
 
     RectTransform _tabBar;
     RectTransform _body;
+    RectTransform _modsButton;
+    Image _modsFill;
+    TmpText _modsLabel;
+    DsModsScreen _mods;
     readonly DsTitleCard _title = new DsTitleCard();
     // Starts idle. The shell is built before anything is known about whether a
     // save is loaded, and defaulting to a screen meant the panel opened on an
@@ -43,6 +48,7 @@ public class DsShell
     // The title card is the honest answer to "no idea yet", so it is the one
     // that costs nothing to be wrong about.
     bool _idle = true;
+    bool _modsBroken;
     int _active = -1;
 
     public DsShell(RectTransform root, int width, int height)
@@ -77,11 +83,24 @@ public class DsShell
         rule.sizeDelta = new Vector2(0f, DsTheme.RuleThickness);
         rule.anchoredPosition = Vector2.zero;
 
+        _modsButton = DsWidgets.Rect(_tabBar, "mods-control");
+        DsWidgets.Place(_modsButton, _w - ModsButtonW, 0f, ModsButtonW, DsTheme.TabBarHeight);
+        _modsFill = DsWidgets.Box(_modsButton, "fill", DsTheme.Panel);
+        DsWidgets.Stretch(_modsFill.rectTransform);
+        DsWidgets.VRule(_modsButton, "left-rule", 0f, 0f, DsTheme.TabBarHeight);
+        _modsLabel = DsWidgets.Label(_modsButton, "label", "MODS", DsTheme.BodySize,
+                                     DsTheme.Ink, TmpAlign.Center, display: true);
+        if (_modsLabel != null) DsWidgets.Stretch(_modsLabel.rectTransform);
+
         // Built last so it covers everything, because that is exactly its job:
         // outside a save there is no screen worth showing and no tab worth
         // offering, so the whole frame goes away rather than sitting there
         // greyed out.
         _title.Build(_root, _w, _h);
+
+        // Built after every other shell element so it is always the topmost
+        // surface. It is a modal, not another tab: ActiveId never changes.
+        GuardMods(() => _mods = new DsModsScreen(_root, _w, _h));
 
         // Match the initial _idle state, rather than waiting for the first
         // SetIdle to disagree with it.
@@ -106,6 +125,7 @@ public class DsShell
         _tabBar.gameObject.SetActive(!idle);
         _body.gameObject.SetActive(!idle);
         _title.SetVisible(idle);
+        if (idle && _mods != null) GuardMods(() => _mods.SetVisible(false));
 
         // Hide the active screen properly on the way out, so it stops ticking
         // and stops driving anything of the game's -- the map screen in
@@ -140,7 +160,8 @@ public class DsShell
     {
         int n = _entries.Count;
         if (n == 0) return;
-        float w = _w / (float)n;
+        float tabsWidth = _w - ModsButtonW;
+        float w = tabsWidth / (float)n;
 
         for (int i = 0; i < n; i++)
         {
@@ -204,6 +225,7 @@ public class DsShell
 
     /// <summary>The id of the visible screen, for persisting across runs.</summary>
     public string ActiveId => (_active >= 0 && _active < _entries.Count) ? _entries[_active].Screen.Id : null;
+    public bool ModsOpen => !_modsBroken && _mods != null && _mods.Visible;
 
     void Paint()
     {
@@ -215,11 +237,16 @@ public class DsShell
             if (e.TabLabel != null) e.TabLabel.color = e.Broken ? DsTheme.InkFaint
                                                     : on ? DsTheme.Ink : DsTheme.InkDim;
         }
+        if (_modsFill != null) _modsFill.color = ModsOpen ? DsTheme.Accent : DsTheme.Panel;
+        if (_modsLabel != null) _modsLabel.color = _modsBroken ? DsTheme.InkFaint
+                                                   : ModsOpen ? DsTheme.Ground : DsTheme.Ink;
     }
 
     public void Tick(float dt)
     {
+        if (_mods != null) GuardMods(() => _mods.Tick());
         if (_idle) { _title.Tick(); return; }
+        if (ModsOpen) return;
         if (_active < 0 || _active >= _entries.Count) return;
         var e = _entries[_active];
         if (e.Broken) return;
@@ -231,14 +258,29 @@ public class DsShell
         // Nothing to press on the title card.
         if (_idle) return;
 
+        // Modal containment: while open, no tap or drag reaches the HUD below.
+        if (ModsOpen)
+        {
+            GuardMods(() => _mods.OnGesture(g));
+            Paint();
+            return;
+        }
+
         // A tap in the tab strip switches screens. The strip is at the TOP of
         // the panel, and panel coordinates have y up, so that is high y.
         if (g.Type == DsGestureType.Tap && g.Position.y >= _h - DsTheme.TabBarHeight)
         {
+            if (g.Position.x >= _w - ModsButtonW)
+            {
+                if (_mods != null) GuardMods(() => _mods.SetVisible(true));
+                Paint();
+                return;
+            }
             int n = _entries.Count;
             if (n > 0)
             {
-                int idx = Mathf.Clamp((int)(g.Position.x / (_w / (float)n)), 0, n - 1);
+                float tabsWidth = _w - ModsButtonW;
+                int idx = Mathf.Clamp((int)(g.Position.x / (tabsWidth / n)), 0, n - 1);
                 Show(idx);
             }
             return;
@@ -260,6 +302,23 @@ public class DsShell
             e.Broken = true;
             if (e.Host != null) e.Host.gameObject.SetActive(false);
             Debug.LogError("[DualScreen] screen '" + e.Screen.Id + "' disabled after error: " + ex);
+            Paint();
+        }
+    }
+
+    // The modal is not a normal Entry because opening it must not replace the
+    // remembered page. It still gets the same fail-contained lifetime: one
+    // broken Mods surface is hidden and disabled without taking down the HUD
+    // or the game.
+    void GuardMods(Action action)
+    {
+        if (_modsBroken) return;
+        try { action(); }
+        catch (Exception ex)
+        {
+            _modsBroken = true;
+            try { if (_mods != null) _mods.SetVisible(false); } catch { }
+            Debug.LogError("[DualScreen] Mods modal disabled after error: " + ex);
             Paint();
         }
     }

@@ -27,7 +27,7 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertNotIn('"Silksong Android"', source)
         self.assertNotIn('"Porting Silksong"', source)
         self.assertIn('"Building ${profile.displayName}"', source)
-        self.assertIn("getString(R.string.launcher_app_name)", source)
+        self.assertIn("text(profile.displayName", source)
 
     def test_launcher_and_mod_screen_use_the_selected_profile_build_root(self):
         launcher = (LAUNCHER / "LauncherActivity.kt").read_text(encoding="utf-8")
@@ -45,6 +45,50 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertIn("PackageCompiler.patchAssembly(profile, root)", source)
         self.assertIn("patchAssemblyName", source)
         self.assertIn('register("BepInEx", "BepInEx.Bootstrap", "Chainloader", "Start", 2)', source)
+
+    def test_built_in_mod_core_is_staged_for_both_game_profiles(self):
+        source = (REPO_ROOT / "src" / "SilksongLauncher.Launcher" / "app" / "build.gradle.kts").read_text(encoding="utf-8")
+
+        self.assertGreaterEqual(source.count('from(rootProject.file("../../tools/shared-patches/src"))'), 2)
+        self.assertIn('into("src/shared")', source)
+
+    def test_silksong_second_screen_registers_a_persistent_mods_modal(self):
+        shell = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsShell.cs").read_text(encoding="utf-8")
+        modal = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsModsScreen.cs")
+
+        self.assertTrue(modal.is_file())
+        modal_source = modal.read_text(encoding="utf-8")
+        self.assertIn("new DsModsScreen", shell)
+        self.assertIn("ModsOpen", shell)
+        self.assertIn("void GuardMods", shell)
+        self.assertIn("GuardMods(() => _mods.Tick())", shell)
+        self.assertIn("GuardMods(() => _mods.OnGesture(g))", shell)
+        self.assertIn("new TweakController", modal_source)
+        self.assertIn("new SilksongTweakAdapter", modal_source)
+        self.assertIn("new UnityTweakStore", modal_source)
+        self.assertIn("SetMaster", modal_source)
+        self.assertIn("Reset", modal_source)
+
+    def test_built_in_tweaks_do_not_use_native_memory_offsets(self):
+        roots = [
+            REPO_ROOT / "tools" / "shared-patches" / "src",
+            REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods",
+        ]
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for root in roots
+            for path in root.rglob("*.cs")
+        ).lower()
+
+        for forbidden in ("intptr", "marshal.", "unsafe", "processmemory", "readprocessmemory", "writeprocessmemory"):
+            self.assertNotIn(forbidden, source)
+
+    def test_master_defaults_off_and_persistence_is_game_qualified(self):
+        source = (REPO_ROOT / "tools" / "shared-patches" / "src" / "Mods" / "TweakController.cs").read_text(encoding="utf-8")
+
+        self.assertIn('"dualsouls.mods." + adapter.GameId + "."', source)
+        self.assertIn("MasterEnabled = false", source)
+        self.assertNotIn("MasterEnabled = true;\n        public", source)
 
 
 if __name__ == "__main__":

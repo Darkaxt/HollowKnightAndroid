@@ -544,7 +544,7 @@ internal static partial class ClassicPlayerTree
         {
             return ClassicFileKind.ReplacementRequired;
         }
-        if (AssetsFile.IsAssetsFile(path)) return ClassicFileKind.Serialized;
+        if (SerializedFileDetection.IsSerializedFile(path)) return ClassicFileKind.Serialized;
 
         if (relativePath.StartsWith("Managed/", StringComparison.OrdinalIgnoreCase) &&
             Path.GetExtension(path).Equals(".dll", StringComparison.OrdinalIgnoreCase))

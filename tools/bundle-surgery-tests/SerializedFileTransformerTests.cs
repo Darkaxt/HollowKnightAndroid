@@ -106,6 +106,25 @@ public sealed class SerializedFileTransformerTests
     }
 
     [Fact]
+    public void Extract_command_recognizes_a_unity_6000_internal_branch_version()
+    {
+        using var fixture = SyntheticAssetFactory.WithShaderPlatformsAndUnityVersion(
+            "6000.0.50f1-uum-100966-branch1",
+            18);
+        var extensionlessInput = Path.Combine(fixture.Root, "globalgamemanagers.assets");
+        File.Copy(fixture.InputPath, extensionlessInput);
+        var output = Path.Combine(fixture.OutputRoot, "globalgamemanagers.android.assets");
+
+        var exitCode = Program.Main(
+            ["extract-vulkan-android", extensionlessInput, output]);
+
+        Assert.Equal(0, exitCode);
+        var inspected = SyntheticAssetFactory.Inspect(output);
+        Assert.Equal(13u, inspected.TargetPlatform);
+        Assert.Equal("6000.0.50f1-uum-100966-branch1", inspected.UnityVersion);
+    }
+
+    [Fact]
     public void Shader_report_recognizes_an_extensionless_serialized_file_by_header()
     {
         using var fixture = SyntheticAssetFactory.WithShaderPlatforms(18);

@@ -478,7 +478,7 @@ internal static class Program
 
     static int ExtractVulkanAndroid(string inputPath, string outputPath)
     {
-        if (AssetsFile.IsAssetsFile(inputPath))
+        if (SerializedFileDetection.IsSerializedFile(inputPath))
         {
             var report = SerializedFileTransformer.Transform(
                 inputPath,
@@ -637,7 +637,7 @@ internal static class Program
         try
         {
             manager.LoadClassPackage(ClassDataPath);
-            if (AssetsFile.IsAssetsFile(path))
+            if (SerializedFileDetection.IsSerializedFile(path))
             {
                 var afile = manager.LoadAssetsFile(path);
                 manager.LoadClassDatabaseFromPackage(afile.file.Metadata.UnityVersion);

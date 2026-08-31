@@ -16,10 +16,9 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
-import android.widget.RadioButton
-import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,12 +26,21 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import dev.silksong.launcher.profiles.GameProfiles
+import dev.silksong.launcher.profiles.GameProfile
 import dev.silksong.launcher.profiles.LegacySilksongAdopter
 import dev.silksong.launcher.profiles.ProfileBuildPaths
 import dev.silksong.launcher.profiles.SelectedGameStore
 import dev.silksong.launcher.runtime.EvidenceKind
+import dev.silksong.launcher.runtime.GameProcessInspector
+import dev.silksong.launcher.runtime.GameProcessState
+import dev.silksong.launcher.runtime.LaunchEligibility
+import dev.silksong.launcher.runtime.LaunchEligibilityCode
 import dev.silksong.launcher.runtime.LauncherRuntimeProvider
 import dev.silksong.launcher.runtime.RuntimeRequest
+import dev.silksong.launcher.runtime.RuntimeState
+import dev.silksong.launcher.shortcuts.GameShortcutContract
+import dev.silksong.launcher.shortcuts.GameShortcutController
+import dev.silksong.launcher.shortcuts.GameShortcutResult
 
 class LauncherActivity : Activity() {
 
@@ -53,14 +61,17 @@ class LauncherActivity : Activity() {
     }
     private val runtime by lazy { LauncherRuntimeProvider.from(this) }
     private val runtimeRequest by lazy { RuntimeRequest(this, profile, buildPaths) }
+    private val shortcutController by lazy { GameShortcutController(this) }
 
     // Panels.
     private lateinit var launchPanel: LinearLayout
     private lateinit var runtimeBanner: TextView
-    private lateinit var gameSelector: RadioGroup
-    private lateinit var radioHollowKnight: RadioButton
-    private lateinit var radioSilksong: RadioButton
-    private lateinit var selectedGameStatus: TextView
+    private lateinit var radioHollowKnight: GameCardView
+    private lateinit var radioSilksong: GameCardView
+    private lateinit var hollowKnightStatus: TextView
+    private lateinit var silksongStatus: TextView
+    private lateinit var btnPinHollowKnight: Button
+    private lateinit var btnPinSilksong: Button
 
     // Launch-panel widgets.
     private lateinit var txtLoginStatus: TextView
@@ -78,6 +89,7 @@ class LauncherActivity : Activity() {
     private lateinit var tokenStore: TokenStore
     private lateinit var settings: SettingsStore
     private var creds: TokenStore.Credentials? = null
+    private lateinit var selectedRuntimeState: RuntimeState
 
     // True between launchGame() and the next onResume. Drives the
     // auto-push trigger: only push when we just returned from the game
@@ -100,6 +112,7 @@ class LauncherActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val directLaunch = acceptDirectLaunch(intent)
         if (profile.id == "silksong") {
             val adoption = LegacySilksongAdopter.adopt(
                 filesDir,
@@ -118,10 +131,12 @@ class LauncherActivity : Activity() {
 
         launchPanel = findViewById(R.id.launch_panel)
         runtimeBanner = findViewById(R.id.txt_runtime_banner)
-        gameSelector = findViewById(R.id.game_selector)
         radioHollowKnight = findViewById(R.id.radio_hollow_knight)
         radioSilksong = findViewById(R.id.radio_silksong)
-        selectedGameStatus = findViewById(R.id.txt_selected_game_status)
+        hollowKnightStatus = findViewById(R.id.txt_hollow_knight_status)
+        silksongStatus = findViewById(R.id.txt_silksong_status)
+        btnPinHollowKnight = findViewById(R.id.btn_pin_hollow_knight)
+        btnPinSilksong = findViewById(R.id.btn_pin_silksong)
         txtLoginStatus = findViewById(R.id.txt_login_status)
         btnLogin = findViewById(R.id.btn_login)
         btnPull = findViewById(R.id.btn_pull)
@@ -161,9 +176,32 @@ class LauncherActivity : Activity() {
         btnLogs.setOnClickListener {
             startActivity(Intent(this, LogActivity::class.java))
         }
+        btnPinHollowKnight.setOnClickListener {
+            onShortcutClicked(GameProfiles.require("hollow-knight"))
+        }
+        btnPinSilksong.setOnClickListener {
+            onShortcutClicked(GameProfiles.require("silksong"))
+        }
         btnLaunch.setOnClickListener { onLaunchClicked() }
 
         showLaunchPanel()
+        if (directLaunch) {
+            intent.action = null
+            btnLaunch.post { onLaunchClicked() }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val requested = directLaunchProfile(intent) ?: return
+        selectedGameStore.set(requested)
+        setIntent(intent)
+        if (requested.id != profile.id) {
+            recreate()
+        } else {
+            intent.action = null
+            btnLaunch.post { onLaunchClicked() }
+        }
     }
 
     override fun onDestroy() {
@@ -181,27 +219,121 @@ class LauncherActivity : Activity() {
     private fun bindProfileControls() {
         val hollowKnight = GameProfiles.require("hollow-knight")
         val silksong = GameProfiles.require("silksong")
-        radioHollowKnight.text = hollowKnight.displayName
-        radioSilksong.text = silksong.displayName
-        gameSelector.check(if (profile.id == hollowKnight.id) R.id.radio_hollow_knight else R.id.radio_silksong)
-        selectedGameStatus.text = getString(R.string.selected_game_status, profile.displayName)
+        radioHollowKnight.setOnClickListener { selectProfile(hollowKnight) }
+        radioSilksong.setOnClickListener { selectProfile(silksong) }
         runtimeBanner.visibility =
             if (runtime.evidenceKind == EvidenceKind.EMULATOR_FAKE) View.VISIBLE else View.GONE
-        gameSelector.setOnCheckedChangeListener { _, checkedId ->
-            val selected = when (checkedId) {
-                R.id.radio_hollow_knight -> hollowKnight
-                R.id.radio_silksong -> silksong
-                else -> return@setOnCheckedChangeListener
-            }
-            if (selected.id != profile.id) {
-                selectedGameStore.set(selected)
-                recreate()
-            }
+        refreshProfileCards()
+    }
+
+    private fun refreshProfileCards() {
+        val hollowKnight = GameProfiles.require("hollow-knight")
+        val silksong = GameProfiles.require("silksong")
+        val hollowKnightState = inspect(hollowKnight)
+        val silksongState = inspect(silksong)
+        selectedRuntimeState = if (profile.id == hollowKnight.id) hollowKnightState else silksongState
+
+        radioHollowKnight.isChecked = profile.id == hollowKnight.id
+        radioSilksong.isChecked = profile.id == silksong.id
+        hollowKnightStatus.text = hollowKnightState.condition.label
+        silksongStatus.text = silksongState.condition.label
+        radioHollowKnight.contentDescription = getString(
+            R.string.game_card_accessibility,
+            hollowKnight.displayName,
+            hollowKnightState.condition.label,
+        )
+        radioSilksong.contentDescription = getString(
+            R.string.game_card_accessibility,
+            silksong.displayName,
+            silksongState.condition.label,
+        )
+        refreshShortcutButton(btnPinHollowKnight, hollowKnight, hollowKnightState)
+        refreshShortcutButton(btnPinSilksong, silksong, silksongState)
+        btnLaunch.text = if (selectedRuntimeState.ready) {
+            getString(R.string.action_play_game, profile.displayName)
+        } else {
+            getString(R.string.action_prepare_game, profile.displayName)
         }
+    }
+
+    private fun inspect(target: GameProfile): RuntimeState {
+        val paths = if (target.id == profile.id) {
+            buildPaths
+        } else {
+            ProfileBuildPaths(
+                filesDir,
+                requireNotNull(getExternalFilesDir(null)) { "No external files directory" },
+                target,
+            )
+        }
+        return runCatching { runtime.inspect(RuntimeRequest(this, target, paths)) }
+            .getOrElse {
+                RuntimeState(
+                    ready = false,
+                    generationId = null,
+                    detail = it.message ?: "inspection failed",
+                    condition = dev.silksong.launcher.runtime.RuntimeCondition.NEEDS_REPAIR,
+                )
+            }
+    }
+
+    private fun refreshShortcutButton(
+        button: Button,
+        target: GameProfile,
+        state: RuntimeState,
+    ) {
+        val pinned = shortcutController.isPinned(target)
+        button.isActivated = pinned
+        button.isEnabled = state.ready
+        button.contentDescription = getString(
+            if (pinned) R.string.shortcut_pinned_accessibility else R.string.shortcut_pin_accessibility,
+            shortcutName(target),
+        )
+    }
+
+    private fun selectProfile(selected: GameProfile) {
+        if (selected.id == profile.id) return
+        selectedGameStore.set(selected)
+        recreate()
+    }
+
+    private fun shortcutName(target: GameProfile): String = when (target.id) {
+        "silksong" -> "Silksong"
+        else -> target.displayName
+    }
+
+    private fun directLaunchProfile(source: Intent): GameProfile? {
+        if (source.action != GameShortcutContract.ACTION_DIRECT_LAUNCH) return null
+        val id = source.getStringExtra(GameShortcutContract.PROFILE_ID_EXTRA)
+        val requested = id?.let(GameProfiles::find)
+        if (requested == null) {
+            LauncherLog.log("Ignored direct-launch shortcut with unsupported profile: $id")
+        }
+        return requested
+    }
+
+    private fun acceptDirectLaunch(source: Intent): Boolean {
+        val requested = directLaunchProfile(source) ?: return false
+        selectedGameStore.set(requested)
+        return true
+    }
+
+    private fun onShortcutClicked(target: GameProfile) {
+        val result = shortcutController.request(target, inspect(target))
+        val message = when (result) {
+            GameShortcutResult.REQUESTED -> getString(R.string.shortcut_requested, shortcutName(target))
+            GameShortcutResult.ALREADY_PINNED -> getString(R.string.shortcut_already_exists, shortcutName(target))
+            GameShortcutResult.UNSUPPORTED -> getString(R.string.shortcut_unsupported)
+            GameShortcutResult.NOT_READY -> getString(R.string.shortcut_not_ready, target.displayName)
+            GameShortcutResult.REJECTED -> getString(R.string.shortcut_rejected)
+        }
+        LauncherLog.log(message)
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
     override fun onResume() {
         super.onResume()
+        if (::radioHollowKnight.isInitialized) refreshProfileCards()
         // Auto-push fires after the user returns from playing the
         // game. We use a flag (set in launchGame) instead of just
         // "always on resume" so dismissing dialogs / opening
@@ -535,10 +667,33 @@ class LauncherActivity : Activity() {
     // ── Launch the game ────────────────────────────────────────────────
 
     private fun onLaunchClicked() {
-        if (!runtime.inspect(runtimeRequest).ready) {
-            btnLaunch.text = getString(R.string.action_prepare_game, profile.displayName)
-            startActivity(Intent(this, SetupActivity::class.java))
-            return
+        val state = runtime.inspect(runtimeRequest)
+        val processState = if (state.ready) {
+            GameProcessInspector.inspect(this, runtime.gameProcessName(runtimeRequest))
+        } else {
+            GameProcessState.INACTIVE
+        }
+        when (LaunchEligibility.evaluate(state, processState).code) {
+            LaunchEligibilityCode.NOT_READY -> {
+                btnLaunch.text = getString(R.string.action_prepare_game, profile.displayName)
+                startActivity(Intent(this, SetupActivity::class.java))
+                return
+            }
+            LaunchEligibilityCode.GAME_PROCESS_ACTIVE -> {
+                launchBlocked(
+                    getString(R.string.game_process_active_title),
+                    getString(R.string.game_process_active_message),
+                )
+                return
+            }
+            LaunchEligibilityCode.GAME_PROCESS_STATE_UNKNOWN -> {
+                launchBlocked(
+                    getString(R.string.game_process_unknown_title),
+                    getString(R.string.game_process_unknown_message),
+                )
+                return
+            }
+            LaunchEligibilityCode.READY -> Unit
         }
         // Before anything else, because it is the one thing here that changes
         // what the player is about to run rather than what it will read.
@@ -547,6 +702,15 @@ class LauncherActivity : Activity() {
             return
         }
         continueLaunch()
+    }
+
+    private fun launchBlocked(title: String, message: String) {
+        LauncherLog.log("Launch blocked: $message")
+        android.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     /**

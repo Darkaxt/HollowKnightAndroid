@@ -121,7 +121,7 @@ object PlayerImage {
         "/data/user/0/${context.packageName}/files/aa"
 
     fun contentRootFor(packageName: String, paths: ProfileBuildPaths): String {
-        val root = "/data/user/0/$packageName/files/p/${paths.profile.runtimeStorageKey}/aa"
+        val root = "/data/user/0/$packageName/p/${paths.profile.runtimeStorageKey}/aa"
         require(root.toByteArray(Charsets.UTF_8).size <= 56) {
             "Addressables content root exceeds the catalog field: $root"
         }

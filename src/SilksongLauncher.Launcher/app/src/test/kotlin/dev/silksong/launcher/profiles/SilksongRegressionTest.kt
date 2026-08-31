@@ -20,6 +20,22 @@ import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
 class SilksongRegressionTest {
+
+    @Test
+    fun `current Linux source accepts the observed executable without x86 suffix`() {
+        val root = File("build/test-silksong-regression/no-suffix-executable").absoluteFile
+        root.deleteRecursively()
+        File(root, "Hollow Knight Silksong").apply {
+            requireNotNull(parentFile).mkdirs()
+            writeText("linux player")
+        }
+        File(root, "Hollow Knight Silksong_Data/globalgamemanagers").writeFixture("fixture")
+        File(root, "Hollow Knight Silksong_Data/StreamingAssets/aa/StandaloneLinux64").mkdirs()
+
+        assertEquals(null, DepotLocation.problemWith(GameProfiles.require("silksong"), root))
+
+        root.deleteRecursively()
+    }
     private fun File.writeFixture(contents: String): File = apply {
         requireNotNull(parentFile).mkdirs()
         writeText(contents)
@@ -33,7 +49,10 @@ class SilksongRegressionTest {
         assertEquals(1030303, profile.steamDepotId)
         assertEquals("6000.0.50f1", profile.unityVersion)
         assertEquals("Hollow Knight Silksong_Data", profile.dataDirectoryName)
-        assertEquals(setOf("Hollow Knight Silksong.x86_64"), profile.executableNames)
+        assertEquals(
+            setOf("Hollow Knight Silksong", "Hollow Knight Silksong.x86_64"),
+            profile.executableNames,
+        )
         assertEquals("ss", profile.runtimeStorageKey)
         assertEquals(ContentLayout.ADDRESSABLES, profile.contentLayout)
         assertEquals("StreamingAssets/aa/StandaloneLinux64", profile.addressablesRoot)
@@ -47,14 +66,14 @@ class SilksongRegressionTest {
         val paths = ProfileBuildPaths(filesDir, externalFilesDir, profile)
 
         assertEquals(File(filesDir, "profiles/silksong/pkg"), paths.packageDir)
-        assertEquals(File(filesDir, "p/ss/aa"), paths.contentLink)
+        assertEquals(File(filesDir.parentFile, "p/ss/aa"), paths.contentLink)
         assertEquals(File(externalFilesDir, "profiles/silksong/build"), paths.buildRoot)
         assertEquals(File(externalFilesDir, "profiles/silksong/staging"), paths.installStaging)
         assertEquals(File(externalFilesDir, "profiles/silksong/depot-staging"), paths.depotStaging)
         assertEquals(File(externalFilesDir, "profiles/silksong/depot"), paths.downloadDepot)
         assertEquals(File(externalFilesDir, "profiles/silksong/content-path.txt"), paths.contentPointer)
         val contentRoot = requireNotNull(PlayerImage.contentRootForProfile("dev.example", paths))
-        assertEquals("/data/user/0/dev.example/files/p/ss/aa", contentRoot)
+        assertEquals("/data/user/0/dev.example/p/ss/aa", contentRoot)
         assertTrue(contentRoot.length <= 56)
 
         val hollowKnight = ProfileBuildPaths(
@@ -85,7 +104,7 @@ class SilksongRegressionTest {
     }
 
     @Test
-    fun `Addressables profile retains the catalog content-root limit`() {
+    fun `Addressables profile uses a compact app-private catalog root`() {
         val root = File("build/test-addressables-content-root").absoluteFile
         val paths = ProfileBuildPaths(
             File(root, "internal"),
@@ -93,12 +112,18 @@ class SilksongRegressionTest {
             GameProfiles.require("silksong"),
         )
 
-        assertThrows(IllegalArgumentException::class.java) {
+        val contentRoot = requireNotNull(
             PlayerImage.contentRootForProfile(
                 "io.github.darkaxt.dualsouls.hkpoc",
                 paths,
-            )
-        }
+            ),
+        )
+
+        assertEquals(
+            "/data/user/0/io.github.darkaxt.dualsouls.hkpoc/p/ss/aa",
+            contentRoot,
+        )
+        assertTrue(contentRoot.toByteArray(Charsets.UTF_8).size <= 56)
     }
 
     @Test
@@ -170,7 +195,7 @@ class SilksongRegressionTest {
         val paths = ProfileBuildPaths(filesDir, externalFilesDir, profile)
         val depot = File(externalFilesDir, "depot")
         File(depot, "${profile.dataDirectoryName}/globalgamemanagers").writeFixture("fixture")
-        File(depot, profile.executableNames.single()).writeFixture("fixture")
+        File(depot, "Hollow Knight Silksong.x86_64").writeFixture("fixture")
         File(depot, ".download-complete").writeFixture(profile.steamDepotId.toString())
 
         LegacySilksongAdopter.adopt(filesDir, externalFilesDir, paths)
@@ -189,7 +214,7 @@ class SilksongRegressionTest {
         val silksong = GameProfiles.require("silksong")
         val hollowKnight = GameProfiles.require("hollow-knight")
         File(depot, "${silksong.dataDirectoryName}/globalgamemanagers").writeFixture("fixture")
-        File(depot, "${silksong.executableNames.single()}").writeText("fixture")
+        File(depot, "Hollow Knight Silksong.x86_64").writeText("fixture")
         File(depot, ".download-complete").writeText(silksong.steamDepotId.toString())
 
         assertTrue(DepotFetcher.isPresent(silksong, depot))
@@ -250,16 +275,17 @@ class SilksongRegressionTest {
         assertTrue(source.contains("dev.silksong.launcher.PROFILE_ID"))
         assertTrue(source.contains("!id.equals(\"silksong\") && !id.equals(\"hollow-knight\")"))
         assertTrue(source.contains("if (profileId().equals(\"hollow-knight\")) return \"hk\""))
-        assertTrue(source.contains("new java.io.File(getFilesDir(), \"profiles/\" + profileId())"))
-        assertTrue(source.contains("new java.io.File(getFilesDir(), \"p/\" + profileRuntimeKey() + \"/aa\")"))
+        assertTrue(source.contains("new java.io.File(getDataDir(), \"p/\" + profileRuntimeKey() + \"/aa\")"))
         assertTrue(source.contains("new java.io.File(ext, \"profiles/\" + profileId())"))
-        assertTrue(source.contains("new java.io.File(profileFilesDir(), \"current\")"))
-        assertTrue(source.contains("new java.io.File(profileFilesDir(), \"generations\")"))
+        assertTrue(source.contains("GameProcessStartup.requireSnapshot()"))
+        assertTrue(source.contains("new java.io.File(startup().getPackageDir())"))
+        assertTrue(source.contains("new java.io.File(startup().getNativeLibraryDir())"))
+        assertTrue(source.contains("new java.io.File(startup().getDataArchive())"))
         assertTrue(source.contains("@Override public java.io.File getObbDir()"))
         assertTrue(source.contains("@Override public java.io.File[] getObbDirs()"))
         assertTrue(source.contains("return profilePackageDir()"))
-        assertTrue(source.contains("return legacyPackageDir()"))
-        assertTrue(source.contains("throw new IllegalStateException(\"current generation is invalid"))
+        assertFalse(source.contains("new java.io.File(profileFilesDir(), \"current\")"))
+        assertFalse(source.contains("return legacyPackageDir()"))
         assertTrue(source.contains("new java.io.File(logs, GAME_LOG + \".prev\")"))
         assertTrue(source.contains("new java.io.File(logs, ERROR_LOG + \".prev\")"))
         assertFalse(source.contains("new java.io.File(ext, ERROR_LOG + \".prev\")"))

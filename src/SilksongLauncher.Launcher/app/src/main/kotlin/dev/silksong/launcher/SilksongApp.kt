@@ -8,6 +8,8 @@ package dev.silksong.launcher
 
 import android.app.Application
 import android.content.Context
+import dev.silksong.launcher.runtime.GameProcessStartup
+import dev.silksong.launcher.runtime.ProcessRole
 
 class SilksongApp : Application() {
 
@@ -21,7 +23,12 @@ class SilksongApp : Application() {
     // point in the process where that is possible.
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
-        UnityDex.inject(this)
+        val processName = ProcessRole.currentName(this)
+            ?: throw IllegalStateException("Could not identify the application process")
+        if (ProcessRole.isGameProcess(packageName, processName)) {
+            val startup = GameProcessStartup.prepare(this)
+            UnityDex.inject(this, startup)
+        }
     }
 
     override fun onCreate() {

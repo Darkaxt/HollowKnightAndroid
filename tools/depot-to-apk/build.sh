@@ -420,7 +420,15 @@ EOF
     # javac targets whatever JDK was found -- a JDK 25 emits class file major
     # 69 and d8 refuses it. Unity's bundled JDK happened to be 17, which is
     # why this only surfaced once the build stopped depending on Unity.
-    "$jdk/javac" --release 17 -nowarn -cp "$cp" -d "$sh/javaout" "${srcs[@]}"
+    # Git Bash supplies POSIX paths and ':' lists, while a Windows javac.exe
+    # expects native paths joined with ';'. MSYS converts ordinary path
+    # arguments but cannot infer that a classpath is a path list, so normalize
+    # it explicitly. Linux, macOS, and Termux keep the original list.
+    local javac_cp="$cp"
+    if [[ "${OS:-}" == "Windows_NT" ]] && command -v cygpath >/dev/null 2>&1; then
+        javac_cp=$(cygpath -wp "$cp")
+    fi
+    "$jdk/javac" --release 17 -nowarn -cp "$javac_cp" -d "$sh/javaout" "${srcs[@]}"
     "$jdk/jar" --create --file "$sh/activity.jar" -C "$sh/javaout" .
     changed+=("$sh/activity.jar")
 

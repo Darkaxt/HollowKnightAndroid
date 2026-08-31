@@ -303,6 +303,68 @@ entry points. A mod is compiled and enabled per profile. A failed mod build or
 load cannot invalidate the base game generation; the launcher offers a safe
 launch with external mods disabled.
 
+### Built-in Mods menu and gameplay tweaks
+
+The built-in Mods menu is a separate concern from loading external mod DLLs.
+It reproduces Dual Souls' player-facing tweak surface through the shared
+bottom-screen product language while keeping all game mutations behind a
+profile adapter. The final entry point is a persistent Mods control in the
+shared HUD which opens a modal over the active page; opening or closing it does
+not change the remembered page.
+
+The following requirements are authoritative:
+
+- **TWEAK-01 — shared interaction:** the common menu owns grouping, row
+  selection, value cycling, descriptions, the master switch, reset, disabled
+  presentation, confirmation behavior, and visible apply errors. Hollow Knight
+  and Silksong do not implement separate navigation models.
+- **TWEAK-02 — typed adapters:** each game adapter exposes stable capability
+  identifiers and applies them through the exact managed game API compiled
+  from the selected depot. Fixed native addresses, IL2CPP offsets, and
+  process-memory scanning are prohibited. A documented Cecil rewrite is
+  allowed only when no stable managed seam exists and the exact game-version
+  compile and device gates cover it.
+- **TWEAK-03 — opt-in and exact reversion:** the master switch defaults OFF.
+  The adapter snapshots the relevant startup values before first use. Turning
+  master OFF, resetting, or handling an apply failure restores that baseline
+  rather than assuming a hard-coded vanilla value or leaving a partial set of
+  tweaks active. OFF is only the first-run default: once explicitly changed,
+  the master selection persists like every other menu value.
+- **TWEAK-04 — profile-local persistence:** selections and the master state are
+  stored outside game saves under a game-qualified namespace. Hollow Knight
+  settings never enable Silksong settings or vice versa. Corrupt or unknown
+  persisted values fall back to the descriptor default without preventing the
+  game from starting. Every accepted change is flushed before returning
+  success. Exiting or killing the game process and launching it again restores
+  both the master state and every individual selection for that game only.
+- **TWEAK-05 — capability truth:** unsupported rows are omitted or visibly
+  unavailable; they never appear to work while doing nothing. Silksong
+  `1.0.29980` initially exposes the proven in-game seams for damage received
+  (`Off`, `PreventDeath`, `FullInvincible`), one-hit kills
+  (`NailDamageStates.InstaKill`), silk-drain control plus the game's own refill
+  path, and changing equips anywhere. These are version-bound typed symbols,
+  not inferred offsets.
+- **TWEAK-06 — parity by meaning:** Dual Souls remains the feature oracle, but
+  rows map semantically: Nail to Needle, Soul to Silk, Geo to Silksong's money
+  and shell-shard currencies, and Charms to Crests/Tools. Needle multipliers,
+  currency multipliers, movement speed, map helpers, health bars, damage
+  numbers, boss retry, teleport, and save states require their own typed hook,
+  rewrite, or save/scene proof before they are enabled.
+- **TWEAK-07 — save and lifecycle safety:** reversible runtime switches land
+  before progression-changing features. Teleport, map mutation, unlocks, boss
+  retry, and save states remain blockers until ordinary play, death/respawn,
+  scene transition, save/reload, and rollback tests demonstrate that a current
+  save is not damaged.
+
+The shared controller is tested without either game assembly. Each profile
+mapping is tested against a fake typed API, then compiled against the exact
+game depot. Host tests prove defaults, persistence, invalid-value fallback,
+master enable/disable, per-option cycling, baseline restoration, and
+apply-failure rollback. Device proof covers visible menu control, touch
+isolation, each enabled capability, pause/resume, scene transition, process
+exit/relaunch for each profile, master OFF, and a base launch with every tweak
+disabled.
+
 ### Skin packs and death rotation
 
 The shared scanner treats each immediate child of an imported folder as a
@@ -392,6 +454,31 @@ launcher and shortcut resources only. They are not bottom-screen theme assets.
 No new artwork is generated for the shared shell; adapters reuse resident game
 assets and must provide a deterministic neutral fallback when an asset has not
 loaded yet.
+
+The upstream [Bottom-screen UI v2.0 issue](https://github.com/jakobkhansen/SilksongAndroid/issues/10)
+is an additional Task 15 design input. Its proposals are adopted as shared-shell
+contracts rather than Silksong-only embellishments:
+
+- inventory items, consumables, loadouts, crests, and tools may be interactive
+  only when the active adapter explicitly reports that the same action is legal
+  in the current game state; cutscenes, disabled inventory states, and benches
+  remain game-authoritative;
+- the neutral shell uses a true-black OLED base. Decorative dividers and
+  borders remain adapter tokens, and icon-only tabs must retain accessible
+  names, focus states, and deterministic text fallbacks;
+- Tasks, Journal, and equivalent progress pages use the same content/detail
+  hierarchy as the other pages. Tab and item transitions share motion tokens
+  across games and honor a reduced-motion setting;
+- moving health or game resources to the bottom screen is an opt-in per-profile
+  setting. The top-screen HUD is hidden only after the bottom display and its
+  live HUD adapter are confirmed ready, and it is restored immediately on
+  display loss, adapter failure, single-display fallback, or feature disable.
+
+Adapters may expose different actions and resource types, but capability,
+disabled-state, confirmation, animation, accessibility, and fallback behavior
+remain properties of the common shell. Any capability that cannot be made safe
+for one game is recorded as a blocker or a tracked deferral rather than being
+silently omitted.
 
 The source comparison behind this contract is recorded in
 `docs/verification/dualscreen-source-audit.md`. The decisive device gate is a

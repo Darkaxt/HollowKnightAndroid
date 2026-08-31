@@ -99,9 +99,16 @@ public class DsTitleCard
         definitive = false;
         try
         {
-            var ui = UIManager.instance;
-            if (ui != null && ui.gameTitle != null)
+            // UIManager.instance reports a missing manager with Debug.LogError.
+            // That is useful to callers that require the menu, but this poll
+            // deliberately runs during the intro and loading scenes too.  Scan
+            // quietly so an expected pre-menu state does not become an error
+            // every half second.
+            var managers = Resources.FindObjectsOfTypeAll<UIManager>();
+            for (int i = 0; i < managers.Length; i++)
             {
+                var ui = managers[i];
+                if (ui == null || ui.gameTitle == null) continue;
                 if (ui.gameTitle.sprite != null) { definitive = true; return ui.gameTitle.sprite; }
                 var chosen = FromLanguage(ui.gameTitle.GetComponent<LogoLanguage>());
                 if (chosen != null) return chosen;

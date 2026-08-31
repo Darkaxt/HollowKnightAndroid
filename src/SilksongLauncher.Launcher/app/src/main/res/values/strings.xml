@@ -8,7 +8,7 @@
     <string name="launcher_status_starting">Starting game…</string>
     <string name="launcher_status_error">Couldn\'t start the game: %1$s</string>
     <string name="runtime_test_banner">TEST RUNTIME · EMULATOR-FAKE</string>
-    <string name="selected_game_status">Selected: %1$s</string>
+    <string name="game_card_accessibility">%1$s, %2$s</string>
 
     <!-- First-run extraction screen. -->
 
@@ -23,7 +23,20 @@
     <string name="action_logs">View logs</string>
     <string name="action_mods">Mods</string>
     <string name="action_launch">Launch game</string>
+    <string name="action_play_game">Play %1$s</string>
     <string name="action_prepare_game">Prepare %1$s</string>
+    <string name="shortcut_pin_symbol">📌</string>
+    <string name="shortcut_pin_accessibility">Pin %1$s shortcut</string>
+    <string name="shortcut_pinned_accessibility">%1$s shortcut is pinned. Tap for removal instructions</string>
+    <string name="shortcut_requested">%1$s shortcut request sent</string>
+    <string name="shortcut_already_exists">%1$s is pinned. Remove it manually from the launcher to unpin it</string>
+    <string name="shortcut_unsupported">This home screen does not support pinned shortcuts</string>
+    <string name="shortcut_not_ready">Prepare %1$s before creating its shortcut</string>
+    <string name="shortcut_rejected">The home screen rejected the shortcut request</string>
+    <string name="game_process_active_title">A game is still running</string>
+    <string name="game_process_active_message">Close the running game and return to this launcher before starting another profile. No runtime paths were changed.</string>
+    <string name="game_process_unknown_title">Could not verify the game process</string>
+    <string name="game_process_unknown_message">The launcher could not prove that the previous Unity process has ended, so it will not change runtimes.</string>
 
     <!-- Settings screen. -->
     <string name="settings_title">Launcher settings</string>
@@ -49,7 +62,7 @@
 
     <string name="settings_back">Back</string>
     <string name="settings_dual_screen">Dual screen</string>
-    <string name="settings_dual_screen_subtitle">Show the inventory, map, tasks, journal and crest on a second screen, with touch. Only does anything on a device that has two screens, such as the Ayn Thor.</string>
+    <string name="settings_dual_screen_subtitle">Show the selected game’s inventory, loadout, progress pages and map through the shared touch interface on a second screen. Only does anything on a device that has two screens, such as the Ayn Thor.</string>
 
     <!-- Login screen. -->
     <string name="login_title">Sign in to Steam</string>

@@ -6,11 +6,12 @@ user-supplied Linux game files, converts and compiles them for Android ARM64,
 and keeps both games behind one launcher, package identity, toolchain library,
 mod library, and—eventually—skin library.
 
-This branch is an implementation checkpoint, **not a finished public release**.
+This repository is an implementation checkpoint, **not a finished public release**.
 The exact Hollow Knight `1.5.12620` Linux build now completes on-device
 conversion, ARM64 compilation, packaging, installation, first boot, and the
-playable-room gate on the AYN Thor. The next production stage is the unified
-launcher lifecycle and current Silksong regression.
+playable-room gate on the AYN Thor. The unified launcher and the first typed
+Silksong built-in Mods surface now pass their host gates; live second-screen,
+effect, persistence, and current Silksong regression proof remain next.
 
 <p align="center">
   <img src="docs/icon.png" alt="Hollow Knight Android combined Hollow Knight and Silksong app icon" width="220" />
@@ -36,8 +37,9 @@ not used for project artwork.
 | Silksong `1.0.29980` | Existing Addressables/Vulkan pipeline is retained behind the `silksong` profile | Re-prove the fork-signed profile generation, preservation/adoption path, and gameplay on the target device |
 | One launcher | Both profiles, independent storage, atomic generations, and cold-process selection exist and have host/emulator coverage | Prove both switch directions with the production ARM64 Unity processes |
 | Mods | The parent's build-time BepInEx 5/Harmony weaver is merged and routed through each selected profile's patch, IL2CPP, generation, and status paths | Real plugin compatibility for each game, compatibility manifests, dependencies, load order, and per-profile enablement remain unverified |
+| Built-in tweaks | A shared, game-qualified controller now hosts a persistent Dual Souls-style Mods modal. Silksong `1.0.29980` exposes typed damage mode, one-hit kills, unlimited Silk, and equip-anywhere adapters; 24/24 behavior tests and the exact 38-source depot compile pass | ARM64 dual-display rendering/touch review, Thor effect checks, process-exit persistence for each game, the Hollow Knight adapter, and later parity rows remain |
 | Skins | Shared death/respawn rotation state machine has host coverage | Pack scanner/import, persistence, real game lifecycle hooks, texture adapters, rollback, and both-game runtime proof |
-| Dual screen | Silksong's direct Vulkan display-1 renderer is selected over Dual Souls' native EGL transport; the two source implementations and a unified shell contract are documented | Implement one shared shell, adapt both games' native pages/art, and verify the common interaction, modal, lifecycle, touch, and fallback matrix on the Thor |
+| Dual screen | Silksong's direct Vulkan display-1 renderer now hosts the unified page shell and persistent Mods modal; the two source implementations and shared product language are documented | Extract the proven shell for Hollow Knight, adapt that game's native pages/art, and verify the common interaction, modal, lifecycle, touch, and fallback matrix live |
 | Releases | Fork identity and GitHub signing pipeline have a signed dry-run proof | No release until source reproducibility, device, gameplay, migration, tag/version, and fresh-download gates pass |
 
 The detailed requirement ledger is
@@ -47,6 +49,10 @@ The current Hollow Knight device evidence is
 The bottom-screen source comparison and selected shared product language are
 recorded in
 [`docs/verification/dualscreen-source-audit.md`](docs/verification/dualscreen-source-audit.md).
+The typed Silksong tweak seams and current host-only proof are recorded in
+[`docs/verification/silksong-mod-menu-source-audit.md`](docs/verification/silksong-mod-menu-source-audit.md).
+The isolated API 35 launcher run is recorded in
+[`docs/verification/emulator-lab-2026-08-31.md`](docs/verification/emulator-lab-2026-08-31.md).
 
 ## Design
 

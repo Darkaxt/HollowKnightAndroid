@@ -326,7 +326,7 @@ class SetupActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
         }
 
-        header = text(getString(R.string.launcher_app_name), 30f, Color.WHITE, bold = true)
+        header = text(profile.displayName, 30f, Color.WHITE, bold = true)
         root.addView(header)
         // "Step 2 of 3" -- present only while something is running.
         stepLabel = text("", 12f, Color.parseColor("#7D3341"), bold = true).apply {
@@ -535,7 +535,7 @@ class SetupActivity : Activity() {
         // The heading says what the app is doing, not what it is called: this
         // screen is on for half an hour and "Silksong" alone reads as an idle
         // title screen rather than work in progress.
-        header.text = if (running) "Building ${profile.displayName}" else getString(R.string.launcher_app_name)
+        header.text = if (running) "Building ${profile.displayName}" else profile.displayName
         if (!running) return
         stepLabel.text = "STEP $stepNumber OF $stepCount"
         status.text = stepTitle.ifEmpty { sub }

@@ -10,7 +10,7 @@ import java.nio.file.Path
  * build state remains external and profile-scoped.
  */
 class ProfileBuildPaths(
-    filesDir: File,
+    val filesDir: File,
     externalFilesDir: File,
     val profile: GameProfile,
 ) {
@@ -18,15 +18,18 @@ class ProfileBuildPaths(
 
     private val internalRoot: Path = profilePaths.root.toPath().toAbsolutePath().normalize()
     private val filesRoot: Path = filesDir.toPath().toAbsolutePath().normalize()
+    private val appDataRoot: Path = requireNotNull(filesRoot.parent) {
+        "App files directory has no private-data parent: $filesRoot"
+    }
     private val externalFilesRoot: Path = externalFilesDir.toPath().toAbsolutePath().normalize()
 
     val packageDir: File = internal("pkg")
-    // Silksong's catalog has a fixed 56-byte content-root field. The canonical
-    // profile tree is too long once the package name is included, so only this
-    // runtime bridge uses the compact, registry-owned profile key.
+    // Silksong's catalog has a fixed 56-byte content-root field. Even
+    // <files>/p/<key>/aa is too long for test package suffixes, so this one
+    // runtime bridge lives directly under the app-private data root.
     val contentLink: File = contained(
-        filesRoot.resolve("p").resolve(profile.runtimeStorageKey).resolve("aa"),
-        filesRoot.resolve("p"),
+        appDataRoot.resolve("p").resolve(profile.runtimeStorageKey).resolve("aa"),
+        appDataRoot.resolve("p"),
     ).toFile()
 
     val externalRoot: File = contained(

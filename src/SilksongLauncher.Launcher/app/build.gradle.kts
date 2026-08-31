@@ -379,6 +379,7 @@ tasks.named("preBuild") { dependsOn(stageBundleSurgery) }
 // for ..." naming a file that looks perfectly fine in the repo).
 val stagePatches by tasks.registering(Sync::class) {
     from(rootProject.file("../../tools/silksong-patches/src")) { into("src") }
+    from(rootProject.file("../../tools/shared-patches/src")) { into("src/shared") }
     from(rootProject.file("../../tools/silksong-patches/entrypoints.json"))
     into(layout.projectDirectory.dir("src/main/assets/ondevice/silksong-patches"))
 }
@@ -386,6 +387,7 @@ tasks.named("preBuild") { dependsOn(stagePatches) }
 
 val stageHollowKnightPatches by tasks.registering(Sync::class) {
     from(rootProject.file("../../tools/hollow-knight-patches/src")) { into("src") }
+    from(rootProject.file("../../tools/shared-patches/src")) { into("src/shared") }
     from(rootProject.file("../../tools/hollow-knight-patches/entrypoints.json"))
     into(layout.projectDirectory.dir("src/main/assets/ondevice/hollow-knight-patches"))
 }

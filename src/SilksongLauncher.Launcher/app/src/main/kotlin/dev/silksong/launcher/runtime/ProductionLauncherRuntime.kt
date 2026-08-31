@@ -24,20 +24,37 @@ class ProductionLauncherRuntime : LauncherRuntime {
                 generationId = null,
                 detail = "Current production generation is invalid: " +
                     (publishedResult.exceptionOrNull()?.message ?: "unknown error"),
+                condition = RuntimeCondition.NEEDS_REPAIR,
             )
         }
         val published = publishedResult.getOrNull()
-        val packageDir = published?.let { File(it.root, "pkg") } ?: request.paths.packageDir
-        val built = File(packageDir, ".built").isFile &&
-            File(packageDir, "lib/arm64/libil2cpp.so").length() > 0L &&
-            PlayerImage.runtimeArchivesPresent(request.context, request.profile, packageDir)
+        val legacyBuilt = File(request.paths.packageDir, ".built").isFile &&
+            File(request.paths.packageDir, "lib/arm64/libil2cpp.so").length() > 0L &&
+            PlayerImage.runtimeArchivesPresent(request.context, request.profile, request.paths.packageDir)
+        val startup = if (published != null) {
+            runCatching { GameProcessStartup.resolve(request.context, request.profile, request.paths) }
+        } else {
+            null
+        }
+        val built = startup?.isSuccess == true
         return RuntimeState(
             ready = built,
             generationId = published?.id,
             detail = if (built) {
-                "Production generation ${published?.id ?: "legacy"} is present"
+                "Production generation ${published?.id} is present"
+            } else if (startup?.isFailure == true) {
+                "Production generation needs repair: " +
+                    (startup.exceptionOrNull()?.message ?: "unknown error")
             } else {
                 "Production build is not ready"
+            },
+            condition = when {
+                built -> RuntimeCondition.READY
+                startup?.isFailure == true -> RuntimeCondition.NEEDS_REPAIR
+                published == null && legacyBuilt -> RuntimeCondition.NEEDS_REPAIR
+                request.paths.profilePaths.staging.listFiles().orEmpty().isNotEmpty() ->
+                    RuntimeCondition.BUILDING
+                else -> RuntimeCondition.NOT_CONFIGURED
             },
         )
     }

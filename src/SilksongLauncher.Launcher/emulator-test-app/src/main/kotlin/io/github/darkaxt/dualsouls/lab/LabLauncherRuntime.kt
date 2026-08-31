@@ -115,6 +115,9 @@ class LabLauncherRuntime : LauncherRuntime {
         return publisher.clearStaged() + publisher.clearPublished() + exitBytes
     }
 
+    override fun gameProcessName(request: RuntimeRequest): String =
+        "${request.context.packageName}:game"
+
     override fun gameIntent(request: RuntimeRequest): Intent {
         val current = GenerationPublisher(request.paths.profilePaths).current()
             ?: throw IllegalStateException("No synthetic generation for ${request.profile.id}")

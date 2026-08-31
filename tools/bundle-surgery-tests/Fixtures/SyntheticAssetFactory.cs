@@ -11,6 +11,21 @@ internal static class SyntheticAssetFactory
     internal static SyntheticSerializedFile WithShaderPlatforms(params int[] platforms)
         => WithShaderPlatformsAndTarget(LinuxBuildTarget, platforms);
 
+    internal static SyntheticSerializedFile WithShaderPlatformsAndUnityVersion(
+        string unityVersion,
+        params int[] platforms)
+    {
+        var blobValue = 0;
+        return WithShaderPlatformChunksAndTarget(
+            LinuxBuildTarget,
+            platforms
+                .Select(platform => (
+                    Platform: platform,
+                    Chunks: new[] { checked((byte)++blobValue) }))
+                .ToArray(),
+            unityVersion: unityVersion);
+    }
+
     internal static SyntheticSerializedFile WithShaderPlatformsAndTarget(
         uint targetPlatform,
         params int[] platforms)
@@ -70,12 +85,13 @@ internal static class SyntheticAssetFactory
         (int Platform, byte[] Chunks)[] platforms,
         int[]? graphicsApis = null,
         string? buildVersion = null,
-        string? gameVersion = null)
+        string? gameVersion = null,
+        string unityVersion = UnityVersion)
     {
         var fixture = SyntheticSerializedFile.Create();
         var manager = new AssetsManager();
         manager.LoadClassPackage(Path.Combine(AppContext.BaseDirectory, "classdata.tpk"));
-        manager.LoadClassDatabaseFromPackage(UnityVersion);
+        manager.LoadClassDatabaseFromPackage(unityVersion);
 
         var file = new AssetsFile
         {
@@ -86,7 +102,7 @@ internal static class SyntheticAssetFactory
             },
             Metadata = new AssetsFileMetadata
             {
-                UnityVersion = UnityVersion,
+                UnityVersion = unityVersion,
                 TargetPlatform = targetPlatform,
                 TypeTreeEnabled = false,
                 TypeTreeTypes = [],

@@ -10,7 +10,10 @@ internal val SilksongProfile = GameProfile(
     currentGameVersion = "1.0.29980",
     acceptedPlatforms = setOf("LinuxPlayer"),
     dataDirectoryName = "Hollow Knight Silksong_Data",
-    executableNames = setOf("Hollow Knight Silksong.x86_64"),
+    executableNames = setOf(
+        "Hollow Knight Silksong",
+        "Hollow Knight Silksong.x86_64",
+    ),
     contentLayout = ContentLayout.ADDRESSABLES,
     patchSet = "silksong-patches",
     addressablesRoot = "StreamingAssets/aa/StandaloneLinux64",

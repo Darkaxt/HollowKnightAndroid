@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>DualSouls.SharedPatches.Core</AssemblyName>
+    <Nullable>disable</Nullable>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src/Mods/**/*.cs" />
+  </ItemGroup>
+</Project>

@@ -22,6 +22,19 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $src  = Join-Path $PSScriptRoot 'src'
+$sharedSrc = Join-Path $repo 'tools\shared-patches\src'
+
+# Some game singleton accessors log an error as part of reporting that their
+# scene object does not exist yet.  A catch block cannot suppress that log, so
+# polling one from Update() turns an expected intro/loading state into a stream
+# of false errors.  Keep the title-card lookup on Unity's quiet object scan.
+$titleCardSource = Get-Content (Join-Path $src 'dualscreen\DsTitleCard.cs') -Raw
+if ($titleCardSource -match 'var\s+ui\s*=\s*UIManager\.instance') {
+    throw '[check] DsTitleCard must not poll UIManager.instance before the menu scene exists'
+}
+if ($titleCardSource -notmatch 'FindObjectsOfTypeAll<UIManager>') {
+    throw '[check] DsTitleCard must locate UIManager through the quiet Unity object scan'
+}
 
 if (-not $Depot) {
     # The depot lives OUTSIDE the checkout -- it is 15 GB of somebody's game,
@@ -67,7 +80,10 @@ $work = Join-Path $taskTempRoot ("dualsouls-patch-check-{0}" -f [Guid]::NewGuid(
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 
 try {
-$sources = Get-ChildItem $src -Recurse -Filter *.cs | ForEach-Object { "    <Compile Include=`"$($_.FullName)`" />" }
+$sources = @($src, $sharedSrc) |
+           Where-Object { Test-Path $_ } |
+           ForEach-Object { Get-ChildItem $_ -Recurse -Filter *.cs } |
+           ForEach-Object { "    <Compile Include=`"$($_.FullName)`" />" }
 
 # Engine assemblies from the Android player, game assemblies from the depot --
 # the same split PackageCompiler.patchReferences uses on the device. netstandard

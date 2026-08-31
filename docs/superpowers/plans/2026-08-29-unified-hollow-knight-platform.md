@@ -1242,6 +1242,14 @@ with one shared shell, and retains the games' data and resident art behind
 adapters. Dual Souls' Android `Presentation`, native EGL blitter, and
 MotionEvent polling are reference behavior only.
 
+**Precursor checkpoint (2026-08-31):** the game-neutral tweak controller is
+now extracted under `tools/shared-patches`, staged for both profiles, and used
+by a persistent Silksong Mods modal. This proves the modal interaction and
+typed-adapter boundary but does not complete the shared renderer/shell work
+below: the current modal still builds with Silksong's `DsWidgets`, `DsTheme`,
+and display-1 runtime. The API 35 x86-64 launcher lab passes 3/3, while ARM64
+Unity rendering and physical display-1 touch remain explicit Thor gates.
+
 - [ ] **Step 1: Test display and fallback decisions**
 
 Using a fake display provider, assert that display 1 is activated and targeted
@@ -1270,6 +1278,12 @@ priority, focus/pressed/disabled states, error isolation, and per-profile
 last-page restoration. Adapters provide only game data, localized labels,
 resident fonts/art, theme tokens, and supported page/modal descriptors.
 
+Include the upstream v2.0 proposals in that contract: adapter-reported action
+availability for item/consumable and loadout interaction; a true-black OLED
+base; accessible icon tabs with text fallback; shared motion and reduced-motion
+tokens; and an opt-in bottom-screen HUD whose top-screen suppression is gated
+on a live secondary display and is reversed on every fallback path.
+
 Host tests must instantiate both adapters against the same shell and assert
 identical geometry and interaction semantics. They must also assert the
 canonical order `Inventory`, `Loadout`, optional progress pages, `Map`; Map
@@ -1281,6 +1295,11 @@ Compile and launch Silksong on Thor. Compare map, inventory, crests, tasks,
 journal, touch, title cards, and single-display behavior with the base
 revision. Record screenshots and functional observations in
 `docs/verification/silksong-dualscreen-regression.md`.
+
+Exercise at least one legal and one game-rejected interactive inventory or
+loadout action, the revamped Tasks/Journal hierarchy, shared tab/item motion
+with reduced motion enabled and disabled, and the optional HUD's enable,
+display-loss, and restore paths.
 
 Pixel identity with the old Silksong-only shell is not required because the
 outer shell is intentionally unified. Page data, interactions, availability,
@@ -1303,7 +1322,10 @@ Capture both games on the physical bottom panel and verify the same tab
 placement, semantic ordering, gestures, selection states, content/detail
 geometry, status locations, modal priority, and idle behavior. Confirm that
 each game uses only its own resident fonts/art inside those shared rules. Run
-the single-display fallback for both profiles. Record the matrix in
+the single-display fallback for both profiles. Review true-black OLED output,
+icon-tab accessible names/text fallback, shared motion/reduced motion, safe
+interactive-action availability, and optional-HUD restoration for both
+profiles. Record the matrix in
 `docs/verification/unified-bottom-screen.md`.
 
 - [ ] **Step 6: Commit**

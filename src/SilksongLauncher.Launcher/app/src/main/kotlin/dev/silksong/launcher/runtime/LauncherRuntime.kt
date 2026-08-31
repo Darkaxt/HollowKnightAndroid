@@ -16,7 +16,16 @@ data class RuntimeState(
     val ready: Boolean,
     val generationId: String?,
     val detail: String,
+    val condition: RuntimeCondition =
+        if (ready) RuntimeCondition.READY else RuntimeCondition.NOT_CONFIGURED,
 )
+
+enum class RuntimeCondition(val label: String) {
+    NOT_CONFIGURED("Not configured"),
+    BUILDING("Building"),
+    READY("Ready"),
+    NEEDS_REPAIR("Needs repair"),
+}
 
 data class RuntimeProgress(
     val stage: String,
@@ -58,6 +67,8 @@ interface LauncherRuntime {
     ): RuntimeState
 
     fun reset(request: RuntimeRequest): Long
+
+    fun gameProcessName(request: RuntimeRequest): String = request.context.packageName
 
     fun gameIntent(request: RuntimeRequest): Intent
 }

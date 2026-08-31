@@ -30,56 +30,26 @@ public class GameActivity extends PlayerActivity
     private String profileId()
     {
         String id = getIntent() == null ? null : getIntent().getStringExtra(PROFILE_ID_EXTRA);
-        if (id == null || id.isEmpty()) id = "silksong";
+        if (id == null || id.isEmpty())
+            throw new IllegalArgumentException("game profile is required");
         if (!id.equals("silksong") && !id.equals("hollow-knight"))
             throw new IllegalArgumentException("unsupported game profile: " + id);
+        dev.silksong.launcher.runtime.GameProcessStartup.requireProfile(id);
         return id;
     }
 
-    private java.io.File profileFilesDir()
+    private dev.silksong.launcher.runtime.GameProcessStartupSnapshot startup()
     {
-        return new java.io.File(getFilesDir(), "profiles/" + profileId());
+        return dev.silksong.launcher.runtime.GameProcessStartup.requireSnapshot();
     }
 
-    private java.io.File legacyPackageDir()
-    {
-        return new java.io.File(profileFilesDir(), "pkg");
-    }
-
-    // A generation becomes visible only when the launcher atomically replaces
-    // this profile's current pointer. Invalid or incomplete pointers never
-    // escape the profile-owned generations directory; older installs retain
-    // their pre-generation pkg directory as a compatibility fallback.
+    // Application.attachBaseContext resolves this immutable package path before
+    // Unity's classes are injected. The activity must never re-read `current`:
+    // a generation published while the process is alive belongs to the next
+    // cold process, not this one.
     private java.io.File profilePackageDir()
     {
-        java.io.File pointer = new java.io.File(profileFilesDir(), "current");
-        if (pointer.isFile())
-        {
-            try
-            {
-                java.io.BufferedReader reader = new java.io.BufferedReader(
-                    new java.io.InputStreamReader(new java.io.FileInputStream(pointer), "UTF-8"));
-                String generation;
-                try { generation = reader.readLine(); }
-                finally { reader.close(); }
-                if (generation != null && generation.matches("[a-z0-9][a-z0-9._-]{0,63}"))
-                {
-                    java.io.File generations = new java.io.File(profileFilesDir(), "generations")
-                        .getCanonicalFile();
-                    java.io.File root = new java.io.File(generations, generation).getCanonicalFile();
-                    java.io.File manifest = new java.io.File(root, "generation.json");
-                    java.io.File pkg = new java.io.File(root, "pkg");
-                    if (root.getParentFile().equals(generations) && manifest.isFile() && pkg.isDirectory())
-                        return pkg;
-                }
-            }
-            catch (Exception e)
-            {
-                android.util.Log.e(TAG, "could not resolve current generation: " + e);
-            }
-            throw new IllegalStateException("current generation is invalid for " + profileId());
-        }
-        return legacyPackageDir();
+        return new java.io.File(startup().getPackageDir());
     }
 
     private String profileRuntimeKey()
@@ -91,7 +61,7 @@ public class GameActivity extends PlayerActivity
 
     private java.io.File profileContentLink()
     {
-        return new java.io.File(getFilesDir(), "p/" + profileRuntimeKey() + "/aa");
+        return new java.io.File(getDataDir(), "p/" + profileRuntimeKey() + "/aa");
     }
 
     private java.io.File profileExternalDir()
@@ -119,19 +89,17 @@ public class GameActivity extends PlayerActivity
     // by design here, no longer contains the engine.
     //
     // So the list is extended, in place, to include app storage.
-    private static final String ABI = "arm64";
-
     // <generation>/pkg/lib/arm64 -- mirrors <apk dir>/lib/<abi>.
     private java.io.File externalLibDir()
     {
-        return new java.io.File(profilePackageDir(), "lib/" + ABI);
+        return new java.io.File(startup().getNativeLibraryDir());
     }
 
     // The game's data, as a zip, once it is built on the device rather than
     // shipped in the APK. Named .apk because that is what it stands in for.
     private java.io.File externalDataApk()
     {
-        return new java.io.File(profilePackageDir(), "data.apk");
+        return new java.io.File(startup().getDataArchive());
     }
 
     private long packageVersionCode()
@@ -185,80 +153,6 @@ public class GameActivity extends PlayerActivity
         java.io.File dir = getObbDir();
         if (dir == null) return new java.io.File("/nonexistent");
         return new java.io.File(dir, obbName("main"));
-    }
-
-    // Android will not map code out of external storage, so wherever the
-    // engine is fetched to -- fetch-unity.sh, or the launcher's download -- it
-    // has to be moved inside before anything can load it. It arrives in the
-    // app's external files directory, which is writable without any permission
-    // and is the one place a download can land.
-    //
-    // The game's data comes the same way, for a different reason: it is not
-    // code and could be read where it lies, but keeping both halves under one
-    // directory means one place to look and one thing to delete.
-    //
-    // The move is one-way: the copy outside is dropped once it is safely in,
-    // because two copies of the engine is 334 MB.
-    private void installEngine()
-    {
-        java.io.File ext = profileExternalDir();
-        if (ext == null) return;
-        java.io.File src = new java.io.File(ext, "staging");
-        java.io.File[] libs = src.listFiles();
-        if (libs == null) return;
-
-        // Never mutate an already-published generation. This compatibility
-        // installer is only for downloads made by pre-generation builds.
-        java.io.File legacy = legacyPackageDir();
-        java.io.File dst = new java.io.File(legacy, "lib/" + ABI);
-        if (!dst.isDirectory() && !dst.mkdirs())
-        {
-            android.util.Log.e(TAG, "could not create " + dst);
-            return;
-        }
-        for (java.io.File so : libs)
-        {
-            boolean isLib = so.getName().endsWith(".so");
-            boolean isData = so.getName().equals("data.apk");
-            if (!isLib && !isData) continue;
-            java.io.File out = isData ? new java.io.File(legacy, "data.apk") :
-                new java.io.File(dst, so.getName());
-            // Everything staged is installed. This used to skip when the sizes
-            // matched, which is not a safe question -- two builds of this game
-            // came to exactly 315563224 bytes, so a rebuilt engine was dropped
-            // here without being installed and the game went on loading the
-            // old one. There is nothing to gain by asking either: a staged
-            // file is deleted once it is in, so finding one here means it is
-            // new.
-            try
-            {
-                // Via a temporary name, so an interrupted copy is never left
-                // looking like a complete library.
-                java.io.File tmp = new java.io.File(out.getParentFile(), out.getName() + ".part");
-                java.io.InputStream in = new java.io.FileInputStream(so);
-                try
-                {
-                    java.io.OutputStream o = new java.io.FileOutputStream(tmp);
-                    try
-                    {
-                        byte[] buf = new byte[1 << 20];
-                        for (int n; (n = in.read(buf)) > 0; ) o.write(buf, 0, n);
-                    }
-                    finally { o.close(); }
-                }
-                finally { in.close(); }
-
-                if (!tmp.renameTo(out)) throw new java.io.IOException("rename to " + out);
-                out.setReadable(true, true);
-                if (isLib) out.setExecutable(true, true);
-                so.delete();
-                android.util.Log.i(TAG, "installed " + out.getName() + " (" + out.length() + " bytes)");
-            }
-            catch (java.io.IOException e)
-            {
-                android.util.Log.e(TAG, "could not install " + so.getName() + ": " + e);
-            }
-        }
     }
 
     // findLibrary consults DexPathList.nativeLibraryPathElements, so the
@@ -534,6 +428,9 @@ public class GameActivity extends PlayerActivity
             // A directory with content already there is the real thing, not a
             // stale link, and is left alone.
             if (link.isDirectory() && !isSymlink(link)) return;
+            java.io.File parent = link.getParentFile();
+            if (parent == null || (!parent.isDirectory() && !parent.mkdirs()))
+                throw new java.io.IOException("could not create content-link parent: " + parent);
             link.delete();
             android.system.Os.symlink(target.getAbsolutePath(), link.getAbsolutePath());
             android.util.Log.i(TAG, "content: " + link + " -> " + target);
@@ -951,7 +848,6 @@ public class GameActivity extends PlayerActivity
         startHeartbeat();
         // Before super.onCreate: that is where UnityPlayerActivity constructs
         // the player, which is what triggers the engine's own library loading.
-        installEngine();
         addNativeLibraryPath();
         stagePackageLayout();
         linkContent();

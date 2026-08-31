@@ -3,7 +3,7 @@ package dev.silksong.launcher
 import android.content.Context
 import dev.silksong.launcher.build.UnityToolchainDescriptor
 import dev.silksong.launcher.build.UnityToolchainRegistry
-import dev.silksong.launcher.profiles.SelectedGameStore
+import dev.silksong.launcher.runtime.GameProcessStartupSnapshot
 import dalvik.system.DexClassLoader
 import java.io.File
 
@@ -71,6 +71,18 @@ object UnityDex {
         val src = sourceJar(unityRoot) ?: return false
         val out = outputJar(context.filesDir, src)
         return out.isFile && out.length() > 0L
+    }
+
+    /** Exact already-dexed player artifact for a registered immutable toolchain. */
+    fun builtPlayerDex(
+        filesDir: File,
+        descriptor: UnityToolchainDescriptor,
+        unityRoot: File,
+    ): File? {
+        requireRegistered(descriptor)
+        val source = sourceJar(unityRoot) ?: return null
+        val output = outputJar(filesDir, source)
+        return output.takeIf { it.isFile && it.length() > 0L }
     }
 
     /**
@@ -183,19 +195,22 @@ object UnityDex {
      * see into a child. And it has to happen before any of those activities
      * is loaded, which is why this runs from Application.attachBaseContext.
      */
-    fun inject(context: Context) {
-        val descriptor = runCatching {
-            UnityToolchainRegistry.resolve(SelectedGameStore(context).get())
-        }.getOrNull() ?: return
-        val unityRoot = UnityToolchainRegistry.rootFor(context.filesDir, descriptor)
-        val source = sourceJar(unityRoot) ?: return
-        val jar = outputJar(context.filesDir, source)
-        if (!jar.isFile) return
-        val appLoader = context.classLoader ?: return
+    fun inject(context: Context, startup: GameProcessStartupSnapshot) {
+        val jar = File(startup.playerDexJar)
+        check(jar.isFile && jar.length() > 0L) {
+            "Verified Unity player dex disappeared before injection: $jar"
+        }
+        val appLoader = checkNotNull(context.classLoader) { "Application class loader is unavailable" }
         try {
-            val dexPathList = field(appLoader.javaClass, "pathList") ?: return
-            val pathList = dexPathList.get(appLoader) ?: return
-            val elementsField = field(pathList.javaClass, "dexElements") ?: return
+            val dexPathList = checkNotNull(field(appLoader.javaClass, "pathList")) {
+                "Application class loader has no pathList"
+            }
+            val pathList = checkNotNull(dexPathList.get(appLoader)) {
+                "Application class loader pathList is null"
+            }
+            val elementsField = checkNotNull(field(pathList.javaClass, "dexElements")) {
+                "Application class loader has no dexElements"
+            }
 
             val donor = DexClassLoader(
                 jar.absolutePath,
@@ -203,9 +218,14 @@ object UnityDex {
                 null,
                 appLoader,
             )
-            val donorList = field(donor.javaClass, "pathList")?.get(donor) ?: return
-            val donorElements = elementsField.get(donorList) as? Array<*> ?: return
-            val current = elementsField.get(pathList) as? Array<*> ?: return
+            val donorList = checkNotNull(field(donor.javaClass, "pathList")?.get(donor)) {
+                "Unity player dex loader has no pathList"
+            }
+            val donorElements = elementsField.get(donorList) as? Array<*>
+                ?: throw IllegalStateException("Unity player dex loader has no dexElements")
+            val current = elementsField.get(pathList) as? Array<*>
+                ?: throw IllegalStateException("Application class loader has no dexElements array")
+            check(donorElements.isNotEmpty()) { "Unity player dex produced no class-loader elements" }
 
             val merged = java.lang.reflect.Array.newInstance(
                 current.javaClass.componentType!!, current.size + donorElements.size)
@@ -215,10 +235,8 @@ object UnityDex {
 
             LauncherLog.log("$TAG: player classes added to the app class loader")
         } catch (t: Throwable) {
-            // Not recoverable here, but throwing would take the launcher UI
-            // down with it -- and the launcher is where the user goes to
-            // build the thing that is missing. The game fails later, loudly.
             LauncherLog.log("$TAG: could not add the player classes", t)
+            throw IllegalStateException("Could not inject the verified Unity player dex", t)
         }
     }
 

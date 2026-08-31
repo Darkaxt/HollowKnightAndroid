@@ -38,34 +38,137 @@
             android:textStyle="bold"
             android:visibility="gone" />
 
-        <RadioGroup
+        <LinearLayout
             android:id="@+id/game_selector"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="94dp"
+            android:layout_marginBottom="6dp"
             android:orientation="horizontal">
 
-            <RadioButton
+            <dev.silksong.launcher.GameCardView
                 android:id="@+id/radio_hollow_knight"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:textColor="@color/text_primary" />
+                android:layout_marginEnd="5dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="@drawable/game_card_outline">
 
-            <RadioButton
+                <ImageView
+                    android:id="@+id/img_hollow_knight_hero"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@null"
+                    android:importantForAccessibility="no"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/game_card_hollow_knight_hero" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/game_card_scrim"
+                    android:importantForAccessibility="no" />
+
+                <ImageView
+                    android:id="@+id/img_hollow_knight_logo"
+                    android:layout_width="210dp"
+                    android:layout_height="56dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="@null"
+                    android:importantForAccessibility="no"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/game_card_hollow_knight_logo" />
+
+                <Button
+                    android:id="@+id/btn_pin_hollow_knight"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:layout_gravity="top|start"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/game_card_pin"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:padding="0dp"
+                    android:text="@string/shortcut_pin_symbol"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/txt_hollow_knight_status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top|end"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/game_card_status"
+                    android:textColor="@color/text_primary"
+                    android:textSize="11sp" />
+            </dev.silksong.launcher.GameCardView>
+
+            <dev.silksong.launcher.GameCardView
                 android:id="@+id/radio_silksong"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:textColor="@color/text_primary" />
-        </RadioGroup>
+                android:layout_marginStart="5dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="@drawable/game_card_outline">
 
-        <TextView
-            android:id="@+id/txt_selected_game_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp"
-            android:textColor="@color/text_muted"
-            android:textSize="12sp" />
+                <ImageView
+                    android:id="@+id/img_silksong_hero"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@null"
+                    android:importantForAccessibility="no"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/game_card_silksong_hero" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/game_card_scrim"
+                    android:importantForAccessibility="no" />
+
+                <ImageView
+                    android:id="@+id/img_silksong_logo"
+                    android:layout_width="210dp"
+                    android:layout_height="56dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="@null"
+                    android:importantForAccessibility="no"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/game_card_silksong_logo" />
+
+                <Button
+                    android:id="@+id/btn_pin_silksong"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:layout_gravity="top|start"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/game_card_pin"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:padding="0dp"
+                    android:text="@string/shortcut_pin_symbol"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/txt_silksong_status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top|end"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/game_card_status"
+                    android:textColor="@color/text_primary"
+                    android:textSize="11sp" />
+            </dev.silksong.launcher.GameCardView>
+        </LinearLayout>
 
         <TextView
             android:id="@+id/txt_login_status"
@@ -99,8 +202,8 @@
                     android:textColor="@color/text_on_control"
                     android:backgroundTint="@color/surface_control"
                     android:foreground="@drawable/focus_on_light"
-                    android:paddingTop="18dp"
-                    android:paddingBottom="18dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
                     android:minHeight="0dp"
                     android:layout_marginBottom="10dp" />
 
@@ -127,8 +230,8 @@
                             android:textColor="@color/text_on_control"
                             android:backgroundTint="@color/surface_control"
                             android:foreground="@drawable/focus_on_light"
-                            android:paddingTop="18dp"
-                            android:paddingBottom="18dp"
+                            android:paddingTop="10dp"
+                            android:paddingBottom="10dp"
                             android:minHeight="0dp"
                             android:enabled="false" />
 
@@ -157,8 +260,8 @@
                             android:textColor="@color/text_on_control"
                             android:backgroundTint="@color/surface_control"
                             android:foreground="@drawable/focus_on_light"
-                            android:paddingTop="18dp"
-                            android:paddingBottom="18dp"
+                            android:paddingTop="10dp"
+                            android:paddingBottom="10dp"
                             android:minHeight="0dp"
                             android:enabled="false" />
 
@@ -183,8 +286,8 @@
                     android:textColor="@color/text_on_control"
                     android:backgroundTint="@color/surface_control"
                     android:foreground="@drawable/focus_on_light"
-                    android:paddingTop="18dp"
-                    android:paddingBottom="18dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
                     android:minHeight="0dp" />
 
                 <!-- Quiet, because it is for the rare day something has gone
@@ -223,8 +326,8 @@
                     android:textColor="@color/text_primary"
                     android:backgroundTint="@color/hornet_red"
                     android:foreground="@drawable/focus_on_dark"
-                    android:paddingTop="18dp"
-                    android:paddingBottom="18dp"
+                    android:paddingTop="11dp"
+                    android:paddingBottom="11dp"
                     android:minHeight="0dp"
                     android:focusedByDefault="true" />
             </LinearLayout>

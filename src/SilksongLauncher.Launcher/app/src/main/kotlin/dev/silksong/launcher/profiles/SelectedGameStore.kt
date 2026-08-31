@@ -15,7 +15,9 @@ class SelectedGameStore(context: Context) {
         require(GameProfiles.find(profile.id) == profile) {
             "Cannot select an unregistered game profile: ${profile.id}"
         }
-        preferences.edit().putString(PROFILE_ID_KEY, profile.id).apply()
+        check(preferences.edit().putString(PROFILE_ID_KEY, profile.id).commit()) {
+            "Could not persist selected game profile: ${profile.id}"
+        }
     }
 
     private companion object {

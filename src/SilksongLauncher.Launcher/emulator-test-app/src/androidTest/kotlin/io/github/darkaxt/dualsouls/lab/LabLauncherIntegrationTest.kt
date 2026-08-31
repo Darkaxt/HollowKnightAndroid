@@ -38,10 +38,12 @@ class LabLauncherIntegrationTest {
         shell("am start -W -n $PACKAGE/dev.silksong.launcher.LauncherActivity")
 
         assertEquals(EvidenceKind.EMULATOR_FAKE, LauncherRuntimeProvider.from(context).evidenceKind)
-        assertNotNull(device.findObject(By.text("Hollow Knight")))
-        assertNotNull(device.findObject(By.text("Hollow Knight: Silksong")))
         val hollowKnight = device.findObject(By.res(PACKAGE, "radio_hollow_knight"))
+        val silksong = device.findObject(By.res(PACKAGE, "radio_silksong"))
         assertNotNull(hollowKnight)
+        assertNotNull(silksong)
+        assertTrue(hollowKnight.contentDescription.toString().startsWith("Hollow Knight, "))
+        assertTrue(silksong.contentDescription.toString().startsWith("Hollow Knight: Silksong, "))
         hollowKnight.click()
         shell("am start -W -n $PACKAGE/dev.silksong.launcher.LauncherActivity")
 

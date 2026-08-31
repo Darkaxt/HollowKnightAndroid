@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="src/**/*.cs" />
+    <Compile Include="../shared-patches/src/**/*.cs" Link="Shared/%(RecursiveDir)%(Filename)%(Extension)" />
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>$(UnityManaged)/UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
