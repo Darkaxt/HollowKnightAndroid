@@ -846,7 +846,8 @@ directory, patch DLL, or entrypoint file contains `Silksong`.
 
 For `ContentLayout.CLASSIC_PLAYER`, invoke `retarget-classic-tree`, install the
 matching `6000.0.61f1` Android built-in resources, and create the profile's
-`data.apk` with ZIP64 support. Preserve sidecar path relationships.
+ZIP32 `data.apk` plus Unity main OBB. Preserve Unity's first-scene rule,
+sidecar relationships, StreamingAssets layout, and matching `unity_obb_guid`.
 
 **Safe-pause cross-check (2026-08-31):** the exact `1.5.12620` tree converted
 with zero missing Vulkan shaders; the patch assembly, IL2CPP generation,
@@ -896,6 +897,20 @@ root before `PlayerImage` branched on `CLASSIC_PLAYER`. A layout-aware content
 root contract and regression now keep the 56-byte guard only for Addressables.
 Step 4 remains a `BLOCKER` until that replacement is installed and the retained
 build publishes, launches, and reaches playable-room evidence.
+
+**Device cross-check (attempt 3, 2026-08-31):** commit `7791431` resumed the
+retained build, relinked 1,390 cached objects in 15 seconds, packed the 4,939 MiB
+classic image, and atomically published generation
+`gen-4414776c-58f0-41a0-88c8-8237279e9af3`. Independent hashes matched every
+manifest payload. `GameActivity` loaded the generation's engine and IL2CPP
+libraries, but Unity's `FileSystemAndroidAPK` could not read the 5.18 GB ZIP64
+container even though toybox extracted the requested GUID and 736 GB remained
+free. Host implementation now emits a non-ZIP64 base plus generation-local main
+OBB using Unity 6000.0.61f1's exact split and GUID contract. The full Android
+suite passes 101 tests with 99 passed and two environment skips; 21 Python CI
+contracts, shell syntax, the real Java shell compile, and the 71,675,399-byte
+isolated APK build also pass. Step 4 remains a `BLOCKER` until the retained
+image is repacked and Unity mounts the OBB through the production shell.
 
 - [ ] **Step 5: Record the spike evidence**
 

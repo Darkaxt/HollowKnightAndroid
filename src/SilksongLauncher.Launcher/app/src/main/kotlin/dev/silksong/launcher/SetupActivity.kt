@@ -253,7 +253,8 @@ class SetupActivity : Activity() {
         if (runtime.evidenceKind == EvidenceKind.EMULATOR_FAKE) {
             runtime.inspect(runtimeRequest).ready
         } else {
-            dataApk.isFile && File(engineDir, "libil2cpp.so").length() > 0 &&
+            PlayerImage.runtimeArchivesPresent(this, profile, pkgDir) &&
+                File(engineDir, "libil2cpp.so").length() > 0 &&
                 UnityDex.isBuilt(this, unityDescriptor, UnityFetcher.rootFor(filesDir, profile)) &&
                 haveGameFiles() &&
                 runCatching { builtMarker.readText() }.getOrNull() == buildSignature
@@ -1092,7 +1093,13 @@ class SetupActivity : Activity() {
                             ).collect { setBusy(true, it.step, it.fraction, it.detail) }
                             setBusy(true, "packing the player image", -1f, "")
                             withContext(Dispatchers.IO) {
-                                PlayerImage.install(out, workspace.packageDir, buildPaths, depot)
+                                PlayerImage.install(
+                                    this@SetupActivity,
+                                    out,
+                                    workspace.packageDir,
+                                    buildPaths,
+                                    depot,
+                                )
                                 PlayerImage.markCurrent(profile, out, depot)
                                 DepotLocation.relink(buildPaths, depot)
                             }
@@ -1110,8 +1117,12 @@ class SetupActivity : Activity() {
                         BuildStage.Verify -> withContext(Dispatchers.IO) {
                             val targetMarker = File(workspace.packageDir, ".built")
                             targetMarker.writeText(buildSignature)
-                            check(File(workspace.packageDir, "data.apk").length() > 0L) {
-                                "player image was not produced"
+                            check(PlayerImage.runtimeArchivesPresent(
+                                this@SetupActivity,
+                                profile,
+                                workspace.packageDir,
+                            )) {
+                                "player image archives were not produced"
                             }
                             for (library in listOf("libunity.so", "libmain.so", "libil2cpp.so")) {
                                 check(File(workspace.engineDir, library).length() > 0L) {

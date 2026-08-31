@@ -182,6 +182,22 @@ class GenerationPublisherTest {
     }
 
     @Test
+    fun `corrupt obb payload is rejected before publication`() {
+        val publisher = GenerationPublisher(hollowKnightPaths)
+        val staged = publisher.begin("job-1", "gen-1")
+        File(staged, "pkg/main.10003.io.github.darkaxt.dualsouls.obb").apply {
+            parentFile.mkdirs()
+            writeText("not a zip")
+        }
+        publisher.finalizeGeneration("job-1", "gen-1", metadata())
+
+        assertThrows(IllegalStateException::class.java) {
+            publisher.publish("job-1", "gen-1")
+        }
+        assertFalse(hollowKnightPaths.currentPointer.exists())
+    }
+
+    @Test
     fun `payload added after manifest finalization is rejected`() {
         val publisher = GenerationPublisher(hollowKnightPaths)
         val staged = publisher.begin("job-1", "gen-1")

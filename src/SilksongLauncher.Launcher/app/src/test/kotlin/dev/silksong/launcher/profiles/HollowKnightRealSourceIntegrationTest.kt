@@ -40,9 +40,10 @@ class HollowKnightRealSourceIntegrationTest {
     }
 
     @Test
-    fun current_classic_player_image_packs_as_a_stored_zip64_archive() {
+    fun current_classic_player_image_splits_into_zip32_apk_and_unity_obb() {
         val rootPath = System.getenv("HOLLOW_KNIGHT_PLAYER_IMAGE_ROOT")
         assumeTrue(!rootPath.isNullOrBlank())
+        val context = ApplicationProvider.getApplicationContext<Context>()
         val root = File(rootPath!!)
         val image = File(root, "image")
         assumeTrue(File(image, "globalgamemanagers").isFile)
@@ -51,29 +52,39 @@ class HollowKnightRealSourceIntegrationTest {
         val paths = ProfileBuildPaths(File(root, "files"), File(root, "external"), profile)
         val pkg = File(root, "pkg")
 
-        PlayerImage.install(root, pkg, paths, File(root, "unused-classic-depot"))
+        PlayerImage.install(context, root, pkg, paths, File(root, "unused-classic-depot"))
 
         val archive = File(pkg, "data.apk")
-        assertTrue("classic player image must exceed the ZIP32 archive limit", archive.length() > 0xffffffffL)
+        val obb = File(pkg, PlayerImage.mainObbName(context))
+        assertTrue("classic data.apk must fit ZIP32", archive.length() in 1..0xffffffffL)
+        assertTrue("classic main OBB must fit Android's limit", obb.length() in 1..(2L * 1024 * 1024 * 1024))
         val sourceFiles = image.walkTopDown().count { it.isFile }
         ZipFile(archive).use { zip ->
             val entries = Collections.list(zip.entries())
-            assertEquals(sourceFiles, entries.size)
             assertTrue(entries.all { it.method == ZipEntry.STORED })
             assertNotNull(zip.getEntry("assets/bin/Data/globalgamemanagers"))
             assertNotNull(zip.getEntry("assets/bin/Data/Managed/Metadata/global-metadata.dat"))
             assertNotNull(zip.getEntry("assets/bin/Data/Resources/unity default resources"))
             assertNotNull(zip.getEntry("assets/bin/Data/Resources/unity_builtin_extra"))
+            assertNotNull(zip.getEntry("assets/unity_obb_guid"))
         }
-        val tail = RandomAccessFile(archive, "r").use { file ->
-            val size = minOf(file.length(), 1024L).toInt()
-            val bytes = ByteArray(size)
-            file.seek(file.length() - size)
-            file.readFully(bytes)
-            bytes
+        ZipFile(obb).use { zip ->
+            val entries = Collections.list(zip.entries())
+            assertTrue(entries.all { it.method == ZipEntry.STORED })
+            assertNotNull(zip.getEntry("unity_obb_guid"))
+            assertEquals(sourceFiles + 2, entries.size + ZipFile(archive).use { Collections.list(it.entries()).size })
         }
-        assertTrue("ZIP64 end record is missing", tail.containsBytes(byteArrayOf(0x50, 0x4b, 0x06, 0x06)))
-        assertTrue("ZIP64 locator is missing", tail.containsBytes(byteArrayOf(0x50, 0x4b, 0x06, 0x07)))
+        for (zip in listOf(archive, obb)) {
+            val tail = RandomAccessFile(zip, "r").use { file ->
+                val size = minOf(file.length(), 1024L).toInt()
+                val bytes = ByteArray(size)
+                file.seek(file.length() - size)
+                file.readFully(bytes)
+                bytes
+            }
+            assertTrue("ZIP64 end record must be absent", !tail.containsBytes(byteArrayOf(0x50, 0x4b, 0x06, 0x06)))
+            assertTrue("ZIP64 locator must be absent", !tail.containsBytes(byteArrayOf(0x50, 0x4b, 0x06, 0x07)))
+        }
     }
 
     private fun ByteArray.containsBytes(needle: ByteArray): Boolean =

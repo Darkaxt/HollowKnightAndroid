@@ -68,6 +68,30 @@ object PlayerImage {
     private const val GRAPHICS_APIS = "21"
 
     /**
+     * Unity 6000.0.61f1's exact Android first-scene rule.
+     *
+     * Files matching this expression remain in the APK. Everything else in a
+     * classic player image can live in the expansion archive mounted by the
+     * Android player. Keeping the rule here, rather than estimating by size,
+     * preserves Unity's startup contract while also keeping data.apk below the
+     * ZIP32 boundary that FileSystemAndroidAPK can read.
+     */
+    private val FIRST_SCENE_RESOURCES = Regex(
+        "^(?:mainData|app\\.info|sharedassets0\\.assets(?:\\.res[GS]?)?(?:\\.split\\w+)?|" +
+            "sharedassets0\\.resource(?:\\.res[GS]?)?(?:\\.split\\w+)?|" +
+            "level0(?:\\.res[GS]?)?(?:\\.split\\w+)?|GI/level0/.*|" +
+            "globalgamemanagers(?:\\.assets)?(?:\\.split\\w+)?|" +
+            "Resources/unity default resources|Resources/unity_builtin_extra|boot\\.config|" +
+            "Managed/.+\\.dll|Managed/.+\\.mdb|Managed/.+\\.pdb|Managed/Resources/.*|" +
+            "Managed/Metadata/.*|.+\\.resS|data\\.unity3d(?:\\.unityexp)?|" +
+            "RuntimeInitializeOnLoads\\.json|ScriptingAssemblies\\.json|" +
+            "UnitySubsystems/UnityARCore/UnitySubsystemsManifest\\.json)$",
+    )
+
+    private const val ZIP32_MAX_BYTES = 0xffffffffL
+    private const val OBB_MAX_BYTES = 2L * 1024L * 1024L * 1024L
+
+    /**
      * Where the assembled image goes.
      *
      * Deliberately not "Data", which is what it is called once installed.
@@ -481,9 +505,21 @@ object PlayerImage {
      * the depot, reached through a link at the short path the catalog was
      * repointed at.
      */
-    fun install(root: File, pkgDir: File, paths: ProfileBuildPaths, depot: File) {
+    fun install(
+        context: android.content.Context,
+        root: File,
+        pkgDir: File,
+        paths: ProfileBuildPaths,
+        depot: File,
+    ) {
         val out = File(pkgDir, "data.apk")
         pkgDir.mkdirs()
+
+        if (paths.profile.contentLayout == ContentLayout.CLASSIC_PLAYER) {
+            installClassic(context, root, pkgDir, out)
+            File(pkgDir, "assets").deleteRecursively()
+            return
+        }
 
         // Via a temporary name: this is 55 MB written on a phone, and a
         // truncated zip under the final name is something the engine would
@@ -525,6 +561,165 @@ object PlayerImage {
             linkContent(paths, depot)
         }
         LauncherLog.log("packed $entries file(s) into $out (${out.length()} bytes)")
+    }
+
+    /** The filename Unity derives from the installed package at runtime. */
+    fun mainObbName(context: android.content.Context): String =
+        "main.${packageVersionCode(context)}.${context.packageName}.obb"
+
+    /** All runtime archives required by a profile are present under one generation. */
+    fun runtimeArchivesPresent(
+        context: android.content.Context,
+        profile: GameProfile,
+        pkgDir: File,
+    ): Boolean =
+        File(pkgDir, "data.apk").length() > 0L &&
+            (profile.contentLayout != ContentLayout.CLASSIC_PLAYER ||
+                File(pkgDir, mainObbName(context)).length() > 0L)
+
+    internal fun isFirstSceneResource(relativePath: String): Boolean =
+        relativePath.replace('\\', '/').let { normalized ->
+            normalized == "unity_app_guid" || FIRST_SCENE_RESOURCES.matches(normalized)
+        }
+
+    /**
+     * Builds the classic Unity APK + main OBB pair.
+     *
+     * The Android player cannot read a ZIP64 package. The exact first-scene
+     * set fits in a normal ZIP32 archive for Hollow Knight 1.5.12620, and the
+     * remainder fits in one expansion file under Android's 2 GiB limit. Unity
+     * requires the same UUID in assets/unity_obb_guid in the APK and at the
+     * root of the OBB before it will mount the expansion.
+     */
+    private fun installClassic(
+        context: android.content.Context,
+        root: File,
+        pkgDir: File,
+        out: File,
+    ) {
+        val image = imageDir(root)
+        val files = image.walkTopDown().filter { it.isFile }.sortedBy { it.path }.toList()
+        val firstScene = files.filter {
+            isFirstSceneResource(it.relativeTo(image).path.replace('\\', '/'))
+        }
+        val expansion = files.filterNot {
+            isFirstSceneResource(it.relativeTo(image).path.replace('\\', '/'))
+        }
+        check(firstScene.isNotEmpty()) { "classic player image has no first-scene resources" }
+        check(expansion.isNotEmpty()) { "classic player image has no expansion resources" }
+
+        val obb = File(pkgDir, mainObbName(context))
+        val apkPart = File(pkgDir, "data.apk.part")
+        val obbPart = File(pkgDir, "${obb.name}.part")
+        apkPart.delete()
+        obbPart.delete()
+        val guid = obbGuid(root)
+
+        try {
+            ZipArchiveOutputStream(BufferedOutputStream(apkPart.outputStream(), 1 shl 16)).use { zip ->
+                zip.setUseZip64(Zip64Mode.Never)
+                zip.setMethod(ZipArchiveOutputStream.STORED)
+                for (file in firstScene) {
+                    val relative = file.relativeTo(image).path.replace('\\', '/')
+                    addStoredFile(zip, file, classicArchivePath(relative))
+                }
+                addStoredBytes(zip, "assets/unity_obb_guid", guid.toByteArray(Charsets.UTF_8))
+            }
+            check(apkPart.length() in 1..ZIP32_MAX_BYTES) {
+                "classic data.apk exceeds the ZIP32 limit: ${apkPart.length()} bytes"
+            }
+
+            ZipArchiveOutputStream(BufferedOutputStream(obbPart.outputStream(), 1 shl 16)).use { zip ->
+                zip.setUseZip64(Zip64Mode.Never)
+                zip.setMethod(ZipArchiveOutputStream.STORED)
+                for (file in expansion) {
+                    val relative = file.relativeTo(image).path.replace('\\', '/')
+                    addStoredFile(zip, file, classicArchivePath(relative))
+                }
+                addStoredBytes(zip, "unity_obb_guid", guid.toByteArray(Charsets.UTF_8))
+            }
+            check(obbPart.length() in 1..OBB_MAX_BYTES) {
+                "classic main OBB exceeds Android's 2 GiB limit: ${obbPart.length()} bytes"
+            }
+
+            atomicReplace(obbPart, obb)
+            atomicReplace(apkPart, out)
+        } catch (t: Throwable) {
+            apkPart.delete()
+            obbPart.delete()
+            throw t
+        }
+
+        for (stale in pkgDir.listFiles().orEmpty()) {
+            if (stale != obb && stale.name.startsWith("main.") && stale.name.endsWith(".obb")) {
+                stale.delete()
+            }
+        }
+        LauncherLog.log(
+            "packed classic player into data.apk (${out.length()} bytes, ${firstScene.size} files) " +
+                "and ${obb.name} (${obb.length()} bytes, ${expansion.size} files)",
+        )
+    }
+
+    private fun classicArchivePath(relativePath: String): String =
+        if (relativePath.startsWith("StreamingAssets/")) {
+            "assets/${relativePath.removePrefix("StreamingAssets/")}"
+        } else {
+            "assets/bin/Data/$relativePath"
+        }
+
+    private fun addStoredFile(zip: ZipArchiveOutputStream, file: File, entryName: String) {
+        val entry = ZipArchiveEntry(entryName)
+        entry.method = ZipArchiveOutputStream.STORED
+        entry.size = file.length()
+        entry.compressedSize = file.length()
+        entry.crc = crcOf(file)
+        zip.putArchiveEntry(entry)
+        file.inputStream().use { it.copyTo(zip, 1 shl 16) }
+        zip.closeArchiveEntry()
+    }
+
+    private fun addStoredBytes(zip: ZipArchiveOutputStream, entryName: String, bytes: ByteArray) {
+        val crc = CRC32().apply { update(bytes) }
+        val entry = ZipArchiveEntry(entryName)
+        entry.method = ZipArchiveOutputStream.STORED
+        entry.size = bytes.size.toLong()
+        entry.compressedSize = bytes.size.toLong()
+        entry.crc = crc.value
+        zip.putArchiveEntry(entry)
+        zip.write(bytes)
+        zip.closeArchiveEntry()
+    }
+
+    private fun atomicReplace(part: File, target: File) {
+        try {
+            Files.move(part.toPath(), target.toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
+        } catch (e: AtomicMoveNotSupportedException) {
+            throw IOException("could not atomically write $target", e)
+        } catch (e: IOException) {
+            throw IOException("could not write $target", e)
+        }
+    }
+
+    private fun packageVersionCode(context: android.content.Context): Long {
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        @Suppress("DEPRECATION")
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            info.longVersionCode
+        } else {
+            info.versionCode.toLong()
+        }
+    }
+
+    private fun obbGuid(root: File): String {
+        val appGuid = File(imageDir(root), "unity_app_guid").takeIf { it.isFile }
+            ?.readText(Charsets.UTF_8)?.trim().orEmpty()
+        check(appGuid.isNotEmpty()) { "classic player image has no unity_app_guid" }
+        val h = MessageDigest.getInstance("MD5")
+            .digest("Dual Souls OBB\n$appGuid".toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+        return "${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-" +
+            "${h.substring(16, 20)}-${h.substring(20, 32)}"
     }
 
     /**

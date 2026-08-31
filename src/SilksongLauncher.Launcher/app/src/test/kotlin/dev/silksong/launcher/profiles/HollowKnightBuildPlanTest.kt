@@ -1,5 +1,7 @@
 package dev.silksong.launcher.profiles
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import dev.silksong.launcher.PackageCompiler
 import dev.silksong.launcher.PlayerImage
 import dev.silksong.launcher.DepotLocation
@@ -117,18 +119,71 @@ class HollowKnightBuildPlanTest {
 
     @Test
     fun `classic package replaces an existing player image`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
         val root = temp.newFolder("repack")
         val image = File(root, "image").apply { mkdirs() }
         File(image, "globalgamemanagers").writeText("fresh")
+        File(image, "unity_app_guid").writeText("11111111-2222-3333-4444-555555555555")
+        File(image, "sharedassets1.assets.resS").writeText("first-scene-sidecar")
+        File(image, "level1").writeText("later-scene")
+        File(image, "StreamingAssets/media/intro.mp4").apply {
+            parentFile.mkdirs()
+            writeText("streamed-media")
+        }
         val pkg = File(root, "pkg").apply { mkdirs() }
         File(pkg, "data.apk").writeText("stale")
         val paths = ProfileBuildPaths(File(root, "files"), File(root, "external"), hollowKnight)
 
-        PlayerImage.install(root, pkg, paths, File(root, "unused-classic-depot"))
+        PlayerImage.install(context, root, pkg, paths, File(root, "unused-classic-depot"))
 
         ZipFile(File(pkg, "data.apk")).use { zip ->
             assertEquals("fresh", zip.getInputStream(zip.getEntry("assets/bin/Data/globalgamemanagers")).reader().readText())
+            assertTrue(zip.getEntry("assets/bin/Data/sharedassets1.assets.resS") != null)
+            assertTrue(zip.getEntry("assets/bin/Data/unity_app_guid") != null)
+            assertTrue(zip.getEntry("assets/unity_obb_guid") != null)
+            assertTrue(zip.getEntry("assets/bin/Data/level1") == null)
+            assertTrue(zip.getEntry("assets/media/intro.mp4") == null)
+        }
+        val obb = File(pkg, PlayerImage.mainObbName(context))
+        assertTrue(obb.isFile)
+        ZipFile(obb).use { zip ->
+            assertTrue(zip.getEntry("assets/bin/Data/globalgamemanagers") == null)
+            assertEquals("later-scene", zip.getInputStream(zip.getEntry("assets/bin/Data/level1")).reader().readText())
+            assertEquals("streamed-media", zip.getInputStream(zip.getEntry("assets/media/intro.mp4")).reader().readText())
+            assertTrue(zip.getEntry("unity_obb_guid") != null)
+            val apkGuid = ZipFile(File(pkg, "data.apk")).use { apk ->
+                apk.getInputStream(apk.getEntry("assets/unity_obb_guid")).reader().readText()
+            }
+            assertEquals(apkGuid, zip.getInputStream(zip.getEntry("unity_obb_guid")).reader().readText())
         }
         assertFalse(File(pkg, "data.apk.part").exists())
+        assertFalse(File(pkg, "${PlayerImage.mainObbName(context)}.part").exists())
+    }
+
+    @Test
+    fun `Unity first scene rule keeps required classic resources in the APK`() {
+        for (path in listOf(
+            "globalgamemanagers",
+            "globalgamemanagers.assets",
+            "unity_app_guid",
+            "sharedassets0.assets",
+            "sharedassets447.assets.resS",
+            "level0",
+            "Managed/Metadata/global-metadata.dat",
+            "Resources/unity default resources",
+            "Resources/unity_builtin_extra",
+            "RuntimeInitializeOnLoads.json",
+            "ScriptingAssemblies.json",
+        )) {
+            assertTrue(path, PlayerImage.isFirstSceneResource(path))
+        }
+        for (path in listOf(
+            "level1",
+            "resources.assets",
+            "sharedassets83.resource",
+            "StreamingAssets/media/intro.mp4",
+        )) {
+            assertFalse(path, PlayerImage.isFirstSceneResource(path))
+        }
     }
 }

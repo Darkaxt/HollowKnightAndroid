@@ -293,7 +293,7 @@ class GenerationPublisher(
     }
 
     private fun verifyZipReadable(file: File, relativePath: String) {
-        if (file.extension.lowercase() !in setOf("apk", "jar", "zip")) return
+        if (file.extension.lowercase() !in setOf("apk", "jar", "zip", "obb")) return
         runCatching {
             ZipFile(file).use { zip ->
                 val buffer = ByteArray(1 shl 16)

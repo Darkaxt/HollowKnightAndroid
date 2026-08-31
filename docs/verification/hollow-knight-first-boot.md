@@ -2,11 +2,11 @@
 
 Date: 2026-08-31
 
-This began as the safe pre-install checkpoint for Task 10 and now records two
-production-path attempts on the Thor. The host proof remains valid, but this
-document still does **not** claim a first boot: attempt 2 completed the real
-on-device ARM64 native link, then exposed a classic-versus-Addressables setup
-defect before a generation could be published or launched.
+This began as the safe pre-install checkpoint for Task 10 and now records three
+production-path attempts on the Thor. The host and publication proofs remain
+valid, but this document still does **not** claim a first boot: attempt 3
+published and loaded the real ARM64 generation, then proved Unity's Android APK
+reader cannot consume the 5.18 GB ZIP64 player-data container.
 
 ## On-device attempt 1
 
@@ -71,6 +71,42 @@ defect before a generation could be published or launched.
   exact 56-byte fail-closed guard. A focused regression covers the distinction.
   A replacement APK and resumed device run are required to publish and launch
   the first Hollow Knight generation.
+
+## On-device attempt 3
+
+- The package was updated in place from commit `7791431`, preserving the exact
+  source, generated code, native object cache, and prior package state. Its APK
+  is 71,659,015 bytes, SHA-256
+  `3e04742ee70bfa8335abc7976974801fa7d6cc4b758c91c945c1e05575c6cde9`;
+  APK Signature Schemes v2 and v3 verify.
+- The retained native cache reported 803/803 generated C++, 180/180 generated
+  C, and 363/363 Unity runtime units unchanged. It relinked 1,390 objects in 15
+  seconds and completed the native stage in 47 seconds, producing the same
+  267,628,408-byte `libil2cpp.so`.
+- The layout-aware classic path passed the former Addressables blocker. The
+  converter assembled a 4,939 MiB classic player image and packed 1,638 files
+  into a 5,179,183,984-byte `data.apk`.
+- Generation `gen-4414776c-58f0-41a0-88c8-8237279e9af3` published atomically.
+  Its manifest records `data.apk` SHA-256
+  `585bc8eb3197682761e41b253eeedd9df9844b61c98e5703c85e5e34e18c0f4c`
+  and `libil2cpp.so` SHA-256
+  `60ef6fdb9605e9a9014320349817309f302f726d2578d869554bab42adcb028d`.
+  Independent on-device hashing matched every manifest entry, and `current`
+  names that exact generation. Staging was empty after publication.
+- `GameActivity` started and loaded `libmain.so`, `libunity.so`, and the
+  generation's `libil2cpp.so`. Unity identified itself as 6000.0.61f1 on
+  ARM64/API 33, then failed to read `assets/bin/Data/unity_app_guid` and showed
+  the misleading storage-capacity dialog.
+- This is not a capacity failure: 736 GB remained free. Toybox `unzip` opened
+  the same archive and extracted the 36-byte GUID, proving that the entry and
+  bytes exist. The failure boundary is Unity's `FileSystemAndroidAPK` reading a
+  ZIP64 package larger than 4 GiB.
+- The replacement host implementation follows Unity 6000.0.61f1's own split:
+  first-scene resources remain in a ZIP32 `data.apk`, later data moves to a
+  standard main OBB, and both contain the same `unity_obb_guid`. The exact live
+  image census projects 3,575,609,029 bytes in the base container and
+  1,603,332,315 bytes in the OBB, below ZIP32 and Android's 2 GiB OBB limit.
+  The actual 5.18 GB split and Unity mount remain the next device gate.
 
 ## Inputs and source proof
 
@@ -137,10 +173,21 @@ defect before a generation could be published or launched.
   superseded. Attempt 2 verifies the portable-shell and launcher-entry fixes;
   its APK must now be superseded by one containing the layout-aware classic
   content-root fix.
+- Attempt 3 supersedes that content-root candidate and proves the monolithic
+  ZIP64 layout is not readable by Unity even though Java and toybox can reopen
+  it. The current packer disables ZIP64 for classic data, preserves Unity's
+  exact first-scene rule, maps StreamingAssets to the archive `assets/` root,
+  emits a generation-local `main.<version>.<package>.obb`, and validates OBB
+  contents before atomic publication.
+- The replacement isolated proof APK is 71,675,399 bytes, SHA-256
+  `a9391355210ff5decc2a357be1ad32f0a0e2afbae2cf45165ede4db8c0ab5ba8`.
+  Its v2/v3 signature and debug certificate
+  `06197430e1a4ba85dca54f7a2ecf8a2db5cc2c2e76eb8f7516e8acf3d1e6a934`
+  verify. It has not yet been installed.
 
 ## Verification gates
 
-- Android host suite: 98 tests, 96 passed, zero failures/errors, two
+- Android host suite: 101 tests, 99 passed, zero failures/errors, two
   environment-gated skips. Each skipped real-source/player-image test was
   then run explicitly against the current inputs and passed.
 - Bundle-surgery suite: 37/37 passed.
@@ -160,17 +207,20 @@ defect before a generation could be published or launched.
 - `COMPLETE`: exact 1.5.12620 source acceptance and full real-tree conversion.
 - `COMPLETE`: exact Android built-ins and project shader transformation.
 - `COMPLETE`: Hollow Knight patch assembly, IL2CPP generation, ARM64 native
-  compilation/link, ELF contract, classic player-image assembly, and ZIP64
-  reopening.
+  compilation/link, ELF contract, classic player-image assembly, atomic
+  generation publication, and independent installed-payload hashes.
 - `COMPLETE`: a signed, isolated launcher APK containing the Hollow Knight
   profile route builds without proprietary game content.
 - `COMPLETE`: the second Thor run verifies the portable object sanitizer and
   the real on-device native path through a 1,390-object ARM64 link and a
   267,628,408-byte `libil2cpp.so`.
-- `BLOCKER`: the second Thor run then failed because classic Hollow Knight was
-  evaluated against Silksong's Addressables catalog-root limit. The
-  layout-aware fix is host-covered; a replacement APK must resume the retained
-  build, assemble the classic player image, publish the generation, and launch.
+- `COMPLETE`: attempt 3 closes the Addressables-root blocker, publishes the
+  exact generation, and proves the Unity 6000.0.61f1 ARM64 engine and all three
+  generation-owned native libraries load.
+- `BLOCKER`: Unity cannot read the published 5.18 GB ZIP64 `data.apk`. The
+  ZIP32 plus main-OBB replacement is host-covered and packaged; it must repack
+  the retained image, publish a new generation, and prove Unity mounts both
+  archives before any menu/gameplay claim.
 - `BLOCKER`: Task 10 is not complete until serial `bfa98654` (AYN Thor,
   Android 13/API 33, ARM64) runs the isolated package, logs
   `[DualSouls][HK] injection probe loaded`, reaches the main menu, and enters a
@@ -180,6 +230,11 @@ defect before a generation could be published or launched.
 - `DEFERRED`: pinned per-game shortcuts with direct profile launch and the
   supplied individual Hollow Knight/Silksong icons. This follows the Task 10
   boot gate so shortcuts cannot advertise an unproven launch path.
+- `DEFERRED`: reduce the private runtime base container from the exact Unity
+  split's projected 3.58 GB toward roughly 1 GB by pairing later-scene `.resS`
+  sidecars with their owners across main and patch OBBs. The installed launcher
+  APK remains about 72 MB. This custom split must not replace the exact-layout
+  POC until device evidence proves Unity resolves those sidecars across mounts.
 
 Local proof artifacts remain under their exact `D:\Temp\dualsouls-hk-*`
 roots for the next device run. They contain user-owned game-derived data and

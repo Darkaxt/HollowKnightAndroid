@@ -134,6 +134,48 @@ public class GameActivity extends PlayerActivity
         return new java.io.File(profilePackageDir(), "data.apk");
     }
 
+    private long packageVersionCode()
+    {
+        try
+        {
+            android.content.pm.PackageInfo info = getPackageManager()
+                .getPackageInfo(getPackageName(), 0);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) return info.getLongVersionCode();
+            return info.versionCode;
+        }
+        catch (Exception ignored) { return 1; }
+    }
+
+    private String obbName(String kind)
+    {
+        return kind + "." + packageVersionCode() + "." + getPackageName() + ".obb";
+    }
+
+    private java.io.File generationObbFile(String kind)
+    {
+        return new java.io.File(profilePackageDir(), obbName(kind));
+    }
+
+    private boolean hasGenerationObb()
+    {
+        return generationObbFile("main").isFile();
+    }
+
+    // A classic generation owns its APK and OBB as one immutable set. Return
+    // that directory to Unity so it mounts the expansion in place, with no
+    // second multi-gigabyte copy under shared external storage.
+    @Override public java.io.File getObbDir()
+    {
+        if (hasGenerationObb()) return profilePackageDir();
+        return super.getObbDir();
+    }
+
+    @Override public java.io.File[] getObbDirs()
+    {
+        if (hasGenerationObb()) return new java.io.File[] { profilePackageDir() };
+        return super.getObbDirs();
+    }
+
     // Unity's own name for the same thing. The engine looks for
     // <obb dir>/main.<versionCode>.<package>.obb without being told to --
     // libunity.so carries the format string and the errors that go with it --
@@ -142,14 +184,7 @@ public class GameActivity extends PlayerActivity
     {
         java.io.File dir = getObbDir();
         if (dir == null) return new java.io.File("/nonexistent");
-        int version = 1;
-        try
-        {
-            version = (int) getPackageManager()
-                .getPackageInfo(getPackageName(), 0).getLongVersionCode();
-        }
-        catch (Exception ignored) { }
-        return new java.io.File(dir, "main." + version + "." + getPackageName() + ".obb");
+        return new java.io.File(dir, obbName("main"));
     }
 
     // Android will not map code out of external storage, so wherever the
@@ -328,6 +363,9 @@ public class GameActivity extends PlayerActivity
                 apkLink.delete();
                 android.system.Os.symlink(data.getAbsolutePath(), apkLink.getAbsolutePath());
                 android.util.Log.i(TAG, "game data from " + data + " (" + data.length() + " bytes)");
+                if (obbFile().isFile())
+                    android.util.Log.i(TAG, "game expansion from " + obbFile()
+                        + " (" + obbFile().length() + " bytes)");
             }
             else if (obbFile().isFile())
             {

@@ -2,6 +2,7 @@ package dev.silksong.launcher.runtime
 
 import android.content.Intent
 import dev.silksong.launcher.BuildReset
+import dev.silksong.launcher.PlayerImage
 import dev.silksong.launcher.build.GenerationPublisher
 import java.io.File
 
@@ -29,7 +30,7 @@ class ProductionLauncherRuntime : LauncherRuntime {
         val packageDir = published?.let { File(it.root, "pkg") } ?: request.paths.packageDir
         val built = File(packageDir, ".built").isFile &&
             File(packageDir, "lib/arm64/libil2cpp.so").length() > 0L &&
-            File(packageDir, "data.apk").length() > 0L
+            PlayerImage.runtimeArchivesPresent(request.context, request.profile, packageDir)
         return RuntimeState(
             ready = built,
             generationId = published?.id,

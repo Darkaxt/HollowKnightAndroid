@@ -2,6 +2,7 @@ package dev.silksong.launcher.runtime
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import dev.silksong.launcher.PlayerImage
 import dev.silksong.launcher.profiles.GameProfiles
 import dev.silksong.launcher.profiles.ProfileBuildPaths
 import dev.silksong.launcher.build.GenerationMetadata
@@ -55,6 +56,31 @@ class ProductionLauncherRuntimeTest {
         File(request.paths.packageDir, "data.apk").writeText("image")
 
         assertTrue(runtime.inspect(request).ready)
+    }
+
+    @Test
+    fun `classic runtime requires its generation-local main OBB`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val profile = GameProfiles.require("hollow-knight")
+        val paths = ProfileBuildPaths(
+            File(root, "hk-files").apply { mkdirs() },
+            File(root, "hk-external").apply { mkdirs() },
+            profile,
+        )
+        val classic = RuntimeRequest(context, profile, paths)
+        val packageDir = paths.packageDir.apply { mkdirs() }
+        File(packageDir, ".built").writeText("signature")
+        File(packageDir, "lib/arm64/libil2cpp.so").apply {
+            parentFile.mkdirs()
+            writeText("native")
+        }
+        File(packageDir, "data.apk").writeText("base")
+
+        assertFalse(runtime.inspect(classic).ready)
+
+        File(packageDir, PlayerImage.mainObbName(context)).writeText("expansion")
+
+        assertTrue(runtime.inspect(classic).ready)
     }
 
     @Test
