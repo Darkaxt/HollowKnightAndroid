@@ -12,8 +12,6 @@ but its first Android boot and playable-room gate remains open.
 
 <p align="center">
   <img src="docs/icon.png" alt="HollowKnightAndroid combined Hollow Knight and Silksong app icon" width="220" />
-  <br />
-  <em><a href="docs/icon-source/ATTRIBUTION.md">User-supplied icon sources and deterministic Android adaptation</a></em>
 </p>
 
 <table>
