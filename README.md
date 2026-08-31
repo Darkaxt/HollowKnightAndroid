@@ -1,6 +1,6 @@
-# HollowKnightAndroid
+# Hollow Knight Android
 
-HollowKnightAndroid is an experimental, unified Android build system and
+Hollow Knight Android is an experimental, unified Android build system and
 launcher for **Hollow Knight** and **Hollow Knight: Silksong**. It takes
 user-supplied Linux game files, converts and compiles them for Android ARM64,
 and keeps both games behind one launcher, package identity, toolchain library,
@@ -11,7 +11,7 @@ Hollow Knight has completed the host conversion and ARM64 compilation gates,
 but its first Android boot and playable-room gate remains open.
 
 <p align="center">
-  <img src="docs/icon.png" alt="HollowKnightAndroid combined Hollow Knight and Silksong app icon" width="220" />
+  <img src="docs/icon.png" alt="Hollow Knight Android combined Hollow Knight and Silksong app icon" width="220" />
 </p>
 
 <table>
