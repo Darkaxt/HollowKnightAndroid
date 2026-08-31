@@ -2,8 +2,9 @@
 //
 // DualScreenV2 remains responsible for display bring-up, hot-plug, pause,
 // input fencing, and teardown ordering. Stage 1 owns only root visibility,
-// idle state, scene invalidation revision, and idempotent disposal. Frame, HUD,
-// pages, overlays, fade behavior, and resident-object adapters arrive later.
+// idle state, scene invalidation revision, and idempotent disposal. Stage 2
+// attaches the resident frame/tab composition; HUD/page content/overlays remain
+// assigned to their later modules.
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 using UnityEngine.SceneManagement;
@@ -11,6 +12,7 @@ using UnityEngine.SceneManagement;
 public sealed class DsPortRuntime
 {
     DsPortLayers _layers;
+    DsPortFrame _frame;
     int _sceneHandle;
     bool _disposed;
 
@@ -21,6 +23,7 @@ public sealed class DsPortRuntime
     public DsPortRuntime(DsPresentation presentation)
     {
         _layers = new DsPortLayers(presentation);
+        _frame = new DsPortFrame(_layers);
         _sceneHandle = SceneManager.GetActiveScene().handle;
         IsVisible = true;
     }
@@ -29,9 +32,13 @@ public sealed class DsPortRuntime
     {
         if (_disposed) return;
         int activeSceneHandle = SceneManager.GetActiveScene().handle;
-        if (activeSceneHandle == _sceneHandle) return;
-        _sceneHandle = activeSceneHandle;
-        SceneRevision++;
+        if (activeSceneHandle != _sceneHandle)
+        {
+            _sceneHandle = activeSceneHandle;
+            SceneRevision++;
+            _frame.InvalidateResidentSources();
+        }
+        _frame.Tick(dt);
     }
 
     public void SetIdle(bool idle)
@@ -40,9 +47,13 @@ public sealed class DsPortRuntime
         IsIdle = idle;
     }
 
-    // Stage 1 has no composition consumer. Do not retain gestures for later
-    // frames: a later module must handle each gesture synchronously or drop it.
-    public void OnGesture(DsGesture gesture) { }
+    // Gestures are still handled synchronously. Stage 2 consumes only bottom
+    // tab taps; every page-specific gesture remains unhandled until its module.
+    public void OnGesture(DsGesture gesture)
+    {
+        if (_disposed) return;
+        _frame.OnGesture(gesture);
+    }
 
     public void SetVisible(bool visible)
     {
@@ -55,6 +66,8 @@ public sealed class DsPortRuntime
     {
         if (_disposed) return;
         _disposed = true;
+        _frame.Dispose();
+        _frame = null;
         _layers.Dispose();
         _layers = null;
     }

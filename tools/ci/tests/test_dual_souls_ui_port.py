@@ -1,5 +1,9 @@
+import inspect
+import os
 import pathlib
 import re
+import subprocess
+import tempfile
 import unittest
 
 
@@ -14,6 +18,23 @@ DUAL_SCREEN = DUALSCREEN_SOURCES / "DualScreenV2.cs"
 PRESENTATION = DUALSCREEN_SOURCES / "DsPresentation.cs"
 PORT_RUNTIME = DUALSCREEN_SOURCES / "DsPortRuntime.cs"
 PORT_LAYERS = DUALSCREEN_SOURCES / "DsPortLayers.cs"
+PORT_UTIL = DUALSCREEN_SOURCES / "DsPortUtil.cs"
+RESIDENT_UI = DUALSCREEN_SOURCES / "DsResidentUi.cs"
+PORT_FRAME = DUALSCREEN_SOURCES / "DsPortFrame.cs"
+PORT_FRAME_STATE = DUALSCREEN_SOURCES / "DsPortFrameState.cs"
+
+
+def portable_temp_parent():
+    runner_temp = os.environ.get("RUNNER_TEMP")
+    if runner_temp:
+        candidate = pathlib.Path(runner_temp)
+        if candidate.is_dir() and os.access(candidate, os.W_OK):
+            return candidate
+    if os.name == "nt":
+        d_temp = pathlib.Path("D:/Temp")
+        if d_temp.is_dir() and os.access(d_temp, os.W_OK):
+            return d_temp
+    return None
 
 REQUIREMENTS = tuple(f"DSUI-{number:02d}" for number in range(1, 11))
 REFERENCE_MODULES = (
@@ -77,6 +98,22 @@ REJECTION_MARKER = re.compile(
 
 def read(path: pathlib.Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def csharp_method_body(source: str, signature_pattern: str) -> str:
+    match = re.search(signature_pattern + r"\s*\{", source)
+    if match is None:
+        return ""
+    start = source.find("{", match.start())
+    depth = 0
+    for index in range(start, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start + 1:index]
+    return ""
 
 
 def normalize_cell(cell: str) -> str:
@@ -513,6 +550,408 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         for row in plan_rows + matrix_rows:
             self.assertNotIn("HOST-COMPLETE", row)
             self.assertIn("HOST-VERIFIED-BOUNDARY", row)
+
+    def test_stage_two_frame_sources_exist(self):
+        for source in (PORT_UTIL, RESIDENT_UI, PORT_FRAME, PORT_FRAME_STATE):
+            with self.subTest(source=source.name):
+                self.assertTrue(source.is_file(), f"missing Stage 2 source: {source.name}")
+
+    def test_resident_adapter_uses_exact_inventory_apis_and_reports_provenance(self):
+        if not RESIDENT_UI.is_file():
+            self.skipTest("DsResidentUi.cs is introduced by Stage 2")
+        source = read(RESIDENT_UI)
+        self.assertIn("Resources.FindObjectsOfTypeAll<InventoryPaneList>()", source)
+        self.assertRegex(source, r"GetPane\s*\(\s*InventoryPaneList\.PaneTypes\s+role\s*\)")
+        self.assertIn("_paneList.GetPane(role)", source)
+        self.assertIn('GetField("currentPaneText"', source)
+        identities = (
+            ("CloneTopOrnament", "_UIManager/UICanvas/OptionsMenuScreen/TopFleur",
+             "Warning_Fleur0008", "959f, 106f, 959f, 106f"),
+            ("CloneBottomOrnament", "_UIManager/UICanvas/KeepResPrompt/BottomFleur",
+             "bottom_fleur0008", "355f, 134f, 303f, 66f"),
+            ("CloneSelectedTopFleur", "_UIManager/UICanvas/PauseMenuScreen/TopFleur",
+             "pause_top_fleur0000", "426f, 123f, 426f, 123f"),
+            ("CloneSelectedBottomFleur", "_UIManager/UICanvas/PauseMenuScreen/BottomFleur",
+             "bottom_fleur0000", "355f, 134f, 355f, 134f"),
+        )
+        for method, path, sprite, dimensions in identities:
+            with self.subTest(path=path, sprite=sprite):
+                self.assertEqual(1, source.count(f'"{path}"'))
+                self.assertEqual(1, source.count(f'"{sprite}"'))
+                clone_method = csharp_method_body(
+                    source, rf"public\s+GameObject\s+{method}\s*\([^)]*\)\s*=>"
+                )
+                if not clone_method:  # expression-bodied method has no braces
+                    clone_method = re.search(
+                        rf"public\s+GameObject\s+{method}\s*\([^)]*\)\s*=>"
+                        rf"(?P<body>.*?);", source, re.DOTALL
+                    ).group("body")
+                self.assertIn(dimensions, re.sub(r"\s+", " ", clone_method))
+        self.assertIn("Resources.FindObjectsOfTypeAll<Image>()", source)
+        self.assertRegex(source, r"source\.sprite\.name\s*!=\s*exactSpriteName")
+        self.assertIn("Vector2 spriteSize = source.sprite.rect.size;", source)
+        self.assertIn("var sourceRect = source.transform as RectTransform;", source)
+        self.assertIn("Vector2 sourceSize = sourceRect.sizeDelta;", source)
+        self.assertRegex(source, r"spriteSize\.x\s*-\s*expectedSpriteWidth")
+        self.assertRegex(source, r"spriteSize\.y\s*-\s*expectedSpriteHeight")
+        self.assertRegex(source, r"sourceSize\.x\s*-\s*expectedRectWidth")
+        self.assertRegex(source, r"sourceSize\.y\s*-\s*expectedRectHeight")
+        self.assertIn("_imageIndex.TryGetValue(exactSourcePath", source)
+        self.assertIn("clone.GetComponent<Image>()", source)
+        self.assertRegex(source, r"CapabilityGap\s*\(")
+        self.assertRegex(source, r"ResidentProvenance\s*\(")
+        self.assertNotRegex(source, r"(?:fallback|substitute).*(?:sprite|ornament)")
+
+    def test_frame_uses_semantic_bottom_tabs_and_resident_text(self):
+        if not PORT_FRAME.is_file():
+            self.skipTest("DsPortFrame.cs is introduced by Stage 2")
+        source = read(PORT_FRAME)
+        order = re.search(
+            r"ApprovedPageOrder\s*=\s*\{(?P<body>.*?)\};", source, re.DOTALL
+        )
+        self.assertIsNotNone(order)
+        self.assertEqual(
+            ["Inventory", "Loadout", "Tasks", "Journal", "Map"],
+            re.findall(r"DsPageRole\.(\w+)", order.group("body")),
+        )
+        self.assertIn("pane.DisplayName", source)
+        self.assertIn("ClonePaneName", source)
+        self.assertIn("BuildBottomCentredTabs", source)
+        self.assertIn("SelectedTopFleur", source)
+        self.assertIn("SelectedBottomFleur", source)
+        self.assertNotIn("UnityEngine.UI.Button", source)
+
+    def test_native_tab_selection_alpha_matches_dual_souls(self):
+        source = read(PORT_FRAME)
+        alpha_body = csharp_method_body(source, r"void\s+ApplyTabSelectionAlpha\s*\(\s*\)")
+        self.assertTrue(alpha_body, "missing tab selection alpha method")
+        self.assertIn("for (int i = 0; i < _tabs.Count; i++)", alpha_body)
+        self.assertIn("var tab = _tabs[i];", alpha_body)
+        self.assertRegex(
+            alpha_body,
+            r"(?s)var\s+color\s*=\s*text\.color\s*;.*?"
+            r"var\s+alpha\s*=\s*DsPortFrameState\.LabelAlpha\s*\(\s*"
+            r"tab\.Role\s*==\s*_selected\s*\)\s*;.*?"
+            r"text\.color\s*=\s*new\s+Color\s*\(\s*color\.r\s*,\s*color\.g\s*,\s*"
+            r"color\.b\s*,\s*alpha\s*\)\s*;",
+        )
+
+        build_body = csharp_method_body(source, r"void\s+TryBuild\s*\(\s*\)")
+        self.assertTrue(build_body)
+        self.assertLess(
+            build_body.index("BuildBottomCentredTabs();"),
+            build_body.index("ApplyTabSelectionAlpha();"),
+        )
+        select_body = csharp_method_body(
+            source, r"public\s+void\s+Select\s*\(\s*DsPageRole\s+role\s*\)"
+        )
+        self.assertTrue(select_body)
+        self.assertLess(
+            select_body.index("_selected = role;"),
+            select_body.index("ApplyTabSelectionAlpha();"),
+        )
+
+    def test_static_frame_clones_are_sanitized_before_activation(self):
+        source = read(PORT_UTIL)
+        body = csharp_method_body(
+            source,
+            r"public\s+static\s+GameObject\s+CloneStaticResidentVisual\s*\([^)]*\)",
+        )
+        self.assertTrue(body, "missing static-frame clone lifecycle")
+        staging_inactive = body.index("staging.SetActive(false);")
+        instantiate = re.search(
+            r"Object\.Instantiate\s*\(\s*source\s*,\s*staging\.transform\s*,\s*false\s*\)",
+            body,
+        )
+        self.assertIsNotNone(instantiate, "clone must be born under inactive staging")
+        clone_inactive = body.index("clone.SetActive(false);")
+        required_policy = (
+            "GetComponentsInChildren<MonoBehaviour>(true)",
+            "behaviour.GetType() == retainedVisualType",
+            "retainedCount != 1",
+            "Object.DestroyImmediate(behaviour);",
+            "var remainingBehaviours = clone.GetComponentsInChildren<MonoBehaviour>(true);",
+            "remainingBehaviours.Length != 1",
+            "remainingBehaviours[0].GetType() != retainedVisualType",
+            "retained.enabled = true;",
+            "retained.gameObject.SetActive(true);",
+            "GetComponentsInChildren<Renderer>(true)",
+            "renderer.gameObject.SetActive(true);",
+            "renderer.enabled = true;",
+        )
+        for statement in required_policy:
+            self.assertIn(statement, body)
+        self.assertNotIn("IsAssignableFrom", body)
+        self.assertNotIn("behaviour.enabled = false;", body)
+        mono_scan = body.index("var behaviours = clone.GetComponentsInChildren<MonoBehaviour>(true);")
+        retained_check = body.index("behaviour.GetType() == retainedVisualType")
+        count_check = body.index("retainedCount != 1")
+        destroy_other = body.index("Object.DestroyImmediate(behaviour);")
+        verify_scan = body.index(
+            "var remainingBehaviours = clone.GetComponentsInChildren<MonoBehaviour>(true);"
+        )
+        verify_exact = body.index("remainingBehaviours[0].GetType() != retainedVisualType")
+        retained_enable = body.index("retained.enabled = true;")
+        retained_active = body.index("retained.gameObject.SetActive(true);")
+        explicit_disable_points = [
+            body.index(f"GetComponentsInChildren<{component}>(true)")
+            for component in ("Animator", "Animation", "AudioSource", "Collider2D")
+        ]
+        renderer_scan = body.index("GetComponentsInChildren<Renderer>(true)")
+        renderer_active = body.index("renderer.gameObject.SetActive(true);")
+        renderer_enable = body.index("renderer.enabled = true;")
+        final_inactive = body.rindex("clone.SetActive(false);")
+        reparent = body.index("clone.transform.SetParent(parent, false);")
+        activate = body.index("clone.SetActive(true);")
+        self.assertLess(staging_inactive, instantiate.start())
+        self.assertLess(instantiate.end(), clone_inactive)
+        self.assertLess(clone_inactive, mono_scan)
+        self.assertLess(mono_scan, retained_check)
+        self.assertLess(retained_check, count_check)
+        self.assertLess(count_check, destroy_other)
+        self.assertLess(destroy_other, verify_scan)
+        self.assertLess(verify_scan, verify_exact)
+        self.assertLess(verify_exact, retained_enable)
+        self.assertLess(retained_enable, retained_active)
+        self.assertTrue(
+            all(retained_active < point < reparent for point in explicit_disable_points)
+        )
+        self.assertLess(max(explicit_disable_points), renderer_scan)
+        self.assertLess(renderer_scan, renderer_active)
+        self.assertLess(renderer_active, renderer_enable)
+        self.assertLess(renderer_enable, final_inactive)
+        self.assertLess(final_inactive, reparent)
+        self.assertLess(reparent, activate)
+        self.assertIn("catch", body)
+        self.assertRegex(body, r"if\s*\(\s*clone\s*!=\s*null\s*\)\s*Object\.Destroy\s*\(\s*clone\s*\)")
+        self.assertRegex(body, r"if\s*\(\s*staging\s*!=\s*null\s*\)\s*Object\.Destroy\s*\(\s*staging\s*\)")
+        self.assertNotIn("CloneResidentVisual", source)
+
+        resident = read(RESIDENT_UI)
+        pane_clone = csharp_method_body(
+            resident, r"public\s+GameObject\s+ClonePaneName\s*\([^)]*\)"
+        )
+        self.assertIn("typeof(PaneText)", pane_clone)
+        image_clone = csharp_method_body(
+            resident, r"GameObject\s+CloneResidentImage\s*\([^)]*\)"
+        )
+        self.assertIn("typeof(Image)", image_clone)
+
+    def test_frame_state_harness_uses_portable_temp_parent(self):
+        harness = inspect.getsource(
+            self.test_pure_frame_state_executes_repeated_selection_boundaries_and_interruptions
+        )
+        self.assertIn("portable_temp_parent()", harness)
+        self.assertNotIn('pathlib.Path("D:/Temp")', harness)
+        selector = inspect.getsource(portable_temp_parent)
+        self.assertIn('os.environ.get("RUNNER_TEMP")', selector)
+        self.assertIn('os.name == "nt"', selector)
+        self.assertIn('pathlib.Path("D:/Temp")', selector)
+        self.assertGreaterEqual(selector.count("is_dir()"), 2)
+        self.assertGreaterEqual(selector.count("os.access"), 2)
+        self.assertIn("return None", selector)
+
+    def test_resident_lookup_is_unique_exact_loaded_and_revision_cached(self):
+        source = read(RESIDENT_UI)
+        self.assertIn("scene.IsValid() || !scene.isLoaded", source)
+        self.assertNotIn("EndsWith", source)
+        self.assertIn("_imageIndex.TryGetValue(exactSourcePath", source)
+        self.assertIn("matches.Count != 1", source)
+        self.assertIn("duplicate", source)
+        self.assertIn("_imageIndexBuilt", source)
+        self.assertIn("_attemptedImageRoles", source)
+        self.assertIn("_refreshAttempted", source)
+        clone_body = csharp_method_body(source, r"GameObject\s+CloneResidentImage\s*\([^)]*\)")
+        self.assertTrue(clone_body)
+        self.assertNotIn("Resources.FindObjectsOfTypeAll<Image>()", clone_body)
+        index_body = csharp_method_body(source, r"void\s+BuildImageIndex\s*\(\s*\)")
+        self.assertEqual(1, index_body.count("Resources.FindObjectsOfTypeAll<Image>()"))
+        forget_body = csharp_method_body(source, r"public\s+void\s+Forget\s*\(\s*\)")
+        self.assertIn("_attemptedImageRoles.Clear();", forget_body)
+        self.assertIn("_imageIndex.Clear();", forget_body)
+        self.assertIn("_imageIndexBuilt = false;", forget_body)
+        self.assertIn("_refreshAttempted = false;", forget_body)
+
+    def test_frame_discovery_runs_once_per_ingame_source_transition(self):
+        source = read(PORT_FRAME)
+        tick = csharp_method_body(source, r"public\s+void\s+Tick\s*\(\s*float\s+dt\s*\)")
+        self.assertTrue(tick)
+        self.assertIn("DsGameData.InGame", tick)
+        self.assertIn("inGame != _lastInGame", tick)
+        self.assertIn("_buildAttempted", tick)
+        self.assertNotIn("Time.frameCount % 30", tick)
+        try_build = csharp_method_body(source, r"void\s+TryBuild\s*\(\s*\)")
+        self.assertNotIn("Resources.FindObjectsOfTypeAll", try_build)
+        invalidate = csharp_method_body(
+            source, r"public\s+void\s+InvalidateResidentSources\s*\(\s*\)"
+        )
+        self.assertIn("_buildAttempted = false;", invalidate)
+        self.assertIn("_resident.Forget();", invalidate)
+
+    def test_pure_frame_state_executes_repeated_selection_boundaries_and_interruptions(self):
+        self.assertTrue(PORT_FRAME_STATE.is_file(), "missing pure production frame state")
+        with tempfile.TemporaryDirectory(dir=portable_temp_parent()) as directory:
+            work = pathlib.Path(directory)
+            (work / "FrameStateHost.csproj").write_text(
+                """<Project Sdk=\"Microsoft.NET.Sdk\">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>disable</Nullable><ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include=\"Program.cs\" />
+    <Compile Include=\"%s\" Link=\"DsPortFrameState.cs\" />
+  </ItemGroup>
+</Project>
+""" % PORT_FRAME_STATE,
+                encoding="utf-8",
+            )
+            (work / "Program.cs").write_text(
+                """using System;
+static class Program
+{
+    static void Need(bool value, string message) { if (!value) throw new Exception(message); }
+    static void Main()
+    {
+        var state = DsPortFrameState.Initial(5, 0);
+        Need(DsPortFrameState.LabelAlpha(true) == 1f, "selected alpha");
+        Need(DsPortFrameState.LabelAlpha(false) == 0.6f, "inactive alpha");
+        Need(DsPortFrameState.ContainsHit(0.2f, 0.2f, 0.4f), "left boundary");
+        Need(DsPortFrameState.ContainsHit(0.4f, 0.2f, 0.4f), "right boundary");
+        Need(!DsPortFrameState.ContainsHit(0.199f, 0.2f, 0.4f), "outside boundary");
+
+        state = DsPortFrameState.BeginSelection(state, 4);
+        Need(state.Direction == 1 && state.SelectedIndex == 4, "forward selection");
+        Need(DsPortFrameState.IsHostActive(state, 0), "first outgoing");
+        Need(DsPortFrameState.IsHostActive(state, 4), "first incoming");
+        Need(!DsPortFrameState.IsHostActive(state, 2), "unrelated host");
+
+        state = DsPortFrameState.BeginSelection(state, 1);
+        Need(state.Direction == -1 && state.SelectedIndex == 1, "interrupted reverse");
+        Need(!DsPortFrameState.IsHostActive(state, 0), "stale outgoing removed");
+        Need(DsPortFrameState.IsHostActive(state, 4), "current outgoing");
+        Need(DsPortFrameState.IsHostActive(state, 1), "new incoming");
+
+        state = DsPortFrameState.CompleteSelection(state);
+        for (int i = 0; i < 5; i++)
+            Need(DsPortFrameState.IsHostActive(state, i) == (i == 1), "settled host " + i);
+    }
+}
+""",
+                encoding="utf-8",
+            )
+            run = subprocess.run(
+                ["dotnet", "run", "--project", str(work / "FrameStateHost.csproj"),
+                 "-c", "Release", "--nologo", "-v", "quiet",
+                 "-p:UseSharedCompilation=false"],
+                cwd=work,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(0, run.returncode, run.stdout + run.stderr)
+
+        frame = read(PORT_FRAME)
+        for decision in (
+            "DsPortFrameState.LabelAlpha", "DsPortFrameState.ContainsHit",
+            "DsPortFrameState.BeginSelection", "DsPortFrameState.IsHostActive",
+            "DsPortFrameState.CompleteSelection",
+        ):
+            self.assertIn(decision, frame)
+
+    def test_frame_owns_masks_positions_page_cache_and_horizontal_slide_state(self):
+        if not PORT_FRAME.is_file():
+            self.skipTest("DsPortFrame.cs is introduced by Stage 2")
+        source = read(PORT_FRAME)
+        for role in ("ContentMask", "StatusAnchor", "ModsAnchor"):
+            with self.subTest(role=role):
+                self.assertIn(role, source)
+        self.assertRegex(source, r"Dictionary\s*<\s*DsPageRole\s*,\s*RectTransform\s*>")
+        self.assertIn("GetOrCreatePageHost", source)
+        self.assertIn("BeginHorizontalSlide", source)
+        self.assertIn("Mathf.Pow(1f - _slideT, 3f)", source)
+        self.assertRegex(source, r"new\s+Vector2\s*\([^,]+,\s*0f\s*\)")
+
+    def test_frame_geometry_comes_from_native_glyph_and_sprite_bounds(self):
+        source = read(PORT_FRAME)
+        resident = read(RESIDENT_UI)
+        self.assertIn("ForceMeshUpdate(true)", source)
+        self.assertRegex(source, r"Renderer\.bounds|renderer\.bounds")
+        self.assertIn("LayoutNativeTabLabels", source)
+        self.assertIn("AlignTabBaselines", source)
+        self.assertIn("ScaleResidentAspect", source)
+        self.assertIn("PositionSelectedFleursFromGlyphBounds", source)
+        self.assertIn("UpdateDynamicInnerEdges", source)
+        self.assertIn("InnerTop", source)
+        self.assertIn("InnerBottom", source)
+        self.assertIn("sprite.rect.size", resident)
+
+    def test_renderer_composition_has_explicit_sorting_and_functional_covers(self):
+        util = read(PORT_UTIL)
+        frame = read(PORT_FRAME)
+        layers = read(PORT_LAYERS)
+        self.assertIn("NormalizeRenderers", util)
+        self.assertRegex(util, r"sortingLayerID\s*=\s*0\s*;")
+        self.assertRegex(util, r"sortingOrder\s*=\s*baseOrder")
+        self.assertIn("DsRendererMaskCover", util)
+        self.assertIn("MeshRenderer", util)
+        self.assertIn("SetRect", util)
+        self.assertIn("UpdateRendererMasks", frame)
+        self.assertEqual(4, len(re.findall(r"_rendererMasks\[\d\]\.SetRect", frame)))
+        self.assertIn("ConfigureCanvasOrder(Pages, PAGE_RENDER_ORDER)", layers)
+        self.assertIn("ConfigureCanvasOrder(Frame, FRAME_RENDER_ORDER)", layers)
+        self.assertIn("ConfigureCanvasOrder(HUD, HUD_RENDER_ORDER)", layers)
+        self.assertIn("canvas.overrideSorting = true", layers)
+        self.assertLess(layers.index("Pages.SetSiblingIndex(1)"),
+                        layers.index("Frame.SetSiblingIndex(2)"))
+        self.assertLess(layers.index("Frame.SetSiblingIndex(2)"),
+                        layers.index("HUD.SetSiblingIndex(3)"))
+
+    def test_interrupted_slide_normalizes_all_hosts_before_new_state(self):
+        source = read(PORT_FRAME)
+        begin = re.search(
+            r"public\s+void\s+BeginHorizontalSlide\s*\([^)]*\)\s*"
+            r"\{(?P<body>.*?)\n\s*\}", source, re.DOTALL
+        )
+        self.assertIsNotNone(begin)
+        self.assertIn("NormalizePageHostsForInterruptedSlide(from);", begin.group("body"))
+        normalize = re.search(
+            r"void\s+NormalizePageHostsForInterruptedSlide\s*\([^)]*\)\s*"
+            r"\{(?P<body>.*?)\n\s*\}", source, re.DOTALL
+        )
+        self.assertIsNotNone(normalize)
+        body = normalize.group("body")
+        self.assertIn("foreach (var pair in _pageHosts)", body)
+        self.assertIn("pair.Value.anchoredPosition = Vector2.zero", body)
+        self.assertRegex(body, r"SetActive\s*\(\s*pair\.Key\s*==\s*current\s*\)")
+        tick = csharp_method_body(source, r"void\s+TickHorizontalSlide\s*\([^)]*\)")
+        completion = tick.index("DsPortFrameState.CompleteSelection(_selectionState)")
+        settle = tick.index("SetOnlySelectedPageActive(", completion)
+        self.assertLess(completion, settle)
+
+    def test_runtime_owns_frame_lifecycle_and_scene_invalidation(self):
+        source = read(PORT_RUNTIME)
+        self.assertRegex(source, r"\bDsPortFrame\s+_frame\s*;")
+        self.assertRegex(source, r"_frame\s*=\s*new\s+DsPortFrame\s*\(")
+        self.assertRegex(source, r"_frame\.Tick\s*\(")
+        self.assertRegex(source, r"_frame\.InvalidateResidentSources\s*\(")
+        self.assertRegex(source, r"_frame\.Dispose\s*\(")
+
+    def test_production_port_sources_do_not_draw_authored_frame_substitutes(self):
+        violations = []
+        rejected = (
+            "DsWidgets.Fleur", "DsTheme.White", "DsTheme.Disc",
+            "AddComponent<Image>", "AddComponent<UnityEngine.UI.Image>",
+            "DsShell", "DsScreens",
+            "Inventory/Border/Inv_Border_", "Sprite.Create(",
+        )
+        sources = list(DUALSCREEN_SOURCES.glob("DsPort*.cs")) + [RESIDENT_UI]
+        for path in sorted(set(sources)):
+            source = read(path)
+            for token in rejected:
+                if token in source:
+                    violations.append(f"{path.name}: {token}")
+        self.assertEqual([], violations)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,14 @@ using UnityEngine;
 
 public sealed class DsPortLayers
 {
+    // World renderers ignore RectTransform sibling order, so the same page <
+    // functional mask < frame < tab < HUD relationship is also explicit here.
+    public const int PAGE_RENDER_ORDER = 1000;
+    public const int MASK_RENDER_ORDER = 3000;
+    public const int FRAME_RENDER_ORDER = 4000;
+    public const int TAB_RENDER_ORDER = 6000;
+    public const int HUD_RENDER_ORDER = 7000;
+
     public RectTransform Content { get; private set; }
     public RectTransform Frame { get; private set; }
     public RectTransform Pages { get; private set; }
@@ -23,6 +31,31 @@ public sealed class DsPortLayers
         HUD = CreateRoot("HUD", presentation.Root, DsPresentation.CONTENT_LAYER);
         Overlays = CreateRoot("Overlays", presentation.OverlayRoot, DsPresentation.OVERLAY_LAYER);
         Fade = CreateRoot("Fade", presentation.OverlayRoot, DsPresentation.OVERLAY_LAYER);
+        ConfigureCanvasOrder(Pages, PAGE_RENDER_ORDER);
+        ConfigureCanvasOrder(Frame, FRAME_RENDER_ORDER);
+        ConfigureCanvasOrder(HUD, HUD_RENDER_ORDER);
+        ApplyCompositionOrder();
+    }
+
+    static void ConfigureCanvasOrder(RectTransform root, int sortingOrder)
+    {
+        var canvas = root.gameObject.AddComponent<Canvas>();
+        canvas.overrideSorting = true;
+        canvas.sortingLayerID = 0;
+        canvas.sortingOrder = sortingOrder;
+    }
+
+    // Match the reference composition roles explicitly. Pages render below
+    // frame chrome, and the persistent HUD remains above both. Overlays and
+    // fade keep the same relationship on their separate proven layer.
+    void ApplyCompositionOrder()
+    {
+        Content.SetSiblingIndex(0);
+        Pages.SetSiblingIndex(1);
+        Frame.SetSiblingIndex(2);
+        HUD.SetSiblingIndex(3);
+        Overlays.SetSiblingIndex(0);
+        Fade.SetSiblingIndex(1);
     }
 
     static RectTransform CreateRoot(string name, RectTransform parent, int layer)

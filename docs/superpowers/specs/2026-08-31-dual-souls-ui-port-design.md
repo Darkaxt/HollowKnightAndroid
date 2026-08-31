@@ -63,6 +63,21 @@ companion must clone, re-parent, re-layer, or otherwise reuse that object and
 its resident assets. Reading game state and drawing an independent substitute
 is prohibited when a usable resident equivalent exists.
 
+Static frame ornaments and tab labels must be instantiated under an inactive
+staging parent. Every cloned `MonoBehaviour` except the explicitly retained
+static visual type (`UnityEngine.UI.Image` for ornaments/fleurs or
+`TMProOld.TextMeshPro` for Pane Name labels) must be removed immediately from
+the owned clone while it remains inactive in hierarchy. Exactly one component
+whose runtime type equals the requested visual type must remain; zero, multiple,
+subclass, or incomplete-removal results fail closed. The retained visual and
+renderer objects are made active/enabled before reparenting and first
+activation. This reproduces
+the Dual Souls treatment of these objects as static chrome. It is not a
+universal resident-clone policy. HUD, page, and overlay work in Stages 3–7
+must reproduce the Hollow Knight oracle's own activate/open, settle,
+selective-freeze or retained-driver sequence and its observable consequences;
+it must not reuse a blanket static-clone sanitizer.
+
 ### DSUI-04 — Semantic substitutions preserve the pattern
 
 Hollow Knight concepts map to Silksong by meaning without changing the design

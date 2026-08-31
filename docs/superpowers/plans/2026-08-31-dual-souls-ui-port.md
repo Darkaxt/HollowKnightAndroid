@@ -227,22 +227,23 @@ blocker. Commit `refactor: separate companion transport from UI composition`.
 - Create: `DsPortUtil.cs`
 - Create: `DsResidentUi.cs`
 - Create: `DsPortFrame.cs`
+- Create: `DsPortFrameState.cs`
 - Modify: `DsPortRuntime.cs`
 - Modify: `DsPortLayers.cs`
 - Test: `tools/ci/tests/test_dual_souls_ui_port.py`
 
-- [ ] **Step 1: Add failing frame-structure contracts**
+- [x] **Step 1: Add failing frame-structure contracts**
 
 Require resident top/bottom ornaments, the Dual Souls bottom-centred label
 row, selection fleurs, context masks, separate status/mod positions, cached
 page hosts, and slide state. Reject flat filled tab rectangles and any call to
 `DsWidgets.Fleur` in production port files.
 
-- [ ] **Step 2: Verify red**
+- [x] **Step 2: Verify red**
 
 Run the targeted unittest and confirm the required frame roles are absent.
 
-- [ ] **Step 3: Port `Bottom.Frame` and shared utilities**
+- [x] **Step 3: Port `Bottom.Frame` and shared utilities**
 
 Translate clone ownership, recursive layer assignment, resident ornament
 lookup, frame bounds, page-host cache, tab mapping, selected fleurs, masks,
@@ -250,15 +251,52 @@ slide orchestration, and teardown. Use Silksong resident ornament/font objects
 located by `DsResidentUi`; when an object is not resident, keep the page hidden
 and report the capability gap rather than drawing a generic substitute.
 
-- [ ] **Step 4: Compile and run structural contracts**
+Host implementation uses exact current Silksong UGUI sources: Options TopFleur
+`Warning_Fleur0008`, Keep Resolution BottomFleur `bottom_fleur0008`, and the
+Pause Menu's `pause_top_fleur0000` / `bottom_fleur0000` selected pair. Full
+source path, Sprite identity, Sprite rect, and source `RectTransform.sizeDelta`
+must all independently match a live resident `Image`; otherwise the role stays
+absent with a capability-gap log. In particular, Keep Resolution BottomFleur
+uses a 355x134 Sprite rect inside a 303x66 source RectTransform.
+Native Pane Name glyph bounds drive baseline alignment, responsive hit slots,
+selected-fleur placement, aspect-preserving scale, and dynamic inner edges.
+The selected label retains its native RGB at alpha 1.0 while every inactive
+label retains native RGB at alpha 0.6, both after build and after selection.
+Four black renderer covers provide functional clipping below frame/tab/HUD
+sorting. Interrupted slides normalize every cached host before starting anew.
+The static ornaments and native tab labels are born under an inactive staging
+parent and made inactive. Before reparenting, every `MonoBehaviour` except the
+one exact retained static visual is removed immediately from the owned clone:
+`UnityEngine.UI.Image` is retained for ornaments/fleurs and
+`TMProOld.TextMeshPro` for Pane Name labels. The clone fails closed unless a
+post-removal scan finds exactly that one concrete visual type; subclasses,
+zero matches, and multiple matches are rejected. The retained visual and
+renderer objects are explicitly active/enabled while the staging parent still
+keeps the hierarchy inactive; non-`MonoBehaviour` animation, audio, and
+collider drivers remain disabled. This sanitizer is Stage 2 static-chrome
+policy only: Stages 3–7 must instead port each oracle object's activate/open,
+settle, and selective-freeze or retained-driver lifecycle and consequences. Exact resident
+Image discovery runs once per in-game/source revision, accepts only loaded
+scenes and one exact root-to-leaf path/Sprite/dimension match, caches misses,
+and resets only on gameplay/source invalidation. Pure selection, hit, slide,
+and host-visibility decisions live in `DsPortFrameState` and execute in a host
+contract using the production source.
+
+- [x] **Step 4: Compile and run structural contracts**
 
 Run the targeted Python test followed by both exact patch compiles.
 
-- [ ] **Step 5: Reconcile, update README, and commit**
+- [x] **Step 5: Reconcile, update README, and commit**
 
 Compare the file against `Bottom.Layering` and `Bottom.Frame` responsibility by
 responsibility. Frame or tab geometry gaps are blockers. Commit
 `feat: port Dual Souls frame composition`.
+
+Reconciliation status is `HOST-VERIFIED-SOURCE / DEVICE-BLOCKED`: exact asset
+identity and the geometry, sorting, masking, and slide source contracts compile,
+but live residency, rendered geometry, cover clipping, and side-by-side parity
+still require device evidence. The dormant shell is not deleted and Stage 3
+must not treat Stage 2 as visually complete until that blocker closes.
 
 ## Stage 3: Port the persistent HUD from resident Silksong objects
 
@@ -534,7 +572,7 @@ release only if all repository release gates are also green.
 | --- | --- | --- | --- | --- | --- |
 | 0 | DSUI-01/02/03/06/08/10 | COMPLETE | None | None | `python -m unittest tools.ci.tests.test_dual_souls_ui_port -v`: 7 tests passed; contract covers DSUI-01–10, distinct first-column rows for all nine reference modules, exactly one valid disposition row for each of the 24 current dualscreen C# filenames, prototype/port status, and README/traceability acceptance language |
 | 1 | DSUI-02/08/10 | HOST-VERIFIED-BOUNDARY | None | Frame/tabs to Stage 2; resident HUD to Stage 3; Map/Inventory/Loadout/progress pages to Stages 4–6; overlays/fade to Stage 7 | Initial RED: 12 tests ran with 7 Stage 0 contracts green, 4 intended failures, and 2 absent-source skips. First review RED: 14 tests ran with 12 green and 2 intended failures for empty composition lifecycle and overbroad status. Second review RED: 18 tests ran with 13 green and 5 failures covering four defects: stale reattach readiness, presentation retention/serialization, pause/presence/readiness activation, and unstretched roots. GREEN: 18/18 tests; exact Silksong compile 42 sources/10 entry points; exact Hollow Knight compile 4 sources, 0 warnings/errors, 16,896-byte DLL/1 entry point. These host checks verify only the source boundary: `DualScreenV2` retains one presentation before yielding; `DsPresentation` serializes activation without a cancellation timeout, rechecks presence after settle, remeasures, and force-sweeps the reused rig; cameras, roots, and touch fencing activate only when the app is unpaused and display 1 is present and ready. Layers remain exactly 6/3. No device or UI parity is claimed. |
-| 2 | DSUI-01/02/03/06/10 | PENDING | Depends on Stage 1 | None | — |
+| 2 | DSUI-01/02/03/06/10 | HOST-VERIFIED-SOURCE / DEVICE-BLOCKED | Live UGUI residency, rendered clone/glyph/fleur geometry, functional cover clipping, and side-by-side parity are not device-proven | Native page content/clone settle/fit to Stages 4–6; HUD/status data to Stage 3; Mods control content to Stage 8 | Fix-pass RED: 27 tests with nine failures for obsolete art discovery, geometry, sorting/masks, and interrupted slides. Re-review RED: 28 tests with six assertions failing across the two defects: conflated Sprite/source-rect validation and missing selected-tab alpha. Quality-review RED: 32 tests with five intended failures for unsafe clone activation, non-unique/suffix/unloaded discovery, repeated scans, and missing executable production-state proof. Final spec-review RED: 32 tests with one intended failure because the five-family sanitizer did not disable arbitrary cloned `MonoBehaviour` drivers. Quality re-review RED: 33 tests with two intended failures because disabled drivers could still receive `Awake` and the executable harness hard-coded `D:/Temp`. GREEN: 33/33 focused and 59/59 full Python tests, including a compiled/executed pure production-source harness and structural exact-type/removal/lifecycle checks. Exact Silksong compile: 46 sources/10 entry points. Exact Hollow Knight compile: 4 sources, 0 warnings/errors, 16,896-byte DLL/1 entry point. Exact UGUI identity, revision-cached discovery, exact-type static pre-activation removal, portable automatic-cleanup harness storage, separate Sprite/source-rect dimensions, selected/inactive alpha, hit boundaries, slide decisions, and native Pane Name APIs are source-proven; no device/UI parity is claimed. |
 | 3 | DSUI-01/03/04/07/10 | PENDING | Depends on Stage 2 | None | — |
 | 4 | DSUI-01–07/10 | PENDING | Depends on Stage 3 | None | — |
 | 5 | DSUI-01–07/10 | PENDING | Depends on Stage 4 | None | — |

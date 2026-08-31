@@ -79,14 +79,16 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertRegex(theme, r"_searched\s*=\s*_display != null && _body != null && _bodyPreferred;")
         self.assertRegex(theme, r"if \(found != null\) _cache\[name\] = found;")
 
-    def test_second_screen_upgrades_from_partial_to_complete_game_fonts(self):
-        theme = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsTheme.cs").read_text(encoding="utf-8")
-        runtime = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DualScreenV2.cs").read_text(encoding="utf-8")
+    def test_second_screen_uses_the_live_native_pane_font_source(self):
+        resident = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsResidentUi.cs").read_text(encoding="utf-8")
+        frame = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsPortFrame.cs").read_text(encoding="utf-8")
+        runtime = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsPortRuntime.cs").read_text(encoding="utf-8")
 
-        self.assertIn('n.Contains("perpetua")', theme)
-        self.assertIn("FontRevision", theme)
-        self.assertIn("DsTheme.FontRevision", runtime)
-        self.assertNotIn("DsTheme.ForgetFont();", runtime)
+        self.assertIn('GetField("currentPaneText"', resident)
+        self.assertIn("ClonePaneName", resident)
+        self.assertIn("ClonePaneName", frame)
+        self.assertIn("InvalidateResidentSources", runtime)
+        self.assertNotIn("DsTheme.FontRevision", runtime)
 
     def test_built_in_tweaks_do_not_use_native_memory_offsets(self):
         roots = [
