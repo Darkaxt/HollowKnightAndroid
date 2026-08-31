@@ -11,9 +11,9 @@ The exact Hollow Knight `1.5.12620` Linux build now completes on-device
 conversion, ARM64 compilation, packaging, installation, first boot, and the
 playable-room gate on the AYN Thor. The fork-signed Silksong `1.0.29980`
 generation also builds and reaches live dual-display gameplay. That run proved
-the direct Unity display path but rejected the current flat companion shell;
-the replacement Dual Souls-style HUD/frame is host-complete and awaits its
-signed-device visual and touch gate.
+the direct Unity display path and rejected the old flat companion shell. A
+newer fork-signed generation now renders the replacement Dual Souls-style
+HUD/frame on the Thor; physical lower-panel touch remains the open device gate.
 
 <p align="center">
   <img src="docs/icon.png" alt="Hollow Knight Android combined Hollow Knight and Silksong app icon" width="220" />
@@ -36,12 +36,12 @@ not used for project artwork.
 | Area | Current evidence | Remaining gate |
 |---|---|---|
 | Hollow Knight `1.5.12620` | Exact Linux manifest accepted; 1,005 serialized files converted with complete Vulkan coverage; 267,628,408-byte AArch64 `libil2cpp.so` built; a ZIP32 base APK plus main OBB generation was independently hash-verified, mounted, and played through the first room on the Thor | Save reload, representative-scene coverage, shared input adapter, and later mod/skin/dual-screen gates remain |
-| Silksong `1.0.29980` | Fork-signed `1.0.3` built the exact current source on the Thor, published a verified ARM64 generation, created a save, reached gameplay, and rendered directly on both physical displays | Re-prove the redesigned companion, lower-panel touch, effects, restart persistence, and two-game switching |
+| Silksong `1.0.29980` | Fork-signed `1.0.3` built the exact current source on the Thor, atomically published a verified ARM64 generation, reached gameplay, and rendered the redesigned companion directly on both physical displays | Prove lower-panel touch, effects, restart persistence, and two-game switching |
 | One launcher | Both profiles, independent storage, atomic generations, and cold-process selection exist and have host/emulator coverage | Prove both switch directions with the production ARM64 Unity processes |
 | Mods | The parent's build-time BepInEx 5/Harmony weaver is merged and routed through each selected profile's patch, IL2CPP, generation, and status paths | Real plugin compatibility for each game, compatibility manifests, dependencies, load order, and per-profile enablement remain unverified |
-| Built-in tweaks | A shared, game-qualified controller hosts a persistent Mods overlay from the standalone HUD gear. Silksong `1.0.29980` exposes typed damage mode, one-hit kills, unlimited Silk, and equip-anywhere adapters; first-run master OFF is proved in the signed production process | Prove the redesigned gear/overlay, lower-panel touch, effects, process-exit persistence for each game, the Hollow Knight adapter, and later parity rows |
+| Built-in tweaks | A shared, game-qualified controller hosts a persistent Mods overlay from the standalone HUD gear. Silksong `1.0.29980` exposes typed damage mode, one-hit kills, unlimited Silk, and equip-anywhere adapters; the standalone gear and first-run master OFF are proved in the signed production process | Prove physical gear/overlay touch, effects, process-exit persistence for each game, the Hollow Knight adapter, and later parity rows |
 | Skins | Shared death/respawn rotation state machine has host coverage | Pack scanner/import, persistence, real game lifecycle hooks, texture adapters, rollback, and both-game runtime proof |
-| Dual screen | Silksong's direct Vulkan display-1 renderer is proved in signed live gameplay. A game-neutral layout now drives its persistent HUD, framed content, bottom tabs and status gutters; 29/29 shared tests include five exact geometry/hit-test contracts | Re-prove the replacement shell visually and by touch on the Thor, then extract the remaining runtime for Hollow Knight and verify the common interaction/lifecycle/fallback matrix |
+| Dual screen | Silksong's direct Vulkan display-1 renderer and the replacement HUD/frame are proved in signed live gameplay. A game-neutral layout drives the persistent HUD, framed content, bottom tabs and status gutters; 29/29 shared tests include five exact geometry/hit-test contracts | Prove physical touch on the replacement shell, then extract the runtime for Hollow Knight and verify the common interaction/lifecycle/fallback, localization, focus and reduced-motion matrix |
 | Releases | Fork identity and GitHub signing pipeline have a signed dry-run proof | No release until source reproducibility, device, gameplay, migration, tag/version, and fresh-download gates pass |
 
 The detailed requirement ledger is

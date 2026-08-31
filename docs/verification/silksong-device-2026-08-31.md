@@ -74,3 +74,65 @@ zero failures/errors and two environment-gated skips, 38/38 bundle-surgery
 tests, exact Silksong and Hollow Knight patch compiles, and a successful debug
 AAR assembly. These checks do not close the blocking signed Thor visual/touch
 gate.
+
+## Replacement-shell signed run
+
+Commit `a310332` was built by fork dry run `33428813976`. The downloaded
+`DualSouls-1.0.3.apk` was 72,227,340 bytes with SHA-256
+`1A75565AB98D17CE651A686CE66A0298B06E108C9979CD9DC603598B477FC095`,
+package/version `io.github.darkaxt.dualsouls` `1.0.3` (`10003`), and the same
+pinned signer SHA-256
+`324B3A3E854B69D567D1527AE52E96A1051ADF13550B485E320F8CE8CF678C38`.
+Installing it in place retained the original install time, selected source,
+preferences, old generation, and `hkpoc` package.
+
+The launcher correctly marked the old generation stale rather than launching
+it. During repair, `current` remained
+`gen-9539acc2-8bb9-4bf3-b93a-eb63b21f5525`. The device compiled the new
+40-source patch assembly, converted 955 C++ and 200 C units in 184 seconds,
+rebuilt the changed native objects, and linked 1,559 objects in a 107-second
+native pass. Only after packaging and verification did `current` atomically
+change to `gen-92b911fd-0063-4a83-b8f1-a34ec3e893b6`.
+
+Published payload evidence:
+
+- `generation.json`: 901 bytes, SHA-256
+  `D05588EF4D6EFD07692575CDD73B4A3BC0EA3A1EAAC5B7383A1E3E206AF7765B`;
+- `data.apk`: 63,749,846 bytes, SHA-256
+  `DC2DB4CF0FAB3F3D73B5084A3291B025C843415733AC22AB250AD40BD0A27B9F`;
+- `libil2cpp.so`: 316,375,952 bytes, SHA-256
+  `F18701F4247BB30344B1FB95588406CFB1CD0A2A7C70D94715CBEB4357169CE6`;
+- source `globalgamemanagers` remained
+  `7C2AF8EBCF5CD360CB8017D6C0EDDE56967F2BE834894352E36CF05F5D14E033`;
+  and
+- `dualsouls.mods.silksong.master` remained `0`.
+
+The exact generation reached `Moss Grotto` gameplay on the primary display.
+The lower physical display rendered the required persistent health/Silk/crest/
+area strip, true-black framed context, bottom-only semantic tabs
+`INVENTORY / CREST / TASKS / JOURNAL / MAP`, paired selection ornaments,
+standalone gear, FPS, and battery status. `MODS` was not a peer tab. This closes
+the blocking replacement-shell **visual** gate for Silksong.
+
+Android's synthetic `input -d 4` touch does not appear in the Unity Input
+System as a physical display-1 touch, and writing event records to the
+lower-panel evdev node is not input injection. Therefore the physical gear,
+tab, and modal interaction gate remains open; host hit testing is not relabeled
+as device touch proof.
+
+The game was force-stopped after capture. The production game and launcher
+PIDs were absent, the separate `hkpoc` launcher remained alive, master stayed
+OFF, and the isolated empty-slot run produced no save file.
+
+## Post-run design reconciliation
+
+The visual pass exposed no new geometry blocker. A read-only specification
+audit did find four host defects, which were repaired immediately after the
+signed run: failed pages now retain the prior working page, font discovery
+continues until both display/body faces exist, missing resident sprites retry
+instead of caching a permanent miss, and the Mods header controls use the
+shared 72-pixel touch minimum. The revised sources pass 29/29 shared tests,
+9/9 profile contracts, 38/38 bundle-surgery tests, both exact-profile patch
+compiles, and 120 Android tests with zero failures/errors and two environment
+skips. A signed rebuild remains required before those four post-run repairs are
+device evidence.

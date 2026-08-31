@@ -55,6 +55,7 @@ class ProfileModPipelineContractTest(unittest.TestCase):
     def test_silksong_second_screen_registers_a_persistent_mods_modal(self):
         shell = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsShell.cs").read_text(encoding="utf-8")
         modal = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsModsScreen.cs")
+        theme = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsTheme.cs").read_text(encoding="utf-8")
 
         self.assertTrue(modal.is_file())
         modal_source = modal.read_text(encoding="utf-8")
@@ -72,6 +73,11 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertIn("new UnityTweakStore", modal_source)
         self.assertIn("SetMaster", modal_source)
         self.assertIn("Reset", modal_source)
+        self.assertIn("CompanionShellLayout.MinimumTouchTarget", modal_source)
+        self.assertRegex(shell, r"if \(entry\.Broken \|\| !IsAvailable\(entry\)\) return;")
+        self.assertRegex(shell, r"if \(!idle && _active < 0\)\s*\{\s*Show\(_preferred\);")
+        self.assertRegex(theme, r"_searched\s*=\s*_display != null && _body != null;")
+        self.assertRegex(theme, r"if \(found != null\) _cache\[name\] = found;")
 
     def test_built_in_tweaks_do_not_use_native_memory_offsets(self):
         roots = [

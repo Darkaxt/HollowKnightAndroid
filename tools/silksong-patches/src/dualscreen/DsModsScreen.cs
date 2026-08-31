@@ -7,6 +7,7 @@
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using DualSouls.DualScreen;
 using DualSouls.Mods;
 using DualSouls.Mods.Silksong;
 using UnityEngine;
@@ -32,7 +33,7 @@ public sealed class DsModsScreen
     const float DetailX = 616f;
     const float RowH = 72f;
     const float GroupH = 38f;
-    const float ControlH = 54f;
+    const float ControlH = CompanionShellLayout.MinimumTouchTarget;
 
     readonly TweakController _controller;
     readonly List<Row> _rows = new List<Row>();

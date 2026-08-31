@@ -42,6 +42,7 @@ public sealed class DsShell
     DsModsScreen _mods;
     bool _modsBroken;
     bool _idle = true;
+    int _preferred;
     int _active = -1;
     float _fps;
     float _nextStatus;
@@ -98,7 +99,8 @@ public sealed class DsShell
 
         int start = _entries.FindIndex(e => e.Screen.Id == preferredId);
         if (start < 0) start = 0;
-        Show(start);
+        _preferred = start;
+        Show(_preferred);
     }
 
     void BuildChrome()
@@ -164,7 +166,15 @@ public sealed class DsShell
         _title.SetVisible(idle);
         if (idle && _mods != null) GuardMods(() => _mods.SetVisible(false));
 
-        if (_active >= 0 && _active < _entries.Count)
+        bool selectedNow = false;
+        if (!idle && _active < 0)
+        {
+            Show(_preferred);
+            if (_active < 0) Next(1);
+            selectedNow = _active >= 0;
+        }
+
+        if (!selectedNow && _active >= 0 && _active < _entries.Count)
         {
             var entry = _entries[_active];
             if (!entry.Broken)
@@ -176,23 +186,52 @@ public sealed class DsShell
     {
         if (index < 0 || index >= _entries.Count || index == _active) return;
 
-        if (_active >= 0 && _active < _entries.Count)
+        var entry = _entries[index];
+        if (entry.Broken || !IsAvailable(entry)) return;
+
+        // Build the candidate while the current page is still visible. A
+        // failed build must never replace working content with a blank host.
+        if (!entry.Built)
         {
-            var previous = _entries[_active];
+            Guard(entry, () => entry.Screen.Build(entry.Host));
+            if (entry.Broken) return;
+            entry.Built = true;
+        }
+
+        int previousIndex = _active;
+        Entry previous = previousIndex >= 0 && previousIndex < _entries.Count
+            ? _entries[previousIndex] : null;
+
+        if (previous != null)
+        {
             previous.Host.gameObject.SetActive(false);
             Guard(previous, () => previous.Screen.OnHide());
         }
 
         _active = index;
-        var entry = _entries[index];
-        if (!entry.Built && !entry.Broken)
-        {
-            entry.Built = true;
-            Guard(entry, () => entry.Screen.Build(entry.Host));
-        }
         entry.Host.gameObject.SetActive(true);
         Guard(entry, () => entry.Screen.OnShow());
+
+        // OnShow is also adapter code. Restore the previous working page when
+        // it fails instead of leaving the frame empty and the broken tab active.
+        if (entry.Broken)
+        {
+            _active = -1;
+            if (previous != null && !previous.Broken && IsAvailable(previous))
+            {
+                previous.Host.gameObject.SetActive(true);
+                Guard(previous, () => previous.Screen.OnShow());
+                if (!previous.Broken) _active = previousIndex;
+            }
+            if (_active < 0) Next(1);
+        }
         Paint();
+    }
+
+    static bool IsAvailable(Entry entry)
+    {
+        try { return entry.Screen.Available; }
+        catch { return false; }
     }
 
     public void Next(int direction)
@@ -203,10 +242,7 @@ public sealed class DsShell
         {
             index = (index + direction + _entries.Count) % _entries.Count;
             var entry = _entries[index];
-            if (entry.Broken) continue;
-            bool available = true;
-            try { available = entry.Screen.Available; } catch { available = false; }
-            if (available) { Show(index); return; }
+            if (!entry.Broken && IsAvailable(entry)) { Show(index); return; }
         }
     }
 
@@ -221,7 +257,7 @@ public sealed class DsShell
             var entry = _entries[i];
             bool selected = i == _active;
             if (entry.TabLabel != null)
-                entry.TabLabel.color = entry.Broken ? DsTheme.InkFaint
+                entry.TabLabel.color = entry.Broken || !IsAvailable(entry) ? DsTheme.InkFaint
                                      : selected ? DsTheme.Ink : DsTheme.InkDim;
             if (entry.TopFleur != null) entry.TopFleur.gameObject.SetActive(selected);
             if (entry.BottomFleur != null) entry.BottomFleur.gameObject.SetActive(selected);
@@ -240,7 +276,11 @@ public sealed class DsShell
         if (ModsOpen) return;
         if (_active < 0 || _active >= _entries.Count) return;
         var entry = _entries[_active];
-        if (!entry.Broken) Guard(entry, () => entry.Screen.Tick(dt));
+        if (!entry.Broken)
+        {
+            Guard(entry, () => entry.Screen.Tick(dt));
+            if (entry.Broken) Next(1);
+        }
     }
 
     void TickStatus(float dt)
@@ -291,7 +331,11 @@ public sealed class DsShell
 
         if (_active < 0 || _active >= _entries.Count) return;
         var entry = _entries[_active];
-        if (!entry.Broken) Guard(entry, () => entry.Screen.OnGesture(gesture));
+        if (!entry.Broken)
+        {
+            Guard(entry, () => entry.Screen.OnGesture(gesture));
+            if (entry.Broken) Next(1);
+        }
     }
 
     void Guard(Entry entry, Action action)

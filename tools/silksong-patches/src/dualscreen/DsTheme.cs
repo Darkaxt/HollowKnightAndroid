@@ -115,6 +115,8 @@ public static class DsTheme
 
         try
         {
+            bool hadDisplay = _display != null;
+            bool hadBody = _body != null;
             var fonts = Resources.FindObjectsOfTypeAll<TmpFont>();
             for (int i = 0; i < fonts.Length; i++)
             {
@@ -132,9 +134,9 @@ public static class DsTheme
                 if (_display != null && _body != null) break;
             }
 
-            if (_display != null || _body != null)
+            _searched = _display != null && _body != null;
+            if ((!hadDisplay && _display != null) || (!hadBody && _body != null))
             {
-                _searched = true;
                 Debug.Log("[DsTheme] fonts: display='" + (_display != null ? _display.name : "-") +
                           "' body='" + (_body != null ? _body.name : "-") + "'");
             }
@@ -179,6 +181,7 @@ public static class DsTheme
     // Addressables and an icon may not be resident before its pane has been
     // opened -- so callers must draw a placeholder rather than assume.
     static readonly Dictionary<string, Sprite> _cache = new Dictionary<string, Sprite>();
+    static readonly Dictionary<string, float> _spriteRetry = new Dictionary<string, float>();
 
     static Sprite _disc;
 
@@ -225,6 +228,8 @@ public static class DsTheme
     {
         Sprite found;
         if (_cache.TryGetValue(name, out found)) return found;
+        float retry;
+        if (_spriteRetry.TryGetValue(name, out retry) && Time.unscaledTime < retry) return null;
         try
         {
             var all = Resources.FindObjectsOfTypeAll<Sprite>();
@@ -235,7 +240,8 @@ public static class DsTheme
         {
             Debug.LogWarning("[DsTheme] sprite lookup failed for '" + name + "': " + e.Message);
         }
-        _cache[name] = found;
+        if (found != null) _cache[name] = found;
+        else _spriteRetry[name] = Time.unscaledTime + 1f;
         return found;
     }
 }
