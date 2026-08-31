@@ -440,14 +440,33 @@ theming is intentional: the two games retain their identities inside the same
 interface without importing promotional launcher artwork into gameplay or
 forcing one game's decorative assets onto the other.
 
-Hollow Knight's existing Dual Souls behavior is a functional baseline, not a
-renderer or layout template. Its persistent HUD, area status, map,
-inventory, charms, story/dialogue/tutorial overlays, item popups, fade
-synchronization, and background/resume behavior are adapter capabilities that
-must be preserved or explicitly tracked. Silksong's inventory, crests, tasks,
-journal, map, title state, and display-isolated touch behavior receive the same
-treatment. Contextual overlays use a shared modal layer above the active page;
-they do not move or replace the shell differently per game.
+Hollow Knight's Dual Souls companion is the canonical **HUD and outer-layout
+template**, while SilksongAndroid's direct Unity display-1 implementation is
+the canonical **rendering, lifecycle, and input technology**. The unified
+surface therefore has all of these invariant regions:
+
+- a persistent top HUD strip with health/resource state, area name, and the
+  active game's equipped-loadout summary where available. Compact
+  performance/battery status occupies the left/right navigation gutters, as it
+  does in the Dual Souls reference;
+- a true-black framed context box separated from the HUD and navigation by
+  full-width resident-game ornaments, with a deterministic symmetric-line
+  fallback while resident art is unavailable;
+- a bottom-centred semantic tab row. The selected label is framed above and
+  below by resident-game fleurs or the same deterministic fallback. Tabs are
+  labels/ornaments, never flat filled rectangles;
+- a small gear control stacked beside the compact status readout. Mods opens
+  as an overlay in the framed context box and is never presented as a sixth
+  peer tab; and
+- the shared title/idle state when no save is active.
+
+Dual Souls' persistent HUD, area status, map, inventory, charms,
+story/dialogue/tutorial overlays, item popups, fade synchronization, and
+background/resume behavior are adapter capabilities that must be preserved or
+explicitly tracked. Silksong's inventory, crests, tasks, journal, map, title
+state, and display-isolated touch behavior receive the same treatment.
+Contextual overlays use a shared modal layer above the active page; they do not
+move or replace the shell differently per game.
 
 The SteamGridDB grids, heroes, logos, and icons supplied for this project are
 launcher and shortcut resources only. They are not bottom-screen theme assets.

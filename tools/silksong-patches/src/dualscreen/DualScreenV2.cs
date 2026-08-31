@@ -129,23 +129,16 @@ public class DualScreenV2 : MonoBehaviour
 
     // One place, so the rebuild-on-font-found path cannot drift from startup.
     //
-    // Map first, and the default. It is the screen you want while actually
-    // playing -- the others answer questions you ask at a bench -- so it is
-    // what the panel should be showing when you have not asked for anything.
-    //
-    // It was originally last, on the reasoning that the one screen with a
-    // render rig behind it should fail on a tab you had to choose rather than
-    // the one you land on. That was the right call while the rig was unproven;
-    // it now works, and the shell disables a screen that throws without taking
-    // the others down, so the risk it was hedging against costs a tab rather
-    // than the panel.
+    // Registration order is the shared semantic bottom-tab order. Map remains
+    // the default by ID, but sits at the right-hand edge like the approved
+    // product language requires.
     static void RegisterScreens(DsShell shell)
     {
-        shell.Register(new DsMapScreen());
         shell.Register(new DsInventoryScreen());
         shell.Register(new DsLoadoutScreen());
         shell.Register(new DsTasksScreen());
         shell.Register(new DsJournalScreen());
+        shell.Register(new DsMapScreen());
     }
 
     void Update()

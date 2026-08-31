@@ -20,30 +20,30 @@ public sealed class DsModsScreen
     {
         public TweakDescriptor Descriptor;
         public RectTransform Root;
-        public Image Fill;
+        public RectTransform Marker;
         public TmpText Label;
         public TmpText Value;
         public Rect Hit;
     }
 
-    const float HeaderH = 88f;
-    const float ListX = 20f;
-    const float ListW = 540f;
-    const float DetailX = 610f;
-    const float RowH = 76f;
-    const float GroupH = 48f;
+    const float HeaderH = 82f;
+    const float ListX = 28f;
+    const float ListW = 532f;
+    const float DetailX = 616f;
+    const float RowH = 72f;
+    const float GroupH = 38f;
     const float ControlH = 54f;
 
     readonly TweakController _controller;
     readonly List<Row> _rows = new List<Row>();
     readonly int _w;
     readonly int _h;
+    readonly float _top;
 
     RectTransform _root;
     RectTransform _close;
     RectTransform _master;
     RectTransform _reset;
-    Image _masterFill;
     TmpText _masterLabel;
     TmpText _detailTitle;
     TmpText _detailValue;
@@ -56,10 +56,11 @@ public sealed class DsModsScreen
     string _message = "";
     bool _messageIsError;
 
-    public DsModsScreen(RectTransform parent, int width, int height)
+    public DsModsScreen(RectTransform parent, int width, int height, float top)
     {
         _w = width;
         _h = height;
+        _top = top;
         _controller = new TweakController(
             new SilksongTweakAdapter(new SilksongGameTweakApi()),
             new UnityTweakStore());
@@ -91,17 +92,16 @@ public sealed class DsModsScreen
     void Build(RectTransform parent)
     {
         _root = DsWidgets.Rect(parent, "mods-modal");
-        DsWidgets.Stretch(_root);
+        DsWidgets.Place(_root, 0f, _top, _w, _h);
 
         var ground = DsWidgets.Box(_root, "ground", DsTheme.Ground);
         DsWidgets.Stretch(ground.rectTransform);
 
-        var header = DsWidgets.Box(_root, "header", DsTheme.Panel);
-        DsWidgets.Place(header.rectTransform, 0f, 0f, _w, HeaderH);
-        DsWidgets.HRule(_root, "header-rule", 0f, HeaderH, _w);
+        var headerFleur = DsWidgets.Fleur(_root, "header-fleur", DsTheme.Ink);
+        DsWidgets.Place(headerFleur, 240f, HeaderH - 12f, _w - 480f, 18f);
 
         _closeHit = new Rect(20f, 16f, 160f, ControlH);
-        _close = DsWidgets.Panel(_root, "close", DsTheme.Ground, DsTheme.PanelEdge);
+        _close = DsWidgets.Rect(_root, "close");
         DsWidgets.Place(_close, _closeHit.x, _closeHit.y, _closeHit.width, _closeHit.height);
         var closeLabel = DsWidgets.Label(_close, "label", "BACK", DsTheme.SmallSize,
                                          DsTheme.Ink, TmpAlign.Center, display: true);
@@ -112,9 +112,8 @@ public sealed class DsModsScreen
         if (title != null) DsWidgets.Place(title.rectTransform, 390f, 0f, 460f, HeaderH);
 
         _masterHit = new Rect(_w - 300f, 16f, 280f, ControlH);
-        _master = DsWidgets.Panel(_root, "master", DsTheme.Ground, DsTheme.PanelEdge);
+        _master = DsWidgets.Rect(_root, "master");
         DsWidgets.Place(_master, _masterHit.x, _masterHit.y, _masterHit.width, _masterHit.height);
-        _masterFill = _master.Find("fill").GetComponent<Image>();
         _masterLabel = DsWidgets.Label(_master, "label", "", DsTheme.SmallSize,
                                        DsTheme.Ink, TmpAlign.Center, display: true);
         if (_masterLabel != null) DsWidgets.Stretch(_masterLabel.rectTransform);
@@ -148,11 +147,11 @@ public sealed class DsModsScreen
             var row = new Row { Descriptor = descriptor, Hit = new Rect(ListX, y, ListW, RowH) };
             row.Root = DsWidgets.Rect(_root, "mod-" + descriptor.Id);
             DsWidgets.Place(row.Root, ListX, y, ListW, RowH);
-            row.Fill = DsWidgets.Box(row.Root, "fill", Color.clear);
-            DsWidgets.Stretch(row.Fill.rectTransform);
+            row.Marker = DsWidgets.Fleur(row.Root, "selection", DsTheme.Ink);
+            DsWidgets.Place(row.Marker, 0f, (RowH - 20f) * 0.5f, 42f, 20f);
             row.Label = DsWidgets.Label(row.Root, "label", descriptor.Title,
                                         DsTheme.BodySize, DsTheme.Ink, TmpAlign.Left, display: true);
-            if (row.Label != null) DsWidgets.Place(row.Label.rectTransform, 14f, 0f, 340f, RowH);
+            if (row.Label != null) DsWidgets.Place(row.Label.rectTransform, 52f, 0f, 300f, RowH);
             row.Value = DsWidgets.Label(row.Root, "value", "", DsTheme.BodySize,
                                         DsTheme.InkDim, TmpAlign.Right, display: true);
             if (row.Value != null) DsWidgets.Place(row.Value.rectTransform, 350f, 0f, 170f, RowH);
@@ -190,7 +189,7 @@ public sealed class DsModsScreen
             DsWidgets.Place(_status.rectTransform, DetailX, _h - 190f, _w - DetailX - 38f, 58f);
 
         _resetHit = new Rect(_w - 300f, _h - 104f, 272f, ControlH);
-        _reset = DsWidgets.Panel(_root, "reset", DsTheme.Ground, DsTheme.PanelEdge);
+        _reset = DsWidgets.Rect(_root, "reset");
         DsWidgets.Place(_reset, _resetHit.x, _resetHit.y, _resetHit.width, _resetHit.height);
         var resetLabel = DsWidgets.Label(_reset, "label", "RESET VALUES", DsTheme.SmallSize,
                                          DsTheme.Ink, TmpAlign.Center, display: true);
@@ -201,6 +200,7 @@ public sealed class DsModsScreen
     {
         if (!Visible || gesture.Type != DsGestureType.Tap) return;
         Vector2 point = DsPresentation.ToLayout(gesture.Position);
+        point.y -= _top;
 
         if (_closeHit.Contains(point))
         {
@@ -245,18 +245,17 @@ public sealed class DsModsScreen
     void Paint()
     {
         bool enabled = _controller.MasterEnabled;
-        if (_masterFill != null) _masterFill.color = enabled ? DsTheme.Accent : DsTheme.Ground;
         if (_masterLabel != null)
         {
-            _masterLabel.text = enabled ? "MASTER  ON" : "MASTER  OFF";
-            _masterLabel.color = enabled ? DsTheme.Ground : DsTheme.Ink;
+            _masterLabel.text = enabled ? "MASTER  ·  ON" : "MASTER  ·  OFF";
+            _masterLabel.color = enabled ? DsTheme.Accent : DsTheme.InkDim;
         }
 
         for (int i = 0; i < _rows.Count; i++)
         {
             Row row = _rows[i];
             bool selected = i == _selected;
-            row.Fill.color = selected ? DsTheme.Panel : Color.clear;
+            if (row.Marker != null) row.Marker.gameObject.SetActive(selected);
             if (row.Label != null) row.Label.color = enabled
                 ? (selected ? DsTheme.Ink : DsTheme.InkDim)
                 : DsTheme.InkFaint;

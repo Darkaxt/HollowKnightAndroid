@@ -1,30 +1,26 @@
-// DsShell — the frame around the screens: a tab strip, one visible screen at a
-// time, and the routing that gets a gesture to the right place.
+// DsShell — the shared Dual Souls HUD/frame on Silksong's direct display.
 //
-// The shell owns nothing about what any screen shows. It knows the list, which
-// one is visible, and how to switch. That is the whole reason the screens are
-// separable, so it is worth keeping the file boring.
-//
-// Every call into a screen is wrapped. A screen that throws is disabled and the
-// shell keeps running: the second screen must never be able to take the game
-// down, and a broken Journal must not cost the player their map.
+// The game-neutral CompanionShellLayout owns the regions and hit targets. This
+// adapter supplies Silksong fonts, state and pages, while every call into a page
+// or the Mods overlay remains fail-contained.
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using DualSouls.DualScreen;
 using UnityEngine;
-using UnityEngine.UI;
 using TmpText = TMProOld.TextMeshProUGUI;
 using TmpAlign = TMProOld.TextAlignmentOptions;
 
-public class DsShell
+public sealed class DsShell
 {
-    class Entry
+    sealed class Entry
     {
         public IDsScreen Screen;
         public RectTransform Host;
         public RectTransform Tab;
-        public Image TabFill;
+        public RectTransform TopFleur;
+        public RectTransform BottomFleur;
         public TmpText TabLabel;
         public bool Built;
         public bool Broken;
@@ -32,109 +28,50 @@ public class DsShell
 
     readonly List<Entry> _entries = new List<Entry>();
     readonly RectTransform _root;
-    readonly int _w, _h;
-    const float ModsButtonW = 176f;
-
-    RectTransform _tabBar;
-    RectTransform _body;
-    RectTransform _modsButton;
-    Image _modsFill;
-    TmpText _modsLabel;
-    DsModsScreen _mods;
+    readonly int _w;
+    readonly int _h;
     readonly DsTitleCard _title = new DsTitleCard();
-    // Starts idle. The shell is built before anything is known about whether a
-    // save is loaded, and defaulting to a screen meant the panel opened on an
-    // empty Inventory and only corrected itself once the idle grace expired.
-    // The title card is the honest answer to "no idea yet", so it is the one
-    // that costs nothing to be wrong about.
-    bool _idle = true;
+
+    CompanionShellLayout _layout;
+    RectTransform _body;
+    RectTransform _chrome;
+    RectTransform _modsGear;
+    TmpText _status;
+    TmpText _battery;
+    DsHudStrip _hud;
+    DsModsScreen _mods;
     bool _modsBroken;
+    bool _idle = true;
     int _active = -1;
+    float _fps;
+    float _nextStatus;
 
     public DsShell(RectTransform root, int width, int height)
     {
-        _root = root; _w = width; _h = height;
-        Build();
+        _root = root;
+        _w = width;
+        _h = height;
+        BuildBase();
     }
 
-    void Build()
+    void BuildBase()
     {
         var bg = DsWidgets.Box(_root, "shell-bg", DsTheme.Ground);
         DsWidgets.Stretch(bg.rectTransform);
 
-        // Body first, tab strip second. uGUI draws in hierarchy order, so the
-        // strip is created last to sit above the content -- belt and braces
-        // alongside the grid's own clipping, since the tabs must never be
-        // covered by a scrolled list.
-        _body = DsWidgets.Rect(_root, "body");
-        DsWidgets.Place(_body, 0f, DsTheme.TabBarHeight, _w, _h - DsTheme.TabBarHeight);
+        _body = DsWidgets.Rect(_root, "context-box");
+        DsWidgets.Stretch(_body);
 
-        _tabBar = DsWidgets.Rect(_root, "tabs");
-        DsWidgets.Place(_tabBar, 0f, 0f, _w, DsTheme.TabBarHeight);
+        // Chrome is a sibling above every page, so map sprites and scrolled
+        // lists can never cover the HUD, separators or tab selection.
+        _chrome = DsWidgets.Rect(_root, "dual-souls-chrome");
+        DsWidgets.Stretch(_chrome);
 
-        var strip = DsWidgets.Box(_tabBar, "tab-bg", DsTheme.Ground);
-        DsWidgets.Stretch(strip.rectTransform);
-
-        // The boundary between the tab strip and the body is a section boundary
-        // like any other, so it is the same white rule the screens use.
-        var rule = DsWidgets.Box(_tabBar, "rule", DsTheme.Rule).rectTransform;
-        rule.anchorMin = new Vector2(0f, 0f);
-        rule.anchorMax = new Vector2(1f, 0f);
-        rule.sizeDelta = new Vector2(0f, DsTheme.RuleThickness);
-        rule.anchoredPosition = Vector2.zero;
-
-        _modsButton = DsWidgets.Rect(_tabBar, "mods-control");
-        DsWidgets.Place(_modsButton, _w - ModsButtonW, 0f, ModsButtonW, DsTheme.TabBarHeight);
-        _modsFill = DsWidgets.Box(_modsButton, "fill", DsTheme.Panel);
-        DsWidgets.Stretch(_modsFill.rectTransform);
-        DsWidgets.VRule(_modsButton, "left-rule", 0f, 0f, DsTheme.TabBarHeight);
-        _modsLabel = DsWidgets.Label(_modsButton, "label", "MODS", DsTheme.BodySize,
-                                     DsTheme.Ink, TmpAlign.Center, display: true);
-        if (_modsLabel != null) DsWidgets.Stretch(_modsLabel.rectTransform);
-
-        // Built last so it covers everything, because that is exactly its job:
-        // outside a save there is no screen worth showing and no tab worth
-        // offering, so the whole frame goes away rather than sitting there
-        // greyed out.
         _title.Build(_root, _w, _h);
 
-        // Built after every other shell element so it is always the topmost
-        // surface. It is a modal, not another tab: ActiveId never changes.
-        GuardMods(() => _mods = new DsModsScreen(_root, _w, _h));
-
-        // Match the initial _idle state, rather than waiting for the first
-        // SetIdle to disagree with it.
-        _tabBar.gameObject.SetActive(false);
         _body.gameObject.SetActive(false);
+        _chrome.gameObject.SetActive(false);
         _title.SetVisible(true);
-    }
-
-    /// <summary>
-    /// Outside a save, show the game's title instead of the tabs.
-    ///
-    /// The shell owns this rather than each screen, because "there is no save
-    /// loaded" is a fact about the whole panel, not about the Journal. It also
-    /// means a screen can no longer disagree with its neighbours about how to
-    /// say so, which is what five separate grey "Main menu" labels amounted to.
-    /// </summary>
-    public void SetIdle(bool idle)
-    {
-        if (idle == _idle) return;
-        _idle = idle;
-
-        _tabBar.gameObject.SetActive(!idle);
-        _body.gameObject.SetActive(!idle);
-        _title.SetVisible(idle);
-        if (idle && _mods != null) GuardMods(() => _mods.SetVisible(false));
-
-        // Hide the active screen properly on the way out, so it stops ticking
-        // and stops driving anything of the game's -- the map screen in
-        // particular holds the game's map open while it is visible.
-        if (_active >= 0 && _active < _entries.Count)
-        {
-            var e = _entries[_active];
-            if (!e.Broken) Guard(e, () => { if (idle) e.Screen.OnHide(); else e.Screen.OnShow(); });
-        }
     }
 
     public void Register(IDsScreen screen)
@@ -142,174 +79,233 @@ public class DsShell
         var host = DsWidgets.Rect(_body, "screen-" + screen.Id);
         DsWidgets.Stretch(host);
         host.gameObject.SetActive(false);
-
         _entries.Add(new Entry { Screen = screen, Host = host });
     }
 
-    /// <summary>Lay the tabs out once every screen has registered.</summary>
+    /// <summary>Freeze the shared geometry after every supported page exists.</summary>
     public void Finish(string preferredId)
     {
-        LayoutTabs();
+        var ids = new string[_entries.Count];
+        for (int i = 0; i < _entries.Count; i++) ids[i] = _entries[i].Screen.Id;
+        _layout = CompanionShellLayout.Create(_w, _h, ids);
+        DsTheme.SetContentGeometry(_layout.Content.Top, _layout.Content.Height);
+        DsWidgets.Place(_body, _layout.Content.Left, _layout.Content.Top,
+                        _layout.Content.Width, _layout.Content.Height);
+
+        BuildChrome();
+        GuardMods(() => _mods = new DsModsScreen(_root, _w, _layout.Content.Height,
+                                                  _layout.Content.Top));
 
         int start = _entries.FindIndex(e => e.Screen.Id == preferredId);
         if (start < 0) start = 0;
         Show(start);
     }
 
-    void LayoutTabs()
+    void BuildChrome()
     {
-        int n = _entries.Count;
-        if (n == 0) return;
-        float tabsWidth = _w - ModsButtonW;
-        float w = tabsWidth / (float)n;
+        _hud = new DsHudStrip(_chrome, _layout.Hud);
 
-        for (int i = 0; i < n; i++)
+        // Full-width symmetric ornaments frame the context box. Adapters may
+        // replace these with resident sprites later without changing geometry.
+        var top = DsWidgets.Fleur(_chrome, "content-fleur-top", DsTheme.Ink);
+        DsWidgets.Place(top, 36f, _layout.TopOrnament.Top,
+                        _w - 72f, _layout.TopOrnament.Height);
+        var bottom = DsWidgets.Fleur(_chrome, "content-fleur-bottom", DsTheme.Ink);
+        DsWidgets.Place(bottom, 36f, _layout.BottomOrnament.Top,
+                        _w - 72f, _layout.BottomOrnament.Height);
+
+        DsWidgets.VRule(_chrome, "frame-left", 16f, _layout.Content.Top + 8f,
+                        _layout.Content.Height - 16f);
+        DsWidgets.VRule(_chrome, "frame-right", _w - 16f,
+                        _layout.Content.Top + 8f, _layout.Content.Height - 16f);
+
+        _modsGear = DsWidgets.Gear(_chrome, "mods-gear", DsTheme.InkDim);
+        Place(_modsGear, _layout.ModsGear.Bounds);
+
+        _status = DsWidgets.Label(_chrome, "fps-status", "", DsTheme.SmallSize,
+                                  DsTheme.InkDim, TmpAlign.Center, display: true);
+        if (_status != null) Place(_status.rectTransform, _layout.Status.Bounds);
+        _battery = DsWidgets.Label(_chrome, "battery-status", "", DsTheme.SmallSize,
+                                   DsTheme.InkDim, TmpAlign.Center, display: true);
+        if (_battery != null) Place(_battery.rectTransform, _layout.Battery.Bounds);
+
+        for (int i = 0; i < _entries.Count; i++)
         {
-            var e = _entries[i];
-            e.Tab = DsWidgets.Rect(_tabBar, "tab-" + e.Screen.Id);
-            DsWidgets.Place(e.Tab, i * w, 0f, w, DsTheme.TabBarHeight);
-
-            e.TabFill = DsWidgets.Box(e.Tab, "fill", Color.clear);
-            DsWidgets.Stretch(e.TabFill.rectTransform);
-
+            var entry = _entries[i];
+            var tab = _layout.Tabs[i];
+            entry.Tab = DsWidgets.Rect(_chrome, "tab-" + entry.Screen.Id);
+            Place(entry.Tab, tab.Bounds);
             string title = "?";
-            try { title = e.Screen.Title; } catch { }
-            e.TabLabel = DsWidgets.Label(e.Tab, "label", title, DsTheme.BodySize,
-                                         DsTheme.InkDim, TmpAlign.Center, display: true);
-            if (e.TabLabel != null) DsWidgets.Stretch(e.TabLabel.rectTransform);
+            try { title = entry.Screen.Title; } catch { }
+            entry.TabLabel = DsWidgets.Label(entry.Tab, "label", title, DsTheme.SmallSize,
+                                             DsTheme.InkDim, TmpAlign.Center, display: true);
+            if (entry.TabLabel != null) DsWidgets.Stretch(entry.TabLabel.rectTransform, 8f);
+
+            var selection = _layout.SelectionFor(i);
+            entry.TopFleur = DsWidgets.Fleur(_chrome, "tab-fleur-top-" + entry.Screen.Id, DsTheme.Ink);
+            Place(entry.TopFleur, selection.Top);
+            entry.BottomFleur = DsWidgets.Fleur(_chrome, "tab-fleur-bottom-" + entry.Screen.Id, DsTheme.Ink);
+            Place(entry.BottomFleur, selection.Bottom);
+        }
+        Paint();
+    }
+
+    static void Place(RectTransform target, CompanionRect rect)
+    {
+        DsWidgets.Place(target, rect.Left, rect.Top, rect.Width, rect.Height);
+    }
+
+    public void SetIdle(bool idle)
+    {
+        if (idle == _idle) return;
+        _idle = idle;
+        _chrome.gameObject.SetActive(!idle);
+        _body.gameObject.SetActive(!idle);
+        _title.SetVisible(idle);
+        if (idle && _mods != null) GuardMods(() => _mods.SetVisible(false));
+
+        if (_active >= 0 && _active < _entries.Count)
+        {
+            var entry = _entries[_active];
+            if (!entry.Broken)
+                Guard(entry, () => { if (idle) entry.Screen.OnHide(); else entry.Screen.OnShow(); });
         }
     }
 
     public void Show(int index)
     {
-        if (index < 0 || index >= _entries.Count) return;
-        if (index == _active) return;
+        if (index < 0 || index >= _entries.Count || index == _active) return;
 
         if (_active >= 0 && _active < _entries.Count)
         {
-            var prev = _entries[_active];
-            prev.Host.gameObject.SetActive(false);
-            Guard(prev, () => prev.Screen.OnHide());
+            var previous = _entries[_active];
+            previous.Host.gameObject.SetActive(false);
+            Guard(previous, () => previous.Screen.OnHide());
         }
 
         _active = index;
-        var e = _entries[index];
-
-        // Built on first show, not at startup: an unused screen costs nothing,
-        // and one that throws while building disables only itself.
-        if (!e.Built && !e.Broken)
+        var entry = _entries[index];
+        if (!entry.Built && !entry.Broken)
         {
-            e.Built = true;
-            Guard(e, () => e.Screen.Build(e.Host));
+            entry.Built = true;
+            Guard(entry, () => entry.Screen.Build(entry.Host));
         }
-
-        e.Host.gameObject.SetActive(true);
-        Guard(e, () => e.Screen.OnShow());
+        entry.Host.gameObject.SetActive(true);
+        Guard(entry, () => entry.Screen.OnShow());
         Paint();
     }
 
     public void Next(int direction)
     {
         if (_entries.Count == 0) return;
-        int i = _active;
+        int index = _active;
         for (int step = 0; step < _entries.Count; step++)
         {
-            i = (i + direction + _entries.Count) % _entries.Count;
-            var e = _entries[i];
-            if (e.Broken) continue;
-            bool ok = true;
-            try { ok = e.Screen.Available; } catch { ok = false; }
-            if (ok) { Show(i); return; }
+            index = (index + direction + _entries.Count) % _entries.Count;
+            var entry = _entries[index];
+            if (entry.Broken) continue;
+            bool available = true;
+            try { available = entry.Screen.Available; } catch { available = false; }
+            if (available) { Show(index); return; }
         }
     }
 
-    /// <summary>The id of the visible screen, for persisting across runs.</summary>
-    public string ActiveId => (_active >= 0 && _active < _entries.Count) ? _entries[_active].Screen.Id : null;
+    public string ActiveId => _active >= 0 && _active < _entries.Count
+        ? _entries[_active].Screen.Id : null;
     public bool ModsOpen => !_modsBroken && _mods != null && _mods.Visible;
 
     void Paint()
     {
         for (int i = 0; i < _entries.Count; i++)
         {
-            var e = _entries[i];
-            bool on = i == _active;
-            if (e.TabFill != null) e.TabFill.color = on ? DsTheme.Panel : Color.clear;
-            if (e.TabLabel != null) e.TabLabel.color = e.Broken ? DsTheme.InkFaint
-                                                    : on ? DsTheme.Ink : DsTheme.InkDim;
+            var entry = _entries[i];
+            bool selected = i == _active;
+            if (entry.TabLabel != null)
+                entry.TabLabel.color = entry.Broken ? DsTheme.InkFaint
+                                     : selected ? DsTheme.Ink : DsTheme.InkDim;
+            if (entry.TopFleur != null) entry.TopFleur.gameObject.SetActive(selected);
+            if (entry.BottomFleur != null) entry.BottomFleur.gameObject.SetActive(selected);
         }
-        if (_modsFill != null) _modsFill.color = ModsOpen ? DsTheme.Accent : DsTheme.Panel;
-        if (_modsLabel != null) _modsLabel.color = _modsBroken ? DsTheme.InkFaint
-                                                   : ModsOpen ? DsTheme.Ground : DsTheme.Ink;
+        DsWidgets.SetGearColor(_modsGear, _modsBroken ? DsTheme.InkFaint
+                                           : ModsOpen ? DsTheme.Accent : DsTheme.InkDim);
     }
 
     public void Tick(float dt)
     {
         if (_mods != null) GuardMods(() => _mods.Tick());
         if (_idle) { _title.Tick(); return; }
+
+        if (_hud != null) _hud.Tick();
+        TickStatus(dt);
         if (ModsOpen) return;
         if (_active < 0 || _active >= _entries.Count) return;
-        var e = _entries[_active];
-        if (e.Broken) return;
-        Guard(e, () => e.Screen.Tick(dt));
+        var entry = _entries[_active];
+        if (!entry.Broken) Guard(entry, () => entry.Screen.Tick(dt));
     }
 
-    public void OnGesture(DsGesture g)
+    void TickStatus(float dt)
     {
-        // Nothing to press on the title card.
-        if (_idle) return;
+        if (dt > 0f)
+        {
+            float sample = 1f / dt;
+            _fps = _fps <= 0f ? sample : Mathf.Lerp(_fps, sample, 0.08f);
+        }
+        if (Time.unscaledTime < _nextStatus) return;
+        _nextStatus = Time.unscaledTime + 0.5f;
+        if (_status != null) _status.text = "FPS  " + Mathf.RoundToInt(_fps);
+        if (_battery != null)
+        {
+            float value = SystemInfo.batteryLevel;
+            string charge = SystemInfo.batteryStatus == BatteryStatus.Charging ? " +" : "";
+            _battery.text = value < 0f ? "BAT  --" : "BAT  " + Mathf.RoundToInt(value * 100f) + "%" + charge;
+        }
+    }
 
-        // Modal containment: while open, no tap or drag reaches the HUD below.
+    public void OnGesture(DsGesture gesture)
+    {
+        if (_idle || _layout == null) return;
+
         if (ModsOpen)
         {
-            GuardMods(() => _mods.OnGesture(g));
+            GuardMods(() => _mods.OnGesture(gesture));
             Paint();
             return;
         }
 
-        // A tap in the tab strip switches screens. The strip is at the TOP of
-        // the panel, and panel coordinates have y up, so that is high y.
-        if (g.Type == DsGestureType.Tap && g.Position.y >= _h - DsTheme.TabBarHeight)
+        if (gesture.Type == DsGestureType.Tap)
         {
-            if (g.Position.x >= _w - ModsButtonW)
+            Vector2 point = DsPresentation.ToLayout(gesture.Position);
+            CompanionHit hit = _layout.HitTest(point.x, point.y);
+            if (hit.Target == CompanionHitTarget.Mods)
             {
                 if (_mods != null) GuardMods(() => _mods.SetVisible(true));
                 Paint();
                 return;
             }
-            int n = _entries.Count;
-            if (n > 0)
+            if (hit.Target == CompanionHitTarget.Tab)
             {
-                float tabsWidth = _w - ModsButtonW;
-                int idx = Mathf.Clamp((int)(g.Position.x / (tabsWidth / n)), 0, n - 1);
-                Show(idx);
+                Show(hit.TabIndex);
+                return;
             }
-            return;
         }
 
         if (_active < 0 || _active >= _entries.Count) return;
-        var e = _entries[_active];
-        if (e.Broken) return;
-        Guard(e, () => e.Screen.OnGesture(g));
+        var entry = _entries[_active];
+        if (!entry.Broken) Guard(entry, () => entry.Screen.OnGesture(gesture));
     }
 
-    // One place where a screen's exception is turned into that screen being
-    // switched off, so the failure is contained and visible rather than fatal.
-    void Guard(Entry e, Action action)
+    void Guard(Entry entry, Action action)
     {
         try { action(); }
         catch (Exception ex)
         {
-            e.Broken = true;
-            if (e.Host != null) e.Host.gameObject.SetActive(false);
-            Debug.LogError("[DualScreen] screen '" + e.Screen.Id + "' disabled after error: " + ex);
+            entry.Broken = true;
+            if (entry.Host != null) entry.Host.gameObject.SetActive(false);
+            Debug.LogError("[DualScreen] screen '" + entry.Screen.Id + "' disabled after error: " + ex);
             Paint();
         }
     }
 
-    // The modal is not a normal Entry because opening it must not replace the
-    // remembered page. It still gets the same fail-contained lifetime: one
-    // broken Mods surface is hidden and disabled without taking down the HUD
-    // or the game.
     void GuardMods(Action action)
     {
         if (_modsBroken) return;
@@ -318,7 +314,7 @@ public class DsShell
         {
             _modsBroken = true;
             try { if (_mods != null) _mods.SetVisible(false); } catch { }
-            Debug.LogError("[DualScreen] Mods modal disabled after error: " + ex);
+            Debug.LogError("[DualScreen] Mods overlay disabled after error: " + ex);
             Paint();
         }
     }

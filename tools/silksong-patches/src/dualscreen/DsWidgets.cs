@@ -48,6 +48,79 @@ public static class DsWidgets
         return img;
     }
 
+    /// <summary>A small rotated square used as a deterministic ornament.</summary>
+    public static Image Diamond(Transform parent, string name, Color color, float size)
+    {
+        var img = Box(parent, name, color);
+        var rt = img.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(size, size);
+        rt.anchoredPosition = Vector2.zero;
+        rt.localRotation = Quaternion.Euler(0f, 0f, 45f);
+        return img;
+    }
+
+    /// <summary>
+    /// Symmetric Hollow Knight-style divider used until a resident game fleur
+    /// is available. It is geometry, not bundled or generated artwork.
+    /// </summary>
+    public static RectTransform Fleur(Transform parent, string name, Color color)
+    {
+        var root = Rect(parent, name);
+
+        var left = Box(root, "line-left", color).rectTransform;
+        left.anchorMin = new Vector2(0.04f, 0.5f);
+        left.anchorMax = new Vector2(0.43f, 0.5f);
+        left.pivot = new Vector2(0.5f, 0.5f);
+        left.sizeDelta = new Vector2(0f, 2f);
+
+        var right = Box(root, "line-right", color).rectTransform;
+        right.anchorMin = new Vector2(0.57f, 0.5f);
+        right.anchorMax = new Vector2(0.96f, 0.5f);
+        right.pivot = new Vector2(0.5f, 0.5f);
+        right.sizeDelta = new Vector2(0f, 2f);
+
+        Diamond(root, "diamond", color, 11f);
+        var leftPoint = Diamond(root, "point-left", color, 6f).rectTransform;
+        leftPoint.anchoredPosition = new Vector2(-22f, 0f);
+        var rightPoint = Diamond(root, "point-right", color, 6f).rectTransform;
+        rightPoint.anchoredPosition = new Vector2(22f, 0f);
+
+        return root;
+    }
+
+    /// <summary>A procedural gear control; the active colour can be repainted.</summary>
+    public static RectTransform Gear(Transform parent, string name, Color color)
+    {
+        var root = Rect(parent, name);
+        for (int i = 0; i < 8; i++)
+        {
+            float a = i * 45f;
+            float rad = a * Mathf.Deg2Rad;
+            var tooth = Box(root, "tooth-" + i, color).rectTransform;
+            tooth.anchorMin = tooth.anchorMax = new Vector2(0.5f, 0.5f);
+            tooth.pivot = new Vector2(0.5f, 0.5f);
+            tooth.sizeDelta = new Vector2(11f, 25f);
+            tooth.anchoredPosition = new Vector2(Mathf.Sin(rad) * 25f, Mathf.Cos(rad) * 25f);
+            tooth.localRotation = Quaternion.Euler(0f, 0f, -a);
+        }
+
+        var outer = Circle(root, "outer", color);
+        Stretch(outer.rectTransform, 12f);
+        var hole = Circle(root, "hole", DsTheme.Ground);
+        Stretch(hole.rectTransform, 28f);
+        return root;
+    }
+
+    public static void SetGearColor(RectTransform gear, Color color)
+    {
+        if (gear == null) return;
+        var images = gear.GetComponentsInChildren<Image>(true);
+        for (int i = 0; i < images.Length; i++)
+            if (images[i] != null && images[i].gameObject.name != "hole") images[i].color = color;
+    }
+
     /// <summary>
     /// A filled rect with a one-pixel-ish border, drawn as five boxes.
     ///

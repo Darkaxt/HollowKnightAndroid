@@ -156,11 +156,12 @@ Expected: failures for missing shared staging and modal registration.
 
 - [x] **Step 3: Implement the modal and staging**
 
-Add a persistent `MODS` control to the current shell. It opens a modal without
-changing `ActiveId`; selecting a row updates the detail pane and tapping the
-selected row again cycles it. Master OFF dims gameplay rows. Reset and apply
-errors remain visible. Idle state closes and hides the modal. Every modal call
-uses the shell's existing exception containment.
+Add a persistent gear control to the Dual Souls-style HUD/status strip. It
+opens the Mods overlay without changing `ActiveId`; Mods is not a peer tab.
+Selecting a row updates the detail pane and tapping the selected row again
+cycles it. Master OFF dims gameplay rows. Reset and apply errors remain
+visible. Idle state closes and hides the modal. Every modal call uses the
+shell's existing exception containment.
 
 Stage `tools/shared-patches/src` beneath both on-device patch assets, include
 it in the exact-depot checks, and add the shared xUnit suite to `make test`.
@@ -227,6 +228,6 @@ existing GitHub signing pipeline.
 | 0 — agreement/source audit | COMPLETE | TWEAK-02 design boundary; TWEAK-05 initial seams | None for planning | Runtime implementation and device proof go to Stages 1–4; parity expansion goes to Stage 5 | `silksong-mod-menu-source-audit.md`; assembly SHA-256 above |
 | 1 — shared controller | COMPLETE | Shared portions of TWEAK-01, TWEAK-03, and TWEAK-04: defaults, validation, master/reset, fail-closed rollback, successful-change flush, game-qualified keys, recreation persistence, and visible failure when the store cannot flush | None for Stage 2 | Real process exit/relaunch goes to Stage 4 | Focused RED exposed swallowed flush failures; full GREEN passes 24/24 shared controller and adapter tests |
 | 2 — Silksong adapter | COMPLETE | TWEAK-02 and initial TWEAK-05: four truthful capabilities, typed game seam, process-wide exact baseline, and no native memory APIs | None | TWEAK-06 parity rows beyond the first four remain gated in Stage 5 | 24/24 shared tests; 38 sources compile against Silksong `1.0.29980` `Assembly-CSharp.dll` SHA-256 `1AF095416B89F73993058F9CBAC3A93959D928314B735CC4ACBCA7BF1A952D2D` |
-| 3 — second-screen modal | HOST-COMPLETE | Host portions of TWEAK-01 and TWEAK-05: persistent shell control, modal containment, grouped list/detail interaction, master/reset/error presentation, shared-source staging for both profiles | The x86-64 AVD cannot execute the ARM64 Unity game or emulate Thor's physical display 1, so the production modal still lacks rendered/touch proof | ARM64 dual-display rendering, touch containment, and real effects remain Stage 4 device gates | 9/9 profile contracts; 24/24 shared tests; Android host BUILD SUCCESSFUL; 38/38 bundle-surgery tests; exact Silksong and Hollow Knight patch compiles pass; launcher lab passes 3/3 on `emulator-5580` API 35 |
-| 4 — device proof | NOT-STARTED | None | Thor matrix absent | None | Pending |
+| 3 — second-screen modal | HOST-COMPLETE | The game-neutral layout now pins the Dual Souls HUD/frame/bottom-tab/gear structure; the Silksong adapter consumes it, keeps Mods out of the tab list, and preserves modal containment, master/reset/error behavior, and shared-source staging | Signed Thor rendering and touch review of the remediated shell remain a Stage 4 device gate | Resident-game ornament replacement may refine the deterministic symmetric fallback without changing geometry | 9/9 profile contracts; 29/29 shared tests including five layout/hit-test contracts; Android host 120 tests with zero failures/errors and two environment skips; 38/38 bundle-surgery tests; both exact profile patch compiles; debug AAR assembly |
+| 4 — device proof | IN-PROGRESS | Fork-signed launcher, exact Silksong `1.0.29980` on-device build, separate ARM64 Unity process, save creation, gameplay, display-1 activation, and first-run master OFF are proved | Redesigned shell/overlay, real lower-panel touch, all four effects, process-exit persistence, and Hollow Knight isolation remain | None | `docs/verification/silksong-device-2026-08-31.md` |
 | 5 — parity/final remediation | NOT-STARTED | None | TWEAK-06/TWEAK-07 parity work absent | None | Pending |

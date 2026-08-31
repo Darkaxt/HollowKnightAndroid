@@ -49,7 +49,7 @@ public abstract class DsGridScreen : IDsScreen
     public virtual void Build(RectTransform host)
     {
         Grid.EmptyMessage = EmptyMessage;
-        Grid.Build(host, Columns, DsTheme.TabBarHeight, GridLeft, GridWidth, DetailRect);
+        Grid.Build(host, Columns, DsTheme.ContentTop, GridLeft, GridWidth, DetailRect);
         Refresh();
     }
 
@@ -173,7 +173,7 @@ public class DsInventoryScreen : DsGridScreen
     {
         get
         {
-            float bodyH = (DsPresentation.PanelH > 0 ? DsPresentation.PanelH : 1080f) - DsTheme.TabBarHeight;
+            float bodyH = DsTheme.ContentHeight;
             return new Rect(LeftX, bodyH - DetailH, (DsPresentation.PanelW > 0 ? DsPresentation.PanelW : 1240f) - LeftX * 2f,
                             DetailH - DsTheme.Pad);
         }
@@ -181,7 +181,7 @@ public class DsInventoryScreen : DsGridScreen
 
     public override void Build(RectTransform host)
     {
-        float bodyH = (DsPresentation.PanelH > 0 ? DsPresentation.PanelH : 1080f) - DsTheme.TabBarHeight;
+        float bodyH = DsTheme.ContentHeight;
         _hornet.Build(host, LeftX, DsTheme.Pad, LeftW, bodyH - DetailH - DsTheme.Pad * 2f);
 
         // Down the gutter between what Hornet IS and what she is carrying. It

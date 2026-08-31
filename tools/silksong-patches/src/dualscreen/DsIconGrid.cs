@@ -151,7 +151,7 @@ public class DsIconGrid
         float panelH = DsPresentation.PanelH > 0 ? DsPresentation.PanelH : 1080f;
         if (left < 0f) left = DsTheme.Pad;
         if (width < 0f) width = panelW - DsTheme.Pad * 2f;
-        float h = panelH - hostTop;
+        float h = DsTheme.ContentHeight;
 
         bool detailBelow = detail.width <= 0f;
         if (detailBelow)

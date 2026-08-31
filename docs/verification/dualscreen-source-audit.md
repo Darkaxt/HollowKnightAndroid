@@ -42,18 +42,38 @@ layout, status placement, idle state, modal priority, diagnostics, and error
 containment. Each game adapter supplies its localized data, supported pages,
 resident fonts/art, and theme tokens.
 
+The live Silksong device review corrected an ambiguity in the original audit:
+Dual Souls is not merely a feature checklist. Its HUD and outer layout are the
+visual template. The direct Unity display-1 renderer remains the selected tech
+layer, but the flat top tab bar observed in the first signed Silksong run is a
+failed design gate. The common shell must instead reproduce Dual Souls'
+persistent top HUD, ornamental context frame, bottom-centred tab labels,
+selected-tab fleurs, and separate gear/status control. Promotional launcher
+art remains prohibited on this surface.
+
 Canonical page order is `Inventory`, `Loadout`, optional game-specific
 progress pages, then `Map`. Hollow Knight maps `Charms` to Loadout; Silksong
 maps `Crests` to Loadout. Tasks and Journal remain available only where the
 adapter can back them with real game state. Omitting a page does not reorder
 the shared semantic groups.
 
-Dual Souls remains the Hollow Knight functional baseline. Its HUD and area
+Dual Souls remains the Hollow Knight functional and visual baseline. Its HUD and area
 status, map, inventory, charms, story/dialogue/tutorial overlays, item popups,
 fade synchronization, skin coverage, and background/resume behavior must be
 implemented through the shared shell or recorded as explicit blockers or
 tracked deferrals. Its native blitter, Java touch polling, and bespoke outer
-layout are not retained.
+transport are not retained; its outer-layout language is retained.
+
+## Signed Silksong device finding
+
+The fork-signed `1.0.3` launcher built the exact Silksong `1.0.29980` source on
+the Thor, started a separate ARM64 Unity process, activated the lower physical
+display through Unity, created a save, and reached live gameplay. The second
+screen rendered its Map/Inventory/Crest/Tasks/Journal content, proving the
+selected renderer and display path. The same capture failed the visual gate:
+it showed a flat top navigation bar with `MODS` as a peer tab and no persistent
+Dual Souls-style HUD/frame. That failure is a blocker for the shared-shell
+stage, not a cosmetic deferral.
 
 ## Required proof
 

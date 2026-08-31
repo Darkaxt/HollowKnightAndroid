@@ -9,6 +9,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="src/Mods/**/*.cs" />
+    <Compile Include="src/**/*.cs" />
   </ItemGroup>
 </Project>

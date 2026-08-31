@@ -26,7 +26,7 @@ public static class DsTheme
     // Sampled to sit beside the game's inventory rather than compete with it:
     // a near-black ground, bone-white text, and the pale gold the menus use to
     // mark what is selected.
-    public static readonly Color Ground      = new Color(0.055f, 0.05f, 0.075f, 1f);
+    public static readonly Color Ground      = Color.black;
     public static readonly Color Panel       = new Color(0.10f, 0.09f, 0.13f, 1f);
     public static readonly Color PanelEdge   = new Color(0.32f, 0.29f, 0.36f, 1f);
     // Sections are divided, not enclosed. A rule is drawn in the gutter BETWEEN
@@ -60,7 +60,17 @@ public static class DsTheme
     // The panel is ~9 cm across and held at arm's length on a handheld, so
     // everything is larger than a desktop UI would be: a 200 px cell is about
     // 14 mm, which is comfortably above the ~9 mm minimum for a touch target.
-    public const float TabBarHeight = 88f;
+    // Set by DsShell from the game-neutral CompanionShellLayout before any
+    // page is built. Page hit-tests need the full-screen top offset even though
+    // their RectTransforms are local to the framed content box.
+    public static float ContentTop { get; private set; } = 174f;
+    public static float ContentHeight { get; private set; } = 736f;
+
+    public static void SetContentGeometry(float top, float height)
+    {
+        ContentTop = top;
+        ContentHeight = height;
+    }
     public const float FooterHeight = 200f;
     public const float Pad          = 20f;
     public const float RuleThickness = 2f;

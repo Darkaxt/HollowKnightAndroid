@@ -71,7 +71,7 @@ public class DsLoadoutScreen : IDsScreen
     public void Build(RectTransform host)
     {
         _host = host;
-        float bodyTop = DsTheme.TabBarHeight;
+        float bodyTop = DsTheme.ContentTop;
 
         // ── left: the crest ────────────────────────────────────────────────
         // No box. The crest is divided from the tool list by the rule down the
@@ -448,7 +448,7 @@ public class DsLoadoutScreen : IDsScreen
         Vector2 p = DsPresentation.ToLayout(g.Position);
         if (p.x >= ListX) return;
 
-        float bodyTop = DsTheme.TabBarHeight;
+        float bodyTop = DsTheme.ContentTop;
         for (int i = 0; i < _slotRects.Count; i++)
         {
             var rt = _slotRects[i];

@@ -373,7 +373,7 @@ public class DsHornetPanel
             _hits.Add(new Hit
             {
                 X = _x + s.Root.anchoredPosition.x,
-                Y = DsTheme.TabBarHeight + _y - s.Root.anchoredPosition.y,
+                Y = DsTheme.ContentTop + _y - s.Root.anchoredPosition.y,
                 W = s.Root.sizeDelta.x,
                 H = s.Root.sizeDelta.y,
                 Name = s.Name,
