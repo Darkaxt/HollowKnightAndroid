@@ -77,19 +77,23 @@ was installed.
 
 ## Verification gates
 
-- Android host suite: 92 tests, 90 passed, zero failures/errors, two
+- Android host suite: 95 tests, 93 passed, zero failures/errors, two
   environment-gated skips. Each skipped real-source/player-image test was
   then run explicitly against the current inputs and passed.
 - Bundle-surgery suite: 37/37 passed.
-- Python CI contracts: 14/14 passed.
+- Python CI contracts: 19/19 passed.
+- Mod-weaver build: zero warnings and zero errors.
 - Hollow Knight patch compilation against the exact game and Android player
   assemblies passed with one registered entry point.
 
 ## Cross-check and safe pause
 
-- `DEFERRED`: inspect and apply the nine pending commits from parent remote
-  `origin` before resuming. Resolve them against this checkpoint and rerun all
-  affected host, converter, packaging, and device gates.
+- `COMPLETE`: the nine pending commits from parent remote `origin` were merged
+  and reconciled against the dual-profile pipeline. Their BepInEx/Harmony mod
+  support now uses the selected profile's build, conversion, and registration
+  paths. The affected host, real-source, patch-compilation, and release-AAR
+  gates have been rerun successfully; a fresh isolated APK is still required
+  before device use.
 - `COMPLETE`: exact 1.5.12620 source acceptance and full real-tree conversion.
 - `COMPLETE`: exact Android built-ins and project shader transformation.
 - `COMPLETE`: Hollow Knight patch assembly, IL2CPP generation, ARM64 native

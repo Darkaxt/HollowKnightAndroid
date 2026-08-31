@@ -37,7 +37,7 @@ FILES   := /sdcard/Android/data/$(PKG)/files
 PROFILE_FILES := $(FILES)/profiles/$(PROFILE)
 
 .PHONY: help dev dev-fast device-wipe install logcat game-logcat build-log \
-        game-reset check test surgery player devices clean \
+        game-reset check test surgery weaver player devices clean \
         docker-image docker-apk docker-up docker-dev docker-down docker-shell
 
 help: ## Show this help
@@ -121,6 +121,9 @@ devices: ## List connected devices
 surgery: ## Build bundle-surgery (Gradle stages it into the APK)
 	dotnet build -c Release tools/bundle-surgery/BundleSurgery.csproj
 
+weaver: ## Build mod-weaver (Gradle stages it into the APK)
+	dotnet build -c Release tools/mod-weaver/ModWeaver.csproj
+
 # The one thing the APK build still needs from Unity: the Android player
 # module, which carries the player classes compiled into the dex,
 # UnityPlayerActivity's source, Gradle, and libunity/libmain. This is the same
@@ -146,7 +149,7 @@ player: ## Fetch Unity's Android player module (instead of installing Unity)
 check: ## Compile-check the patch sources against your depot (fast, thorough)
 	@pwsh -NoProfile -File tools/silksong-patches/check.ps1
 
-test: ## Run host-side launcher and converter tests
+test: weaver ## Run host-side launcher and converter tests
 	@test -f "$(AP)/Tools/gradle/lib/gradle-launcher-8.11.jar" || { \
 		echo "No pinned Gradle launcher under AP=$(AP). Run 'make player' or set AP explicitly." >&2; \
 		exit 1; \
@@ -157,4 +160,4 @@ test: ## Run host-side launcher and converter tests
 	dotnet test tools/bundle-surgery-tests/BundleSurgery.Tests.csproj -c Release
 
 clean: ## Remove build outputs
-	rm -rf "$(BUILD_ROOT)" "$(APK_DIR)" src/SilksongLauncher.Launcher/app/build tools/bundle-surgery/bin tools/bundle-surgery/obj
+	rm -rf "$(BUILD_ROOT)" "$(APK_DIR)" src/SilksongLauncher.Launcher/app/build tools/bundle-surgery/bin tools/bundle-surgery/obj tools/mod-weaver/bin tools/mod-weaver/obj

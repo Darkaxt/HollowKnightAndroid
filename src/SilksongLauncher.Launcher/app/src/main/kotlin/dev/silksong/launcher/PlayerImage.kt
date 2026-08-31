@@ -985,13 +985,24 @@ object PlayerImage {
      * -- because this runs again on every rebuild.
      */
     internal fun registerPatches(profile: GameProfile, img: File, root: File) {
-        val assembly = PackageCompiler.patchAssembly(profile, root)
-        if (!assembly.isFile) {
-            LauncherLog.log("no patches to register")
+        // Everything managed that the depot did not ship: the port's own
+        // patches, the BepInEx shims, and whatever the weaver staged out of
+        // the mods folder. An assembly missing from this list is compiled into
+        // libil2cpp.so and then never loaded, which looks exactly like a mod
+        // that does nothing.
+        val staged = Il2cppConverter.asmDir(root)
+        val patchAssembly = PackageCompiler.patchAssembly(profile, root)
+        val patchAssemblyName = patchAssembly.name.removeSuffix(".dll")
+        val names = buildList {
+            add(patchAssembly.name)
+            for (shim in PackageCompiler.shimAssemblies(root)) add(shim.name)
+            for (plugin in Mods.stagedAssemblies(root)) add("$plugin.dll")
+        }.distinct().filter { File(staged, it).isFile }
+
+        if (names.isEmpty()) {
+            LauncherLog.log("no assemblies of ours to register")
             return
         }
-        val name = assembly.name
-        val assemblyName = name.removeSuffix(".dll")
 
         // ScriptingAssemblies.json: parallel arrays of names and types, and
         // they have to stay the same length. 16 is what the depot's own
@@ -999,51 +1010,75 @@ object PlayerImage {
         val listFile = File(img, "ScriptingAssemblies.json")
         if (listFile.isFile) {
             val json = org.json.JSONObject(listFile.readText())
-            val names = json.getJSONArray("names")
-            val already = (0 until names.length()).any { names.getString(it) == name }
-            if (!already) {
-                names.put(name)
+            val list = json.getJSONArray("names")
+            var added = 0
+            for (name in names) {
+                val already = (0 until list.length()).any { list.getString(it) == name }
+                if (already) continue
+                list.put(name)
                 json.optJSONArray("types")?.put(16)
+                added++
+            }
+            if (added > 0) {
                 listFile.writeText(json.toString())
-                LauncherLog.log("registered $name in ScriptingAssemblies.json")
+                LauncherLog.log("registered $added assembly/assemblies in ScriptingAssemblies.json")
             }
         }
 
         // RuntimeInitializeOnLoads.json: one row per entry point.
-        val entryPoints = PackageCompiler.entryPoints(root) ?: return
         val loadsFile = File(img, "RuntimeInitializeOnLoads.json")
         if (!loadsFile.isFile) return
         val loads = org.json.JSONObject(loadsFile.readText())
         val rows = loads.getJSONArray("root")
-        val wanted = org.json.JSONObject(entryPoints).getJSONArray("entryPoints")
+
         var addedCount = 0
-        for (i in 0 until wanted.length()) {
-            val e = wanted.getJSONObject(i)
-            val className = e.getString("className")
-            val methodName = e.getString("methodName")
+
+        fun register(assemblyName: String, nameSpace: String, className: String, methodName: String, loadTypes: Int) {
             val exists = (0 until rows.length()).any {
                 val r = rows.getJSONObject(it)
                 r.optString("assemblyName") == assemblyName &&
                     r.optString("className") == className &&
                     r.optString("methodName") == methodName
             }
-            if (exists) continue
+            if (exists) return
             rows.put(
                 org.json.JSONObject()
                     .put("assemblyName", assemblyName)
                     // The ported patches sit in the global namespace, as the
                     // game's own classes do; only the newer ones are scoped.
-                    .put("nameSpace", e.optString("nameSpace", ""))
+                    .put("nameSpace", nameSpace)
                     .put("className", className)
                     .put("methodName", methodName)
-                    .put("loadTypes", e.getInt("loadTypes"))
+                    .put("loadTypes", loadTypes)
                     .put("isUnityClass", false),
             )
             addedCount++
         }
+
+        PackageCompiler.entryPoints(root)?.let { text ->
+            val entries = org.json.JSONObject(text).getJSONArray("entryPoints")
+            for (i in 0 until entries.length()) {
+                val e = entries.getJSONObject(i)
+                register(
+                    patchAssemblyName,
+                    e.optString("nameSpace", ""),
+                    e.getString("className"),
+                    e.getString("methodName"),
+                    e.getInt("loadTypes"),
+                )
+            }
+        }
+
+        // The chainloader. Registered only when there is a BepInEx to call
+        // into, and after assemblies are loaded (2) because it finds plugins
+        // by reflecting over them.
+        if (names.contains("BepInEx.dll")) {
+            register("BepInEx", "BepInEx.Bootstrap", "Chainloader", "Start", 2)
+        }
+
         if (addedCount > 0) {
             loadsFile.writeText(loads.toString())
-            LauncherLog.log("registered $addedCount patch entry point(s)")
+            LauncherLog.log("registered $addedCount entry point(s)")
         }
     }
 

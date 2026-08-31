@@ -325,7 +325,7 @@ class SetupActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
         }
 
-        header = text("Silksong Android", 30f, Color.WHITE, bold = true)
+        header = text(getString(R.string.launcher_app_name), 30f, Color.WHITE, bold = true)
         root.addView(header)
         // "Step 2 of 3" -- present only while something is running.
         stepLabel = text("", 12f, Color.parseColor("#7D3341"), bold = true).apply {
@@ -534,7 +534,7 @@ class SetupActivity : Activity() {
         // The heading says what the app is doing, not what it is called: this
         // screen is on for half an hour and "Silksong" alone reads as an idle
         // title screen rather than work in progress.
-        header.text = if (running) "Porting Silksong" else "Silksong Android"
+        header.text = if (running) "Building ${profile.displayName}" else getString(R.string.launcher_app_name)
         if (!running) return
         stepLabel.text = "STEP $stepNumber OF $stepCount"
         status.text = stepTitle.ifEmpty { sub }
@@ -948,6 +948,8 @@ class SetupActivity : Activity() {
                 } else {
                     null
                 }
+                val mods = Mods.dir(this@SetupActivity)
+                withContext(Dispatchers.IO) { Mods.ensure(mods) }
                 val request = ProfileBuildRequest(
                     jobId = "job-${UUID.randomUUID()}",
                     generationId = "gen-${UUID.randomUUID()}",
@@ -1043,16 +1045,27 @@ class SetupActivity : Activity() {
                                 out,
                                 assets,
                             ).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                            PackageCompiler.compileShims(
+                                unity,
+                                depot,
+                                this@SetupActivity,
+                                out,
+                                assets,
+                            ).collect { setBusy(true, it.step, it.fraction, it.detail) }
                         }
 
                         BuildStage.ConvertIl2Cpp -> {
-                            if (!Il2cppConverter.isPresent(out) || Il2cppConverter.isStale(profile, out)) {
+                            if (!Il2cppConverter.isPresent(out) ||
+                                Il2cppConverter.isStale(profile, out, mods, assets)
+                            ) {
                                 Il2cppConverter.convert(
                                     profile,
                                     unity,
                                     depot,
                                     this@SetupActivity,
                                     out,
+                                    mods = mods,
+                                    assets = assets,
                                 ).collect { setBusy(true, it.step, it.fraction, it.detail) }
                             }
                         }

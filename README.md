@@ -1,113 +1,143 @@
-# Silksong Android
+# HollowKnightAndroid
 
-**Hollow Knight: Silksong** Android port with dual-screen capabilites and optional
-Steam integration for game files and cloud saves.
+HollowKnightAndroid is an experimental, unified Android build system and
+launcher for **Hollow Knight** and **Hollow Knight: Silksong**. It takes
+user-supplied Linux game files, converts and compiles them for Android ARM64,
+and keeps both games behind one launcher, package identity, toolchain library,
+mod library, and—eventually—skin library.
+
+This branch is an implementation checkpoint, **not a finished public release**.
+Hollow Knight has completed the host conversion and ARM64 compilation gates,
+but its first Android boot and playable-room gate remains open.
 
 <p align="center">
   <img src="docs/icon.png" alt="HollowKnightAndroid combined Hollow Knight and Silksong app icon" width="220" />
   <br />
-  <em><a href="docs/icon-source/ATTRIBUTION.md">Icon sources and deterministic adaptation record</a></em>
+  <em><a href="docs/icon-source/ATTRIBUTION.md">User-supplied icon sources and deterministic Android adaptation</a></em>
 </p>
 
-<img width="2048" height="1536" alt="IMG_1639" src="https://github.com/user-attachments/assets/c9ddb25d-37a8-4e7e-877c-0f13eb13efed" />
+<table>
+  <tr>
+    <td><img src="docs/ui-source/steamgriddb/hollow-knight-grid-287022.webp" alt="Hollow Knight artwork" /></td>
+    <td><img src="docs/ui-source/steamgriddb/silksong-grid-325379.webp" alt="Silksong artwork" /></td>
+  </tr>
+</table>
 
-## Features
+The supplied grids, heroes, logos, and individual game icons are preserved in
+[`docs/ui-source/steamgriddb`](docs/ui-source/steamgriddb/ATTRIBUTION.md) for the
+planned launcher redesign and per-game shortcuts. Generative image tools are
+not used for project artwork.
 
-- **Dual screen**: Show interactive map, inventory, crests, tasks and journal on the second screen
-- **Steam integration (optional)**: Sign in to Steam if you want the app to download game files and/or your Steam cloud saves for you
-- **High performance**: Compiles to native arm64 via IL2CPP and uses Vulkan shaders
-- **Fully open source and legal**: Supply your own game files either manually or through Steam sign-in (the app downloads them for you)
-- **Compilation on device**: Just download the APK and supply the game files, porting happens on device (20–30 min on a Snapdragon 8 Gen 2)
-- **QoL settings**: Skip intro, set resolution, auto upload/download cloud saves etc.
-- **Any device**: Any Android device works, single screen as well. Android 13 only for now (Android 15 is not supported at the moment)
+## Current status
 
-## Getting started
+| Area | Current evidence | Remaining gate |
+|---|---|---|
+| Hollow Knight `1.5.12620` | Exact Linux manifest accepted; 1,005 serialized files converted with complete Vulkan coverage; IL2CPP and a 16 KB-aligned AArch64 `libil2cpp.so` built; 5.18 GB ZIP64 player image reopened successfully | Install the isolated build on ARM64, observe the patch probe, reach the menu and a playable room with rendering, audio, and input |
+| Silksong `1.0.29980` | Existing Addressables/Vulkan pipeline is retained behind the `silksong` profile | Re-prove the fork-signed profile generation, preservation/adoption path, and gameplay on the target device |
+| One launcher | Both profiles, independent storage, atomic generations, and cold-process selection exist and have host/emulator coverage | Prove both switch directions with the production ARM64 Unity processes |
+| Mods | The parent's build-time BepInEx 5/Harmony weaver is merged and routed through each selected profile's patch, IL2CPP, generation, and status paths | Real plugin compatibility for each game, compatibility manifests, dependencies, load order, and per-profile enablement remain unverified |
+| Skins | Shared death/respawn rotation state machine has host coverage | Pack scanner/import, persistence, real game lifecycle hooks, texture adapters, rollback, and both-game runtime proof |
+| Dual screen | Silksong's existing Vulkan multi-display implementation remains the rendering foundation | Re-extract the game-neutral layer and implement/verify Hollow Knight screens and single-display fallback |
+| Releases | Fork identity and GitHub signing pipeline have a signed dry-run proof | No release until source reproducibility, device, gameplay, migration, tag/version, and fresh-download gates pass |
 
-1. Download the latest APK from
-   [Releases](https://github.com/jakobkhansen/SilksongAndroid/releases/latest)
-   and install it.
-2. Supply your own game files. Either copy them across from your PC yourself,
-   or let the app fetch them for you by signing in to Steam.
-3. Press the button. The app fetches everything it needs and builds the game.
-   The build takes 20–30 minutes on a Snapdragon 8 Gen 2, most of it the download and the compile.
-4. Play. After the first build, launching is instant.
+The detailed requirement ledger is
+[`docs/verification/design-traceability.md`](docs/verification/design-traceability.md).
+The current Hollow Knight host evidence is
+[`docs/verification/hollow-knight-first-boot.md`](docs/verification/hollow-knight-first-boot.md).
 
-Any device should do (tested on the AYN Thor and the Retroid Pocket Flip 2). Open an issue
-if your device doesn't work.
+## Design
 
-### Supplying the game files yourself
+- One installed package: `io.github.darkaxt.dualsouls`.
+- One dedicated launcher process; only one Unity game process is loaded at a
+  time.
+- Exact, fail-closed profiles for source validation, Unity version, conversion,
+  patches, saves, and feature adapters.
+- Independent profile generations under private app storage, published
+  atomically after verification.
+- Shared immutable toolchains by Unity version and content hash.
+- No Team Cherry game files, Steam credentials, generated game data, Unity
+  binaries, or private signing keys in this repository or its release APK.
 
-If you'd rather not sign in, download the game's **Linux** depot on a PC with
-[DepotDownloader](https://github.com/SteamRE/DepotDownloader). The Linux files are the
-ones the port is built from; the Windows (1030301) and macOS (1030302) depots will not do,
-and the app rejects them:
+The approved architecture is documented in
+[`docs/superpowers/specs/2026-08-29-unified-hollow-knight-platform-design.md`](docs/superpowers/specs/2026-08-29-unified-hollow-knight-platform-design.md).
+
+## Supported inputs
+
+Only complete **Linux** builds are accepted. Windows and macOS builds are not
+interchangeable inputs, and files from different versions or platforms must
+never be mixed.
+
+### Hollow Knight
+
+- Production target: `1.5.12620`, Unity `6000.0.61f1`.
+- `1.5.12612` is retained only as a backward-compatibility reference.
+- The classic player layout is copied into the generated private player image;
+  the original source remains necessary for repair, rebuild, and updates.
+
+### Silksong
+
+- Current profile: `1.0.29980`, Unity `6000.0.50f1` branch build.
+- Its multi-gigabyte Addressables content remains in the selected source folder
+  and is read there at runtime, so moving or deleting that folder breaks the
+  installed generation.
+
+Steam-assisted acquisition remains optional. Users may instead select a
+complete, legitimately acquired Linux installation.
+
+## Mods
+
+The newly merged parent implementation supports a useful subset of BepInEx 5
+plugins by weaving Harmony prefixes and postfixes into managed assemblies
+**before** IL2CPP conversion. There is no runtime JIT, so adding, removing, or
+replacing a DLL requires rebuilding the selected game profile. Configuration
+and enable/disable gates are read at launch.
+
+Development builds use the shared folder:
+
+```text
+Android/data/io.github.darkaxt.dualsouls/files/mods
+```
+
+Transpilers, runtime-computed patch targets, `Reflection.Emit`, and runtime DLL
+discovery cannot work in this architecture. The weaver reports unsupported
+patches before native compilation. Until the remaining Task 14 contracts are
+implemented, do not treat a plugin working in one game as evidence that it is
+compatible with the other.
+
+## Building and verification
+
+Prerequisites are an Android SDK, JDK 17 or newer, .NET 8, Git Bash on Windows,
+and the exact Unity Android/editor components resolved by the game profiles.
+
+The core host gates are:
 
 ```sh
-DepotDownloader -app 1030300 -depot 1030303 -username <your account> -password <your password> -dir silksong
+make surgery
+make weaver
+make test
+make check
 ```
 
-Copy the whole `silksong` folder onto the device, as long as it is on
-the device's own storage. Then press **Choose folder** in the app and pick it.
+`make dev` additionally packages and installs a development APK, so use it only
+when device mutation is intended. The GitHub Actions signing workflow uses the
+fork's pinned package identity and signing certificate; it does not publish a
+release until explicitly dispatched and all release gates are satisfied.
 
-```
-silksong/                          <-- pick THIS one
-├── Hollow Knight Silksong.x86_64
-├── UnityPlayer.so
-└── Hollow Knight Silksong_Data/
-    ├── Managed/
-    ├── MonoBleedingEdge/
-    ├── Plugins/
-    ├── Resources/
-    ├── StreamingAssets/
-    ├── globalgamemanagers
-    ├── resources.assets
-    └── ...
-```
+## Project history and upstream
 
-**Wherever you put them, leave them there.** The game is several gigabytes of content that
-is never copied into the app: it is read from that folder every time you play, and every
-app update that rebuilds the game reads it too. Deleting or moving the folder stops the
-game from starting. The app leaves a `SILKSONG-DO-NOT-DELETE.txt` in there saying so.
-
-## Steam Cloud Saves
-
-If you sign in to Steam, you also get your Steam Cloud saves. Pull before you play, push
-when you're done, or let the launcher do both automatically (see settings). Save conflicts
-are handled, but back your saves up if you want to be certain nothing is lost.
-
-Signing in, by QR code or password, goes through
-[JavaSteam](https://github.com/Longi94/JavaSteam), an open-source Steam client library.
-Your password is never stored: the only thing kept is the login token Steam issues in
-return, encrypted, and it never leaves the device.
-
-## AI assistance
-
-Much of this project was written with AI assistance. Everything in it is reviewed and
-tested on real hardware before release.
+This fork is based on
+[`jakobkhansen/SilksongAndroid`](https://github.com/jakobkhansen/SilksongAndroid).
+Its on-device toolchain, Vulkan player, dual-screen implementation, and
+build-time BepInEx work are the foundation being generalized into the unified
+platform.
 
 ## Legal
 
-This repository and the APK contain **no extracted game content and nothing Unity-made**.
-Silksong is © Team Cherry, and none of its extracted code, game data, art or audio is
-distributed here. The APK is a
-build system: it downloads Unity's toolchain, takes *your* game files (supplied by hand,
-or fetched with your own Steam account), and compiles a playable build on your own device.
+Hollow Knight, Hollow Knight: Silksong, their assets, and associated marks are
+properties of Team Cherry. This unofficial project is not endorsed by Team
+Cherry.
 
-The tooling is MIT-licensed; see [LICENSE](LICENSE). Third-party open-source
-components shipped in the APK are listed in [NOTICE.md](NOTICE.md), which also
-records what the APK deliberately does *not* contain.
-
-
-## Building from source
-
-You don't need Unity or any game files to build the APK:
-
-```bash
-make player     # once: fetch Unity's Android player module (~642 MB)
-make surgery    # once: build bundle-surgery
-make dev        # rebuild, repackage, install
-```
-
-Requires an Android SDK, JDK 17+ and the .NET 8 SDK; on Windows use Git Bash.
-`make docker-apk` does the same in a container. See [COPILOT.md](COPILOT.md)
-for the full development loop.
+The repository contains build and adaptation tooling only. Users must supply
+their own legitimately acquired game files. The tooling is MIT-licensed; see
+[`LICENSE`](LICENSE). Shipped third-party open-source components and exclusions
+are recorded in [`NOTICE.md`](NOTICE.md).

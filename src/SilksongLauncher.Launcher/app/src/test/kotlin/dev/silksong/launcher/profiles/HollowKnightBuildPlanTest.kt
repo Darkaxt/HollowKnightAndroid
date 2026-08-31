@@ -3,6 +3,7 @@ package dev.silksong.launcher.profiles
 import dev.silksong.launcher.PackageCompiler
 import dev.silksong.launcher.PlayerImage
 import dev.silksong.launcher.DepotLocation
+import dev.silksong.launcher.Il2cppConverter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -79,11 +80,19 @@ class HollowKnightBuildPlanTest {
         PackageCompiler.patchAssembly(hollowKnight, root).apply {
             requireNotNull(parentFile).mkdirs()
             writeBytes(byteArrayOf(1))
+            File(Il2cppConverter.asmDir(root), name).also { staged ->
+                requireNotNull(staged.parentFile).mkdirs()
+                copyTo(staged)
+            }
         }
         File(root, "patches").mkdirs()
         File(root, "patches/entrypoints.json").writeText(
             """{"entryPoints":[{"nameSpace":"HollowKnightPatches","className":"InjectionProbe","methodName":"Start","loadTypes":2}]}""",
         )
+        for (name in listOf("0Harmony.dll", "BepInEx.dll")) {
+            File(PackageCompiler.outputDir(root), name).writeBytes(byteArrayOf(1))
+            File(Il2cppConverter.asmDir(root), name).writeBytes(byteArrayOf(1))
+        }
         File(image, "ScriptingAssemblies.json").writeText("""{"names":[],"types":[]}""")
         File(image, "RuntimeInitializeOnLoads.json").writeText("""{"root":[]}""")
 
@@ -93,6 +102,17 @@ class HollowKnightBuildPlanTest {
         assertEquals("HollowKnightPatches.dll", assemblies.getJSONArray("names").getString(0))
         val loads = JSONObject(File(image, "RuntimeInitializeOnLoads.json").readText())
         assertEquals("HollowKnightPatches", loads.getJSONArray("root").getJSONObject(0).getString("assemblyName"))
+        assertEquals(
+            setOf("HollowKnightPatches.dll", "0Harmony.dll", "BepInEx.dll"),
+            (0 until assemblies.getJSONArray("names").length())
+                .map { assemblies.getJSONArray("names").getString(it) }
+                .toSet(),
+        )
+        assertTrue(
+            (0 until loads.getJSONArray("root").length())
+                .map { loads.getJSONArray("root").getJSONObject(it).getString("assemblyName") }
+                .contains("BepInEx"),
+        )
     }
 
     @Test

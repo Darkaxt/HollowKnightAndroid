@@ -851,10 +851,12 @@ matching `6000.0.61f1` Android built-in resources, and create the profile's
 **Safe-pause cross-check (2026-08-31):** the exact `1.5.12620` tree converted
 with zero missing Vulkan shaders; the patch assembly, IL2CPP generation,
 293,057,880-byte ARM64 shared library, ELF contract, and 5,179,143,894-byte
-ZIP64 player image all passed. Before Step 4 resumes, first inspect and apply
-the nine commits by which this fork is behind `origin`, resolve them against
-the design contract, and rerun affected gates. The isolated proof APK is built
-but deliberately not installed.
+ZIP64 player image all passed. The nine commits previously pending from
+`origin/master` were merged on 2026-08-31. Their build-time BepInEx/Harmony
+pipeline is now routed through selected-profile build roots, patch assemblies,
+IL2CPP conversion, and runtime registration. Affected gates must pass again
+before Step 4 begins. The pre-sync isolated proof APK was deliberately not
+installed and is no longer a device candidate; rebuild it after the merge.
 
 - [ ] **Step 4: Run the end-to-end ARM64 spike on the Thor**
 
@@ -1083,6 +1085,21 @@ git commit -m "feat: share skin activation and death rotation"
 ```
 
 ### Task 14: Add the shared mod library and safe mode
+
+**Parent-sync starting point (2026-08-31):** the merged parent series supplies
+a build-time BepInEx 5/Harmony DLL weaver, source shims, mod screen, content
+stamps, and launch-time gates. The merge routes that baseline through each
+selected profile's independent build root and patch registration while keeping
+one shared external mod folder. This is useful infrastructure, not Task 14
+completion: compatibility manifests, game/version filtering, dependencies,
+deterministic load order, per-profile enablement, and safe launch remain the
+required steps below.
+
+- [x] **Step 0: Adopt the parent build-time DLL weaver without losing profile isolation**
+
+Host contracts cover clean weaver staging, selected-profile setup/conversion,
+profile-specific staleness roots, recursive DLL discovery, content stamps,
+toggle gates, and Hollow Knight patch plus BepInEx runtime registration.
 
 **Files:**
 - Create: `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/mods/ModManifest.kt`

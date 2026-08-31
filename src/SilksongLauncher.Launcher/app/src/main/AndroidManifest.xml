@@ -98,6 +98,11 @@
             android:label="@string/settings_title"
             android:process=":launcher"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+        <activity
+            android:name="dev.silksong.launcher.ModsActivity"
+            android:exported="false"
+            android:process=":launcher"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
         <!--
           The two builder processes. See MonoService: the .NET runtime needs a
           process of its own, cannot be started twice in one, and a run

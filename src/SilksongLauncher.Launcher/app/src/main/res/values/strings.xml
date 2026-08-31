@@ -21,6 +21,7 @@
     <string name="action_push_saves_busy">Export saves</string>
     <string name="action_settings">Settings</string>
     <string name="action_logs">View logs</string>
+    <string name="action_mods">Mods</string>
     <string name="action_launch">Launch game</string>
     <string name="action_prepare_game">Prepare %1$s</string>
 
