@@ -359,7 +359,10 @@ EOF
     for d in "$SCRIPT_DIR"/shell/res/mipmap-*; do
         [[ -d "$d" ]] || continue
         mkdir -p "$sh/res/$(basename "$d")"
-        cp -f "$d"/* "$sh/res/$(basename "$d")/"
+        for f in "$d"/*; do
+            [[ -f "$f" ]] || continue
+            cp -f "$f" "$sh/res/$(basename "$d")/"
+        done
     done
 
     local link_res=(-R "$sh/res.zip") extra_pkg=()

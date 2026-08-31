@@ -29,6 +29,9 @@
 
 package dev.silksong.launcher
 
+import dev.silksong.launcher.profiles.ContentLayout
+import dev.silksong.launcher.profiles.GameProfile
+import dev.silksong.launcher.profiles.GameProfiles
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
@@ -109,13 +112,33 @@ object PackageCompiler {
 
     // ── the patches ────────────────────────────────────────────────────────
 
-    private const val PATCHES = "SilksongPatches.dll"
-    private const val PATCH_ASSETS = "ondevice/patches"
+    fun patchAssemblyName(profile: GameProfile): String {
+        require(GameProfiles.find(profile.id) == profile) {
+            "Patches require an exact registered profile: ${profile.id}"
+        }
+        return when (profile.id) {
+            "hollow-knight" -> "HollowKnightPatches.dll"
+            "silksong" -> "SilksongPatches.dll"
+            else -> error("No patch assembly is registered for ${profile.id}")
+        }
+    }
+
+    fun patchAssetPath(profile: GameProfile): String {
+        require(GameProfiles.find(profile.id) == profile) {
+            "Patches require an exact registered profile: ${profile.id}"
+        }
+        return "ondevice/${profile.patchSet}"
+    }
+
+    fun requiresSaveIo(profile: GameProfile): Boolean =
+        profile.contentLayout == ContentLayout.ADDRESSABLES
 
     /** Our own code, once compiled. Added to the build, not substituted into it. */
-    fun patchAssembly(root: File): File = File(outputDir(root), PATCHES)
+    fun patchAssembly(profile: GameProfile, root: File): File =
+        File(outputDir(root), patchAssemblyName(profile))
 
-    fun patchesPresent(root: File): Boolean = patchAssembly(root).length() > 0
+    fun patchesPresent(profile: GameProfile, root: File): Boolean =
+        patchAssembly(profile, root).length() > 0
 
     /**
      * Compiles the port's own game code.
@@ -128,6 +151,7 @@ object PackageCompiler {
      * than a null at runtime.
      */
     fun compilePatches(
+        profile: GameProfile,
         unity: File,
         depot: File,
         context: android.content.Context,
@@ -139,7 +163,7 @@ object PackageCompiler {
             trySend(Progress("Fetching Roslyn", done.toFloat() / total, ToolchainFetcher.mb(done, total)))
         }
         val src = File(root, "patches").apply { deleteRecursively(); mkdirs() }
-        copyAssets(assets, PATCH_ASSETS, src)
+        copyAssets(assets, patchAssetPath(profile), src)
 
         val cs = File(src, "src").walkTopDown()
             .filter { it.isFile && it.extension == "cs" }
@@ -147,8 +171,8 @@ object PackageCompiler {
             .toList()
         if (cs.isEmpty()) throw IOException("no patch sources in the APK")
 
-        val out = patchAssembly(root)
-        out.parentFile.mkdirs()
+        val out = patchAssembly(profile, root)
+        requireNotNull(out.parentFile).mkdirs()
         val rsp = File(root, "patches.rsp")
         rsp.printWriter().use { w ->
             w.println("-target:library")
@@ -180,7 +204,7 @@ object PackageCompiler {
                     (errors.firstOrNull() ?: "exit ${result.code}").trim().take(300),
             )
         }
-        LauncherLog.log("SilksongPatches.dll: ${out.length()} bytes from ${cs.size} sources")
+        LauncherLog.log("${out.name}: ${out.length()} bytes from ${cs.size} sources")
         send(Progress("Patches ready", 1f, ""))
     }.flowOn(Dispatchers.IO)
 
@@ -235,7 +259,7 @@ object PackageCompiler {
         if (cs.isEmpty()) throw IOException("no SafeIo sources in the APK")
 
         val out = ioAssembly(root)
-        out.parentFile.mkdirs()
+        requireNotNull(out.parentFile).mkdirs()
         val rsp = File(root, "silksong-io.rsp")
         rsp.printWriter().use { w ->
             w.println("-target:library")
@@ -424,7 +448,7 @@ object PackageCompiler {
         // namespace it names is declared in there.
         val nested = sources.walkTopDown()
             .filter { it.isFile && it.extension == "asmdef" && it != File(sources, "Unity.InputSystem.asmdef") }
-            .map { it.parentFile.absolutePath + File.separator }
+            .map { requireNotNull(it.parentFile).absolutePath + File.separator }
             .toList()
         val cs = sources.walkTopDown()
             .filter { it.isFile && it.extension == "cs" }
@@ -436,7 +460,7 @@ object PackageCompiler {
 
         val refs = references(unity, depot)
         val out = File(outputDir(root), ASSEMBLY)
-        out.parentFile.mkdirs()
+        requireNotNull(out.parentFile).mkdirs()
 
         send(Progress("Compiling the Input System", -1f, "${cs.size} sources"))
 

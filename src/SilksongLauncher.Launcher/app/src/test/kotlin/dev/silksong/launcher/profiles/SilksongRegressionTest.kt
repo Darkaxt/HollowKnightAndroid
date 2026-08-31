@@ -213,6 +213,8 @@ class SilksongRegressionTest {
         val source = File(root, "tools/depot-to-apk/shell/GameActivity.java").readText()
 
         assertTrue(source.contains("dev.silksong.launcher.PROFILE_ID"))
+        assertTrue(source.contains("!id.equals(\"silksong\") && !id.equals(\"hollow-knight\")"))
+        assertTrue(source.contains("if (profileId().equals(\"hollow-knight\")) return \"hk\""))
         assertTrue(source.contains("new java.io.File(getFilesDir(), \"profiles/\" + profileId())"))
         assertTrue(source.contains("new java.io.File(getFilesDir(), \"p/\" + profileRuntimeKey() + \"/aa\")"))
         assertTrue(source.contains("new java.io.File(ext, \"profiles/\" + profileId())"))

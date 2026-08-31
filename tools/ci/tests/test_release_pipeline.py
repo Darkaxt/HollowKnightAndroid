@@ -7,6 +7,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 HELPER = ROOT / "tools" / "ci" / "release_contract.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
+BUILD_SCRIPT = ROOT / "tools" / "depot-to-apk" / "build.sh"
 
 
 def load_helper():
@@ -62,6 +63,13 @@ class ReleasePipelineContractTest(unittest.TestCase):
         self.assertIn("tools/ci/release_contract.py select-apk", workflow)
         self.assertIn("tools/ci/release_contract.py check-package", workflow)
         self.assertNotIn(":emulator-test-app", workflow)
+
+    def test_apk_shell_ignores_empty_resource_directories(self):
+        script = BUILD_SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn('for f in "$d"/*; do', script)
+        self.assertIn('[[ -f "$f" ]] || continue', script)
+        self.assertNotIn('cp -f "$d"/* "$sh/res/$(basename "$d")/"', script)
 
 
 if __name__ == "__main__":

@@ -104,4 +104,16 @@ public sealed class SerializedFileTransformerTests
         Assert.Equal(0, exitCode);
         Assert.Equal(13u, SyntheticAssetFactory.Inspect(output).TargetPlatform);
     }
+
+    [Fact]
+    public void Shader_report_recognizes_an_extensionless_serialized_file_by_header()
+    {
+        using var fixture = SyntheticAssetFactory.WithShaderPlatforms(18);
+        var extensionlessInput = Path.Combine(fixture.Root, "unity_builtin_extra");
+        File.Copy(fixture.InputPath, extensionlessInput);
+
+        var exitCode = Program.Main(["shader-report", extensionlessInput]);
+
+        Assert.Equal(0, exitCode);
+    }
 }

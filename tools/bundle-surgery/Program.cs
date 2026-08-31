@@ -582,17 +582,11 @@ internal static class Program
     static int ShaderReport(string path)
     {
         var manager = new AssetsManager();
-        manager.LoadClassPackage(ClassDataPath);
-
-        var bundle = manager.LoadBundleFile(path, true);
-        manager.LoadClassDatabaseFromPackage(bundle.file.Header.EngineVersion);
-
         int shaders = 0, multi = 0, noVulkan = 0;
         var mixes = new Dictionary<string, int>();
-        foreach (var dirInfo in bundle.file.BlockAndDirInfo.DirectoryInfos)
+
+        void Visit(AssetsFileInstance afile)
         {
-            if ((dirInfo.Flags & 4) == 0) continue;
-            var afile = manager.LoadAssetsFileFromBundle(bundle, dirInfo.Name);
             foreach (var asset in afile.file.GetAssetsOfType(AssetClassID.Shader))
             {
                 var bf = manager.GetBaseField(afile, asset);
@@ -639,7 +633,31 @@ internal static class Program
                 mixes[key] = seen + 1;
             }
         }
-        manager.UnloadAll();
+
+        try
+        {
+            manager.LoadClassPackage(ClassDataPath);
+            if (AssetsFile.IsAssetsFile(path))
+            {
+                var afile = manager.LoadAssetsFile(path);
+                manager.LoadClassDatabaseFromPackage(afile.file.Metadata.UnityVersion);
+                Visit(afile);
+            }
+            else
+            {
+                var bundle = manager.LoadBundleFile(path, true);
+                manager.LoadClassDatabaseFromPackage(bundle.file.Header.EngineVersion);
+                foreach (var dirInfo in bundle.file.BlockAndDirInfo.DirectoryInfos)
+                {
+                    if ((dirInfo.Flags & 4) == 0) continue;
+                    Visit(manager.LoadAssetsFileFromBundle(bundle, dirInfo.Name));
+                }
+            }
+        }
+        finally
+        {
+            manager.UnloadAll();
+        }
         foreach (var kv in mixes)
             Console.WriteLine($"  platforms [{kv.Key}]: {kv.Value} shader(s)");
         Console.WriteLine($"{shaders} shader(s), {multi} with more than one chunk, {noVulkan} with no Vulkan slice");

@@ -42,15 +42,20 @@ import kotlinx.coroutines.launch
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.IOException
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption.ATOMIC_MOVE
+import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.security.MessageDigest
 import java.util.zip.CRC32
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 import kotlin.coroutines.coroutineContext
 import dev.silksong.launcher.profiles.ProfileBuildPaths
 import dev.silksong.launcher.profiles.ContentLayout
 import dev.silksong.launcher.profiles.GameProfile
 import dev.silksong.launcher.profiles.GameProfiles
+import org.apache.commons.compress.archivers.zip.Zip64Mode
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry
+import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream
 
 object PlayerImage {
 
@@ -163,6 +168,7 @@ object PlayerImage {
             append(GRAPHICS_APIS).append('\n')
             append(metadata.length()).append('/').append(metadata.lastModified()).append('\n')
             append(ggm?.length() ?: 0).append('/').append(ggm?.lastModified() ?: 0).append('\n')
+            append(PackageCompiler.patchAssemblyName(profile)).append('\n')
             append(PackageCompiler.entryPoints(root).orEmpty())
         }
     }
@@ -254,6 +260,93 @@ object PlayerImage {
         send(Progress("Preparing the player image", -1f, "staging bundle-surgery"))
         val surgery = stageSurgery(root, assets)
         val img = imageDir(root)
+
+        if (profile.contentLayout == ContentLayout.CLASSIC_PLAYER) {
+            send(Progress("Converting classic player data", -1f, "validating exact source"))
+            val classic = File(root, "classic-player-tree")
+            val report = File(root, "classic-tree-report.json")
+            val manifest = File(root, "classic-profile-manifest.json")
+            val manifestAsset = "profiles/${profile.id}-${profile.currentGameVersion}.json"
+            val manifestPart = File(root, "classic-profile-manifest.json.part")
+            assets.open(manifestAsset).use { input ->
+                manifestPart.outputStream().use { output -> input.copyTo(output) }
+            }
+            if (!manifestPart.renameTo(manifest)) {
+                manifestPart.delete()
+                throw IOException("could not stage $manifestAsset")
+            }
+            run(
+                surgery,
+                context,
+                listOf(
+                    "retarget-classic-tree",
+                    data.absolutePath,
+                    classic.absolutePath,
+                    manifest.absolutePath,
+                    report.absolutePath,
+                ),
+            )
+
+            send(Progress("Assembling the player image", -1f, "copying classic data"))
+            img.deleteRecursively()
+            for (source in classic.walkTopDown().sortedBy { it.path }) {
+                if (!source.isFile) continue
+                val relative = source.relativeTo(classic).path.replace('\\', '/')
+                if (!shouldCopyClassicRelativePath(relative)) continue
+                val target = File(img, relative)
+                target.parentFile?.mkdirs()
+                source.copyTo(target, overwrite = true)
+            }
+            File(img, "Resources").mkdirs()
+            File(img, "Managed/Metadata").mkdirs()
+            File(img, "Managed/Resources").mkdirs()
+            engineResources.copyTo(
+                File(img, "Resources/unity default resources"),
+                overwrite = true,
+            )
+            val builtin = File(data, "Resources/unity_builtin_extra")
+            if (!builtin.isFile) throw IOException("classic source has no Resources/unity_builtin_extra")
+            run(
+                surgery,
+                context,
+                listOf(
+                    "extract-vulkan-android",
+                    builtin.absolutePath,
+                    File(img, "Resources/unity_builtin_extra").absolutePath,
+                ),
+            )
+            File(converted, "Metadata/global-metadata.dat").copyTo(
+                File(img, "Managed/Metadata/global-metadata.dat"),
+                overwrite = true,
+            )
+            for (resource in File(converted, "Resources").listFiles().orEmpty()) {
+                if (resource.isFile && resource.name.endsWith(".dat")) {
+                    resource.copyTo(
+                        File(img, "Managed/Resources/${resource.name}"),
+                        overwrite = true,
+                    )
+                }
+            }
+            setScriptingBackend(File(img, "boot.config"))
+            registerPatches(profile, img, root)
+            File(img, "unity_app_guid").writeText(
+                guidFromMetadata(File(img, "Managed/Metadata/global-metadata.dat")),
+            )
+            catalogDir(root).deleteRecursively()
+            if (!File(img, "globalgamemanagers").isFile) {
+                throw IOException("classic converter produced no globalgamemanagers")
+            }
+            LauncherLog.log(
+                "classic player image: " +
+                    "${img.walkTopDown().filter { it.isFile }.sumOf { it.length() } / 1024 / 1024} MB",
+            )
+            send(Progress("Player image ready", 1f, "classic player"))
+            return@channelFlow
+        }
+
+        require(profile.contentLayout == ContentLayout.ADDRESSABLES) {
+            "Unsupported content layout for ${profile.id}: ${profile.contentLayout}"
+        }
         img.deleteRecursively()
         File(img, "Resources").mkdirs()
         File(img, "Managed/Metadata").mkdirs()
@@ -318,7 +411,7 @@ object PlayerImage {
         run(surgery, context, listOf("set-build-version", ggm.absolutePath, profile.unityVersion))
 
         setScriptingBackend(File(img, "boot.config"))
-        registerPatches(img, root)
+        registerPatches(profile, img, root)
 
         File(img, "unity_app_guid").writeText(
             guidFromMetadata(File(img, "Managed/Metadata/global-metadata.dat")),
@@ -384,20 +477,26 @@ object PlayerImage {
         val tmp = File(pkgDir, "data.apk.part")
         tmp.delete()
         var entries = 0
-        ZipOutputStream(BufferedOutputStream(tmp.outputStream(), 1 shl 16)).use { zip ->
+        ZipArchiveOutputStream(BufferedOutputStream(tmp.outputStream(), 1 shl 16)).use { zip ->
+            zip.setUseZip64(Zip64Mode.AsNeeded)
             // Stored, not deflated. The engine memory-maps what it reads out
             // of here, and the payload is already-compressed asset data that
             // deflate would only make slower to load. Matches what build.sh
             // does with jar --no-compress.
-            zip.setMethod(ZipOutputStream.STORED)
+            zip.setMethod(ZipArchiveOutputStream.STORED)
             entries += addTree(zip, imageDir(root), "assets/bin/Data")
             if (catalogDir(root).isDirectory) {
                 entries += addTree(zip, catalogDir(root), "assets/aa")
             }
         }
-        if (!tmp.renameTo(out)) {
+        try {
+            Files.move(tmp.toPath(), out.toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
+        } catch (e: AtomicMoveNotSupportedException) {
             tmp.delete()
-            throw IOException("could not write $out")
+            throw IOException("could not atomically write $out", e)
+        } catch (e: IOException) {
+            tmp.delete()
+            throw IOException("could not write $out", e)
         }
 
         // Anything an older layout left behind. Loose assets here are not
@@ -408,7 +507,9 @@ object PlayerImage {
         // The catalog's content root is a fixed 56-byte field, which fits an
         // internal path and not the depot's real one -- the game's directory
         // name alone is most of the budget. So the short path is a link.
-        linkContent(paths, depot)
+        if (paths.profile.contentLayout == ContentLayout.ADDRESSABLES) {
+            linkContent(paths, depot)
+        }
         LauncherLog.log("packed $entries file(s) into $out (${out.length()} bytes)")
     }
 
@@ -446,19 +547,19 @@ object PlayerImage {
      * the stream cannot work out for itself, so both are computed here before
      * the bytes are written.
      */
-    private fun addTree(zip: ZipOutputStream, dir: File, prefix: String): Int {
+    private fun addTree(zip: ZipArchiveOutputStream, dir: File, prefix: String): Int {
         var n = 0
         for (f in dir.walkTopDown().sortedBy { it.path }) {
             if (!f.isFile) continue
             val rel = f.relativeTo(dir).path.replace('\\', '/')
-            val entry = ZipEntry("$prefix/$rel")
-            entry.method = ZipEntry.STORED
+            val entry = ZipArchiveEntry("$prefix/$rel")
+            entry.method = ZipArchiveOutputStream.STORED
             entry.size = f.length()
             entry.compressedSize = f.length()
             entry.crc = crcOf(f)
-            zip.putNextEntry(entry)
+            zip.putArchiveEntry(entry)
             f.inputStream().use { it.copyTo(zip, 1 shl 16) }
-            zip.closeEntry()
+            zip.closeArchiveEntry()
             n++
         }
         return n
@@ -475,6 +576,17 @@ object PlayerImage {
             }
         }
         return crc.value
+    }
+
+    fun shouldCopyClassicRelativePath(relativePath: String): Boolean {
+        val normalized = relativePath.replace('\\', '/').trimStart('/')
+        val lower = normalized.lowercase(java.util.Locale.ROOT)
+        if (lower.endsWith(".part")) return false
+        if (lower == "managed" || lower.startsWith("managed/")) return false
+        if (lower == "monobleedingedge" || lower.startsWith("monobleedingedge/")) return false
+        if (lower == "resources/unity default resources") return false
+        if (lower == "resources/unity_builtin_extra") return false
+        return normalized.isNotEmpty() && normalized.split('/').none { it == ".." }
     }
 
     /**
@@ -872,13 +984,14 @@ object PlayerImage {
      * Both edits are idempotent -- an entry already present is not added twice
      * -- because this runs again on every rebuild.
      */
-    private fun registerPatches(img: File, root: File) {
-        val assembly = PackageCompiler.patchAssembly(root)
+    internal fun registerPatches(profile: GameProfile, img: File, root: File) {
+        val assembly = PackageCompiler.patchAssembly(profile, root)
         if (!assembly.isFile) {
             LauncherLog.log("no patches to register")
             return
         }
         val name = assembly.name
+        val assemblyName = name.removeSuffix(".dll")
 
         // ScriptingAssemblies.json: parallel arrays of names and types, and
         // they have to stay the same length. 16 is what the depot's own
@@ -910,14 +1023,14 @@ object PlayerImage {
             val methodName = e.getString("methodName")
             val exists = (0 until rows.length()).any {
                 val r = rows.getJSONObject(it)
-                r.optString("assemblyName") == "SilksongPatches" &&
+                r.optString("assemblyName") == assemblyName &&
                     r.optString("className") == className &&
                     r.optString("methodName") == methodName
             }
             if (exists) continue
             rows.put(
                 org.json.JSONObject()
-                    .put("assemblyName", "SilksongPatches")
+                    .put("assemblyName", assemblyName)
                     // The ported patches sit in the global namespace, as the
                     // game's own classes do; only the newer ones are scoped.
                     .put("nameSpace", e.optString("nameSpace", ""))

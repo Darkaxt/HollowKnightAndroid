@@ -31,7 +31,7 @@ public class GameActivity extends PlayerActivity
     {
         String id = getIntent() == null ? null : getIntent().getStringExtra(PROFILE_ID_EXTRA);
         if (id == null || id.isEmpty()) id = "silksong";
-        if (!id.equals("silksong"))
+        if (!id.equals("silksong") && !id.equals("hollow-knight"))
             throw new IllegalArgumentException("unsupported game profile: " + id);
         return id;
     }
@@ -85,6 +85,7 @@ public class GameActivity extends PlayerActivity
     private String profileRuntimeKey()
     {
         if (profileId().equals("silksong")) return "ss";
+        if (profileId().equals("hollow-knight")) return "hk";
         throw new IllegalArgumentException("unsupported runtime profile: " + profileId());
     }
 

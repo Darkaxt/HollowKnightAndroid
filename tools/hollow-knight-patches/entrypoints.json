@@ -1,0 +1,10 @@
+{
+  "entryPoints": [
+    {
+      "nameSpace": "HollowKnightPatches",
+      "className": "InjectionProbe",
+      "methodName": "Start",
+      "loadTypes": 2
+    }
+  ]
+}

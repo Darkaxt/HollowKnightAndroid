@@ -380,9 +380,16 @@ tasks.named("preBuild") { dependsOn(stageBundleSurgery) }
 val stagePatches by tasks.registering(Sync::class) {
     from(rootProject.file("../../tools/silksong-patches/src")) { into("src") }
     from(rootProject.file("../../tools/silksong-patches/entrypoints.json"))
-    into(layout.projectDirectory.dir("src/main/assets/ondevice/patches"))
+    into(layout.projectDirectory.dir("src/main/assets/ondevice/silksong-patches"))
 }
 tasks.named("preBuild") { dependsOn(stagePatches) }
+
+val stageHollowKnightPatches by tasks.registering(Sync::class) {
+    from(rootProject.file("../../tools/hollow-knight-patches/src")) { into("src") }
+    from(rootProject.file("../../tools/hollow-knight-patches/entrypoints.json"))
+    into(layout.projectDirectory.dir("src/main/assets/ondevice/hollow-knight-patches"))
+}
+tasks.named("preBuild") { dependsOn(stageHollowKnightPatches) }
 
 // SafeIo, staged the same way and for the same reasons, but kept apart from
 // the patches above because it is compiled apart from them. The patches are

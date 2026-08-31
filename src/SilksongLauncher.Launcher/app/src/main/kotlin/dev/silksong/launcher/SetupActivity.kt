@@ -664,7 +664,7 @@ class SetupActivity : Activity() {
             return
         }
         DepotLocation.remember(buildPaths, dir)
-        DepotLocation.writeMarker(dir)
+        DepotLocation.writeMarker(profile, dir)
         // A different folder is a different content tree, and the built game
         // reads that tree directly rather than a copy. It has almost certainly
         // never been retargeted -- and the stamp that would say so identifies
@@ -897,9 +897,6 @@ class SetupActivity : Activity() {
             runSynthetic()
             return
         }
-        require(profile.contentLayout == ContentLayout.ADDRESSABLES) {
-            "The production setup pipeline does not yet support ${profile.contentLayout}: ${profile.id}"
-        }
         val unity = UnityFetcher.rootFor(filesDir, profile)
         val tools = ToolchainFetcher.rootFor(this)
         val out = buildPaths.buildRoot
@@ -1029,14 +1026,17 @@ class SetupActivity : Activity() {
                                 PackageCompiler.compile(unity, depot, this@SetupActivity, out)
                                     .collect { setBusy(true, it.step, it.fraction, it.detail) }
                             }
-                            PackageCompiler.compileIo(
-                                unity,
-                                depot,
-                                this@SetupActivity,
-                                out,
-                                assets,
-                            ).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                            if (PackageCompiler.requiresSaveIo(profile)) {
+                                PackageCompiler.compileIo(
+                                    unity,
+                                    depot,
+                                    this@SetupActivity,
+                                    out,
+                                    assets,
+                                ).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                            }
                             PackageCompiler.compilePatches(
+                                profile,
                                 unity,
                                 depot,
                                 this@SetupActivity,
@@ -1046,8 +1046,9 @@ class SetupActivity : Activity() {
                         }
 
                         BuildStage.ConvertIl2Cpp -> {
-                            if (!Il2cppConverter.isPresent(out) || Il2cppConverter.isStale(out)) {
+                            if (!Il2cppConverter.isPresent(out) || Il2cppConverter.isStale(profile, out)) {
                                 Il2cppConverter.convert(
+                                    profile,
                                     unity,
                                     depot,
                                     this@SetupActivity,
@@ -1082,13 +1083,15 @@ class SetupActivity : Activity() {
                                 PlayerImage.markCurrent(profile, out, depot)
                                 DepotLocation.relink(buildPaths, depot)
                             }
-                            PlayerImage.retargetContent(
-                                profile,
-                                depot,
-                                this@SetupActivity,
-                                out,
-                                assets,
-                            ).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                            if (profile.contentLayout == ContentLayout.ADDRESSABLES) {
+                                PlayerImage.retargetContent(
+                                    profile,
+                                    depot,
+                                    this@SetupActivity,
+                                    out,
+                                    assets,
+                                ).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                            }
                         }
 
                         BuildStage.Verify -> withContext(Dispatchers.IO) {

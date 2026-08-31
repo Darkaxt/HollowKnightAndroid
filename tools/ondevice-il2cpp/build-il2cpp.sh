@@ -170,7 +170,13 @@ fi
 # 247 distinct basenames (os/Posix/Thread.cpp vs os/Win32/Thread.cpp), so
 # basename-derived names silently overwrite each other and the link then fails
 # hundreds of objects later.
-obj_name() { printf 'obj/%s%s.o' "$1" "$(echo "${2#$3/}" | tr -c 'A-Za-z0-9._-' '_')"; }
+# GNU coreutils on Android writes "HASH  path". The MSYS build used by the
+# local proof writes "HASH *path" to mark binary mode. Both hashes describe
+# the same bytes; normalising the optional marker keeps the filename out of
+# the marker and makes the incremental manifest portable between hosts.
+normalize_sha256_manifest() {
+    sed 's/^\([0-9a-fA-F][0-9a-fA-F]*\) \*/\1  /'
+}
 
 : > obj/.seen
 : > obj/.objs
@@ -185,7 +191,8 @@ cat > obj/.cc <<'WORKER'
 #!/system/bin/sh
 f="$1"
 rel="${f#$CC_TREE/}"
-out=$(printf 'obj/%s%s.o' "$CC_PREFIX" "$(echo "$rel" | tr -c 'A-Za-z0-9._-' '_')")
+safe=${rel//[^A-Za-z0-9._-]/_}
+out=$(printf 'obj/%s%s.o' "$CC_PREFIX" "$safe")
 exec $CLANG -x "$CC_LANG" -std="$CC_STD" $CC_PCH $CXXFLAGS $DEF $INC $TGT \
      -c "$f" -o "$out" 2>>err.log
 WORKER
@@ -243,7 +250,7 @@ compile_all() {
 
     # One sha256sum call for the whole phase: per-file invocations cost more
     # than the hashing itself.
-    echo "$srcs" | xargs sha256sum > obj/.now
+    echo "$srcs" | xargs sha256sum | normalize_sha256_manifest > obj/.now
     cat obj/.now >> obj/.seen
 
     # Decide what needs doing before doing any of it, so the work can be handed
@@ -251,9 +258,15 @@ compile_all() {
     : > obj/.todo
     built=0
     while read -r hash f; do
-        out=$(obj_name "$prefix" "$f" "$tree")
+        rel=${f#$tree/}
+        safe=${rel//[^A-Za-z0-9._-]/_}
+        out="obj/$prefix$safe.o"
         echo "$out" >> obj/.objs
-        old=$(grep -F "  $f" "$MANIFEST" 2>/dev/null | head -1 | cut -d' ' -f1)
+        if [ -s "$MANIFEST" ]; then
+            old=$(grep -F "  $f" "$MANIFEST" 2>/dev/null | head -1 | cut -d' ' -f1)
+        else
+            old=
+        fi
         if [ -f "$out" ] && [ "$old" = "$hash" ]; then
             continue
         fi
@@ -302,7 +315,9 @@ compile_all() {
         # trouble was the game crashing on launch.
         failed=0
         while read -r f; do
-            [ -f "$(obj_name "$prefix" "$f" "$tree")" ] || failed=$((failed + 1))
+            rel=${f#$tree/}
+            safe=${rel//[^A-Za-z0-9._-]/_}
+            [ -f "obj/$prefix$safe.o" ] || failed=$((failed + 1))
         done < obj/.todo
         if [ "$failed" -gt 0 ]; then
             echo "### FAILED: $failed of $built translation units produced no object" >&2
@@ -420,6 +435,20 @@ rm -f obj/.now obj/.objs
 
 T3=$(date +%s)
 echo "### PHASE D: linking libil2cpp.so"
+# Thousands of object paths do not fit in Windows' command-line limit when
+# this script is exercised under Git Bash, and large games can also approach
+# the kernel argv limit on-device. Clang response files are supported in both
+# environments and keep the link invocation constant-sized.
+LINK_OBJECTS="obj/.link-objects.rsp"
+: > "$LINK_OBJECTS"
+link_object_count=0
+for o in obj/*.o; do
+    [ -f "$o" ] || continue
+    printf '%s\n' "$o" >> "$LINK_OBJECTS"
+    link_object_count=$((link_object_count+1))
+done
+[ "$link_object_count" -gt 0 ] || { echo "### NO OBJECTS TO LINK" >&2; exit 1; }
+echo "  link objects: $link_object_count"
 # baselib.a is Unity's PREBUILT arm64-android static library (shipped in the
 # Editor's AndroidPlayer StaticLibs). It is not compilable from the sources in
 # external/baselib, and without it the .so fails at dlopen on
@@ -463,7 +492,7 @@ echo "### PHASE D: linking libil2cpp.so"
 "$USR/bin/clang++" $TGT -shared -fPIC -fuse-ld=lld -nostdlib++ \
     -Wl,-soname,libil2cpp.so \
     -Wl,-z,max-page-size=16384 \
-    -o "$ROOT/libil2cpp.so" obj/*.o "$BASELIB" \
+    -o "$ROOT/libil2cpp.so" "@$LINK_OBJECTS" "$BASELIB" \
     -lc++_static -lc++abi -llog -lm -ldl -lc \
     -Wl,--allow-shlib-undefined >>err.log 2>&1
 link_status=$?

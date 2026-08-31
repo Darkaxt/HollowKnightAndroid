@@ -820,7 +820,7 @@ git commit -m "feat: publish atomic game generations"
 - Create: `tools/hollow-knight-patches/src/InjectionProbe.cs`
 - Create: `tools/hollow-knight-patches/check.ps1`
 
-- [ ] **Step 1: Add a separately compiled Hollow Knight injection probe**
+- [x] **Step 1: Add a separately compiled Hollow Knight injection probe**
 
 ```csharp
 using UnityEngine;
@@ -836,17 +836,25 @@ The project references only assemblies from the selected Hollow Knight depot
 plus shared patch sources. The entry-point manifest names this method
 explicitly.
 
-- [ ] **Step 2: Parameterize assembly and patch inputs**
+- [x] **Step 2: Parameterize assembly and patch inputs**
 
 `PackageCompiler`, `Il2cppConverter`, and `PlayerImage` accept `GameProfile`,
 `ProfilePaths`, and the selected generation. Remove assumptions that the data
 directory, patch DLL, or entrypoint file contains `Silksong`.
 
-- [ ] **Step 3: Add the classic content strategy**
+- [x] **Step 3: Add the classic content strategy**
 
 For `ContentLayout.CLASSIC_PLAYER`, invoke `retarget-classic-tree`, install the
 matching `6000.0.61f1` Android built-in resources, and create the profile's
 `data.apk` with ZIP64 support. Preserve sidecar path relationships.
+
+**Safe-pause cross-check (2026-08-31):** the exact `1.5.12620` tree converted
+with zero missing Vulkan shaders; the patch assembly, IL2CPP generation,
+293,057,880-byte ARM64 shared library, ELF contract, and 5,179,143,894-byte
+ZIP64 player image all passed. Before Step 4 resumes, first inspect and apply
+the nine commits by which this fork is behind `origin`, resolve them against
+the design contract, and rerun affected gates. The isolated proof APK is built
+but deliberately not installed.
 
 - [ ] **Step 4: Run the end-to-end ARM64 spike on the Thor**
 
@@ -867,6 +875,11 @@ Create `docs/verification/hollow-knight-first-boot.md` containing source
 manifest hash, APK commit, device serial/model, Android version, Unity version,
 build duration, relevant log excerpts, tested scene, observed defects, and
 artifact hashes. Do not include game files or credentials.
+
+`docs/verification/hollow-knight-first-boot.md` currently records the complete
+pre-install host checkpoint. Keep this step open until its device/model,
+injection log, tested scene, and observed-defect sections contain real boot
+evidence.
 
 - [ ] **Step 6: Commit the working spike**
 
@@ -902,22 +915,32 @@ changing native paths.
 
 Use two labeled radio cards with status text (`Not configured`, `Building`,
 `Ready`, `Needs repair`). Selection writes through `SelectedGameStore` and
-refreshes launcher actions. Do not begin Unity from the selection callback.
+refreshes launcher actions. Redesign the cards with the already preserved
+user-supplied SteamGridDB grids, heroes, logos, and icons; do not generate or
+redraw artwork. Do not begin Unity from the selection callback.
 
-- [ ] **Step 3: Resolve native and data paths before Unity class loading**
+- [ ] **Step 3: Add pinned direct-launch shortcuts**
+
+Expose a `Create shortcut` action for each registered game through Android's
+pin-shortcut API. Each shortcut carries only the registered profile ID, opens
+the shared launch eligibility path, and uses the preserved individual Hollow
+Knight or Silksong icon supplied by the user. Tests cover unsupported launcher,
+duplicate request, not-ready profile, and both exact profile intents.
+
+- [ ] **Step 4: Resolve native and data paths before Unity class loading**
 
 `SilksongApp.attachBaseContext` reads the selected profile and current
 generation, verifies both, injects that profile's `classes.jar` dex, and
 records immutable process startup paths. `GameActivity` refuses an Intent
 whose profile differs from the process startup profile.
 
-- [ ] **Step 4: Test both switch directions on the Thor**
+- [ ] **Step 5: Test both switch directions on the Thor**
 
 Prove Silksong -> launcher -> Hollow Knight and Hollow Knight -> launcher ->
 Silksong. Confirm the old Unity PID is gone before starting the other profile;
 do not kill it on an elapsed-time threshold.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add src/SilksongLauncher.Launcher tools/depot-to-apk/shell/GameActivity.java

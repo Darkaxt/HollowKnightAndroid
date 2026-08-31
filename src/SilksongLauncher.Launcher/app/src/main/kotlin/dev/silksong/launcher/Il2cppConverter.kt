@@ -27,6 +27,7 @@
 
 package dev.silksong.launcher
 
+import dev.silksong.launcher.profiles.GameProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -114,8 +115,11 @@ object Il2cppConverter {
      * build. An assembly of ours that is missing from the staged set counts as
      * stale for the same reason: that is exactly what an upgrade looks like.
      */
-    fun isStale(root: File): Boolean {
-        val ours = listOf(PackageCompiler.patchAssembly(root), PackageCompiler.ioAssembly(root))
+    fun isStale(profile: GameProfile, root: File): Boolean {
+        val ours = buildList {
+            add(PackageCompiler.patchAssembly(profile, root))
+            if (PackageCompiler.requiresSaveIo(profile)) add(PackageCompiler.ioAssembly(root))
+        }
         for (built in ours) {
             if (!built.isFile) continue
             val staged = File(asmDir(root), built.name)
@@ -158,7 +162,13 @@ object Il2cppConverter {
 
     // ── the run ────────────────────────────────────────────────────────────
 
-    fun convert(unity: File, depot: File, context: android.content.Context, root: File): Flow<Progress> = channelFlow {
+    fun convert(
+        profile: GameProfile,
+        unity: File,
+        depot: File,
+        context: android.content.Context,
+        root: File,
+    ): Flow<Progress> = channelFlow {
         val bcl = bclDir(unity)
         val engine = engineManagedDir(unity)
         val deploy = deployDir(unity)
@@ -179,7 +189,7 @@ object Il2cppConverter {
         val assemblies = stageAssemblies(bcl, engine, managed, PackageCompiler.outputDir(root), asmDir(root))
         LauncherLog.log("il2cpp input: ${assemblies.size} assemblies")
 
-        redirectSaveCalls(context, root)
+        if (PackageCompiler.requiresSaveIo(profile)) redirectSaveCalls(context, root)
 
         prepareTool(deploy)
 

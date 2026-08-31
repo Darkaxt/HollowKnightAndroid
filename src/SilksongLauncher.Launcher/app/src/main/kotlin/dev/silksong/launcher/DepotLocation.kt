@@ -40,6 +40,7 @@ import android.os.Environment
 import android.provider.DocumentsContract
 import java.io.File
 import dev.silksong.launcher.profiles.ProfileBuildPaths
+import dev.silksong.launcher.profiles.ContentLayout
 import dev.silksong.launcher.profiles.GameProfile
 import dev.silksong.launcher.profiles.GameProfiles
 
@@ -275,6 +276,7 @@ object DepotLocation {
     }
 
     fun relink(paths: ProfileBuildPaths, depot: File) {
+        if (paths.profile.contentLayout != ContentLayout.ADDRESSABLES) return
         PlayerImage.linkContent(paths, depot)
         val content = contentDir(paths.profile, depot) ?: return
         val out = paths.contentPointer
@@ -403,7 +405,7 @@ object DepotLocation {
                 "What has to be in the folder is \"${profile.dataDirectoryName}\" and " +
                 "everything beside it, from the game's Linux files."
         }
-        if (!isWritable(contentDir(profile, dir) ?: dir)) {
+        if (requiresWritableContent(profile) && !isWritable(contentDir(profile, dir) ?: dir)) {
             return "that folder cannot be written to, and the game's content has to be " +
                 "converted in place. Some devices keep memory cards read-only for apps; " +
                 "if that folder is on one, copy the game to internal storage instead."
@@ -419,6 +421,9 @@ object DepotLocation {
         PlayerImage.depotData(depot)
             ?.let { PlayerImage.addressablesContainer(profile, it) }
             ?.takeIf { it.isDirectory }
+
+    fun requiresWritableContent(profile: GameProfile): Boolean =
+        profile.contentLayout == ContentLayout.ADDRESSABLES
 
     /**
      * Whether we may write in a directory, asked by writing in it.
@@ -439,22 +444,34 @@ object DepotLocation {
     /**
      * Says, in the folder itself, that the folder is now load-bearing.
      *
-     * The depot is not a copy of anything after this: only the 55 MB player
-     * image is taken inside the app, and the several gigabytes of content stay
-     * here and are read from here every time the game runs. Somebody tidying
-     * up their downloads a month later has no other way to know that.
+     * Addressables remain live runtime content; a classic player is copied
+     * into the generated image but still needs its source for rebuilds and
+     * repairs. Somebody tidying up downloads later needs the right warning for
+     * the selected layout rather than a Silksong-only claim.
      */
-    fun writeMarker(dir: File) {
+    fun writeMarker(profile: GameProfile, dir: File) {
         try {
+            val usage = if (profile.contentLayout == ContentLayout.ADDRESSABLES) {
+                "The game reads its content straight out of here every time it runs -- " +
+                    "it was not copied into the app, because it is several gigabytes."
+            } else {
+                "The launcher keeps these source files to build and repair the Android " +
+                    "player image. The running game uses the generated private copy."
+            }
+            val consequence = if (profile.contentLayout == ContentLayout.ADDRESSABLES) {
+                "Deleting or moving this folder will stop the game from starting, and " +
+                    "the app will not be able to update it either."
+            } else {
+                "Deleting or moving this folder will prevent repairs, rebuilds, and " +
+                    "updates, even though the current generated game may keep working."
+            }
             File(dir, MARKER).writeText(
-                "Silksong Android is using this folder.\n" +
+                "HollowKnightAndroid is using this folder for ${profile.displayName}.\n" +
                     "\n" +
-                    "The game reads its content straight out of here every time it runs -- " +
-                    "it was not copied into the app, because it is several gigabytes.\n" +
+                    "$usage\n" +
                     "\n" +
-                    "Deleting or moving this folder will stop the game from starting, and " +
-                    "the app will not be able to update it either. Both mean downloading " +
-                    "the game again and rebuilding it, which takes around half an hour.\n",
+                    "$consequence Restoring the source may require downloading the game " +
+                    "again.\n",
             )
         } catch (t: Throwable) {
             // Advisory. A folder that will not take a text file is worth a log
