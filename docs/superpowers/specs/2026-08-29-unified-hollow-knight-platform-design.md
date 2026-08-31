@@ -85,6 +85,9 @@ versions or operating systems.
    and release artifacts.
 10. Provide reproducible, signed launcher releases after the implementation
     and hardware gates pass.
+11. Present one coherent bottom-screen product language across both games,
+    with shared structure and interaction rather than a Silksong interface
+    containing visibly grafted-on Hollow Knight pages.
 
 ## Non-goals
 
@@ -346,6 +349,57 @@ native EGL compositor.
 Single-display devices remain supported. The renderer must degrade to the
 primary display without creating an unusable invisible UI path.
 
+### Unified bottom-screen product language
+
+The bottom screen is one product surface with two game adapters. Both games
+use the same shell geometry, tab behavior, gesture vocabulary, touch-target
+sizes, selection feedback, content/detail split, status placement, modal
+priority, idle behavior, error containment, accessibility rules, and
+diagnostic overlay. A user who switches games should already understand how
+to navigate the second screen.
+
+The canonical page order is semantic rather than tied to either game's class
+names:
+
+1. Inventory;
+2. Loadout (`Charms` for Hollow Knight, `Crests` for Silksong);
+3. game-specific progress pages (`Tasks` and `Journal` where supported);
+4. Map, always at the right-hand edge.
+
+Unavailable pages are omitted without changing the relative order of the
+remaining semantic groups. The shell remembers the last page per profile and
+uses a shared idle/title state when no save is active.
+
+The common visual system owns layout metrics, spacing, rules, focus and
+pressed states, contrast thresholds, type roles, animation policy, and the
+placement of status information. A game adapter supplies localized labels,
+data, icons, and its own resident game fonts and ornamentation. That controlled
+theming is intentional: the two games retain their identities inside the same
+interface without importing promotional launcher artwork into gameplay or
+forcing one game's decorative assets onto the other.
+
+Hollow Knight's existing Dual Souls behavior is a functional baseline, not a
+renderer or layout template. Its persistent HUD, area status, map,
+inventory, charms, story/dialogue/tutorial overlays, item popups, fade
+synchronization, and background/resume behavior are adapter capabilities that
+must be preserved or explicitly tracked. Silksong's inventory, crests, tasks,
+journal, map, title state, and display-isolated touch behavior receive the same
+treatment. Contextual overlays use a shared modal layer above the active page;
+they do not move or replace the shell differently per game.
+
+The SteamGridDB grids, heroes, logos, and icons supplied for this project are
+launcher and shortcut resources only. They are not bottom-screen theme assets.
+No new artwork is generated for the shared shell; adapters reuse resident game
+assets and must provide a deterministic neutral fallback when an asset has not
+loaded yet.
+
+The source comparison behind this contract is recorded in
+`docs/verification/dualscreen-source-audit.md`. The decisive device gate is a
+side-by-side Thor review of both games covering the same navigation,
+interaction, modal, pause/resume, and single-display matrix. Emulator evidence
+may prove shell and fallback logic but cannot close physical display or touch
+attribution gates.
+
 ### Branding and launcher icon
 
 The installed application must not reuse the Silksong-only icon. The final
@@ -392,6 +446,11 @@ records any intentional design change, checks that no proprietary content was
 introduced, and confirms that the previous working Silksong and profile
 generations remain recoverable. Design changes are made in this specification
 before code begins to depend on them.
+
+Every major achievement also refreshes the branch `README.md` in the same
+stage-close change. Its public feature/status claims must agree with the
+traceability ledger and link to the current verification record. A stage is
+not closed with a stale README.
 
 The initial host-only POC may implement the profile/storage primitives and the
 classic converter/source validator before the Silksong device regression. It

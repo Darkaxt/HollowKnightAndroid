@@ -65,7 +65,9 @@ dependent milestone:
    blocker.
 7. Run `git diff --check`, `make test`, the milestone-specific checks, and a
    tracked-file scan proving that no game or Unity binaries entered the tree.
-8. Commit the traceability update separately with the message
+8. Refresh `README.md` after every major achievement so its public feature and
+   status claims match the verification ledger and link to the new evidence.
+9. Commit the traceability and README update separately with the message
    `docs: cross-check milestone N against design`, replacing `N` with the
    completed milestone number.
 
@@ -1219,12 +1221,26 @@ git commit -m "feat: add per-profile mod builds and safe mode"
 
 **Files:**
 - Create: `tools/shared-patches/src/DualScreen/IDualScreenData.cs`
+- Create: `tools/shared-patches/src/DualScreen/IDualScreenTheme.cs`
+- Create: `tools/shared-patches/src/DualScreen/DualScreenShell.cs`
 - Create: `tools/shared-patches/src/DualScreen/DualScreenRuntime.cs`
 - Move: `tools/silksong-patches/src/dualscreen/DsPresentation.cs` to `tools/shared-patches/src/DualScreen/DsPresentation.cs`
 - Move: `tools/silksong-patches/src/dualscreen/DsInput.cs` to `tools/shared-patches/src/DualScreen/DsInput.cs`
 - Move: `tools/silksong-patches/src/dualscreen/DsTheme.cs` to `tools/shared-patches/src/DualScreen/DsTheme.cs`
+- Create: `tools/silksong-patches/src/dualscreen/SilksongScreenAdapter.cs`
 - Create: `tools/hollow-knight-patches/src/dualscreen/HollowKnightScreenData.cs`
 - Test: `tools/shared-patches-tests/DualScreenRuntimeTests.cs`
+- Test: `tools/shared-patches-tests/DualScreenShellTests.cs`
+
+- [x] **Step 0: Compare the two source implementations**
+
+Record the transport, input, lifecycle, page, HUD, overlay, and theme behavior
+of Silksong `DualScreenV2` and current `igawa6/dualsouls` in
+`docs/verification/dualscreen-source-audit.md`. The selected boundary keeps
+Silksong's Unity display-1/Vulkan transport, replaces the per-game outer UI
+with one shared shell, and retains the games' data and resident art behind
+adapters. Dual Souls' Android `Presentation`, native EGL blitter, and
+MotionEvent polling are reference behavior only.
 
 - [ ] **Step 1: Test display and fallback decisions**
 
@@ -1247,25 +1263,55 @@ The shared runtime owns display activation, target camera, presentation,
 themes, touch routing, diagnostics, and single-display fallback. It references
 no Silksong types.
 
-- [ ] **Step 3: Preserve Silksong behavior through an adapter**
+Define the shared shell contract alongside the data boundary. It owns the
+layout grid, semantic page ordering, tab and swipe navigation, touch metrics,
+content/detail composition, status placement, idle/title state, modal overlay
+priority, focus/pressed/disabled states, error isolation, and per-profile
+last-page restoration. Adapters provide only game data, localized labels,
+resident fonts/art, theme tokens, and supported page/modal descriptors.
+
+Host tests must instantiate both adapters against the same shell and assert
+identical geometry and interaction semantics. They must also assert the
+canonical order `Inventory`, `Loadout`, optional progress pages, `Map`; Map
+remains last even when optional pages are absent.
+
+- [ ] **Step 3: Preserve Silksong capabilities through an adapter**
 
 Compile and launch Silksong on Thor. Compare map, inventory, crests, tasks,
 journal, touch, title cards, and single-display behavior with the base
 revision. Record screenshots and functional observations in
 `docs/verification/silksong-dualscreen-regression.md`.
 
-- [ ] **Step 4: Add the first Hollow Knight screen**
+Pixel identity with the old Silksong-only shell is not required because the
+outer shell is intentionally unified. Page data, interactions, availability,
+failure isolation, and game-native theme assets must remain equivalent.
 
-Implement a map/status proof using Hollow Knight's adapter. Success is a
-stable second-display camera, correct scene transitions, correct touch display
-attribution, and no regression to primary-display input.
+- [ ] **Step 4: Add the Hollow Knight adapter baseline**
 
-- [ ] **Step 5: Commit**
+Implement Inventory, Charms-as-Loadout, and Map through Hollow Knight's
+adapter, using Dual Souls as the functional reference while drawing through
+the shared shell. Preserve the persistent HUD/status contract and establish
+the shared modal layer with at least one real Hollow Knight story or tutorial
+overlay. Success is a stable second-display camera, correct scene transitions,
+correct touch display attribution, synchronized fades and pause/resume, and no
+regression to primary-display input. Any remaining Dual Souls capability is a
+named blocker or tracked deferral with a target and acceptance test.
+
+- [ ] **Step 5: Cross-game product review on Thor**
+
+Capture both games on the physical bottom panel and verify the same tab
+placement, semantic ordering, gestures, selection states, content/detail
+geometry, status locations, modal priority, and idle behavior. Confirm that
+each game uses only its own resident fonts/art inside those shared rules. Run
+the single-display fallback for both profiles. Record the matrix in
+`docs/verification/unified-bottom-screen.md`.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add tools/shared-patches tools/shared-patches-tests tools/silksong-patches \
-        tools/hollow-knight-patches docs/verification
-git commit -m "feat: share the Vulkan dual-screen runtime"
+        tools/hollow-knight-patches docs/verification docs/superpowers README.md
+git commit -m "feat: unify the bottom-screen runtime and shell"
 ```
 
 ## Milestone 7: Branding, CI, signing, and release proof

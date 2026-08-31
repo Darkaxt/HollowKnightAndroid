@@ -7,8 +7,10 @@ and keeps both games behind one launcher, package identity, toolchain library,
 mod library, and—eventually—skin library.
 
 This branch is an implementation checkpoint, **not a finished public release**.
-Hollow Knight has completed the host conversion and ARM64 compilation gates,
-but its first Android boot and playable-room gate remains open.
+The exact Hollow Knight `1.5.12620` Linux build now completes on-device
+conversion, ARM64 compilation, packaging, installation, first boot, and the
+playable-room gate on the AYN Thor. The next production stage is the unified
+launcher lifecycle and current Silksong regression.
 
 <p align="center">
   <img src="docs/icon.png" alt="Hollow Knight Android combined Hollow Knight and Silksong app icon" width="220" />
@@ -30,18 +32,21 @@ not used for project artwork.
 
 | Area | Current evidence | Remaining gate |
 |---|---|---|
-| Hollow Knight `1.5.12620` | Exact Linux manifest accepted; 1,005 serialized files converted with complete Vulkan coverage; IL2CPP and a 16 KB-aligned AArch64 `libil2cpp.so` built; 5.18 GB ZIP64 player image reopened successfully | Install the isolated build on ARM64, observe the patch probe, reach the menu and a playable room with rendering, audio, and input |
+| Hollow Knight `1.5.12620` | Exact Linux manifest accepted; 1,005 serialized files converted with complete Vulkan coverage; 267,628,408-byte AArch64 `libil2cpp.so` built; a ZIP32 base APK plus main OBB generation was independently hash-verified, mounted, and played through the first room on the Thor | Save reload, representative-scene coverage, shared input adapter, and later mod/skin/dual-screen gates remain |
 | Silksong `1.0.29980` | Existing Addressables/Vulkan pipeline is retained behind the `silksong` profile | Re-prove the fork-signed profile generation, preservation/adoption path, and gameplay on the target device |
 | One launcher | Both profiles, independent storage, atomic generations, and cold-process selection exist and have host/emulator coverage | Prove both switch directions with the production ARM64 Unity processes |
 | Mods | The parent's build-time BepInEx 5/Harmony weaver is merged and routed through each selected profile's patch, IL2CPP, generation, and status paths | Real plugin compatibility for each game, compatibility manifests, dependencies, load order, and per-profile enablement remain unverified |
 | Skins | Shared death/respawn rotation state machine has host coverage | Pack scanner/import, persistence, real game lifecycle hooks, texture adapters, rollback, and both-game runtime proof |
-| Dual screen | Silksong's existing Vulkan multi-display implementation remains the rendering foundation | Re-extract the game-neutral layer and implement/verify Hollow Knight screens and single-display fallback |
+| Dual screen | Silksong's direct Vulkan display-1 renderer is selected over Dual Souls' native EGL transport; the two source implementations and a unified shell contract are documented | Implement one shared shell, adapt both games' native pages/art, and verify the common interaction, modal, lifecycle, touch, and fallback matrix on the Thor |
 | Releases | Fork identity and GitHub signing pipeline have a signed dry-run proof | No release until source reproducibility, device, gameplay, migration, tag/version, and fresh-download gates pass |
 
 The detailed requirement ledger is
 [`docs/verification/design-traceability.md`](docs/verification/design-traceability.md).
-The current Hollow Knight host evidence is
+The current Hollow Knight device evidence is
 [`docs/verification/hollow-knight-first-boot.md`](docs/verification/hollow-knight-first-boot.md).
+The bottom-screen source comparison and selected shared product language are
+recorded in
+[`docs/verification/dualscreen-source-audit.md`](docs/verification/dualscreen-source-audit.md).
 
 ## Design
 
@@ -53,6 +58,10 @@ The current Hollow Knight host evidence is
 - Independent profile generations under private app storage, published
   atomically after verification.
 - Shared immutable toolchains by Unity version and content hash.
+- One bottom-screen shell across both games: shared geometry, semantic page
+  order, navigation, gestures, status placement, modal behavior, and
+  diagnostics, with each adapter supplying only its own data and resident
+  game art.
 - No Team Cherry game files, Steam credentials, generated game data, Unity
   binaries, or private signing keys in this repository or its release APK.
 
