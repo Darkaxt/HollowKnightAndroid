@@ -60,7 +60,7 @@ composition satisfies the target.
 
 | Stage | State | Blockers | Tracked deferrals | Evidence |
 | --- | --- | --- | --- | --- |
-| Corrective specification and plan | `IN-PROGRESS` | None in the document update itself | All implementation requirements are assigned to Stages 1–9 | Corrective spec, plan, and this matrix |
+| Stage 0 contract enforcement | `COMPLETE` | None | All production implementation requirements remain assigned to Stages 1–9 | `python -m unittest tools.ci.tests.test_dual_souls_ui_port -v`: 7 tests passed; DSUI-01–10, distinct first-column rows for all nine reference modules, exactly one valid disposition row for each of the 24 current dualscreen C# filenames, explicit prototype/port status, and README/traceability acceptance language are enforced |
 | Direct-display transport | `PROVEN_BASELINE` | Multi-role composition isolation and fade remain unimplemented | None | Signed Silksong display-1 gameplay proof and current `DsPresentation` source |
 | Authored shell | `REJECTED_PROTOTYPE` | Must be removed from production after replacements land | None | Device review plus source audit proves independent composition |
 | Dual Souls composition port | `NOT_STARTED` | Stages 1–8 | None | No production `DsPort*` implementation exists yet |

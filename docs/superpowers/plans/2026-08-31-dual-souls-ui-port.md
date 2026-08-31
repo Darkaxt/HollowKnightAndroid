@@ -96,20 +96,22 @@ commit remains compilable and reviewable.
 
 **Files:**
 
-- Create: `docs/verification/dual-souls-ui-port-matrix.md`
-- Modify: `docs/verification/design-traceability.md`
-- Modify: `README.md`
+- Existing authority/status: specification, matrix, `README.md`, and
+  `docs/verification/design-traceability.md`
+- Evidence ledgers: this plan and
+  `docs/verification/dual-souls-ui-port-matrix.md`
 - Test: `tools/ci/tests/test_dual_souls_ui_port.py`
 
-- [ ] **Step 1: Write the failing source-contract test**
+- [x] **Step 1: Write the source-contract test**
 
 Add tests that require the authoritative port spec and matrix, require matrix
 rows for all eight `HKDualScreen.Bottom.*` modules plus the main lifecycle,
 require a `DELETE`, `RETAIN`, or `REWRITE` disposition for every current
-dualscreen source file, and reject `new DsShell(` from `DualScreenV2.cs` once
-the production switch stage is marked complete.
+dualscreen source file. It also rejects acceptance language that claims the
+current authored shell completes or visually proves the port. The live
+`new DsShell(` production entry remains a Stage 1 contract.
 
-- [ ] **Step 2: Run the test and confirm the expected missing-matrix failure**
+- [x] **Step 2: Run the test against the already-authored contract**
 
 Run:
 
@@ -117,9 +119,11 @@ Run:
 python -m unittest tools.ci.tests.test_dual_souls_ui_port -v
 ```
 
-Expected: failure naming the absent port matrix; no syntax or discovery error.
+The design phase had already authored the specification, plan, matrix, README,
+and traceability correction. Stage 0 therefore added enforcement without
+manufacturing a fake missing-matrix failure.
 
-- [ ] **Step 3: Write the source-to-source matrix**
+- [x] **Step 3: Write the source-to-source matrix**
 
 For every reference module, record its concrete object sources, clone/re-layer
 behavior, frame/HUD/page/overlay responsibilities, Silksong resident
@@ -128,13 +132,13 @@ evidence gap. For every current `dualscreen/*.cs` file record one disposition:
 `RETAIN_INFRASTRUCTURE`, `REWRITE_PORT`, `TEMPORARY_REFERENCE`, or
 `DELETE_AFTER_STAGE_N`. No generic “similar implementation” row is allowed.
 
-- [ ] **Step 4: Correct traceability and README status**
+- [x] **Step 4: Correct traceability and README status**
 
 Mark the authored-shell visual result `REJECTED_PROTOTYPE`, reset the UI port
 to `IN-PROGRESS`, link the corrective spec/plan/matrix, and state that display
 transport is proven while Dual Souls UI parity is not.
 
-- [ ] **Step 5: Run the contract test and self-review the documents**
+- [x] **Step 5: Run the contract test and self-review the documents**
 
 Run the unittest again and search for placeholders or weakened language:
 
@@ -146,14 +150,14 @@ rg -n "TBD|TODO|similar-looking|inspired by|approximation" docs/superpowers/spec
 Expected: tests pass; only explicit prohibitions or historical failure notes
 may match the search.
 
-- [ ] **Step 6: Reconcile and commit**
+- [x] **Step 6: Reconcile and commit**
 
 Re-read DSUI-01 through DSUI-10, update the matrix ledger with stage evidence,
 classify every gap, and commit:
 
 ```powershell
-git add docs README.md tools/ci/tests/test_dual_souls_ui_port.py
-git commit -m "docs: require a faithful Dual Souls UI port"
+git add docs/superpowers/plans/2026-08-31-dual-souls-ui-port.md docs/verification/dual-souls-ui-port-matrix.md tools/ci/tests/test_dual_souls_ui_port.py
+git commit -m "test: enforce the Dual Souls UI port contract"
 ```
 
 ## Stage 1: Separate direct-display transport from UI composition
@@ -520,7 +524,7 @@ release only if all repository release gates are also green.
 
 | Stage | Requirements | State | Blockers | Tracked deferrals | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| 0 | DSUI-01/02/03/06/08/10 | IN-PROGRESS | Port matrix and source contract not yet committed | None | Corrective spec written |
+| 0 | DSUI-01/02/03/06/08/10 | COMPLETE | None | None | `python -m unittest tools.ci.tests.test_dual_souls_ui_port -v`: 7 tests passed; contract covers DSUI-01–10, distinct first-column rows for all nine reference modules, exactly one valid disposition row for each of the 24 current dualscreen C# filenames, prototype/port status, and README/traceability acceptance language |
 | 1 | DSUI-02/08/10 | PENDING | Depends on Stage 0 | None | — |
 | 2 | DSUI-01/02/03/06/10 | PENDING | Depends on Stage 1 | None | — |
 | 3 | DSUI-01/03/04/07/10 | PENDING | Depends on Stage 2 | None | — |
