@@ -1,5 +1,5 @@
-// DsPresentation — the second screen itself: one display, one camera, one
-// canvas, and the discipline that keeps all three from touching the game.
+// DsPresentation — the second screen itself: one display, two composition
+// roles, and the discipline that keeps both roles from touching the game.
 //
 // This replaces the whole of V1's transport. There is no RenderTexture, no
 // AsyncGPUReadback, no shared memory, no Java. Unity presents to the panel
@@ -24,12 +24,12 @@
 //     systemWidth/Height once they appear, else Android's own report, else a
 //     configured fallback.
 //
-// Isolation from the game is enforced at both ends. Our camera renders exactly
-// one layer, and that layer is cleared from every other camera's mask -- on a
-// slow sweep, because Unity has no "a camera was created" event and the game
-// spawns cameras for cutscenes and bosses. The reverse direction (the game
-// drawing our layer) is the one that would be visible to the player, so it is
-// the one that gets swept.
+// Isolation from the game is enforced at both ends. Our cameras each render
+// exactly one owned layer, and both layers are cleared from every other
+// camera's mask -- on a slow sweep, because Unity has no "a camera was created"
+// event and the game spawns cameras for cutscenes and bosses. The reverse
+// direction (the game drawing our layers) is the one that would be visible to
+// the player, so it is the one that gets swept.
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System;
@@ -42,10 +42,13 @@ public class DsPresentation
     /// <summary>Unity's index for the second panel.</summary>
     public const int DISPLAY = 1;
 
-    // Layers 3 and 6 are unnamed in the game's TagManager, so 6 is ours. The
-    // game renders its HUD and menus on layer 5 ("UI") and its world on the
-    // rest; nothing of the game's is ever moved here.
-    public const int LAYER = 6;
+    // Layers 3 and 6 are the only unnamed layers in Silksong's TagManager.
+    // Content/frame/pages/HUD share 6; overlays/fade share 3. Do not assign any
+    // other layer to companion composition without new source evidence.
+    public const int CONTENT_LAYER = 6;
+    public const int OVERLAY_LAYER = 3;
+    public const int LAYER = CONTENT_LAYER; // temporary compatibility for dormant sources
+    const int OWNED_LAYER_MASK = (1 << CONTENT_LAYER) | (1 << OVERLAY_LAYER);
 
     // The AYN Thor's panel, used only until the real size is known.
     const int FALLBACK_W = 1240;
@@ -53,8 +56,13 @@ public class DsPresentation
 
     public Camera Camera { get; private set; }
     public Canvas Canvas { get; private set; }
-    /// <summary>Where screens build their UI. Fills the panel.</summary>
+    /// <summary>Content/frame/page/HUD camera, retained as Camera for compatibility.</summary>
+    public Camera OverlayCamera { get; private set; }
+    public Canvas OverlayCanvas { get; private set; }
+    /// <summary>Content/frame/page/HUD root. Fills the panel.</summary>
     public RectTransform Root { get; private set; }
+    /// <summary>Contextual overlay and fade root. Fills the panel.</summary>
+    public RectTransform OverlayRoot { get; private set; }
     public bool Ready { get; private set; }
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -85,6 +93,9 @@ public class DsPresentation
 
     readonly Transform _parent;
     CanvasScaler _scaler;
+    CanvasScaler _overlayScaler;
+    bool _bringupInProgress;
+    int _availabilityRevision;
     float _nextSweep;
 
     public DsPresentation(Transform parent) { _parent = parent; }
@@ -94,58 +105,92 @@ public class DsPresentation
     /// </summary>
     public IEnumerator Bringup()
     {
-        var displays = Display.displays;
-        if (displays.Length <= DISPLAY)
+        // Multiple startup/hot-plug coroutines share this instance. Wait for
+        // the current owner without a cancellation timeout; if it failed, the
+        // next waiter becomes the owner and retries against current displays.
+        while (_bringupInProgress) yield return null;
+        if (Ready) yield break;
+
+        _bringupInProgress = true;
+        try
         {
-            // Not an error: a device with one screen is a device with one
-            // screen, and everything here simply does not run.
-            Debug.Log("[DualScreen] only " + displays.Length + " display(s); second screen not available");
-            yield break;
-        }
+            var displays = Display.displays;
+            if (displays.Length <= DISPLAY)
+            {
+                MarkUnavailable();
+                Debug.Log("[DualScreen] only " + displays.Length + " display(s); second screen not available");
+                yield break;
+            }
 
-        try { displays[DISPLAY].Activate(); }
-        catch (Exception e)
+            int availabilityRevision = _availabilityRevision;
+            try { displays[DISPLAY].Activate(); }
+            catch (Exception e)
+            {
+                MarkUnavailable();
+                Debug.LogError("[DualScreen] could not activate display " + DISPLAY + ": " + e);
+                yield break;
+            }
+
+            // Activate is asynchronous and has no readiness signal on this
+            // platform. This is a required settle interval, not a cancellation
+            // timeout; a reattach always repeats it before drawing.
+            float settle = DsConfig.Int("settle_ms", 1500) / 1000f;
+            float until = Time.realtimeSinceStartup + settle;
+            while (Time.realtimeSinceStartup < until) yield return null;
+
+            // The panel may detach during the settle interval. Refresh the
+            // array before indexing or measuring it.
+            displays = Display.displays;
+            if (displays.Length <= DISPLAY)
+            {
+                MarkUnavailable();
+                Debug.Log("[DualScreen] second display disappeared during activation");
+                yield break;
+            }
+
+            // A detach/reattach while Activate was settling belongs to a new
+            // display generation. This owner activated the old generation, so
+            // leave Ready false and let the serialized waiter activate and
+            // settle the current one itself.
+            if (availabilityRevision != _availabilityRevision)
+            {
+                Debug.Log("[DualScreen] display changed during activation; retrying current generation");
+                yield break;
+            }
+
+            MeasurePanel(displays[DISPLAY]);
+
+            if (Camera == null)
+            {
+                Build();
+            }
+            else
+            {
+                // Re-use the one rig, but refresh both canvases and camera
+                // isolation after the display was activated again.
+                var panelSize = new Vector2(Width, Height);
+                if (_scaler != null) _scaler.referenceResolution = panelSize;
+                if (_overlayScaler != null) _overlayScaler.referenceResolution = panelSize;
+                SweepCameras(force: true);
+            }
+
+            Ready = true;
+
+            Debug.Log("[DualScreen] second screen up: " + Width + "x" + Height +
+                      " (" + ((float)Width / Height).ToString("F2") + ":1)" +
+                      " canvas=" + Canvas.renderMode + " layers=" +
+                      CONTENT_LAYER + "/" + OVERLAY_LAYER);
+        }
+        finally
         {
-            Debug.LogError("[DualScreen] could not activate display " + DISPLAY + ": " + e);
-            yield break;
+            _bringupInProgress = false;
         }
-
-        // See the header: there is nothing to poll, so this is a timer. It is
-        // deliberately generous -- it happens once, at startup, while the game
-        // is still loading, and the failure it prevents is a native crash.
-        float settle = DsConfig.Int("settle_ms", 1500) / 1000f;
-        float until = Time.realtimeSinceStartup + settle;
-        while (Time.realtimeSinceStartup < until) yield return null;
-
-        MeasurePanel();
-
-        if (Camera == null)
-        {
-            Build();
-        }
-        else
-        {
-            // Re-acquiring a panel we have already built for -- an unplug and
-            // replug. Build() must NOT run twice: it creates the camera and the
-            // canvas outright, so a second call leaves two of each, both
-            // drawing, and the screens' UI attached to the orphaned one.
-            // Keeping the rig also keeps everything built on it.
-            if (_scaler != null) _scaler.referenceResolution = new Vector2(Width, Height);
-            SweepCameras(force: true);
-        }
-
-        Ready = true;
-
-        Debug.Log("[DualScreen] second screen up: " + Width + "x" + Height +
-                  " (" + ((float)Width / Height).ToString("F2") + ":1)" +
-                  " canvas=" + Canvas.renderMode + " layer=" + LAYER);
     }
 
     // renderingWidth/Height are always 0x0 here, so take systemWidth/Height when
     // they are populated and fall back to what Android says the panel is.
-    void MeasurePanel()
+    void MeasurePanel(Display d)
     {
-        var d = Display.displays[DISPLAY];
         int w = d.systemWidth, h = d.systemHeight;
         if (w <= 0 || h <= 0) { w = d.renderingWidth; h = d.renderingHeight; }
         if (w <= 0 || h <= 0)
@@ -164,12 +209,12 @@ public class DsPresentation
     {
         var camGo = new GameObject("DsCamera");
         camGo.transform.SetParent(_parent, false);
-        camGo.layer = LAYER;
+        camGo.layer = CONTENT_LAYER;
         Camera = camGo.AddComponent<Camera>();
         Camera.targetDisplay = DISPLAY;
         Camera.clearFlags = CameraClearFlags.SolidColor;
         Camera.backgroundColor = Color.black;
-        Camera.cullingMask = 1 << LAYER;    // ours and only ours
+        Camera.cullingMask = 1 << CONTENT_LAYER;
         Camera.orthographic = true;
         Camera.nearClipPlane = -100f;
         Camera.farClipPlane = 100f;
@@ -178,53 +223,65 @@ public class DsPresentation
         Camera.useOcclusionCulling = false;
         Camera.depth = -50f;
 
-        var canvasGo = new GameObject("DsCanvas");
+        var overlayCamGo = new GameObject("DsOverlayCamera");
+        overlayCamGo.transform.SetParent(_parent, false);
+        overlayCamGo.layer = OVERLAY_LAYER;
+        OverlayCamera = overlayCamGo.AddComponent<Camera>();
+        OverlayCamera.targetDisplay = DISPLAY;
+        OverlayCamera.clearFlags = CameraClearFlags.Depth;
+        OverlayCamera.cullingMask = 1 << OVERLAY_LAYER;
+        OverlayCamera.orthographic = true;
+        OverlayCamera.nearClipPlane = -100f;
+        OverlayCamera.farClipPlane = 100f;
+        OverlayCamera.allowHDR = false;
+        OverlayCamera.allowMSAA = false;
+        OverlayCamera.useOcclusionCulling = false;
+        OverlayCamera.depth = -40f;
+
+        Canvas = BuildCanvas("DsCanvas", "DsRoot", CONTENT_LAYER, Camera,
+                             out RectTransform contentRoot, out _scaler);
+        Root = contentRoot;
+        OverlayCanvas = BuildCanvas("DsOverlayCanvas", "DsOverlayRoot",
+                                    OVERLAY_LAYER, OverlayCamera,
+                                    out RectTransform overlayRoot, out _overlayScaler);
+        OverlayRoot = overlayRoot;
+        UiCamera = Camera;
+
+        SweepCameras(force: true);
+        SetVisible(false); // the host applies pause/presence/readiness together
+    }
+
+    Canvas BuildCanvas(string canvasName, string rootName, int layer, Camera camera,
+                       out RectTransform root, out CanvasScaler scaler)
+    {
+        var canvasGo = new GameObject(canvasName);
         canvasGo.transform.SetParent(_parent, false);
-        canvasGo.layer = LAYER;
-        Canvas = canvasGo.AddComponent<Canvas>();
+        canvasGo.layer = layer;
 
-        // ScreenSpaceCamera by default rather than Overlay, because the map
-        // screen will need world-space content composited with the UI and only
-        // a camera-rendered canvas can do that. Overlay is kept one flag away
-        // in case a device disagrees.
-        if (DsConfig.Str("canvasmode", "camera") == "overlay")
-        {
-            Canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            Canvas.targetDisplay = DISPLAY;
-            UiCamera = null;            // overlay canvases hit-test against null
-        }
-        else
-        {
-            Canvas.renderMode = RenderMode.ScreenSpaceCamera;
-            Canvas.worldCamera = Camera;
-            Canvas.planeDistance = 1f;
-            UiCamera = Camera;
-        }
+        var canvas = canvasGo.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceCamera;
+        canvas.worldCamera = camera;
+        canvas.planeDistance = 1f;
 
-        // Authored at the panel's own size, so a different second screen scales
-        // rather than clips. matchWidthOrHeight 0.5 splits the difference on a
-        // panel with a different aspect.
-        var scaler = canvasGo.AddComponent<CanvasScaler>();
+        // Both roles use the same measured panel geometry so an overlay cannot
+        // drift from the content it covers on a differently sized display.
+        scaler = canvasGo.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(Width, Height);
         scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
         scaler.matchWidthOrHeight = 0.5f;
-        _scaler = scaler;
 
-        // No GraphicRaycaster and no EventSystem: we own every rect on this
-        // screen and hit-test them ourselves, so a raycaster would only add a
-        // way to collide with the game's event system.
-
-        var rootGo = new GameObject("DsRoot");
-        rootGo.layer = LAYER;
-        Root = rootGo.AddComponent<RectTransform>();
-        Root.SetParent(canvasGo.transform, false);
-        Root.anchorMin = Vector2.zero;
-        Root.anchorMax = Vector2.one;
-        Root.offsetMin = Vector2.zero;
-        Root.offsetMax = Vector2.zero;
-
-        SweepCameras(force: true);
+        // No GraphicRaycaster and no EventSystem: gesture acquisition remains
+        // isolated in DsInput and cannot collide with the game's event system.
+        var rootGo = new GameObject(rootName);
+        rootGo.layer = layer;
+        root = rootGo.AddComponent<RectTransform>();
+        root.SetParent(canvasGo.transform, false);
+        root.anchorMin = Vector2.zero;
+        root.anchorMax = Vector2.one;
+        root.offsetMin = Vector2.zero;
+        root.offsetMax = Vector2.zero;
+        return canvas;
     }
 
     /// <summary>
@@ -249,15 +306,19 @@ public class DsPresentation
         if (_camBuf == null || _camBuf.Length < count) _camBuf = new Camera[count + 4];
         Camera.GetAllCameras(_camBuf);
 
-        int mask = 1 << LAYER;
         for (int i = 0; i < count; i++)
         {
             var c = _camBuf[i];
-            if (c == null || c == Camera) continue;
-            if ((c.cullingMask & mask) == 0) continue;
-            c.cullingMask &= ~mask;
-            Debug.Log("[DualScreen] cleared layer " + LAYER + " from camera '" + c.name + "'");
+            if (c == null || IsOwnedCamera(c)) continue;
+            if ((c.cullingMask & OWNED_LAYER_MASK) == 0) continue;
+            c.cullingMask &= ~OWNED_LAYER_MASK;
+            Debug.Log("[DualScreen] cleared owned layers from camera '" + c.name + "'");
         }
+    }
+
+    bool IsOwnedCamera(Camera camera)
+    {
+        return camera == Camera || camera == OverlayCamera;
     }
 
     Camera[] _camBuf;
@@ -266,15 +327,35 @@ public class DsPresentation
     public void SetVisible(bool visible)
     {
         if (Camera != null && Camera.enabled != visible) Camera.enabled = visible;
+        if (OverlayCamera != null && OverlayCamera.enabled != visible) OverlayCamera.enabled = visible;
         if (Canvas != null && Canvas.enabled != visible) Canvas.enabled = visible;
+        if (OverlayCanvas != null && OverlayCanvas.enabled != visible) OverlayCanvas.enabled = visible;
+    }
+
+    public void MarkUnavailable()
+    {
+        _availabilityRevision++;
+        Ready = false;
+        SetVisible(false);
     }
 
     public void Destroy()
     {
+        if (OverlayCanvas != null) UnityEngine.Object.Destroy(OverlayCanvas.gameObject);
         if (Canvas != null) UnityEngine.Object.Destroy(Canvas.gameObject);
+        if (OverlayCamera != null) UnityEngine.Object.Destroy(OverlayCamera.gameObject);
         if (Camera != null) UnityEngine.Object.Destroy(Camera.gameObject);
-        Canvas = null; Camera = null; Root = null;
+        Canvas = null;
+        OverlayCanvas = null;
+        Camera = null;
+        OverlayCamera = null;
+        Root = null;
+        OverlayRoot = null;
+        _scaler = null;
+        _overlayScaler = null;
+        UiCamera = null;
         Ready = false;
+        _bringupInProgress = false;
     }
 }
 #endif

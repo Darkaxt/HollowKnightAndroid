@@ -7,9 +7,8 @@
 // only while the inventory was open, letterboxed, because that menu is authored
 // for 16:9 and this panel is 1240x1080. All of that is gone.
 //
-// Unity renders to the panel itself (see DsPresentation), and what it renders
-// is ours: a UI built for this screen's shape, from the game's own data. This
-// file owns three things and delegates the rest:
+// Unity renders to the panel itself (see DsPresentation). This entry point owns
+// transport lifecycle and delegates composition to DsPortRuntime:
 //
 //   * whether the second screen runs at all,
 //   * bringing the panel up and keeping it up across pause, resume and hot-plug,
@@ -27,14 +26,13 @@ public class DualScreenV2 : MonoBehaviour
     public static DualScreenV2 Instance { get; private set; }
 
     DsPresentation _screen;
-    DsShell _shell;
+    DsPortRuntime _port;
     DsInput _input;
     DsTestCard _card;
     bool _paused;
+    bool _displayPresent;
     int _displayCount;
     float _nextFence;
-    float _nextFontRetry;
-    int _fontRevision = -1;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -67,6 +65,7 @@ public class DualScreenV2 : MonoBehaviour
         // stayed dead until the app was restarted. On a handheld whose panel
         // detaches, that is a normal thing to do rather than an edge case.
         _displayCount = Display.displays.Length;
+        _displayPresent = _displayCount > DsPresentation.DISPLAY;
         Display.onDisplaysUpdated += OnDisplaysUpdated;
 
         yield return Bringup();
@@ -79,10 +78,15 @@ public class DualScreenV2 : MonoBehaviour
     /// </summary>
     IEnumerator Bringup()
     {
-        if (_screen != null && _screen.Ready) yield break;
-
-        var screen = _screen ?? new DsPresentation(transform);
+        var screen = _screen;
+        if (screen == null)
+        {
+            screen = new DsPresentation(transform);
+            _screen = screen; // retain before yielding so every caller shares one rig
+        }
         yield return screen.Bringup();
+
+        _displayPresent = Display.displays.Length > DsPresentation.DISPLAY;
 
         if (!screen.Ready)
         {
@@ -90,16 +94,15 @@ public class DualScreenV2 : MonoBehaviour
             // rather than half of something -- and stay resident, because a
             // panel may still turn up.
             Debug.Log("[DualScreen] no second display; dormant");
+            ApplyActiveState();
             yield break;
         }
-
-        _screen = screen;
 
         // The test card is the M1 rig: corner markers, a sweeping bar and a
         // touch crosshair, which is how "the surface covers the panel" and
         // "input is separated" were verified. Kept one flag away, because it is
         // the fastest way to tell a rendering problem from a content problem.
-        if (_shell == null && _card == null)
+        if (_port == null && _card == null)
         {
             if (DsConfig.Bool("testcard", false))
             {
@@ -108,38 +111,15 @@ public class DualScreenV2 : MonoBehaviour
             else
             {
                 _input = new DsInput();
-                BuildShell();
+                _port = new DsPortRuntime(_screen);
             }
         }
 
-        // Only now does input need separating, and only now is it safe to take
-        // touches away from the game.
-        DsTouch.Enabled = true;
-        DsTouch.InstallFence(gameObject);
+        // Transport readiness is necessary but not sufficient: a paused app or
+        // a panel lost during bring-up must remain dark and must not fence input.
+        ApplyActiveState();
 
         Debug.Log("[DualScreen] ready");
-    }
-
-    void BuildShell()
-    {
-        _shell = new DsShell(_screen.Root, _screen.Width, _screen.Height);
-        RegisterScreens(_shell);
-        _shell.Finish(DsConfig.Str("screen", "map"));
-        _fontRevision = DsTheme.FontRevision;
-    }
-
-    // One place, so the rebuild-on-font-found path cannot drift from startup.
-    //
-    // Registration order is the shared semantic bottom-tab order. Map remains
-    // the default by ID, but sits at the right-hand edge like the approved
-    // product language requires.
-    static void RegisterScreens(DsShell shell)
-    {
-        shell.Register(new DsInventoryScreen());
-        shell.Register(new DsLoadoutScreen());
-        shell.Register(new DsTasksScreen());
-        shell.Register(new DsJournalScreen());
-        shell.Register(new DsMapScreen());
     }
 
     void Update()
@@ -154,7 +134,7 @@ public class DualScreenV2 : MonoBehaviour
         // Event systems are rebuilt with scenes, so the fence has to keep being
         // re-applied. InstallFence's fast path is a static read plus a
         // comparison, but the rate limit keeps even that off the hot path.
-        if (Time.unscaledTime >= _nextFence)
+        if (DsTouch.Enabled && Time.unscaledTime >= _nextFence)
         {
             _nextFence = Time.unscaledTime + 0.25f;
             DsTouch.InstallFence(gameObject);
@@ -163,31 +143,15 @@ public class DualScreenV2 : MonoBehaviour
         float dt = Time.unscaledDeltaTime;
 
         if (_card != null) { _card.Tick(); return; }
-        if (_shell == null) return;
+        if (_port == null) return;
 
         DsProbe.MaybeRun();
-
-        // The complete game font set is not resident when we start. DsTheme
-        // first exposes any safe fallback it can find, then upgrades to the
-        // proper display/prose pair as Addressables load. Existing TMP labels
-        // retain their assigned font, so rebuild whenever that choice changes.
-        if (Time.unscaledTime >= _nextFontRetry)
-        {
-            _nextFontRetry = Time.unscaledTime + 2f;
-            int revision = DsTheme.FontRevision;
-            if (DsTheme.HasFont && revision != _fontRevision)
-            {
-                Debug.Log("[DualScreen] game fonts changed — rebuilding shell");
-                RebuildShell();
-                _fontRevision = DsTheme.FontRevision;
-            }
-        }
 
         if (_input != null)
         {
             _input.Poll();
             var gestures = _input.Gestures;
-            for (int i = 0; i < gestures.Count; i++) _shell.OnGesture(gestures[i]);
+            for (int i = 0; i < gestures.Count; i++) _port.OnGesture(gestures[i]);
         }
 
         // Outside a save, the panel shows the game's title instead of the tabs.
@@ -205,27 +169,14 @@ public class DualScreenV2 : MonoBehaviour
         else if (_idleSince < 0f) _idleSince = Time.unscaledTime;
 
         bool settled = !_everInGame || Time.unscaledTime - _idleSince >= IDLE_GRACE;
-        _shell.SetIdle(!inGame && settled);
+        _port.SetIdle(!inGame && settled);
 
-        _shell.Tick(dt);
+        _port.Tick(dt);
     }
 
     const float IDLE_GRACE = 0.75f;
     float _idleSince = -1f;
     bool _everInGame;
-
-    // Rebuild when a better game font becomes resident. This is cheaper and
-    // simpler than teaching every widget to swap its font independently, and
-    // normally happens only as startup fallbacks give way to the menu fonts.
-    void RebuildShell()
-    {
-        string keep = _shell != null ? _shell.ActiveId : null;
-        var root = _screen.Root;
-        for (int i = root.childCount - 1; i >= 0; i--) Destroy(root.GetChild(i).gameObject);
-        _shell = new DsShell(root, _screen.Width, _screen.Height);
-        RegisterScreens(_shell);
-        _shell.Finish(keep ?? DsConfig.Str("screen", "map"));
-    }
 
     // The panel is driven by touch alone, deliberately. The shoulder buttons
     // were briefly wired to change tabs, and that is wrong: L1/R1 are the
@@ -242,12 +193,14 @@ public class DualScreenV2 : MonoBehaviour
         if (now == _displayCount) return;
         Debug.Log("[DualScreen] displays changed: " + _displayCount + " -> " + now);
         _displayCount = now;
+        _displayPresent = now > DsPresentation.DISPLAY;
 
-        if (now <= DsPresentation.DISPLAY)
+        if (!_displayPresent)
         {
             // The panel went away. Stop drawing and stop stealing input, so the
             // game behaves exactly as it would on a single-screen device.
-            SetActive(false);
+            if (_screen != null) _screen.MarkUnavailable();
+            ApplyActiveState();
         }
         else
         {
@@ -262,14 +215,15 @@ public class DualScreenV2 : MonoBehaviour
         // Re-activating is the same asynchronous business as the first time, so
         // it gets the same settling period before anything is drawn.
         yield return Bringup();
-        if (_screen != null && _screen.Ready) SetActive(true);
     }
 
-    void SetActive(bool on)
+    void ApplyActiveState()
     {
-        if (_screen != null) _screen.SetVisible(on);
-        DsTouch.Enabled = on;
-        if (!on) DsTouch.RemoveFence();
+        bool active = !_paused && _displayPresent && _screen != null && _screen.Ready;
+        if (_screen != null) _screen.SetVisible(active);
+        if (_port != null) _port.SetVisible(active);
+        DsTouch.Enabled = active;
+        if (!active) DsTouch.RemoveFence();
         else DsTouch.InstallFence(gameObject);
     }
 
@@ -278,8 +232,9 @@ public class DualScreenV2 : MonoBehaviour
     void OnApplicationPause(bool paused)
     {
         _paused = paused;
-        if (_screen == null || !_screen.Ready) return;
-        SetActive(!paused);
+        _displayPresent = Display.displays.Length > DsPresentation.DISPLAY;
+        if (!_displayPresent && _screen != null) _screen.MarkUnavailable();
+        ApplyActiveState();
     }
 
     void OnApplicationQuit() { Shutdown(); }
@@ -293,7 +248,9 @@ public class DualScreenV2 : MonoBehaviour
         // Give the game its input back before anything else, so a teardown can
         // never leave the player unable to press a menu.
         DsTouch.RemoveFence();
+        if (_port != null) { _port.Dispose(); _port = null; }
         if (_screen != null) { _screen.Destroy(); _screen = null; }
+        _input = null;
         _card = null;
     }
 }

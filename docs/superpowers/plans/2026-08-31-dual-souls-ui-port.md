@@ -49,8 +49,8 @@ tests, Android Gradle/Robolectric, GitHub Actions signing.
 
 ### Create as the production port
 
-- `DsPortRuntime.cs`: lifecycle/orchestration equivalent of the companion
-  portion of `HKDualScreen.cs`.
+- `DsPortRuntime.cs`: composition-state boundary below the `DualScreenV2`
+  host/transport lifecycle; later modules attach orchestration here.
 - `DsPortLayers.cs`: direct-display equivalent of `Bottom.Layering`.
 - `DsPortFrame.cs`: frame, ornaments, tab row, page clone cache, page fit, and
   slide orchestration equivalent of `Bottom.Frame`.
@@ -172,39 +172,47 @@ git commit -m "test: enforce the Dual Souls UI port contract"
 - Modify: `DsPresentation.cs`
 - Test: `tools/ci/tests/test_dual_souls_ui_port.py`
 
-- [ ] **Step 1: Add failing contracts for the production entry point**
+- [x] **Step 1: Add failing contracts for the production entry point**
 
-Require `DualScreenV2` to instantiate `DsPortRuntime`, prohibit `DsShell`, and
-require private layer/camera roles for frame/pages, HUD, overlays, and fade.
-Require every port camera to target display 1 and every port layer to be swept
+Require `DualScreenV2` to instantiate `DsPortRuntime` only after presentation
+readiness, prohibit `DsShell`, and require exactly the proven content and
+overlay layer/camera roles with named frame/pages/HUD/overlays/fade roots.
+Require both port cameras to target display 1 and both port layers to be swept
 from primary-display cameras.
 
-- [ ] **Step 2: Verify the contracts fail because the port runtime is absent**
+- [x] **Step 2: Verify the contracts fail because the port runtime is absent**
 
 Run the targeted unittest and confirm the failure identifies
 `DsPortRuntime`, not an unrelated repository issue.
 
-- [ ] **Step 3: Implement the minimum transport/composition boundary**
+- [x] **Step 3: Implement the minimum transport/composition boundary**
 
-`DsPortRuntime` owns bring-up callbacks, visibility, update ordering, scene
-invalidation, and teardown. `DsPortLayers` requests the dedicated frame/page,
-HUD, overlay, and fade camera/layer roles from `DsPresentation` and exposes
-only roots/cameras, never widget construction. Switch `DualScreenV2` to this
-runtime behind the existing `testcard` diagnostic branch.
+`DualScreenV2` remains the host/transport lifecycle owner for display bring-up,
+hot-plug, pause, input fencing, and teardown ordering. It creates
+`DsPortRuntime` only after `DsPresentation` is ready and behind the existing
+`testcard` diagnostic branch. The runtime owns composition-root visibility,
+idle state, a monotonic active-scene revision for later invalidation, and
+idempotent disposal; it does not queue gestures. `DsPortLayers` exposes empty
+named roots beneath the exact two presentation roles, never widgets or extra
+layers/cameras.
 
-- [ ] **Step 4: Compile exact Silksong and Hollow Knight patches**
+- [x] **Step 4: Compile exact Silksong and Hollow Knight patches**
 
 Run:
 
 ```powershell
-pwsh -NoProfile -File tools/silksong-patches/check.ps1
-pwsh -NoProfile -File tools/hollow-knight-patches/check.ps1
+pwsh -NoProfile -File tools/silksong-patches/check.ps1 `
+  -Depot 'D:\Temp\hkandroid-task11-silksong-managed' `
+  -Player 'D:\Temp\dualsouls-unity-player\android\Variations\il2cpp\Managed'
+pwsh -NoProfile -File tools/hollow-knight-patches/check.ps1 `
+  -Depot 'D:\Temp\dualsouls-hk-12620\Hollow Knight\hollow_knight_Data\Managed' `
+  -Player 'D:\Temp\dualsouls-unity-61-toolchain\android\Variations\il2cpp\Managed'
 ```
 
 Expected: both exact-version compiles succeed with no production reference to
 `DsShell` from `DualScreenV2`.
 
-- [ ] **Step 5: Reconcile and commit**
+- [x] **Step 5: Reconcile and commit**
 
 Update the matrix. A missing frame/HUD/page is a tracked deferral to its named
 stage; a transport leak, duplicate camera, or primary-input regression is a
@@ -525,7 +533,7 @@ release only if all repository release gates are also green.
 | Stage | Requirements | State | Blockers | Tracked deferrals | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | 0 | DSUI-01/02/03/06/08/10 | COMPLETE | None | None | `python -m unittest tools.ci.tests.test_dual_souls_ui_port -v`: 7 tests passed; contract covers DSUI-01–10, distinct first-column rows for all nine reference modules, exactly one valid disposition row for each of the 24 current dualscreen C# filenames, prototype/port status, and README/traceability acceptance language |
-| 1 | DSUI-02/08/10 | PENDING | Depends on Stage 0 | None | — |
+| 1 | DSUI-02/08/10 | HOST-VERIFIED-BOUNDARY | None | Frame/tabs to Stage 2; resident HUD to Stage 3; Map/Inventory/Loadout/progress pages to Stages 4–6; overlays/fade to Stage 7 | Initial RED: 12 tests ran with 7 Stage 0 contracts green, 4 intended failures, and 2 absent-source skips. First review RED: 14 tests ran with 12 green and 2 intended failures for empty composition lifecycle and overbroad status. Second review RED: 18 tests ran with 13 green and 5 failures covering four defects: stale reattach readiness, presentation retention/serialization, pause/presence/readiness activation, and unstretched roots. GREEN: 18/18 tests; exact Silksong compile 42 sources/10 entry points; exact Hollow Knight compile 4 sources, 0 warnings/errors, 16,896-byte DLL/1 entry point. These host checks verify only the source boundary: `DualScreenV2` retains one presentation before yielding; `DsPresentation` serializes activation without a cancellation timeout, rechecks presence after settle, remeasures, and force-sweeps the reused rig; cameras, roots, and touch fencing activate only when the app is unpaused and display 1 is present and ready. Layers remain exactly 6/3. No device or UI parity is claimed. |
 | 2 | DSUI-01/02/03/06/10 | PENDING | Depends on Stage 1 | None | — |
 | 3 | DSUI-01/03/04/07/10 | PENDING | Depends on Stage 2 | None | — |
 | 4 | DSUI-01–07/10 | PENDING | Depends on Stage 3 | None | — |

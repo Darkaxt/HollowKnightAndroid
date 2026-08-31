@@ -10,6 +10,10 @@ MATRIX = REPO_ROOT / "docs" / "verification" / "dual-souls-ui-port-matrix.md"
 DUALSCREEN_SOURCES = (
     REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen"
 )
+DUAL_SCREEN = DUALSCREEN_SOURCES / "DualScreenV2.cs"
+PRESENTATION = DUALSCREEN_SOURCES / "DsPresentation.cs"
+PORT_RUNTIME = DUALSCREEN_SOURCES / "DsPortRuntime.cs"
+PORT_LAYERS = DUALSCREEN_SOURCES / "DsPortLayers.cs"
 
 REQUIREMENTS = tuple(f"DSUI-{number:02d}" for number in range(1, 11))
 REFERENCE_MODULES = (
@@ -292,6 +296,223 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         for example in negated_examples:
             with self.subTest(example=example):
                 self.assertEqual([], shell_acceptance_violations(example))
+
+    def test_stage_one_port_sources_exist(self):
+        for source in (PORT_RUNTIME, PORT_LAYERS):
+            with self.subTest(source=source.name):
+                self.assertTrue(source.is_file(), f"missing Stage 1 source: {source.name}")
+
+    def test_production_entry_uses_the_empty_port_runtime_not_the_authored_shell(self):
+        source = read(DUAL_SCREEN)
+        self.assertRegex(source, r"\bDsPortRuntime\s+_port\s*;")
+        self.assertRegex(
+            source,
+            r"_port\s*=\s*new\s+DsPortRuntime\s*\(\s*_screen\s*\)\s*;",
+        )
+        presentation_assignment = source.index("_screen = screen;")
+        bringup_yield = source.index("yield return screen.Bringup();")
+        ready_guard = source.index("if (!screen.Ready)")
+        runtime_construction = source.index("_port = new DsPortRuntime(_screen);")
+        self.assertLess(presentation_assignment, bringup_yield)
+        self.assertLess(bringup_yield, ready_guard)
+        self.assertLess(ready_guard, runtime_construction)
+        for rejected in (
+            r"\bDsShell\s+_shell\b",
+            r"new\s+DsShell\s*\(",
+            r"\bRegisterScreens\s*\(",
+        ):
+            with self.subTest(rejected=rejected):
+                self.assertNotRegex(source, rejected)
+
+    def test_no_production_dualscreen_source_constructs_the_dormant_shell(self):
+        violations = []
+        for path in sorted(DUALSCREEN_SOURCES.glob("*.cs")):
+            if path.name == "DsShell.cs":
+                continue  # retained dormant type; its declaration is not reachability
+            if re.search(r"new\s+DsShell\s*\(", read(path)):
+                violations.append(path.name)
+        self.assertEqual([], violations, "production sources must not construct DsShell")
+
+    def test_presentation_owns_only_the_proven_content_and_overlay_layers(self):
+        source = read(PRESENTATION)
+        self.assertRegex(source, r"public\s+const\s+int\s+CONTENT_LAYER\s*=\s*6\s*;")
+        self.assertRegex(source, r"public\s+const\s+int\s+OVERLAY_LAYER\s*=\s*3\s*;")
+        self.assertRegex(
+            source,
+            r"OWNED_LAYER_MASK\s*=\s*\(1\s*<<\s*CONTENT_LAYER\)\s*\|\s*"
+            r"\(1\s*<<\s*OVERLAY_LAYER\)\s*;",
+        )
+        self.assertEqual(2, len(re.findall(r"AddComponent<Camera>\s*\(\s*\)", source)))
+        self.assertEqual(
+            [("CONTENT_LAYER", "6"), ("OVERLAY_LAYER", "3")],
+            re.findall(r"const\s+int\s+(\w*LAYER\w*)\s*=\s*(\d+)\s*;", source),
+        )
+
+        for camera, layer in (
+            ("Camera", "CONTENT_LAYER"),
+            ("OverlayCamera", "OVERLAY_LAYER"),
+        ):
+            with self.subTest(camera=camera):
+                block = re.search(
+                    rf"(?ms)^\s*{camera}\s*=\s*.*?AddComponent<Camera>\s*\(\s*\)\s*;"
+                    rf"(?P<body>.*?)(?=^\s*$)",
+                    source,
+                )
+                self.assertIsNotNone(block, f"missing construction block for {camera}")
+                body = block.group("body")
+                self.assertRegex(body, rf"\b{camera}\.targetDisplay\s*=\s*DISPLAY\s*;")
+                self.assertRegex(body, rf"\b{camera}\.cullingMask\s*=\s*1\s*<<\s*{layer}\s*;")
+
+        self.assertRegex(
+            source,
+            r"if\s*\(\s*c\s*==\s*null\s*\|\|\s*IsOwnedCamera\s*\(\s*c\s*\)\s*\)\s*continue\s*;",
+        )
+        self.assertRegex(source, r"c\.cullingMask\s*&=\s*~OWNED_LAYER_MASK\s*;")
+        owned_check = re.search(
+            r"bool\s+IsOwnedCamera\s*\(\s*Camera\s+camera\s*\)\s*\{(?P<body>.*?)\}",
+            source,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(owned_check)
+        self.assertIn("camera == Camera", owned_check.group("body"))
+        self.assertIn("camera == OverlayCamera", owned_check.group("body"))
+
+    def test_empty_port_layer_roots_preserve_content_and_overlay_roles(self):
+        if not PORT_LAYERS.is_file():
+            self.skipTest("DsPortLayers.cs is introduced by Stage 1")
+        source = read(PORT_LAYERS)
+        for root_name in ("Content", "Frame", "Pages", "HUD", "Overlays", "Fade"):
+            with self.subTest(root_name=root_name):
+                self.assertIn(f'"{root_name}"', source)
+        self.assertIn("presentation.Root", source)
+        self.assertIn("presentation.OverlayRoot", source)
+        self.assertIn("DsPresentation.CONTENT_LAYER", source)
+        self.assertIn("DsPresentation.OVERLAY_LAYER", source)
+        for rejected in ("DsShell", "DsWidgets", "IDsScreen"):
+            with self.subTest(rejected=rejected):
+                self.assertNotIn(rejected, source)
+
+    def test_port_runtime_tracks_composition_lifecycle_without_drawing(self):
+        if not PORT_RUNTIME.is_file():
+            self.skipTest("DsPortRuntime.cs is introduced by Stage 1")
+        source = read(PORT_RUNTIME)
+        self.assertRegex(source, r"\bDsPortLayers\s+_layers\s*;")
+        self.assertIn("SceneManager.GetActiveScene().handle", source)
+        self.assertRegex(source, r"SceneRevision\s*\+\+")
+        self.assertRegex(source, r"IsIdle\s*=\s*idle\s*;")
+        self.assertRegex(source, r"IsVisible\s*=\s*visible\s*;")
+        self.assertRegex(source, r"_layers\.SetVisible\s*\(\s*visible\s*\)\s*;")
+        self.assertRegex(source, r"if\s*\(\s*_disposed\s*\)\s*return\s*;")
+        self.assertNotRegex(source, r"(?:List|Queue)\s*<\s*DsGesture\s*>")
+
+        layer_source = read(PORT_LAYERS)
+        self.assertRegex(layer_source, r"public\s+void\s+SetVisible\s*\(\s*bool\s+visible\s*\)")
+        self.assertRegex(layer_source, r"\.gameObject\.SetActive\s*\(\s*visible\s*\)")
+        for rejected in ("DsShell", "DsWidgets", "IDsScreen"):
+            with self.subTest(rejected=rejected):
+                self.assertNotIn(rejected, source)
+
+    def test_hotplug_reactivates_and_rechecks_the_existing_presentation(self):
+        host = read(DUAL_SCREEN)
+        self.assertNotRegex(
+            host,
+            r"if\s*\(\s*_screen\s*!=\s*null\s*&&\s*_screen\.Ready\s*\)\s*yield\s+break\s*;",
+        )
+        self.assertRegex(host, r"_screen\.MarkUnavailable\s*\(\s*\)\s*;")
+
+        presentation = read(PRESENTATION)
+        self.assertRegex(presentation, r"public\s+void\s+MarkUnavailable\s*\(")
+        self.assertRegex(presentation, r"int\s+_availabilityRevision\s*;")
+        self.assertIn(
+            "int availabilityRevision = _availabilityRevision;",
+            presentation,
+        )
+        self.assertIn(
+            "if (availabilityRevision != _availabilityRevision)",
+            presentation,
+        )
+        mark_unavailable = re.search(
+            r"public\s+void\s+MarkUnavailable\s*\(\s*\)\s*\{(?P<body>.*?)\n\s*\}",
+            presentation,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(mark_unavailable)
+        self.assertIn("_availabilityRevision++;", mark_unavailable.group("body"))
+
+        revision_capture = presentation.index(
+            "int availabilityRevision = _availabilityRevision;"
+        )
+        activate = presentation.index("displays[DISPLAY].Activate();")
+        settle = presentation.index("while (Time.realtimeSinceStartup < until)", activate)
+        refreshed = presentation.index("displays = Display.displays;", settle)
+        presence_check = presentation.index("if (displays.Length <= DISPLAY)", refreshed)
+        revision_check = presentation.index(
+            "if (availabilityRevision != _availabilityRevision)",
+            presence_check,
+        )
+        measure = presentation.index("MeasurePanel(displays[DISPLAY]);", presence_check)
+        ready = presentation.index("Ready = true;", measure)
+        self.assertLess(revision_capture, activate)
+        self.assertLess(activate, settle)
+        self.assertLess(settle, refreshed)
+        self.assertLess(refreshed, presence_check)
+        self.assertLess(presence_check, revision_check)
+        self.assertLess(revision_check, measure)
+        self.assertLess(measure, ready)
+
+    def test_bringup_serializes_one_retained_presentation_without_timeout(self):
+        host = read(DUAL_SCREEN)
+        retained = host.index("_screen = screen;")
+        yielded = host.index("yield return screen.Bringup();")
+        self.assertLess(retained, yielded)
+
+        presentation = read(PRESENTATION)
+        self.assertRegex(presentation, r"bool\s+_bringupInProgress\s*;")
+        self.assertRegex(
+            presentation,
+            r"while\s*\(\s*_bringupInProgress\s*\)\s*yield\s+return\s+null\s*;",
+        )
+        self.assertNotRegex(presentation, r"bringup.{0,80}(?:timeout|deadline)")
+
+    def test_host_active_state_requires_unpaused_present_ready_display(self):
+        source = read(DUAL_SCREEN)
+        self.assertRegex(source, r"bool\s+_displayPresent\s*;")
+        self.assertIn(
+            "bool active = !_paused && _displayPresent && _screen != null && _screen.Ready;",
+            source,
+        )
+        self.assertRegex(source, r"_displayPresent\s*=\s*now\s*>\s*DsPresentation\.DISPLAY\s*;")
+        self.assertRegex(source, r"if\s*\(\s*DsTouch\.Enabled\s*&&\s*Time\.unscaledTime")
+        pause = re.search(
+            r"void\s+OnApplicationPause\s*\(\s*bool\s+paused\s*\)\s*\{(?P<body>.*?)\}",
+            source,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(pause)
+        self.assertIn("ApplyActiveState();", pause.group("body"))
+        self.assertNotIn("SetActive(!paused)", pause.group("body"))
+
+    def test_all_empty_port_roots_full_stretch_their_parent(self):
+        source = read(PORT_LAYERS)
+        self.assertIn("root.anchorMin = Vector2.zero;", source)
+        self.assertIn("root.anchorMax = Vector2.one;", source)
+        self.assertIn("root.offsetMin = Vector2.zero;", source)
+        self.assertIn("root.offsetMax = Vector2.zero;", source)
+
+    def test_stage_one_status_is_bounded_to_the_verified_source_boundary(self):
+        plan_rows = [
+            line for line in read(PLAN).splitlines() if line.startswith("| 1 |")
+        ]
+        matrix_rows = [
+            line
+            for line in read(MATRIX).splitlines()
+            if line.startswith("| Stage 1 transport/composition separation |")
+        ]
+        self.assertEqual(1, len(plan_rows))
+        self.assertEqual(1, len(matrix_rows))
+        for row in plan_rows + matrix_rows:
+            self.assertNotIn("HOST-COMPLETE", row)
+            self.assertIn("HOST-VERIFIED-BOUNDARY", row)
 
 
 if __name__ == "__main__":
