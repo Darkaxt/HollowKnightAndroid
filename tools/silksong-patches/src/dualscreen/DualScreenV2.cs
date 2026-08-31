@@ -34,7 +34,7 @@ public class DualScreenV2 : MonoBehaviour
     int _displayCount;
     float _nextFence;
     float _nextFontRetry;
-    bool _fontReady;
+    int _fontRevision = -1;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -125,6 +125,7 @@ public class DualScreenV2 : MonoBehaviour
         _shell = new DsShell(_screen.Root, _screen.Width, _screen.Height);
         RegisterScreens(_shell);
         _shell.Finish(DsConfig.Str("screen", "map"));
+        _fontRevision = DsTheme.FontRevision;
     }
 
     // One place, so the rebuild-on-font-found path cannot drift from startup.
@@ -166,17 +167,19 @@ public class DualScreenV2 : MonoBehaviour
 
         DsProbe.MaybeRun();
 
-        // The game's fonts are not loaded when we start, so text would build
-        // blank. Retry until they appear, then rebuild the shell once with them.
-        if (!_fontReady && Time.unscaledTime >= _nextFontRetry)
+        // The complete game font set is not resident when we start. DsTheme
+        // first exposes any safe fallback it can find, then upgrades to the
+        // proper display/prose pair as Addressables load. Existing TMP labels
+        // retain their assigned font, so rebuild whenever that choice changes.
+        if (Time.unscaledTime >= _nextFontRetry)
         {
             _nextFontRetry = Time.unscaledTime + 2f;
-            DsTheme.ForgetFont();
-            if (DsTheme.HasFont)
+            int revision = DsTheme.FontRevision;
+            if (DsTheme.HasFont && revision != _fontRevision)
             {
-                _fontReady = true;
-                Debug.Log("[DualScreen] fonts found — rebuilding shell");
+                Debug.Log("[DualScreen] game fonts changed — rebuilding shell");
                 RebuildShell();
+                _fontRevision = DsTheme.FontRevision;
             }
         }
 
@@ -211,8 +214,9 @@ public class DualScreenV2 : MonoBehaviour
     float _idleSince = -1f;
     bool _everInGame;
 
-    // Rebuild once the font exists. Cheaper and far simpler than teaching every
-    // widget to swap its font later, and it happens at most once per run.
+    // Rebuild when a better game font becomes resident. This is cheaper and
+    // simpler than teaching every widget to swap its font independently, and
+    // normally happens only as startup fallbacks give way to the menu fonts.
     void RebuildShell()
     {
         string keep = _shell != null ? _shell.ActiveId : null;

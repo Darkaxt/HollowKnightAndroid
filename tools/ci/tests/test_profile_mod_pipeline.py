@@ -76,8 +76,17 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertIn("CompanionShellLayout.MinimumTouchTarget", modal_source)
         self.assertRegex(shell, r"if \(entry\.Broken \|\| !IsAvailable\(entry\)\) return;")
         self.assertRegex(shell, r"if \(!idle && _active < 0\)\s*\{\s*Show\(_preferred\);")
-        self.assertRegex(theme, r"_searched\s*=\s*_display != null && _body != null;")
+        self.assertRegex(theme, r"_searched\s*=\s*_display != null && _body != null && _bodyPreferred;")
         self.assertRegex(theme, r"if \(found != null\) _cache\[name\] = found;")
+
+    def test_second_screen_upgrades_from_partial_to_complete_game_fonts(self):
+        theme = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsTheme.cs").read_text(encoding="utf-8")
+        runtime = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DualScreenV2.cs").read_text(encoding="utf-8")
+
+        self.assertIn('n.Contains("perpetua")', theme)
+        self.assertIn("FontRevision", theme)
+        self.assertIn("DsTheme.FontRevision", runtime)
+        self.assertNotIn("DsTheme.ForgetFont();", runtime)
 
     def test_built_in_tweaks_do_not_use_native_memory_offsets(self):
         roots = [

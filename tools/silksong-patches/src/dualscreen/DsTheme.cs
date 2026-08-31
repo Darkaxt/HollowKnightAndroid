@@ -91,8 +91,10 @@ public static class DsTheme
     // matching it is both correct and free.
 
     static TmpFont _display, _body;
+    static bool _bodyPreferred;
     static bool _searched;
     static float _nextSearch;
+    static int _fontRevision;
 
     /// <summary>Caps display face, for tabs and titles.</summary>
     public static TmpFont Display { get { Search(); return _display ?? _body; } }
@@ -102,6 +104,13 @@ public static class DsTheme
 
     /// <summary>Anything usable at all yet?</summary>
     public static bool HasFont { get { Search(); return _display != null || _body != null; } }
+
+    /// <summary>
+    /// Changes whenever a better resident game font replaces a startup
+    /// fallback. Existing labels cannot observe that replacement themselves,
+    /// so the second-screen owner uses this revision to rebuild its widgets.
+    /// </summary>
+    public static int FontRevision { get { Search(); return _fontRevision; } }
 
     static void Search()
     {
@@ -115,8 +124,8 @@ public static class DsTheme
 
         try
         {
-            bool hadDisplay = _display != null;
-            bool hadBody = _body != null;
+            TmpFont oldDisplay = _display;
+            TmpFont oldBody = _body;
             var fonts = Resources.FindObjectsOfTypeAll<TmpFont>();
             for (int i = 0; i < fonts.Length; i++)
             {
@@ -129,14 +138,27 @@ public static class DsTheme
                 if (n.Contains("arial") || n.Contains("liberation")) continue;
 
                 if (_display == null && n.Contains("trajan")) _display = f;
-                else if (_body == null && (n.Contains("perpetua") || n.Contains("amor"))) _body = f;
 
-                if (_display != null && _body != null) break;
+                // Amor is resident during the first playable frames, but its
+                // TMP atlas is a deliberately small prompt subset (notably its
+                // uppercase M is only a stub). Perpetua is the game's complete
+                // prose face and arrives with the menu fonts. Keep Amor only
+                // as a temporary startup fallback, then upgrade deterministically.
+                if (!_bodyPreferred && n.Contains("perpetua"))
+                {
+                    _body = f;
+                    _bodyPreferred = true;
+                }
+                else if (_body == null && n.Contains("amor"))
+                {
+                    _body = f;
+                }
             }
 
-            _searched = _display != null && _body != null;
-            if ((!hadDisplay && _display != null) || (!hadBody && _body != null))
+            _searched = _display != null && _body != null && _bodyPreferred;
+            if (oldDisplay != _display || oldBody != _body)
             {
+                _fontRevision++;
                 Debug.Log("[DsTheme] fonts: display='" + (_display != null ? _display.name : "-") +
                           "' body='" + (_body != null ? _body.name : "-") + "'");
             }
@@ -150,7 +172,8 @@ public static class DsTheme
     /// <summary>Fonts appear once the game has loaded its UI; allow a retry.</summary>
     public static void ForgetFont()
     {
-        _display = null; _body = null; _searched = false; _nextSearch = 0f;
+        _display = null; _body = null; _bodyPreferred = false;
+        _searched = false; _nextSearch = 0f; _fontRevision++;
     }
 
     // ── sprites ─────────────────────────────────────────────────────────────
