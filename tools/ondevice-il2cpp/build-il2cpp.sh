@@ -191,7 +191,10 @@ cat > obj/.cc <<'WORKER'
 #!/system/bin/sh
 f="$1"
 rel="${f#$CC_TREE/}"
-safe=${rel//[^A-Za-z0-9._-]/_}
+# Android's mksh accepts ${value//pattern/replacement}, but unlike Bash it
+# does not treat ^ as negation in a glob bracket expression. `!` is portable
+# to both shells and retains the no-subprocess hot path for every source.
+safe=${rel//[!A-Za-z0-9._-]/_}
 out=$(printf 'obj/%s%s.o' "$CC_PREFIX" "$safe")
 exec $CLANG -x "$CC_LANG" -std="$CC_STD" $CC_PCH $CXXFLAGS $DEF $INC $TGT \
      -c "$f" -o "$out" 2>>err.log
@@ -259,7 +262,7 @@ compile_all() {
     built=0
     while read -r hash f; do
         rel=${f#$tree/}
-        safe=${rel//[^A-Za-z0-9._-]/_}
+        safe=${rel//[!A-Za-z0-9._-]/_}
         out="obj/$prefix$safe.o"
         echo "$out" >> obj/.objs
         if [ -s "$MANIFEST" ]; then
@@ -316,7 +319,7 @@ compile_all() {
         failed=0
         while read -r f; do
             rel=${f#$tree/}
-            safe=${rel//[^A-Za-z0-9._-]/_}
+            safe=${rel//[!A-Za-z0-9._-]/_}
             [ -f "obj/$prefix$safe.o" ] || failed=$((failed + 1))
         done < obj/.todo
         if [ "$failed" -gt 0 ]; then

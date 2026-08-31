@@ -1,5 +1,6 @@
 import importlib.util
 import pathlib
+import re
 import tempfile
 import unittest
 
@@ -8,6 +9,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[3]
 HELPER = ROOT / "tools" / "ci" / "release_contract.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 BUILD_SCRIPT = ROOT / "tools" / "depot-to-apk" / "build.sh"
+IL2CPP_BUILD_SCRIPT = ROOT / "tools" / "ondevice-il2cpp" / "build-il2cpp.sh"
 
 
 def load_helper():
@@ -70,6 +72,37 @@ class ReleasePipelineContractTest(unittest.TestCase):
         self.assertIn('for f in "$d"/*; do', script)
         self.assertIn('[[ -f "$f" ]] || continue', script)
         self.assertNotIn('cp -f "$d"/* "$sh/res/$(basename "$d")/"', script)
+
+    def test_apk_shell_exposes_launcher_as_its_only_launcher_entry_point(self):
+        script = BUILD_SCRIPT.read_text(encoding="utf-8")
+
+        launcher = re.search(
+            r'<activity android:name="dev\.silksong\.launcher\.LauncherActivity"'
+            r'(?P<body>.*?)</activity>',
+            script,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(launcher)
+        self.assertIn('android:exported="true"', launcher.group("body"))
+        self.assertIn('android.intent.action.MAIN', launcher.group("body"))
+        self.assertIn('android.intent.category.LAUNCHER', launcher.group("body"))
+
+        setup = re.search(
+            r'<activity android:name="dev\.silksong\.launcher\.SetupActivity"'
+            r'(?P<body>.*?)/>',
+            script,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(setup)
+        self.assertIn('android:exported="false"', setup.group("body"))
+        self.assertNotIn('android.intent.action.MAIN', setup.group("body"))
+
+    def test_on_device_object_names_use_android_shell_portable_sanitising(self):
+        script = IL2CPP_BUILD_SCRIPT.read_text(encoding="utf-8")
+        portable = "safe=${rel//[!A-Za-z0-9._-]/_}"
+
+        self.assertNotIn("safe=${rel//[^", script)
+        self.assertEqual(3, script.count(portable))
 
 
 if __name__ == "__main__":

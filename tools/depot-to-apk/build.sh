@@ -209,6 +209,10 @@ step_5_apk_shell() {
         <meta-data android:name="android.game_mode_config"
                    android:resource="@xml/game_mode_config" />
         <activity android:name="dev.silksong.launcher.SetupActivity"
+            android:exported="false" android:process=":launcher"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+        <activity android:name="dev.silksong.launcher.LauncherActivity"
             android:exported="true" android:process=":launcher"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
@@ -217,10 +221,6 @@ step_5_apk_shell() {
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name="dev.silksong.launcher.LauncherActivity"
-            android:exported="false" android:process=":launcher"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
-            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
         <activity android:name="dev.silksong.launcher.LoginActivity"
             android:exported="false" android:process=":launcher"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"

@@ -2,6 +2,7 @@ package dev.silksong.launcher
 
 import android.content.Context
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.RadioButton
 import android.widget.TextView
@@ -77,5 +78,22 @@ class LauncherProfileSelectionTest {
         SelectedGameStore(context).set(GameProfiles.require("hollow-knight"))
 
         Robolectric.buildActivity(SetupActivity::class.java).setup().get()
+    }
+
+    @Test
+    fun `hollow knight setup names the selected game instead of silksong`() {
+        SelectedGameStore(context).set(GameProfiles.require("hollow-knight"))
+
+        val activity = Robolectric.buildActivity(SetupActivity::class.java).setup().get()
+        val copy = collectText(activity.findViewById(android.R.id.content))
+
+        assertTrue(copy.any { it == "Where is your copy of Hollow Knight?" })
+        assertFalse(copy.any { it.contains("Silksong") })
+    }
+
+    private fun collectText(view: View): List<String> = when (view) {
+        is TextView -> listOf(view.text.toString())
+        is ViewGroup -> (0 until view.childCount).flatMap { collectText(view.getChildAt(it)) }
+        else -> emptyList()
     }
 }

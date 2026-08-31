@@ -1,4 +1,4 @@
-// SetupActivity — the first screen, and the app's entry point.
+// SetupActivity — the selected game's first-run and repair screen.
 //
 // The APK ships neither the game nor the engine. Unity's redistributables are
 // fetched from Unity, and the game itself is built on the device out of the
@@ -281,7 +281,7 @@ class SetupActivity : Activity() {
      * Across every candidate rather than the resolved one, because a macOS
      * copy is never resolved at all -- its data directory sits a level below
      * where [PlayerImage.depotData] looks -- and "where is your copy of
-     * Silksong" is the wrong thing to say to someone whose copy is right
+     * the game" is the wrong thing to say to someone whose copy is right
      * there. See [PlayerImage.foreignBuild].
      */
     private fun wrongBuild(): Pair<File, PlayerImage.ForeignBuild>? {
@@ -308,7 +308,7 @@ class SetupActivity : Activity() {
         notedWrongBuild = key
         LauncherLog.log(
             "depot: ${build.label} build (depot ${build.depot}) in ${where.absolutePath}; " +
-                "this port needs the Linux depot ${DepotFetcher.DEPOT_ID}",
+                "this port needs the Linux depot ${profile.steamDepotId}",
         )
     }
 
@@ -466,19 +466,19 @@ class SetupActivity : Activity() {
             foreign != null -> {
                 val (where, build) = foreign
                 noteWrongBuild(where, build)
-                status.text = "That is the ${build.label} version of Silksong"
+                status.text = "That is the ${build.label} version of ${profile.displayName}"
                 detail.text = "Found in\n${where.absolutePath}\n\n" +
                     "This port is built from the Linux version, depot " +
-                    "${DepotFetcher.DEPOT_ID}. Install Silksong for Linux in Steam, or " +
+                    "${profile.steamDepotId}. Install ${profile.displayName} for Linux in Steam, or " +
                     "download that depot with DepotDownloader, then point this at it."
                 primary.visibility = View.GONE
                 secondary.text = "Choose folder"
                 secondary.visibility = View.VISIBLE
             }
             readyToPort || haveGame -> {
-                status.text = message ?: "Ready to port Silksong"
+                status.text = message ?: "Ready to port ${profile.displayName}"
                 detail.text =
-                    "Silksong will now be ported to Android, here on this device.\n\n" +
+                    "${profile.displayName} will now be ported to Android, here on this device.\n\n" +
                     "Some supporting tools are downloaded as part of this, so an internet " +
                     "connection is needed while it runs.\n\n" +
                     "Expect 20-30 minutes on a Snapdragon 8 Gen 2, depending on your network " +
@@ -489,7 +489,7 @@ class SetupActivity : Activity() {
                 secondary.visibility = View.GONE
             }
             else -> {
-                status.text = message ?: "Where is your copy of Silksong?"
+                status.text = message ?: "Where is your copy of ${profile.displayName}?"
                 detail.text = "Sign in to Steam to download it, or choose the folder you " +
                     "copied the game's Linux files into.\n\n" +
                     "Copying them to\n${depotDir?.absolutePath ?: "external storage"}\nworks too."

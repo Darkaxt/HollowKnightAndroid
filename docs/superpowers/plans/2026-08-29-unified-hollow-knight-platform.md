@@ -871,6 +871,19 @@ structured log. Success requires:
 followed by a visible main menu, successful new-game or save load, and one
 playable room with correct rendering, audio, and input.
 
+**Device cross-check (attempt 1, 2026-08-31):** the isolated post-parent-sync
+package accepted the exact Linux 1.5.12620 source, compiled the Hollow Knight,
+Harmony, and BepInEx assemblies, generated 803 C++ plus 180 C units, and began
+native compilation. Android `mksh` then preserved `/` separators in the
+Bash-style object sanitizer and Clang failed on `obj/r__/...`. The sanitizer
+now uses portable pure-shell `!` bracket negation with regression contracts.
+The same run also exposed
+the shell manifest routing first launch to `SetupActivity` and hardcoded
+Silksong setup copy; host tests now require `LauncherActivity` as the sole
+launcher entry point and profile-specific setup text. Step 4 remains a
+`BLOCKER` until a replacement APK resumes the retained device build, publishes
+the generation, and reaches the required playable-room evidence.
+
 - [ ] **Step 5: Record the spike evidence**
 
 Create `docs/verification/hollow-knight-first-boot.md` containing source

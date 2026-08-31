@@ -2,11 +2,47 @@
 
 Date: 2026-08-31
 
-This is the safe pre-install checkpoint for Task 10. It proves the current
-Hollow Knight Linux build can be converted, compiled for Android ARM64, and
-packed through the shared player-image path. It deliberately does **not**
-claim a first boot: the user requested a pause before the isolated proof APK
-was installed.
+This began as the safe pre-install checkpoint for Task 10 and now also records
+the first production-path attempt on the Thor. The host proof remains valid,
+but this document still does **not** claim a first boot: the first device run
+found a portable-shell defect during native compilation and stopped before a
+generation could be published or launched.
+
+## On-device attempt 1
+
+- Device: serial `bfa98654`, AYN Thor, Android 13/API 33, ARM64.
+- Isolated package: `io.github.darkaxt.dualsouls.hkpoc`, version
+  `1.0.3`/`10003`, built from implementation commit `e336e28`.
+- APK: 71,659,015 bytes, SHA-256
+  `3aa95e7b4e50b7d320e8d02c9033125b7939f10dcb77b83e93d7b6a86de2cea5`;
+  APK Signature Schemes v2 and v3 verify.
+- The exact Linux 1.5.12620 source was copied to
+  `/storage/emulated/0/Download/HollowKnight-1.5.12620`. Its retained transfer
+  manifest verified 1,753 expected and actual files with zero missing, extra,
+  or hash-mismatched files. The launcher persisted that path in the
+  `hollow-knight` profile's `source.pointer`.
+- The Hollow Knight folder under the device's `Games` directory is Windows
+  only and is excluded. That directory will be consulted only for the
+  separately identified Linux Silksong source during its regression pass.
+- The production coordinator compiled `HollowKnightPatches.dll`, Harmony, and
+  BepInEx, then converted 169 assemblies into 803 C++ and 180 C translation
+  units. The IL2CPP managed conversion completed in 141 seconds.
+- Native compilation failed after 485 seconds when Android's `mksh` treated
+  `^` as a literal inside the Bash-style glob replacement used to sanitize
+  relative paths. Slashes therefore survived in targets such as
+  `obj/r__/_________.o`, whose unintended parent directory did not exist.
+- `tools/ondevice-il2cpp/build-il2cpp.sh` now uses the pure-shell `!` bracket
+  negation supported by both Bash and Android `mksh`, without adding a process
+  per translation unit. CI contracts reject the former `^` syntax and any
+  per-file `sed`; `bash -n` passes, and Thor itself maps `vm/Runtime.cpp` to
+  `vm_Runtime.cpp`. The replacement APK and resumed on-device compilation are
+  still required before this defect is considered closed.
+- The installed shell also exposed `SetupActivity` as `MAIN`/`LAUNCHER`, making
+  the two-game selector unreachable, and displayed Silksong-specific setup
+  copy for the selected Hollow Knight profile. Host regressions now require
+  exported `LauncherActivity` to be the sole launcher entry point and require
+  profile-specific Hollow Knight setup text. Device verification awaits the
+  same replacement APK.
 
 ## Inputs and source proof
 
@@ -69,11 +105,10 @@ was installed.
 - The shell now accepts the `hollow-knight` launch profile and maps its compact
   runtime key to `hk`; a regression test prevents the former Silksong-only
   rejection from returning.
-- Pre-fix isolated debug proof package: `io.github.darkaxt.dualsouls.hkpoc`, version
-  `1.0.3`/`10003`, 70,985,716 bytes, SHA-256
-  `dd26c71789af9f2eb1f40754834c37c40260adc8f5e6505a0313d3f5a92a542a`.
-  APK Signature Schemes v2 and v3 verify. It was not installed and must be
-  rebuilt from the post-sync tree before device use.
+- The older pre-sync isolated debug proof package remains superseded. The
+  post-sync package used in attempt 1 is identified in the device section
+  above and must itself be superseded by a build containing the portable-shell
+  and launcher-entry fixes.
 
 ## Verification gates
 
@@ -101,6 +136,10 @@ was installed.
   reopening.
 - `COMPLETE`: a signed, isolated launcher APK containing the Hollow Knight
   profile route builds without proprietary game content.
+- `BLOCKER`: the first Thor run reached real on-device IL2CPP generation and
+  native compilation but failed on the now-fixed object-name sanitizer. A
+  replacement APK must resume the retained build and finish linking,
+  generation publication, and launch.
 - `BLOCKER`: Task 10 is not complete until serial `bfa98654` (AYN Thor,
   Android 13/API 33, ARM64) runs the isolated package, logs
   `[DualSouls][HK] injection probe loaded`, reaches the main menu, and enters a

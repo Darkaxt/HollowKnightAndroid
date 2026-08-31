@@ -23,7 +23,9 @@ class NativeBuildContractTest(unittest.TestCase):
     def test_object_names_are_sanitized_without_per_file_processes(self):
         source = SCRIPT.read_text(encoding="utf-8")
 
-        self.assertIn('safe=${rel//[^A-Za-z0-9._-]/_}', source)
+        self.assertEqual(3, source.count('safe=${rel//[!A-Za-z0-9._-]/_}'))
+        self.assertNotIn('safe=${rel//[^A-Za-z0-9._-]/_}', source)
+        self.assertNotIn("| sed 's/[^A-Za-z0-9._-]/_/g'", source)
         self.assertNotIn("echo \"${2#$3/}\" | tr", source)
         self.assertNotIn('out=$(obj_name ', source)
 
