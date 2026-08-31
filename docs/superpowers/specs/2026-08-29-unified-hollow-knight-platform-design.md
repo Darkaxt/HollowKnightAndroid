@@ -413,6 +413,13 @@ primary display without creating an unusable invisible UI path.
 
 ### Unified bottom-screen product language
 
+The authoritative implementation contract for this section is
+`docs/superpowers/specs/2026-08-31-dual-souls-ui-port-design.md`. The common
+surface is a port of Dual Souls' Hollow Knight companion composition, not a
+new shell that approximates its appearance. Silksong substitutes its resident
+sprites, fonts, terminology, data, and additional features while preserving
+that design pattern.
+
 The bottom screen is one product surface with two game adapters. Both games
 use the same shell geometry, tab behavior, gesture vocabulary, touch-target
 sizes, selection feedback, content/detail split, status placement, modal
@@ -432,13 +439,12 @@ Unavailable pages are omitted without changing the relative order of the
 remaining semantic groups. The shell remembers the last page per profile and
 uses a shared idle/title state when no save is active.
 
-The common visual system owns layout metrics, spacing, rules, focus and
-pressed states, contrast thresholds, type roles, animation policy, and the
-placement of status information. A game adapter supplies localized labels,
-data, icons, and its own resident game fonts and ornamentation. That controlled
-theming is intentional: the two games retain their identities inside the same
-interface without importing promotional launcher artwork into gameplay or
-forcing one game's decorative assets onto the other.
+The ported Dual Souls composition owns layout metrics, spacing, rules, focus
+and pressed states, contrast thresholds, type roles, animation policy, and the
+placement of status information. A game adapter locates and reuses localized
+labels, data, icons, fonts, ornamentation, and complete usable UI objects from
+the running game. It may not replace resident UI with independently authored
+widgets merely because drawing a substitute is easier.
 
 Hollow Knight's Dual Souls companion is the canonical **HUD and outer-layout
 template**, while SilksongAndroid's direct Unity display-1 implementation is
@@ -462,17 +468,19 @@ surface therefore has all of these invariant regions:
 
 Dual Souls' persistent HUD, area status, map, inventory, charms,
 story/dialogue/tutorial overlays, item popups, fade synchronization, and
-background/resume behavior are adapter capabilities that must be preserved or
-explicitly tracked. Silksong's inventory, crests, tasks, journal, map, title
-state, and display-isolated touch behavior receive the same treatment.
+background/resume behavior are modules to port, not merely capabilities to
+imitate. Silksong's inventory, crests, tasks, journal, map, title state, and
+display-isolated touch behavior are integrated through resident-object clones
+and semantic substitutions under the same composition pattern.
 Contextual overlays use a shared modal layer above the active page; they do not
 move or replace the shell differently per game.
 
 The SteamGridDB grids, heroes, logos, and icons supplied for this project are
 launcher and shortcut resources only. They are not bottom-screen theme assets.
-No new artwork is generated for the shared shell; adapters reuse resident game
-assets and must provide a deterministic neutral fallback when an asset has not
-loaded yet.
+No new artwork is generated for the ported companion composition; adapters
+reuse resident game assets. A fallback is allowed only when the dedicated port
+matrix proves that no usable resident equivalent exists, and it must follow
+the Dual Souls design pattern.
 
 The upstream [Bottom-screen UI v2.0 issue](https://github.com/jakobkhansen/SilksongAndroid/issues/10)
 is an additional Task 15 design input. Its proposals are adopted as shared-shell

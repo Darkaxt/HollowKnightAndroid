@@ -10,10 +10,11 @@ This repository is an implementation checkpoint, **not a finished public release
 The exact Hollow Knight `1.5.12620` Linux build now completes on-device
 conversion, ARM64 compilation, packaging, installation, first boot, and the
 playable-room gate on the AYN Thor. The fork-signed Silksong `1.0.29980`
-generation also builds and reaches live dual-display gameplay. That run proved
-the direct Unity display path and rejected the old flat companion shell. A
-newer fork-signed generation now renders the replacement Dual Souls-style
-HUD/frame on the Thor; physical lower-panel touch remains the open device gate.
+generation also builds and reaches live dual-display gameplay. Those runs
+prove the direct Unity display path. The separately authored companion UI is
+now rejected prototype work: production is being corrected to a module-by-
+module port of Hollow Knight Dual Souls' bottom-screen composition using
+Silksong's resident UI objects and assets.
 
 <p align="center">
   <img src="docs/icon.png" alt="Hollow Knight Android combined Hollow Knight and Silksong app icon" width="220" />
@@ -41,16 +42,18 @@ not used for project artwork.
 | Mods | The parent's build-time BepInEx 5/Harmony weaver is merged and routed through each selected profile's patch, IL2CPP, generation, and status paths | Real plugin compatibility for each game, compatibility manifests, dependencies, load order, and per-profile enablement remain unverified |
 | Built-in tweaks | A shared, game-qualified controller hosts a persistent Mods overlay from the standalone HUD gear. Silksong `1.0.29980` exposes typed damage mode, one-hit kills, unlimited Silk, and equip-anywhere adapters; the standalone gear and first-run master OFF are proved in the signed production process | Prove physical gear/overlay touch, effects, process-exit persistence for each game, the Hollow Knight adapter, and later parity rows |
 | Skins | Shared death/respawn rotation state machine has host coverage | Pack scanner/import, persistence, real game lifecycle hooks, texture adapters, rollback, and both-game runtime proof |
-| Dual screen | Silksong's direct Vulkan display-1 renderer and the replacement HUD/frame are proved in signed live gameplay. A game-neutral layout drives the persistent HUD, framed content, bottom tabs and status gutters; 29/29 shared tests include five exact geometry/hit-test contracts | Prove physical touch on the replacement shell, then extract the runtime for Hollow Knight and verify the common interaction/lifecycle/fallback, localization, focus and reduced-motion matrix |
+| Dual screen | Silksong's direct Vulkan display-1 transport is proved in signed live gameplay. The authored shell shown in that run is rejected and is not the production target | Port Dual Souls' frame, resident HUD, Map, Inventory, Loadout, selection, overlays, fades and lifecycle onto the direct renderer; then close the side-by-side Hollow Knight/Silksong matrix |
 | Releases | Fork identity and GitHub signing pipeline have a signed dry-run proof | No release until source reproducibility, device, gameplay, migration, tag/version, and fresh-download gates pass |
 
 The detailed requirement ledger is
 [`docs/verification/design-traceability.md`](docs/verification/design-traceability.md).
 The current Hollow Knight device evidence is
 [`docs/verification/hollow-knight-first-boot.md`](docs/verification/hollow-knight-first-boot.md).
-The bottom-screen source comparison and selected shared product language are
-recorded in
-[`docs/verification/dualscreen-source-audit.md`](docs/verification/dualscreen-source-audit.md).
+The corrected bottom-screen port contract, plan, and source matrix are recorded
+in
+[`docs/superpowers/specs/2026-08-31-dual-souls-ui-port-design.md`](docs/superpowers/specs/2026-08-31-dual-souls-ui-port-design.md),
+[`docs/superpowers/plans/2026-08-31-dual-souls-ui-port.md`](docs/superpowers/plans/2026-08-31-dual-souls-ui-port.md), and
+[`docs/verification/dual-souls-ui-port-matrix.md`](docs/verification/dual-souls-ui-port-matrix.md).
 The typed Silksong tweak seams and current host-only proof are recorded in
 [`docs/verification/silksong-mod-menu-source-audit.md`](docs/verification/silksong-mod-menu-source-audit.md).
 The signed Silksong production run and blocking companion-layout finding are
@@ -69,10 +72,10 @@ The isolated API 35 launcher run is recorded in
 - Independent profile generations under private app storage, published
   atomically after verification.
 - Shared immutable toolchains by Unity version and content hash.
-- One bottom-screen shell across both games: shared geometry, semantic page
-  order, navigation, gestures, status placement, modal behavior, and
-  diagnostics, with each adapter supplying only its own data and resident
-  game art.
+- One Dual Souls bottom-screen composition across both games: Hollow Knight's
+  frame, hierarchy, navigation, selection, modal, and lifecycle patterns;
+  Silksong's resident sprites, fonts, data, terminology, and additional pages;
+  and SilksongAndroid's direct-display transport.
 - No Team Cherry game files, Steam credentials, generated game data, Unity
   binaries, or private signing keys in this repository or its release APK.
 

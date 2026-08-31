@@ -28,7 +28,12 @@ must preserve. It is an implementation input, not device proof.
 | Theme construction | Shared uGUI metrics with fonts, strings, sprites, and colors resolved from the running Silksong build | Clones and relayers Hollow Knight panes, ornaments, maps, HUD, fonts, sprites, and dialogue objects |
 | Lifecycle | Display rig is hidden or rebuilt for pause and display changes; no second display leaves it dormant | The Android presentation is hidden in the background and shown on resume; single-screen mode disables the companion |
 
-## Selected boundary
+## Superseded boundary
+
+The earlier boundary below incorrectly allowed a separately authored
+game-neutral shell to reproduce only the visible outcome. Device review proved
+that interpretation unacceptable: it produced an approximation instead of a
+port. It is retained here only to explain the failed prototype.
 
 The unified application keeps Silksong's direct Unity display-1 architecture.
 Hollow Knight has already passed the Vulkan gameplay gate, so its native
@@ -36,11 +41,12 @@ Hollow Knight has already passed the Vulkan gameplay gate, so its native
 renderer. Direct-display operation, touch attribution, lifecycle, and
 single-display fallback still require physical Thor proof for Hollow Knight.
 
-The outer shell becomes game-neutral. It owns geometry, semantic tab order,
-navigation and gestures, touch metrics, selection feedback, content/detail
-layout, status placement, idle state, modal priority, diagnostics, and error
-containment. Each game adapter supplies its localized data, supported pages,
-resident fonts/art, and theme tokens.
+The rejected prototype made the outer shell game-neutral and independently
+authored. It owned geometry, semantic tab order, navigation, gestures, touch
+metrics, selection feedback, content/detail layout, status placement, idle
+state, modal priority, diagnostics, and error containment while adapters
+supplied data and theme tokens. That boundary is no longer a production
+option.
 
 The live Silksong device review corrected an ambiguity in the original audit:
 Dual Souls is not merely a feature checklist. Its HUD and outer layout are the
@@ -57,12 +63,27 @@ maps `Crests` to Loadout. Tasks and Journal remain available only where the
 adapter can back them with real game state. Omitting a page does not reorder
 the shared semantic groups.
 
-Dual Souls remains the Hollow Knight functional and visual baseline. Its HUD and area
-status, map, inventory, charms, story/dialogue/tutorial overlays, item popups,
-fade synchronization, skin coverage, and background/resume behavior must be
-implemented through the shared shell or recorded as explicit blockers or
+Dual Souls remains the Hollow Knight functional and visual baseline. Its HUD
+and area status, map, inventory, charms, story/dialogue/tutorial overlays,
+item popups, fade synchronization, skin coverage, and background/resume
+behavior must be ported module by module or recorded as explicit blockers or
 tracked deferrals. Its native blitter, Java touch polling, and bespoke outer
-transport are not retained; its outer-layout language is retained.
+transport are not retained.
+
+## Corrected production boundary
+
+`docs/superpowers/specs/2026-08-31-dual-souls-ui-port-design.md` is now
+authoritative. SilksongAndroid contributes only the direct-display transport,
+touch, lifecycle, diagnostics, and fallback technology. The UI composition is
+a port of Dual Souls' `HKDualScreen.Bottom.*` pipeline.
+
+Silksong adapters must clone, re-parent, re-layer, and drive resident game UI
+objects wherever equivalents exist. Independently authored widgets are
+allowed only as documented fallbacks for genuinely missing native objects.
+Silksong asset identity replaces Hollow Knight asset identity, but structural,
+compositional, and behavioral fidelity to Dual Souls is required. The authored
+`DsShell` path is rejected prototype work, and render success does not satisfy
+the corrected acceptance gate.
 
 ## Signed Silksong device finding
 
