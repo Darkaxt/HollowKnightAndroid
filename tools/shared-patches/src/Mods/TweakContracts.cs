@@ -13,10 +13,26 @@ namespace DualSouls.Mods
             string description,
             string defaultValue,
             IReadOnlyList<string> values)
+            : this(id, group, title, description, defaultValue, values, true, "", "")
+        {
+        }
+
+        TweakDescriptor(
+            string id,
+            string group,
+            string title,
+            string description,
+            string defaultValue,
+            IReadOnlyList<string> values,
+            bool isAvailable,
+            string trackingId,
+            string unavailableReason)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("A tweak id is required.", nameof(id));
             if (string.IsNullOrWhiteSpace(group)) throw new ArgumentException("A tweak group is required.", nameof(group));
             if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("A tweak title is required.", nameof(title));
+            if (!isAvailable && string.IsNullOrWhiteSpace(trackingId)) throw new ArgumentException("A tracking id is required for unavailable tweaks.", nameof(trackingId));
+            if (!isAvailable && string.IsNullOrWhiteSpace(unavailableReason)) throw new ArgumentException("An unavailable reason is required for unavailable tweaks.", nameof(unavailableReason));
             if (values == null || values.Count == 0) throw new ArgumentException("At least one value is required.", nameof(values));
 
             var copy = new string[values.Count];
@@ -39,6 +55,20 @@ namespace DualSouls.Mods
             Description = description ?? "";
             DefaultValue = defaultValue;
             Values = copy;
+            IsAvailable = isAvailable;
+            TrackingId = trackingId ?? "";
+            UnavailableReason = unavailableReason ?? "";
+        }
+
+        public static TweakDescriptor Deferred(
+            string id,
+            string group,
+            string title,
+            string description,
+            string trackingId,
+            string unavailableReason)
+        {
+            return new TweakDescriptor(id, group, title, description, "off", new[] { "off" }, false, trackingId, unavailableReason);
         }
 
         public string Id { get; }
@@ -47,6 +77,9 @@ namespace DualSouls.Mods
         public string Description { get; }
         public string DefaultValue { get; }
         public IReadOnlyList<string> Values { get; }
+        public bool IsAvailable { get; }
+        public string TrackingId { get; }
+        public string UnavailableReason { get; }
 
         public bool Allows(string value)
         {

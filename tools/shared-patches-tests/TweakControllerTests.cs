@@ -5,6 +5,66 @@ namespace SharedPatches.Tests;
 
 public sealed class TweakControllerTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void DeferredRequiresNonblankTrackingId(string trackingId)
+    {
+        Assert.Throws<ArgumentException>(() => TweakDescriptor.Deferred(
+            "bench_teleport", "MOVEMENT", "BENCH TELEPORT", "Teleport to benches.", trackingId, "The game adapter does not support bench teleport yet."));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void DeferredRequiresNonblankUnavailableReason(string unavailableReason)
+    {
+        Assert.Throws<ArgumentException>(() => TweakDescriptor.Deferred(
+            "bench_teleport", "MOVEMENT", "BENCH TELEPORT", "Teleport to benches.", "H3-BENCH-TELEPORT", unavailableReason));
+    }
+
+    [Fact]
+    public void DeferredIsUnavailableAndFixedOff()
+    {
+        var descriptor = TweakDescriptor.Deferred(
+            "bench_teleport", "MOVEMENT", "BENCH TELEPORT", "Teleport to benches.", "H3-BENCH-TELEPORT", "The game adapter does not support bench teleport yet.");
+
+        Assert.False(descriptor.IsAvailable);
+        Assert.Equal("off", descriptor.DefaultValue);
+        Assert.Equal(new[] { "off" }, descriptor.Values);
+        Assert.Equal("H3-BENCH-TELEPORT", descriptor.TrackingId);
+        Assert.Equal("The game adapter does not support bench teleport yet.", descriptor.UnavailableReason);
+    }
+
+    [Fact]
+    public void DeferredRowsCorrectStaleValuesSkipApplyAndRejectCycling()
+    {
+        var adapter = new DeferredRecordingAdapter();
+        var store = new MemoryStore
+        {
+            ["dualsouls.mods.hollow-knight.master"] = "1",
+            ["dualsouls.mods.hollow-knight.value.bench_teleport"] = "on"
+        };
+        var controller = new TweakController(adapter, store);
+
+        var initialized = controller.Initialize();
+        var cycled = controller.Cycle("bench_teleport");
+
+        Assert.True(initialized.Success);
+        Assert.True(controller.MasterEnabled);
+        Assert.Equal("off", controller.Value("bench_teleport"));
+        Assert.Equal("off", store["dualsouls.mods.hollow-knight.value.bench_teleport"]);
+        Assert.Equal(2, store.FlushCount);
+        Assert.Empty(adapter.Applied);
+        Assert.False(cycled.Success);
+        Assert.Contains("BENCH TELEPORT", cycled.Error);
+        Assert.Contains("H3-BENCH-TELEPORT", cycled.Error);
+        Assert.Contains("The game adapter does not support bench teleport yet.", cycled.Error);
+        Assert.Empty(adapter.Applied);
+    }
+
     [Fact]
     public void InitializeDefaultsMasterOffWithoutApplyingTweaks()
     {
@@ -299,6 +359,27 @@ public sealed class TweakControllerTests
 
         public void RestoreBaseline() => RestoreCount++;
         public void Tick() => TickCount++;
+    }
+
+    private sealed class DeferredRecordingAdapter : ITweakAdapter
+    {
+        public string GameId => "hollow-knight";
+        public IReadOnlyList<TweakDescriptor> Descriptors { get; } = new[]
+        {
+            TweakDescriptor.Deferred(
+                "bench_teleport", "MOVEMENT", "BENCH TELEPORT", "Teleport to benches.", "H3-BENCH-TELEPORT", "The game adapter does not support bench teleport yet.")
+        };
+        public List<(string Id, string Value)> Applied { get; } = new();
+
+        public void CaptureBaseline() { }
+        public TweakActionResult Apply(string id, string value)
+        {
+            Applied.Add((id, value));
+            return TweakActionResult.Ok();
+        }
+
+        public void RestoreBaseline() { }
+        public void Tick() { }
     }
 
     private sealed class MemoryStore : Dictionary<string, string>, ITweakStore

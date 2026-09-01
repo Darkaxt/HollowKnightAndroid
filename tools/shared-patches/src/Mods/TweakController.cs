@@ -108,6 +108,8 @@ namespace DualSouls.Mods
             EnsureInitialized();
             TweakDescriptor descriptor;
             if (!_byId.TryGetValue(id, out descriptor)) return TweakActionResult.Fail("Unknown tweak: " + id);
+            if (!descriptor.IsAvailable)
+                return TweakActionResult.Fail(descriptor.Title + " is unavailable (" + descriptor.TrackingId + "): " + descriptor.UnavailableReason);
             if (!MasterEnabled) return TweakActionResult.Fail("Enable MASTER before changing gameplay tweaks.");
 
             string previous = Value(id);
@@ -177,6 +179,7 @@ namespace DualSouls.Mods
             for (int i = 0; i < Descriptors.Count; i++)
             {
                 TweakDescriptor descriptor = Descriptors[i];
+                if (!descriptor.IsAvailable) continue;
                 string value = Value(descriptor.Id);
                 if (string.Equals(value, descriptor.DefaultValue, StringComparison.Ordinal)) continue;
 
