@@ -54,7 +54,7 @@ namespace DualSouls.Mods
             Title = title;
             Description = description ?? "";
             DefaultValue = defaultValue;
-            Values = copy;
+            Values = Array.AsReadOnly(copy);
             IsAvailable = isAvailable;
             TrackingId = trackingId ?? "";
             UnavailableReason = unavailableReason ?? "";

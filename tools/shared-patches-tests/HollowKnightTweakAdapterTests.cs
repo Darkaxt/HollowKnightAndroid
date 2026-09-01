@@ -149,36 +149,6 @@ public sealed class HollowKnightTweakAdapterTests
     }
 
     [Fact]
-    public void DescriptorValueDriftFailsClosedWithoutApiCall()
-    {
-        var catalog = new HollowKnightTweakAdapter(new RecordingApi());
-
-        foreach (TweakDescriptor row in catalog.Descriptors.Where(row => row.IsAvailable))
-        {
-            var values = Assert.IsAssignableFrom<IList<string>>(row.Values);
-            string originalValue = values[0];
-            const string driftedValue = "future_value";
-
-            try
-            {
-                values[0] = driftedValue;
-                var api = new RecordingApi();
-                var adapter = new HollowKnightTweakAdapter(api);
-
-                TweakActionResult result = adapter.Apply(row.Id, driftedValue);
-
-                Assert.False(result.Success);
-                Assert.Contains(driftedValue, result.Error);
-                Assert.Empty(api.Calls);
-            }
-            finally
-            {
-                values[0] = originalValue;
-            }
-        }
-    }
-
-    [Fact]
     public void DeferredRowsHaveExactUniqueTrackingMapAndRemainVisible()
     {
         var adapter = new HollowKnightTweakAdapter(new RecordingApi());

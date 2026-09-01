@@ -26,6 +26,39 @@ public sealed class TweakControllerTests
     }
 
     [Fact]
+    public void DescriptorCopiesConstructorValuesBeforeExposingThem()
+    {
+        string[] inputValues = { "off", "on" };
+        var descriptor = new TweakDescriptor(
+            "example", "TEST", "EXAMPLE", "Example descriptor.", "off", inputValues);
+
+        inputValues[0] = "corrupt";
+        inputValues[1] = "also_corrupt";
+
+        Assert.Equal(new[] { "off", "on" }, descriptor.Values);
+        Assert.Equal("off", descriptor.DefaultValue);
+        Assert.True(descriptor.Allows("off"));
+        Assert.False(descriptor.Allows("corrupt"));
+    }
+
+    [Fact]
+    public void DescriptorValuesRejectListMutationAndPreserveDefaultInvariant()
+    {
+        var descriptor = new TweakDescriptor(
+            "example", "TEST", "EXAMPLE", "Example descriptor.",
+            "off", new[] { "off", "on" });
+        var values = Assert.IsAssignableFrom<IList<string>>(descriptor.Values);
+
+        Exception mutationError = Record.Exception(() => values[0] = "corrupt");
+
+        Assert.IsType<NotSupportedException>(mutationError);
+        Assert.Equal(new[] { "off", "on" }, descriptor.Values);
+        Assert.Equal("off", descriptor.DefaultValue);
+        Assert.True(descriptor.Allows(descriptor.DefaultValue));
+        Assert.False(descriptor.Allows("corrupt"));
+    }
+
+    [Fact]
     public void DeferredIsUnavailableAndFixedOff()
     {
         var descriptor = TweakDescriptor.Deferred(
