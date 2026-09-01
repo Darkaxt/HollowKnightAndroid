@@ -87,6 +87,44 @@ public sealed class DirectDisplayFaultTests
     }
 
     [Fact]
+    public void RecoveredContentDeactivationCommitsHostInactiveState()
+    {
+        var rig = FaultRig.CreateActiveWithContent();
+        rig.FailStep = "content:false";
+        Assert.Throws<InvalidOperationException>(() => rig.Host.SetPaused(true));
+        Assert.True(rig.Host.IsActive);
+
+        // The content owner completed its independent restoration retry.
+        rig.FailStep = null;
+        rig.Events.Clear();
+        rig.Host.AcknowledgeContentInactiveAndReconcile();
+
+        Assert.False(rig.Host.IsActive);
+        Assert.Equal(
+            new[] { "touch:false", "content:false", "presentation:false" },
+            rig.Events);
+    }
+
+    [Fact]
+    public void RecoveredContentDeactivationReactivatesIfDesiredStateResumed()
+    {
+        var rig = FaultRig.CreateActiveWithContent();
+        rig.FailStep = "content:false";
+        Assert.Throws<InvalidOperationException>(() => rig.Host.SetPaused(true));
+        rig.Host.SetPaused(false);
+        Assert.True(rig.Host.IsActive);
+
+        rig.FailStep = null;
+        rig.Events.Clear();
+        rig.Host.AcknowledgeContentInactiveAndReconcile();
+
+        Assert.True(rig.Host.IsActive);
+        Assert.Equal(
+            new[] { "presentation:true", "content:true", "touch:true" },
+            rig.Events);
+    }
+
+    [Fact]
     public void SynchronousActivationRequestFailureRearmsThePresenceGeneration()
     {
         var rig = new FaultRig { FailStep = "activation:request" };

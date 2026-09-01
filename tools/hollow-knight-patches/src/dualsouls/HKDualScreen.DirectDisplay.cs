@@ -112,6 +112,8 @@ public partial class HKDualScreen
         directDisplayRestorePending = false;
         if (directDisplayFinalTeardownPending)
             CompleteDirectDisplayTeardown();
+        else if (transport != null)
+            transport.OnReferenceRestoreCompleted();
     }
 
     void CompleteDirectDisplayTeardown()

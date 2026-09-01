@@ -278,9 +278,16 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         self.assertIn("RestoreReferenceRouting()", retry)
         self.assertIn("CompleteDirectDisplayTeardown()", retry)
+        self.assertIn("transport.OnReferenceRestoreCompleted()", retry)
         main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
         self.assertIn("if (directDisplayRestorePending)", main)
         self.assertIn("RetryPendingDirectDisplayRestore()", main)
+        adapter = strip_csharp_comments(read(ADAPTER))
+        recovered = method_body(
+            adapter,
+            r"internal\s+void\s+OnReferenceRestoreCompleted\s*\(\s*\)",
+        )
+        self.assertIn("AcknowledgeContentInactiveAndReconcile()", recovered)
 
     def test_orchestrator_wires_frame_pages_selection_overlays_fade_and_lifecycle(self):
         main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))

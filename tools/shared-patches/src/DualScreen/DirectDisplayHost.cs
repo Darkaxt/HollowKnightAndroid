@@ -23,6 +23,7 @@ namespace DualSouls.DualScreen
         bool _active;
         bool _disposed;
         bool _activationRequested;
+        bool _reconciliationPending;
         float _panelWidth;
         float _panelHeight;
 
@@ -133,6 +134,23 @@ namespace DualSouls.DualScreen
             RequestActivationIfNeeded();
         }
 
+        /// <summary>
+        /// Commits a content owner's successful out-of-band deactivation
+        /// retry, then reconciles the current desired state. This closes the
+        /// gap left when an earlier Deactivate callback threw after the other
+        /// transport layers had already been released.
+        /// </summary>
+        public void AcknowledgeContentInactiveAndReconcile()
+        {
+            if (_disposed) return;
+            // A failed deactivation may have left touch, content, or
+            // presentation in different states. Force one complete replay in
+            // the direction currently desired instead of trusting any layer.
+            _reconciliationPending = true;
+            ApplyActiveState();
+            RequestActivationIfNeeded();
+        }
+
         void RequestActivationIfNeeded()
         {
             if (_disposed || !_enabled || !_displayPresent ||
@@ -208,7 +226,7 @@ namespace DualSouls.DualScreen
         {
             bool shouldBeActive = _enabled && _displayPresent &&
                 _presentationReady && !_paused;
-            if (shouldBeActive == _active) return;
+            if (!_reconciliationPending && shouldBeActive == _active) return;
             if (shouldBeActive) Activate();
             else Deactivate();
         }
@@ -230,6 +248,7 @@ namespace DualSouls.DualScreen
             if (activationFailure == null)
             {
                 _active = true;
+                _reconciliationPending = false;
                 return;
             }
 
@@ -241,6 +260,7 @@ namespace DualSouls.DualScreen
                 TryStep(() => _content.SetTransportActive(false), failures);
             TryStep(() => _setPresentationVisible(false), failures);
             _active = false;
+            _reconciliationPending = failures.Count > 1;
             ThrowFailures(failures);
         }
 
@@ -255,12 +275,14 @@ namespace DualSouls.DualScreen
             if (failures.Count == 0)
             {
                 _active = false;
+                _reconciliationPending = false;
                 return;
             }
 
             // Desired state was recorded by the setter, but the actual state is
             // not cleanly inactive. Keep it retryable on the same publication.
             _active = true;
+            _reconciliationPending = true;
             ThrowFailures(failures);
         }
 
@@ -286,6 +308,7 @@ namespace DualSouls.DualScreen
             _displayPresent = false;
             _presentationReady = false;
             _activationRequested = false;
+            _reconciliationPending = false;
 
             // Teardown always attempts the complete final sequence and reports
             // every failure after the last owned resource has been released.

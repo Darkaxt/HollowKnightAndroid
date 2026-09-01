@@ -402,6 +402,12 @@ namespace HollowKnightPatches
             _contentDisposed = true;
         }
 
+        internal void OnReferenceRestoreCompleted()
+        {
+            if (_host != null && !_host.IsDisposed)
+                _host.AcknowledgeContentInactiveAndReconcile();
+        }
+
         void ReleasePresentation()
         {
             if (_presentation == null) return;
