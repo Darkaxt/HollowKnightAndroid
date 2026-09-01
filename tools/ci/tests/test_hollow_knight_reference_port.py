@@ -306,6 +306,30 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertLess(first_activation, text_assignment)
         self.assertLess(text_assignment, mesh_update)
 
+    def test_frame_tab_row_uses_device_safe_scale_and_centres_real_glyph_bounds(self):
+        layout = strip_csharp_comments(read(REFERENCE_ROOT / "HKLayout.cs"))
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        position = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
+        self.assertRegex(layout, r"compTabScale\s*=\s*0\.6f")
+        self.assertRegex(layout, r"compTabY\s*=\s*-0\.76f")
+        self.assertIn("desiredGlyphCenter", position)
+        self.assertIn("desiredGlyphCenter.x - glyphBounds.center.x", position)
+        self.assertIn("desiredGlyphCenter.y - glyphBounds.center.y", position)
+
+    def test_frame_tab_labels_sort_above_chrome_and_fleurs_are_slot_bounded(self):
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        tabs = method_body(frame, r"void\s+BuildTabRow\s*\([^)]*\)")
+        position = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
+        self.assertIn('r.sortingLayerName = "Inventory"', tabs)
+        self.assertRegex(tabs, r"r\.sortingOrder\s*=\s*10080\s*\+\s*i")
+        self.assertIn("float fleurMaxW", position)
+        self.assertIn("Mathf.Min(charmsW", position)
+        self.assertIn("float textBot = actB.min.y", position)
+
     def test_pane_clones_are_sanitized_while_inactive_before_activation(self):
         frame = strip_csharp_comments(
             read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")

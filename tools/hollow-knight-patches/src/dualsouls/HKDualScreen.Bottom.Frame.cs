@@ -394,7 +394,17 @@ public partial class HKDualScreen
                     SetLayerRecursive(go.transform, ATTR_LAYER);
                     // Force renderers and the retained TMP Behaviour on. The
                     // closed inventory can leave both disabled independently.
-                    foreach (var r in go.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = true; }
+                    foreach (var r in go.GetComponentsInChildren<Renderer>(true))
+                    {
+                        r.gameObject.SetActive(true);
+                        r.enabled = true;
+                        // BuildFrame raises every chrome renderer by 20000
+                        // after this method returns. Start the native labels
+                        // above the two fleur quads so transparent/black atlas
+                        // padding can never cover the retained TMP glyphs.
+                        r.sortingLayerName = "Inventory";
+                        r.sortingOrder = 10080 + i;
+                    }
                     Component tmp = null;
                     foreach (var c in go.GetComponentsInChildren<Component>(true))
                     {
@@ -472,7 +482,28 @@ public partial class HKDualScreen
             if (tmp == null) continue;
             bool active = col == activeCol;
             if (colChanged) SetTmpColor(tmp, new Color(1f, 1f, 1f, active ? 1f : 0.6f));
-            if (t != null && frameBase.TryGetValue(t, out var tbs)) t.localScale = tbs * zf * Mathf.Max(0.1f, cfg.compTabScale);   // LIVE font size
+            if (t != null && frameBase.TryGetValue(t, out var tbs))
+            {
+                t.localScale = tbs * zf * Mathf.Max(0.1f, cfg.compTabScale);   // LIVE font size
+                // Pane Name is authored deep inside HK's inventory canvas, so
+                // its generated glyph mesh is offset from the cloned root.
+                // Place the REAL mesh bounds at the requested tab centre;
+                // otherwise the labels (and the fleurs which follow them)
+                // can land outside the 1240x1080 companion view.
+                var glyphRenderer = (tmp as Component).GetComponent<Renderer>();
+                if (glyphRenderer != null)
+                {
+                    var glyphBounds = glyphRenderer.bounds;
+                    if (glyphBounds.size.x > 1e-5f && glyphBounds.size.y > 1e-5f)
+                    {
+                        Vector3 desiredGlyphCenter = t.position;
+                        t.position += new Vector3(
+                            desiredGlyphCenter.x - glyphBounds.center.x,
+                            desiredGlyphCenter.y - glyphBounds.center.y,
+                            0f);
+                    }
+                }
+            }
         }
         if (colChanged) tabColorCol = activeCol;
         PositionHudStrip(s, asp, zf, effectiveTab);   // B3: area name, fps/battery, equipped-charm row, no-map label
@@ -502,12 +533,16 @@ public partial class HKDualScreen
         if (actHave)
         {
             float charmsW = charmsHave ? charmsB.size.x : actB.size.x;
+            // A native localized title can be much wider than its tab cell.
+            // Keep each selected fleur inside that cell instead of allowing
+            // its source-aspect quad to grow across or beyond the display.
+            float fleurMaxW = Mathf.Max(0.1f, cfg.compTabSpacing * s * asp * 0.82f);
             float gap = cfg.compBotFleurGap * s;
             float textTop = actB.max.y;                              // cap tops (reliable)
-            float textBot = actB.max.y - cfg.compBotFleurTextH * s;  // visible text bottom (same font for all tabs)
+            float textBot = actB.min.y;                              // tight live glyph bottom
             if (botFleurT != null)
             {
-                float w = charmsW * Mathf.Max(0.05f, cfg.compBotFleurWScale);
+                float w = Mathf.Min(charmsW * Mathf.Max(0.05f, cfg.compBotFleurWScale), fleurMaxW);
                 float sc = Mathf.Max(0.0001f, w / botFleurAspWH), hh = sc * 0.5f;
                 botFleurT.localScale = new Vector3(sc, sc * (cfg.compBotFleurFlip == 1 ? -1f : 1f), sc);
                 botFleurT.position = new Vector3(actB.center.x, textTop + gap + hh, actB.center.z - 0.1f);   // above, edge = gap over text top
@@ -516,7 +551,7 @@ public partial class HKDualScreen
             else frameInnerBotFrac = (textTop + gap - cam.position.y) / s;
             if (botFleur2T != null)
             {
-                float w2 = charmsW * Mathf.Max(0.05f, cfg.compBotFleur2WScale);
+                float w2 = Mathf.Min(charmsW * Mathf.Max(0.05f, cfg.compBotFleur2WScale), fleurMaxW);
                 float sc2 = Mathf.Max(0.0001f, w2 / botFleur2AspWH), hh2 = sc2 * 0.5f;
                 botFleur2T.localScale = new Vector3(sc2, sc2 * (cfg.compBotFleur2Flip == 1 ? -1f : 1f), sc2);
                 botFleur2T.position = new Vector3(actB.center.x, textBot - gap - hh2, actB.center.z - 0.1f);  // below, edge = gap under text bottom

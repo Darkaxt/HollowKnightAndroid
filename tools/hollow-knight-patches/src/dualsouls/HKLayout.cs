@@ -76,10 +76,10 @@ class HKLayout
     public int compFrame = 1;        // 1 = draw HK's context-box ornament frame around the map
     public float compFrameScale = 1.0f;// ornament size multiplier (live-tune)
     public float compFrameFit = 1.15f;   // Inventory/Charms: when the frame is on, zoom the pane out by this so it sits INSIDE the frame (Map tab: compMapMargin instead)
-    public float compTabScale = 2.7f;    // tab-label size multiplier
-    public float compTabY = -1.05f;      // tab row Y (BELOW the framed box) — fractions of the half-view; +up
+    public float compTabScale = 0.6f;    // device-safe tab-label size multiplier (~3.3% of the lower display height)
+    public float compTabY = -0.76f;      // tab glyph centre Y (bottom 12% band) — fractions of the half-view; +up
     public float compMapCenterY = 0.0f; // Inventory/Charms: shift the pane UP so it sits inside the frame (Map tab centres itself in the inner rect; not used there)
-    public float compTabSpacing = 0.4f; // horizontal spacing between tab labels (live) — 3 tabs centred on the middle one
+    public float compTabSpacing = 0.45f;// horizontal spacing between tab labels (live) — 3 tabs centred on the middle one
     public float compBotFleurGap = 0.03f;// SAME gap between the tab text and BOTH fleurs (above + below), ortho fracs
     public int compBotFleurFlip = 0;     // 1 = flip the TOP fleur (#3) upside-down
     public float compBotFleurWScale = 1.0f;   // TOP fleur (#3) width = Charms-tab text width * this (aspect locked)

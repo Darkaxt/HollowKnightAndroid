@@ -134,6 +134,14 @@ must reproduce the Hollow Knight oracle's own activate/open, settle,
 selective-freeze or retained-driver sequence and its observable consequences;
 it must not reuse a blanket static-clone sanitizer.
 
+The retained tab row is laid out from the generated glyph bounds on the actual
+lower panel. All labels and their selected-tab fleurs must remain fully inside
+their tab cells at the measured display size, with the labels sorted above the
+ornament quads. Source pivots, localization width, or a source-tuned scale may
+not place the glyphs off-screen, make adjacent titles overlap, or allow either
+fleur to span multiple cells. This is a transport adaptation of the existing
+Dual Souls chrome, not a replacement design.
+
 ### DSUI-04 — Semantic substitutions preserve the pattern
 
 Hollow Knight concepts map to Silksong by meaning without changing the design
