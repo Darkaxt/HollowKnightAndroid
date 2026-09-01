@@ -216,10 +216,10 @@ matrix.
 | Inventory, Charms, and Map switching | PASS | The display-associated `fts_ts_3` event path selected all three bottom pages; high-level ADB display injection is not counted |
 | Selection, details, and action prompt | PASS | Selecting Old Nail rendered selection corners, its name/description, and the native X glyph |
 | Tab glyph/fleur bounds | PASS | All ornaments remain centered and bounded to their tab cells |
-| Resident Inventory/Map/Charms text | FAIL | TMP objects retain valid geometry but produce no pixels |
-| Quiet pre-manager startup | FAIL | Per-frame singleton-log flooding is gone, but the latest affected-row pass retained two isolated `GameCameras` lookups |
+| Resident Inventory/Map/Charms text | FAIL | Menu-only run `33532750369` produced only tiny unreadable fragments. Root cause is the Android port's `0.6` tab scale versus the pinned Dual Souls `2.7`; the reference scale is restored host-side and awaits one visual recheck |
+| Quiet patch-owned pre-manager startup | PASS | Every patch-owned pre-fixture/lifecycle path now uses `resolvedGameCameras`. The two remaining messages in run `33532750369` have complete stacks in Hollow Knight's own `Platform:SetSceneLoadState`, so they are a base-game startup baseline rather than an H2 defect |
 | Pause lower surface | PASS | Pausing presents the Hollow Knight title card on display 1 |
-| Tutorial/dialogue/item/fade state routing | PENDING | One observed attack-tutorial state exposed a persistent-HUD scan gap; the batched correction is host-green. Recheck uses controlled/static lower-HUD state only, not gameplay traversal |
+| Tutorial/dialogue/item/fade state routing | PENDING | One earlier attack-tutorial observation exposed a persistent-HUD scan gap; the batched correction is host-green. Recheck uses host contracts or controlled injected lower-HUD state only, never gameplay |
 | Background/resume and restoration retry | PENDING | Host contracts cover retry ownership; affected signed lower-HUD lifecycle rows remain |
 | Physical display loss / true single-display start | TRACKED DEFERRAL | Unchanged H1 hardware/composer limitation; must close by H5 |
 | Teardown and host-setting restoration | PASS | Package PID absent after force-stop; temporary layout file removed; `stay_on_while_plugged_in` restored to `0` |
@@ -264,8 +264,34 @@ Dual Souls label method. The third source correction now restores the oracle's
 direct clone under the live frame, dependency-preserving driver disable,
 explicit activation/renderer enable, final text assignment, and forced mesh
 sequence. `ScanTutorials` now uses the already quietly resolved camera owner,
-closing the remaining pre-manager getter path. Twenty-five focused companion
-contracts, all 58 shared tests, all 103 Python tests, both exact patch compiles,
-and the exact 222,720-byte `1.5.12620` patch are green. One affected-row signed
-lower-HUD-only recheck remains. Every later device pass is likewise targeted
-and excludes gameplay testing.
+closing the remaining pre-manager getter path.
+
+The first menu-only validation seam was signed by dry-run `33532750369` from
+commit `55dceea`. The downloaded APK SHA-256 is
+`dab47c95e637a6138eb1c860cc149616502f5d9595ac0c2a243604f55c6bc0da`;
+APK Signature Scheme v2/v3 and the pinned signer verify. The in-place update
+preserved package UID and first-install time, and the exact source rebuilt as
+generation `gen-b38920f7-580d-47bb-96d6-f5abcecdb2e5`.
+
+That pass never selected a save, started a game, skipped an intro, entered a
+room, or issued gameplay input. A default-off `MAIN_MENU` fixture acquired and
+verified Hollow Knight's native input lock, invoked only the production
+frame/tab path, captured the lower surface, restored the exact input baselines,
+stopped cleanly, and was force-stopped. No save file was created. The temporary
+config, device captures/XML, stay-awake setting, and one failed-build staging
+directory were removed; the verified generation was preserved.
+
+The fixture proved all three labels have live TMP renderer bounds, but the
+surface showed only tiny unreadable fragments. Comparison with the complete
+pinned reference found the root cause: commit `b866732` had changed
+`compTabScale` from the reference's `2.7` to `0.6`, reducing the final
+typography to 22% of its intended size. A RED/GREEN contract now pins `2.7`.
+Every patch-owned remaining `GameCameras.instance` helper was also converted to
+the quiet resolved owner. Complete stack traces prove the two isolated startup
+messages came instead from Hollow Knight's own `Platform:SetSceneLoadState`.
+
+The correction passes 29 focused companion contracts, all 58 shared tests, all
+108 Python tests, both exact patch compiles, and the exact 225,792-byte
+`1.5.12620` patch. H2 remains blocked only until one affected-row menu fixture
+shows readable reference-scale labels and clean teardown. Every later device
+pass follows the same no-gameplay rule.

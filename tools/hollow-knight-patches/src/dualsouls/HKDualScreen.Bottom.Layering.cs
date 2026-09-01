@@ -195,7 +195,7 @@ public partial class HKDualScreen
         if (promptCam == null || !promptCam.enabled || cfg.compDimSync == 0) { if (fadeQuadMR != null && fadeQuadMR.enabled) fadeQuadMR.enabled = false; return; }
         try
         {
-            var gcams = GameCameras.instance; var fadeFsm = gcams != null ? gcams.cameraFadeFSM : null;
+            var gcams = resolvedGameCameras; var fadeFsm = gcams != null ? gcams.cameraFadeFSM : null;
             if (fadeFsm == null)
             {
                 if (fadeQuadMR != null && fadeQuadMR.enabled) fadeQuadMR.enabled = false;
@@ -369,7 +369,7 @@ public partial class HKDualScreen
         {
             bool hold = false; string gs = "?";
             try { var g = GameManager.instance; if (g != null) { hold = g.IsInSceneTransition; gs = g.gameState.ToString(); } } catch { }
-            var gcams2 = GameCameras.instance; var ff = gcams2 != null ? gcams2.cameraFadeFSM : null;
+            var gcams2 = resolvedGameCameras; var ff = gcams2 != null ? gcams2.cameraFadeFSM : null;
             float gui = FsmStateFadeAlpha(ff);
             string st = ff != null ? ff.ActiveStateName : "?";
             if (Mathf.Abs(alpha - diagLastA) > 0.03f || Mathf.Abs(gui - diagLastGui) > 0.03f || st != diagLastSt || hold != diagLastHold)

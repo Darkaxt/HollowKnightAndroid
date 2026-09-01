@@ -68,7 +68,7 @@ public partial class HKDualScreen
         TryDirectStep(ReleaseLowerHudFixtureInputLockOrThrow, failures);
         TryDirectStep(() =>
         {
-            var cameras = GameCameras.instance;
+            var cameras = resolvedGameCameras;
             if (cameras != null) RelayerHud(cameras, true);
         }, failures);
         TryDirectStep(RestoreRoutedLayers, failures);

@@ -66,19 +66,19 @@ cycle. A device cycle before the source-complete gate is permitted only when a
 host-invisible platform question genuinely blocks further migration.
 
 Every device cycle from H2 through release is feature-targeted and uses no
-gameplay testing. The game may remain unmoving in the minimum static scene needed
-to host a surface, but validation must use lower-screen controls, host contracts,
-controlled debug injection, or synthetic state instead of navigation, combat,
-collection, progression, or save mutation through play. Close the game after
-each affected-row capture.
+gameplay testing. An in-game room or save is not a permitted validation host,
+even if the character would remain unmoving. Validation must use a title/menu
+fixture, host contracts, controlled debug injection, or synthetic state instead
+of navigation, combat, collection, progression, or save mutation through play.
+Close the game after each affected-row capture.
 
 This rule applies to every pass, including first checks, defect rechecks,
 lifecycle checks, and release-candidate checks. Starting a new game, selecting a
-save, skipping an intro, or entering a room is not part of a validation pass when
-a title/menu-bound fixture can exercise the affected row. If a production object
-only exists after scene bootstrap, the fixture must reach it through an explicit
-input-disabled, save-neutral state seam; it must not obtain that state through
-played input.
+save, skipping an intro, entering a room, or reusing an already-loaded gameplay
+state is never part of a validation pass. If a production object only exists
+after scene bootstrap, the fixture must create the minimum required state
+through an explicit input-disabled, save-neutral debug seam; it must not obtain
+that state through played input or a user save.
 
 ## File structure and ownership
 
@@ -364,7 +364,21 @@ preserved the package identity and app UID, and rebuilt exact generation
 before acceptance when its setup path reached new-game/intro state; no save file
 was created and no result from that path is counted. Step 6 remains open until a
 title/menu-bound, controlled lower-HUD fixture proves the labels and startup log
-behavior without entering gameplay.
+behavior without entering gameplay. Signed dry-run `33532750369` then installed
+commit `55dceea`, preserved package identity/UID/first-install time, and rebuilt
+exact generation `gen-b38920f7-580d-47bb-96d6-f5abcecdb2e5`. Its default-off
+`MAIN_MENU` fixture locked native menu input, invoked only the production
+frame/tab path, and closed without selecting a save, starting a game, entering a
+room, issuing gameplay input, or creating a save. The capture reduced the
+remaining visual blocker to a prior Android-only scale divergence: `b866732`
+changed the pinned `compTabScale` from `2.7` to `0.6`, so the labels rendered at
+22% of the reference size. Complete log stacks also show both isolated
+`GameCameras` messages came from Hollow Knight's own
+`Platform:SetSceneLoadState`, not the patch. The next correction restores the
+pinned `2.7` scale and eliminates all remaining patch-owned logging singleton
+getters. It passes 29 focused contracts, 58 shared tests, 108 Python tests, both
+exact compiles, and produces a 225,792-byte Hollow Knight patch. Step 6 remains
+open for one menu-only label/teardown recheck.
 
 - [ ] **Step 7: Reconcile and commit**
 
@@ -461,8 +475,10 @@ working skin and record an error if application fails.
 - [ ] **Step 4: Verify host, exact compile, and device rotation**
 
 Import at least two valid packs and one invalid sibling, apply each pack,
-rotate across death/respawn, relaunch, disable skins, and verify live rollback.
-Confirm no Silksong selection or files changed. Close the game after capture.
+rotate across controlled death/respawn-state injection, relaunch, disable skins,
+and verify live rollback. Never obtain those states through gameplay or a user
+save. Confirm no Silksong selection or files changed. Close the game after
+capture.
 
 - [ ] **Step 5: Reconcile and commit**
 
@@ -487,7 +503,9 @@ repository-content audit, and signing-contract suites from a clean checkout.
 
 On `bfa98654`, verify HUD, every companion page, all lower-display gestures,
 Mods effects and persistence, skin scan/apply/rotation/rollback, pause/resume,
-display loss, single-display fallback, save preservation, and process exit.
+display loss, single-display fallback, and process exit through title/menu or
+controlled injected state. Verify save-preservation and rollback semantics on
+host synthetic save fixtures; device passes neither read nor write game saves.
 
 - [ ] **Step 3: Cross-check the specification**
 
@@ -599,8 +617,10 @@ after both adapters pass. Confirm no production entry point references them.
 
 - [ ] **Step 2: Prove two-game isolation and switching**
 
-Run both switch directions, independent Mods/skins/page state, reset isolation,
-save preservation, display fallback, update, and rollback.
+Run both switch directions at the title/menu boundary, independent
+Mods/skins/page state through controlled injection, reset isolation, display
+fallback, update, and rollback. Verify save preservation only with host
+synthetic fixtures; device switching does not open or mutate a user save.
 
 - [ ] **Step 3: Final specification reconciliation**
 
@@ -619,7 +639,7 @@ the installed app, and smoke-test both profiles. Close the running game.
 | --- | --- | --- | --- | --- |
 | H0 | DSUI-00/08/10 | `COMPLETE` | None | Both specifications, both parent plans, matrix, traceability, README, and 5/5 ordering contracts agree; the existing 38-contract Silksong suite remains green after the status correction |
 | H1 | DSUI-00/02/10 | `IMPLEMENTED / DEVICE-PARTIAL` | No implementation blocker; one tracked physical detach/true single-display deferral must close by H5 | 49/49 shared tests, 78/78 Python tests, both exact compiles, signed run `33494317664`, update-preserving Thor transport and pause/resume captures |
-| H2 | DSUI-00/01/02/07/10 | `SOURCE-COMPLETE / DEVICE-BLOCKED` | Signed lower-HUD evidence proves routed live HUD, clean primary HUD, blurred/dimmed backdrop, real lower-controller page switching, selection/details/prompt, bounded ornaments, pause title presentation, persistent opening-credit routing, and live Inventory under the direct transport. Resident TMP tab text still has no pixels in signed run `33525049660`; the now-exact direct-clone lifecycle and final quiet-scan correction remain device-unproved | Run `33515971125` established the broad matrix. Runs `33520627292` and `33525049660` used unmoving static fixtures, preserved lower touch, and narrowed the blocker without gameplay testing. The third correction passes 25 focused contracts, 58 shared tests, 103 Python tests, both exact compiles, and a 222,720-byte Hollow Knight patch. One affected-row lower-HUD-only signed recheck remains |
+| H2 | DSUI-00/01/02/07/10 | `SOURCE-COMPLETE / DEVICE-BLOCKED` | Signed lower-HUD evidence proves routed live HUD, clean primary HUD, blurred/dimmed backdrop, real lower-controller page switching, selection/details/prompt, bounded ornaments, pause title presentation, persistent opening-credit routing, and live Inventory under the direct transport. Menu-only run `33532750369` proves the fixture/input-lock path and narrows the remaining blocker to unreadably small tab text caused by the Android-only `0.6` scale; the pinned `2.7` scale is restored but device-unproved | Run `33515971125` established the broad matrix. Earlier room-hosted evidence is historical and is not an allowed future validation method. Run `33532750369` used only the input-locked `MAIN_MENU` production frame fixture and clean teardown. The correction passes 29 focused contracts, 58 shared tests, 108 Python tests, both exact compiles, and a 225,792-byte Hollow Knight patch. Base-game `Platform:SetSceneLoadState` singleton messages are not an H2 blocker; one menu-only label/teardown recheck remains |
 | H3 | DSUI-00/05/09/10 | `PENDING` | Hollow Knight Mods behavior and persistence | Host isolation plus Thor effect/relaunch matrix |
 | H4 | DSUI-00/05/09/10 | `PENDING` | Scanner, application, rotation, rollback | Host pack matrix plus controlled Thor death/respawn-state injection proof; no gameplay testing |
 | H5 | DSUI-00–10 | `PENDING` | Hollow Knight blockers and deferrals must both reach zero | Clean host and complete Thor reference matrix |

@@ -76,7 +76,7 @@ class HKLayout
     public int compFrame = 1;        // 1 = draw HK's context-box ornament frame around the map
     public float compFrameScale = 1.0f;// ornament size multiplier (live-tune)
     public float compFrameFit = 1.15f;   // Inventory/Charms: when the frame is on, zoom the pane out by this so it sits INSIDE the frame (Map tab: compMapMargin instead)
-    public float compTabScale = 0.6f;    // device-safe tab-label size multiplier (~3.3% of the lower display height)
+    public float compTabScale = 2.7f;    // pinned Dual Souls tab-label scale; do not shrink the reference typography
     public float compTabY = -0.76f;      // tab glyph centre Y (bottom 12% band) — fractions of the half-view; +up
     public float compMapCenterY = 0.0f; // Inventory/Charms: shift the pane UP so it sits inside the frame (Map tab centres itself in the inner rect; not used there)
     public float compTabSpacing = 0.45f;// horizontal spacing between tab labels (live) — 3 tabs centred on the middle one

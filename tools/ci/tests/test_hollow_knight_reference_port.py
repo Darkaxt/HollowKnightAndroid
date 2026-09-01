@@ -377,6 +377,21 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("FindFirstObjectByType<GameCameras>()", resolver)
         self.assertIn("FindFirstObjectByType<GameManager>()", resolver)
 
+    def test_pre_fixture_helpers_never_call_the_logging_game_cameras_getter(self):
+        layering = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Layering.cs")
+        )
+        direct = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.DirectDisplay.cs")
+        )
+        for body in (
+            method_body(layering, r"void\s+SyncBottomFade\s*\(\s*\)"),
+            method_body(layering, r"void\s+FadeSyncDiag\s*\([^)]*\)"),
+            method_body(direct, r"void\s+RestoreReferenceRouting\s*\(\s*\)"),
+        ):
+            self.assertIn("resolvedGameCameras", body)
+            self.assertNotIn("GameCameras.instance", body)
+
     def test_lower_hud_fixture_is_default_off_menu_bound_and_preempts_gameplay_hooks(self):
         layout = strip_csharp_comments(read(REFERENCE_ROOT / "HKLayout.cs"))
         main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
@@ -495,13 +510,13 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             routing,
         )
 
-    def test_frame_tab_row_uses_device_safe_scale_and_centres_real_glyph_bounds(self):
+    def test_frame_tab_row_uses_pinned_reference_scale_and_centres_real_glyph_bounds(self):
         layout = strip_csharp_comments(read(REFERENCE_ROOT / "HKLayout.cs"))
         frame = strip_csharp_comments(
             read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
         )
         position = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
-        self.assertRegex(layout, r"compTabScale\s*=\s*0\.6f")
+        self.assertRegex(layout, r"compTabScale\s*=\s*2\.7f")
         self.assertRegex(layout, r"compTabY\s*=\s*-0\.76f")
         self.assertIn("desiredGlyphCenter", position)
         self.assertIn("desiredGlyphCenter.x - glyphBounds.center.x", position)

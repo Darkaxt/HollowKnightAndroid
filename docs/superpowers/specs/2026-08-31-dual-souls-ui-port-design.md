@@ -221,22 +221,23 @@ Rendering something on display 1 is not acceptance evidence by itself.
 Every remaining reference-device pass for this work—from H2 through final
 cross-game acceptance, including first checks, rechecks, lifecycle checks, and
 release-candidate checks—is a targeted feature validation pass only. It may use
-the minimum unmoving static scene needed to host the lower companion and inspect
-rendering, layout, primary-HUD cleanup, backdrop, page/modal controls,
-display-specific touch, persistence, pause/resume/restoration, and teardown. It
-must not navigate, fight, collect, progress, mutate saves through play, or run
-general gameplay. State-dependent HUD, Mods, skin, death/respawn, and rotation
-behavior must be exercised through focused host contracts, controlled debug
-injection, synthetic state, or an already-present static state. Each device pass
-closes the game immediately after its affected rows. This restriction changes
-the verification method, not the required production behavior.
+only a title/menu-bound fixture, host contracts, controlled debug injection, or
+synthetic state to inspect rendering, layout, primary-HUD cleanup, backdrop,
+page/modal controls, display-specific touch, persistence,
+pause/resume/restoration, and teardown. It must not select a save, start a new
+game, skip an intro, enter or reuse an in-game room, navigate, fight, collect,
+progress, mutate saves through play, or run general gameplay. State-dependent
+HUD, Mods, skin, death/respawn, and rotation behavior must be exercised through
+focused host contracts, controlled debug injection, or synthetic state. Each
+device pass closes the game immediately after its affected rows. This
+restriction changes the verification method, not the required production
+behavior.
 
-The static-scene allowance is not authorization to select a save, start a new
-game, skip an intro, enter or traverse a room, or manufacture state through
-gameplay input. Prefer a title/menu-bound fixture for any row it can host. When a
-runtime-only production object must be bootstrapped, the validation seam must do
-so explicitly with gameplay input disabled and save writes prevented; the pass
-still exercises only the named lower-screen row and teardown.
+When a runtime-only production object must be bootstrapped, the validation seam
+must create the minimum required state explicitly with gameplay input disabled
+and save reads/writes prevented; the pass still exercises only the named
+lower-screen row and teardown. An already-loaded gameplay state is not an
+allowed shortcut.
 
 ## Architecture
 

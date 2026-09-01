@@ -69,6 +69,36 @@ class HollowKnightFirstPlanTests(unittest.TestCase):
         self.assertIn("tracked_deferrals = 0", plan)
         self.assertIn("update the README", plan)
 
+    def test_every_device_pass_forbids_gameplay_and_save_state_hosts(self):
+        plan = read(PLAN)
+        spec = read(SPEC)
+        self.assertIn("Every device cycle from H2 through release", plan)
+        self.assertIn("An in-game room or save is not a permitted validation host", plan)
+        self.assertIn("already-loaded gameplay", plan)
+        self.assertIn("device passes neither read nor write game saves", plan)
+        self.assertIn("device switching does not open or mutate a user save", plan)
+        self.assertIn("Every remaining reference-device pass", spec)
+        self.assertIn("enter or reuse an in-game room", spec)
+        self.assertIn("save reads/writes prevented", spec)
+        for document in (plan, spec):
+            self.assertNotIn("minimum unmoving static scene needed", document)
+            self.assertNotIn("already-present static state", document)
+
+        traceability = read(TRACEABILITY)
+        gate4 = next(
+            line for line in traceability.splitlines()
+            if line.startswith("| Device gate 4:")
+        )
+        gate5 = next(
+            line for line in traceability.splitlines()
+            if line.startswith("| Device gate 5:")
+        )
+        self.assertNotIn("save/reload/resume", gate4)
+        self.assertIn("synthetic save fixtures", gate4)
+        self.assertNotIn("Stable gameplay", gate5)
+        self.assertNotIn("Boss, effects-heavy", gate5)
+        self.assertIn("controlled injected render states", gate5)
+
 
 if __name__ == "__main__":
     unittest.main()
