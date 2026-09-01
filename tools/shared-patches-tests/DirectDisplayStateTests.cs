@@ -82,6 +82,36 @@ public sealed class DirectDisplayStateTests
     }
 
     [Fact]
+    public void ProductDisableAtomicallyRestoresContentAndTouchOwnership()
+    {
+        var recording = RecordingTransport.CreateActive();
+        recording.Events.Clear();
+
+        recording.Host.SetEnabled(false);
+
+        Assert.False(recording.Host.IsActive);
+        Assert.True(recording.Host.IsFallback);
+        Assert.Equal(
+            new[] { "touch:false", "content:false", "presentation:false" },
+            recording.Events);
+
+        recording.Host.SetEnabled(true);
+
+        Assert.True(recording.Host.IsActive);
+        Assert.Equal(
+            new[]
+            {
+                "touch:false",
+                "content:false",
+                "presentation:false",
+                "presentation:true",
+                "content:true",
+                "touch:true",
+            },
+            recording.Events);
+    }
+
+    [Fact]
     public void DisplayLossDeactivatesAndFallsBack()
     {
         var recording = RecordingTransport.CreateActive();

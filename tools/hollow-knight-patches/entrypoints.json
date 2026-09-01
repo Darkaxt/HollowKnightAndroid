@@ -8,7 +8,7 @@
     },
     {
       "nameSpace": "HollowKnightPatches",
-      "className": "DirectDisplayProbe",
+      "className": "HkDirectDisplayAdapter",
       "methodName": "Bootstrap",
       "loadTypes": 0
     }

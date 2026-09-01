@@ -41,13 +41,23 @@ def strip_csharp_comments(source: str) -> str:
 
 
 class HollowKnightDirectDisplayProbeContractTest(unittest.TestCase):
-    def test_probe_source_and_injection_entrypoint_exist(self):
+    def test_probe_remains_diagnostic_only_and_production_owns_the_entrypoint(self):
         self.assertTrue(PROBE.is_file(), f"missing probe source: {PROBE}")
         entrypoints = json.loads(ENTRYPOINTS.read_text(encoding="utf-8"))["entryPoints"]
-        self.assertIn(
+        self.assertNotIn(
             {
                 "nameSpace": "HollowKnightPatches",
                 "className": "DirectDisplayProbe",
+                "methodName": "Bootstrap",
+                "loadTypes": 0,
+            },
+            entrypoints,
+            "the H1 diagnostic must not compete with the H2 production owner",
+        )
+        self.assertIn(
+            {
+                "nameSpace": "HollowKnightPatches",
+                "className": "HkDirectDisplayAdapter",
                 "methodName": "Bootstrap",
                 "loadTypes": 0,
             },
@@ -73,7 +83,12 @@ class HollowKnightDirectDisplayProbeContractTest(unittest.TestCase):
         )
         bootstrap = method_body(source, r"(?:public\s+)?static\s+void\s+Bootstrap\s*\(\s*\)")
         self.assertTrue(bootstrap, "missing static Bootstrap method")
+        self.assertIn("HkDirectDisplayAdapter.IsProductionEnabled()", bootstrap)
         self.assertIn("if (!ShouldRun()) return;", bootstrap)
+        self.assertLess(
+            bootstrap.index("HkDirectDisplayAdapter.IsProductionEnabled()"),
+            bootstrap.index("ShouldRun()"),
+        )
         self.assertLess(bootstrap.index("ShouldRun()"), bootstrap.index("new GameObject("))
 
         should_run = method_body(source, r"(?:public\s+)?static\s+bool\s+ShouldRun\s*\(\s*\)")

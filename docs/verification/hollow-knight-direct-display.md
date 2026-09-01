@@ -103,3 +103,31 @@ reach zero by H5. H2 may begin because the transport implementation and its
 real dual-panel lifecycle are proved, but H5 cannot close until an ARM64
 single-display target or a composer-level Thor removal mechanism supplies the
 missing device event.
+
+## H2 pinned-source provenance
+
+The Hollow Knight companion port is based on the MIT-licensed source from
+`igawa6/dualsouls` at exact commit
+`5c22451435b772acde0c7e6456f9019bc1baef73`. No game binary, managed
+assembly, texture, sprite, sound, or other proprietary asset is imported into
+the repository. The values below are the SHA-256 hashes of the pristine
+upstream source files before the Android direct-display transport adaptation:
+
+| Reference module | Pristine SHA-256 |
+| --- | --- |
+| `HKDualScreen.cs` | `7c9f11b59d768d7dde9506f0b546dee03f9704dbc4329ad20cfb8bd3f15b8d3d` |
+| `HKDualScreen.Util.cs` | `20a021e2970ac0ff8852188506accba3277ce475e8f0a314a3a85e69fbc8f65a` |
+| `HKDualScreen.Bottom.Layering.cs` | `a7c4a720c9756026de363a1c3744ca29e2a96455286cc779bcbe20ae5c1692ea` |
+| `HKDualScreen.Bottom.Frame.cs` | `26f4f4650a76787d8e8286d6f375abebdd469c4ac1366cd19de88276d7cc5a7a` |
+| `HKDualScreen.Bottom.Hud.cs` | `f8aeaadf76ee6e53380b9aeefa24af14ed4e6def9754e795ac5842d5145b33d7` |
+| `HKDualScreen.Bottom.Inventory.cs` | `32f0b52f21fcbd8c89c10acd554853fe1dde41b01586f36ddc93a7b42d6ce7ef` |
+| `HKDualScreen.Bottom.Charms.cs` | `66bb323f25130af869021d11ef0eb9b229fbbc8a09bc9fb9e400a371a9f2c67c` |
+| `HKDualScreen.Bottom.Map.cs` | `5099609d8af787e6f421a685334d06285cc8210638498d3e6fb055befd3fe2bb` |
+| `HKDualScreen.Bottom.Select.cs` | `9394e124f96072b7d73ea2f8b5eaf2cbd3ecb51452d2f364ce918d21cb17f968` |
+
+The repository copies preserve those module boundaries and responsibilities.
+Only the old Java/EGL auxiliary-display bridge and its native blit/touch path
+are replaced; the existing HUD, inventory, charms, map, selection, routing,
+and restore behavior remain the presentation oracle. H3 tweaks/mods and H4
+skins are represented by an explicit inert stage boundary in H2 rather than
+silently approximated or imported ahead of their gates.

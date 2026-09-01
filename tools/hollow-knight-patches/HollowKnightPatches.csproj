@@ -11,6 +11,10 @@
   <ItemGroup>
     <Compile Include="src/**/*.cs" />
     <Compile Include="../shared-patches/src/**/*.cs" Link="Shared/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Reference Include="UnityEngine">
+      <HintPath>$(HollowKnightManaged)/UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>$(UnityManaged)/UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
@@ -27,6 +31,34 @@
       <HintPath>$(UnityManaged)/UnityEngine.TextRenderingModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.AndroidJNIModule">
+      <HintPath>$(HollowKnightManaged)/UnityEngine.AndroidJNIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AnimationModule">
+      <HintPath>$(HollowKnightManaged)/UnityEngine.AnimationModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath>$(HollowKnightManaged)/UnityEngine.ImageConversionModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.JSONSerializeModule">
+      <HintPath>$(HollowKnightManaged)/UnityEngine.JSONSerializeModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ParticleSystemModule">
+      <HintPath>$(HollowKnightManaged)/UnityEngine.ParticleSystemModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.Physics2DModule">
+      <HintPath>$(HollowKnightManaged)/UnityEngine.Physics2DModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="PlayMaker">
+      <HintPath>$(HollowKnightManaged)/PlayMaker.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="UnityEngine.UI">
       <HintPath>$(HollowKnightManaged)/UnityEngine.UI.dll</HintPath>
       <Private>false</Private>
@@ -37,6 +69,18 @@
     </Reference>
     <Reference Include="Assembly-CSharp">
       <HintPath>$(HollowKnightManaged)/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp-firstpass">
+      <HintPath>$(HollowKnightManaged)/Assembly-CSharp-firstpass.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TeamCherry.Localization">
+      <HintPath>$(HollowKnightManaged)/TeamCherry.Localization.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TeamCherry.TK2D">
+      <HintPath>$(HollowKnightManaged)/TeamCherry.TK2D.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

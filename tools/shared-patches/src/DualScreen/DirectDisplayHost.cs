@@ -19,6 +19,7 @@ namespace DualSouls.DualScreen
         bool _displayPresent;
         bool _presentationReady;
         bool _paused;
+        bool _enabled = true;
         bool _active;
         bool _disposed;
         bool _activationRequested;
@@ -40,6 +41,7 @@ namespace DualSouls.DualScreen
         public bool DisplayPresent => _displayPresent;
         public bool PresentationReady => _presentationReady;
         public bool IsPaused => _paused;
+        public bool IsEnabled => _enabled;
         public bool IsActive => _active;
         public bool IsFallback => !_active;
         public bool IsDisposed => _disposed;
@@ -72,20 +74,7 @@ namespace DualSouls.DualScreen
             }
 
             ApplyActiveState();
-            if (_activationRequested) return;
-
-            _activationRequested = true;
-            try
-            {
-                _requestActivation();
-            }
-            catch
-            {
-                // Presence was observed, but this generation has not acquired
-                // an activation request and the same observation must retry.
-                _activationRequested = false;
-                throw;
-            }
+            RequestActivationIfNeeded();
         }
 
         /// <summary>
@@ -124,6 +113,44 @@ namespace DualSouls.DualScreen
             if (_disposed) return;
             _paused = paused;
             ApplyActiveState();
+        }
+
+        /// <summary>
+        /// Enables or disables product ownership of the secondary display.
+        /// Disabling is the same ordered transition used for pause and loss:
+        /// touch is released first, then content restores, then presentation
+        /// visibility is removed. Presence/readiness remain available so an
+        /// enabled toggle can resume without rebuilding the display.
+        /// </summary>
+        public void SetEnabled(bool enabled)
+        {
+            if (_disposed) return;
+            if (_enabled != enabled) _enabled = enabled;
+            // Reconcile even when the desired value is unchanged. A prior
+            // activation/deactivation callback may have thrown after the
+            // desired flag was committed, leaving actual state retryable.
+            ApplyActiveState();
+            RequestActivationIfNeeded();
+        }
+
+        void RequestActivationIfNeeded()
+        {
+            if (_disposed || !_enabled || !_displayPresent ||
+                _presentationReady || _activationRequested)
+                return;
+
+            _activationRequested = true;
+            try
+            {
+                _requestActivation();
+            }
+            catch
+            {
+                // Presence was observed, but this generation has not acquired
+                // an activation request and the same observation must retry.
+                _activationRequested = false;
+                throw;
+            }
         }
 
         /// <summary>
@@ -179,7 +206,8 @@ namespace DualSouls.DualScreen
 
         void ApplyActiveState()
         {
-            bool shouldBeActive = _displayPresent && _presentationReady && !_paused;
+            bool shouldBeActive = _enabled && _displayPresent &&
+                _presentationReady && !_paused;
             if (shouldBeActive == _active) return;
             if (shouldBeActive) Activate();
             else Deactivate();

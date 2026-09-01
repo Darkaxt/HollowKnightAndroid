@@ -38,6 +38,10 @@ namespace HollowKnightPatches
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         public static void Bootstrap()
         {
+            // H2 production always wins if both opt-ins are present. The H1
+            // card remains available only as an explicitly invoked transport
+            // diagnostic and never competes for display/camera ownership.
+            if (HkDirectDisplayAdapter.IsProductionEnabled()) return;
             if (!ShouldRun()) return;
             if (_instance != null) return;
 

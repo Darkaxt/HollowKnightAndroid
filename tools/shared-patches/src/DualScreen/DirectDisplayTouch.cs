@@ -26,6 +26,12 @@ namespace DualSouls.DualScreen
         static readonly HashSet<int> _ids = new HashSet<int>();
         static readonly List<Vector2> _positions = new List<Vector2>();
         static bool _inputSystemOk = true;
+        static bool _targetCanceled;
+
+        public static bool TargetCanceledThisFrame
+        {
+            get { Refresh(); return _targetCanceled; }
+        }
 
         public static void ConfigureTargetDisplay(int displayIndex)
         {
@@ -37,6 +43,7 @@ namespace DualSouls.DualScreen
             _frame = -1;
             _ids.Clear();
             _positions.Clear();
+            _targetCanceled = false;
             _inputSystemOk = true;
         }
 
@@ -46,6 +53,7 @@ namespace DualSouls.DualScreen
             _frame = Time.frameCount;
             _ids.Clear();
             _positions.Clear();
+            _targetCanceled = false;
             if (!_inputSystemOk) return;
 
             try
@@ -57,11 +65,15 @@ namespace DualSouls.DualScreen
                 {
                     var touch = touches[i];
                     var phase = touch.phase.ReadValue();
-                    if (phase == UnityEngine.InputSystem.TouchPhase.None ||
-                        phase == UnityEngine.InputSystem.TouchPhase.Ended ||
-                        phase == UnityEngine.InputSystem.TouchPhase.Canceled)
-                        continue;
                     if (touch.displayIndex.ReadValue() != _targetDisplay) continue;
+                    if (phase == UnityEngine.InputSystem.TouchPhase.Canceled)
+                    {
+                        _targetCanceled = true;
+                        continue;
+                    }
+                    if (phase == UnityEngine.InputSystem.TouchPhase.None ||
+                        phase == UnityEngine.InputSystem.TouchPhase.Ended)
+                        continue;
                     _ids.Add(touch.touchId.ReadValue());
                     _positions.Add(touch.position.ReadValue());
                 }

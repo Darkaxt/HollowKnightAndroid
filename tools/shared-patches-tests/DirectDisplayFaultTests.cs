@@ -66,6 +66,27 @@ public sealed class DirectDisplayFaultTests
     }
 
     [Fact]
+    public void ProductDisableFailureCanRetryTheSameDesiredValue()
+    {
+        var rig = FaultRig.CreateActiveWithContent();
+        rig.Events.Clear();
+        rig.FailStep = "content:false";
+
+        Assert.Throws<InvalidOperationException>(() => rig.Host.SetEnabled(false));
+        Assert.False(rig.Host.IsEnabled);
+        Assert.True(rig.Host.IsActive);
+
+        rig.FailStep = null;
+        rig.Events.Clear();
+        rig.Host.SetEnabled(false);
+
+        Assert.False(rig.Host.IsActive);
+        Assert.Equal(
+            new[] { "touch:false", "content:false", "presentation:false" },
+            rig.Events);
+    }
+
+    [Fact]
     public void SynchronousActivationRequestFailureRearmsThePresenceGeneration()
     {
         var rig = new FaultRig { FailStep = "activation:request" };

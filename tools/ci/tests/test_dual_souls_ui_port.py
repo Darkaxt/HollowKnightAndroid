@@ -769,9 +769,10 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
     def test_host_active_state_requires_unpaused_present_ready_display(self):
         source = read(DUAL_SCREEN)
         host = read(DISPLAY_HOST)
-        self.assertIn(
-            "bool shouldBeActive = _displayPresent && _presentationReady && !_paused;",
+        self.assertRegex(
             host,
+            r"bool\s+shouldBeActive\s*=\s*_enabled\s*&&\s*_displayPresent\s*&&\s*"
+            r"_presentationReady\s*&&\s*!_paused\s*;",
         )
         self.assertRegex(source, r"bool\s+present\s*=\s*now\s*>\s*DsPresentation\.DISPLAY\s*;")
         self.assertIn("host.SetPresentationReady(true, screen.Width, screen.Height);", source)
