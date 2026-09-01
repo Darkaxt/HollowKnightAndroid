@@ -240,29 +240,45 @@ namespace BepInEx.Bootstrap
     /// <summary>
     /// Makes a settings window written for a monitor usable on a handheld.
     ///
-    /// Three things are wrong with it at this size, and they need three
-    /// different levers:
+    /// Four things are wrong with it at this size, and each needs its own
+    /// lever. All of them are on the ambient skin or on the plugin's own
+    /// members, found by name; a plugin that has none of them is drawn at
+    /// whatever size it chose.
     ///
     /// The text is eleven pixels, because that is IMGUI's default and the
-    /// window does not override it. That one is the ambient skin, which the
-    /// window reads rather than replaces, so raising the sizes there raises
-    /// everything it draws. They are put back when the window closes: the
-    /// skin is the whole game's, not this window's.
+    /// window does not override it. That one is the skin, which the window
+    /// reads rather than replaces, so raising the sizes there raises
+    /// everything it draws. Everything is put back when the window closes:
+    /// the skin is the whole game's, not this window's.
     ///
     /// The headers are not, because a window like this caches its own copy of
     /// the skin's label at a fixed size -- and only builds that copy when it
     /// is missing, which is why it is enough to raise the size on whatever
-    /// copy it is currently holding. Left alone, the headings come out smaller
-    /// than the text underneath them.
+    /// copy it is holding. Left alone the headings come out smaller than the
+    /// text under them.
     ///
-    /// The window itself is capped in pixels, and the columns inside it are
-    /// derived from that cap, so all three have to move together or the
-    /// controls sit outside the frame. Only on opening, so that a window the
-    /// player has since dragged or resized is left where they put it.
+    /// The window will not stay where it is put. It is drawn with
+    /// GUILayout.Window, which sizes a window to fit its CONTENTS and returns
+    /// that size, and the plugin stores what it returns -- so a rect set from
+    /// outside survives exactly one frame before collapsing back onto the
+    /// widest row, which with every plugin collapsed is the row of buttons
+    /// along the top. Setting the rect is therefore not enough and never can
+    /// be: what holds it open is a fixedWidth and fixedHeight on the skin's
+    /// window style, which the layout system treats as both the minimum and
+    /// the maximum.
     ///
-    /// Everything here is by name and optional. A plugin that does not have
-    /// these members is simply drawn at whatever size it chose, which is what
-    /// happens today.
+    /// The position has the same problem and the same shape of answer. It is
+    /// also read back from the layout every frame, so any nudge -- a phantom
+    /// pointer, a clamp, rounding -- is stored and applied again next frame,
+    /// and the window walks off the edge of the screen where a handheld has no
+    /// cursor to drag it back with. So it is written every frame instead of
+    /// once: the window is a fixed panel in the middle of the screen, which is
+    /// what it should have been on a device with no mouse anyway.
+    ///
+    /// The scrollbar is fifteen pixels wide, which is a fine target for a
+    /// mouse and no target at all for a thumb. Scrollbar widths are fixed
+    /// sizes on their styles rather than font metrics, so they do not follow
+    /// the text and are scaled separately.
     /// </summary>
     internal sealed class Enlarge
     {
@@ -274,8 +290,17 @@ namespace BepInEx.Bootstrap
         readonly FieldInfo[] _cachedStyles;
 
         int _applied;
-        UnityEngine.GUIStyle[] _skin;
-        int[] _was;
+
+        // Where the window belongs, and the screen it was worked out for.
+        UnityEngine.Rect _target;
+        int _screenWidth, _screenHeight;
+
+        // The skin as the game had it, so it can be handed back untouched.
+        UnityEngine.GUIStyle[] _styles;
+        UnityEngine.GUIStyle _windowStyle;
+        int[] _font;
+        float[] _width, _height;
+        int _bars;
 
         internal Enlarge(object plugin)
         {
@@ -312,12 +337,24 @@ namespace BepInEx.Bootstrap
 
         internal void Apply(float scale, bool opening)
         {
-            var size = UnityEngine.Mathf.RoundToInt(Base * UnityEngine.Mathf.Clamp(scale, 1f, 4f));
+            scale = UnityEngine.Mathf.Clamp(scale, 1f, 4f);
+            var size = UnityEngine.Mathf.RoundToInt(Base * scale);
 
             if (_applied != size)
             {
                 Remember();
-                for (var i = 0; i < _skin.Length; i++) _skin[i].fontSize = size;
+                for (var i = 0; i < _styles.Length; i++) _styles[i].fontSize = size;
+
+                // Bars, from the index the scrollbar styles start at. Both
+                // dimensions on each: a vertical bar is held by its width, a
+                // horizontal one by its height, and the little end buttons by
+                // both.
+                for (var i = _bars; i < _styles.Length; i++)
+                {
+                    if (_width[i] > 0) _styles[i].fixedWidth = UnityEngine.Mathf.Round(_width[i] * scale);
+                    if (_height[i] > 0) _styles[i].fixedHeight = UnityEngine.Mathf.Round(_height[i] * scale);
+                }
+
                 _applied = size;
                 // The window's own measurements are in the old size until it
                 // lays out again, so a change of scale resizes it too.
@@ -339,47 +376,121 @@ namespace BepInEx.Bootstrap
                 }
             }
 
-            if (opening) Resize(scale);
+            if (opening ||
+                _screenWidth != UnityEngine.Screen.width ||
+                _screenHeight != UnityEngine.Screen.height)
+            {
+                Resize(scale);
+            }
+            else
+            {
+                Pin();
+            }
+        }
+
+        /// <summary>
+        /// Puts the window back where it was put.
+        ///
+        /// The position is not ours to set once and forget: the plugin stores
+        /// whatever the layout system hands back every frame, so anything that
+        /// nudges the window -- a phantom pointer, a clamp, the layout's own
+        /// rounding -- is written into the rect and is there again next frame,
+        /// a little further along. Left alone it walks off the side of the
+        /// screen, and on a handheld there is no cursor to drag it back with.
+        /// </summary>
+        void Pin()
+        {
+            if (_rect == null || _target.width <= 0) return;
+            try
+            {
+                if ((UnityEngine.Rect)_rect.GetValue(_plugin, null) != _target)
+                    _rect.SetValue(_plugin, _target, null);
+            }
+            catch (Exception)
+            {
+            }
         }
 
         /// <summary>Puts the game's skin back the way the game had it.</summary>
         internal void Restore()
         {
-            if (_applied == 0 || _skin == null) return;
-            for (var i = 0; i < _skin.Length; i++) _skin[i].fontSize = _was[i];
+            if (_applied == 0 || _styles == null) return;
+            for (var i = 0; i < _styles.Length; i++)
+            {
+                _styles[i].fontSize = _font[i];
+                _styles[i].fixedWidth = _width[i];
+                _styles[i].fixedHeight = _height[i];
+            }
             _applied = 0;
         }
 
         void Remember()
         {
-            if (_skin != null) return;
+            if (_styles != null) return;
             var skin = UnityEngine.GUI.skin;
-            _skin = new[]
+
+            // Order matters: everything from _bars on is a scrollbar part,
+            // and gets its fixed size scaled as well as its font.
+            var styles = new System.Collections.Generic.List<UnityEngine.GUIStyle>
             {
                 skin.label, skin.button, skin.box, skin.toggle, skin.textField, skin.textArea,
                 skin.window, skin.horizontalSlider, skin.horizontalSliderThumb,
-                skin.verticalScrollbar, skin.horizontalScrollbar,
             };
-            _was = new int[_skin.Length];
-            for (var i = 0; i < _skin.Length; i++) _was[i] = _skin[i].fontSize;
+            _windowStyle = skin.window;
+            _bars = styles.Count;
+            styles.AddRange(new[]
+            {
+                skin.verticalScrollbar, skin.verticalScrollbarThumb,
+                skin.verticalScrollbarUpButton, skin.verticalScrollbarDownButton,
+                skin.horizontalScrollbar, skin.horizontalScrollbarThumb,
+                skin.horizontalScrollbarLeftButton, skin.horizontalScrollbarRightButton,
+            });
+
+            _styles = styles.ToArray();
+            _font = new int[_styles.Length];
+            _width = new float[_styles.Length];
+            _height = new float[_styles.Length];
+            for (var i = 0; i < _styles.Length; i++)
+            {
+                _font[i] = _styles[i].fontSize;
+                _width[i] = _styles[i].fixedWidth;
+                _height[i] = _styles[i].fixedHeight;
+            }
         }
 
         void Resize(float scale)
         {
-            if (_rect == null) return;
             try
             {
-                var current = (UnityEngine.Rect)_rect.GetValue(_plugin, null);
-                // Grown by the same factor as the text, then held inside the
-                // screen with a margin: a window wider than the panel cannot
-                // be dragged back into view with a stick.
-                var width = UnityEngine.Mathf.Min(current.width * scale, UnityEngine.Screen.width * 0.95f);
-                var height = UnityEngine.Mathf.Min(current.height * scale, UnityEngine.Screen.height * 0.95f);
+                // From the size the window asked for, not from the size it
+                // currently is: by the time this runs a second time the window
+                // has been through a layout, and scaling what came out of that
+                // would compound.
+                var wide = UnityEngine.Mathf.Min(650f * scale, UnityEngine.Screen.width * 0.98f);
+                var tall = UnityEngine.Mathf.Min(560f * scale, UnityEngine.Screen.height * 0.98f);
+
+                // What actually holds the window open. Without this the layout
+                // system shrinks it back onto its contents on the very next
+                // frame, however large a rect it was handed.
+                if (_windowStyle != null)
+                {
+                    _windowStyle.fixedWidth = UnityEngine.Mathf.Round(wide);
+                    _windowStyle.fixedHeight = UnityEngine.Mathf.Round(tall);
+                }
+
+                if (_rect == null) return;
                 var grown = new UnityEngine.Rect(
-                    UnityEngine.Mathf.Round((UnityEngine.Screen.width - width) / 2f),
-                    UnityEngine.Mathf.Round((UnityEngine.Screen.height - height) / 2f),
-                    UnityEngine.Mathf.Round(width), UnityEngine.Mathf.Round(height));
+                    UnityEngine.Mathf.Round((UnityEngine.Screen.width - wide) / 2f),
+                    UnityEngine.Mathf.Round((UnityEngine.Screen.height - tall) / 2f),
+                    UnityEngine.Mathf.Round(wide), UnityEngine.Mathf.Round(tall));
                 _rect.SetValue(_plugin, grown, null);
+
+                // Remembered so that Pin can put it back, and against the
+                // screen it was centred on: a resolution change makes it wrong
+                // rather than merely stale.
+                _target = grown;
+                _screenWidth = UnityEngine.Screen.width;
+                _screenHeight = UnityEngine.Screen.height;
 
                 // The columns are derived from the width and do not follow it
                 // by themselves. The proportions are the window's own.
