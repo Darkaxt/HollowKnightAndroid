@@ -377,86 +377,44 @@ public partial class HKDualScreen
             };
             for (int i = 0; i < labels.Length; i++)
             {
-                var staging = new GameObject("HKTabCloneStaging");
-                staging.SetActive(false);
-                GameObject go = null;
-                try
+                // Preserve the proven Dual Souls label lifecycle: clone the
+                // live Pane Name directly under the resident frame, disable
+                // its non-TMP drivers, activate it, then assign/mesh the final
+                // localized text. The inactive staging lifecycle used by the
+                // pane clones is not valid for this legacy TMP hierarchy; the
+                // signed 1.5.12620 pass produced no glyph pixels from it.
+                var go = Instantiate(src.gameObject, frameRoot.transform);
+                go.name = "F_Tab" + i;
+                foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true))
+                    if (mb != null && !mb.GetType().Name.Contains("TextMeshPro")) mb.enabled = false;
+                SetLayerRecursive(go.transform, ATTR_LAYER);
+                go.SetActive(true);
+                foreach (var r in go.GetComponentsInChildren<Renderer>(true))
                 {
-                    // Keep the clone inactive in hierarchy until every driver
-                    // except the retained TMP visual has been disabled. This
-                    // prevents the inventory's close/fade behaviours from
-                    // running OnEnable on our resident tab label while keeping
-                    // the complete legacy-TMP dependency graph intact. The
-                    // pinned Dual Souls reference disables these components;
-                    // destroying any of them produces valid bounds but no
-                    // glyph pixels on Hollow Knight 1.5.12620.
-                    go = Instantiate(src.gameObject, staging.transform);
-                    go.SetActive(false);
-                    go.name = "F_Tab" + i;
-                    foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true))
-                    {
-                        if (mb == null) continue;
-                        string driverName = mb.GetType().Name;
-                        if (driverName.Contains("TextMeshPro")) continue;
-                        mb.enabled = false;
-                    }
-                    SetLayerRecursive(go.transform, ATTR_LAYER);
-                    // Force renderers and the retained TMP Behaviour on. The
-                    // closed inventory can leave both disabled independently.
-                    foreach (var r in go.GetComponentsInChildren<Renderer>(true))
-                    {
-                        r.gameObject.SetActive(true);
-                        r.enabled = true;
-                        // BuildFrame raises every chrome renderer by 20000
-                        // after this method returns. Start the native labels
-                        // above the two fleur quads so transparent/black atlas
-                        // padding can never cover the retained TMP glyphs.
-                        r.sortingLayerName = "Inventory";
-                        r.sortingOrder = 10080 + i;
-                    }
-                    Component tmp = null;
-                    foreach (var c in go.GetComponentsInChildren<Component>(true))
-                    {
-                        if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
-                        tmp = c;
-                        var tmpBehaviour = c as Behaviour;
-                        if (tmpBehaviour != null) tmpBehaviour.enabled = true;
-                        break;
-                    }
-                    go.transform.SetParent(frameRoot.transform, false);
-                    go.SetActive(true);
-                    // TMP cannot construct its mesh until its first Awake,
-                    // which is intentionally deferred by the inactive staging
-                    // parent. Assign and force the final text only after the
-                    // sanitized clone has received that first activation.
-                    if (tmp != null)
-                    {
-                        try { tmp.GetType().GetProperty("text")?.SetValue(tmp, labels[i], null); } catch { }
-                        try { tmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(tmp, null); } catch { }
-                    }
-                    // TextMeshPro disables its mesh renderer while the
-                    // inherited Pane Name text is empty. Assigning text via
-                    // reflection and forcing the mesh does not reliably turn
-                    // that renderer back on, so this re-enable must happen
-                    // after the final mesh update (the area-name port uses the
-                    // same lifecycle correction).
-                    foreach (var tabRenderer in go.GetComponentsInChildren<Renderer>(true))
-                    {
-                        tabRenderer.gameObject.SetActive(true);
-                        tabRenderer.enabled = true;
-                    }
-                    frameTabs.Add((tmp, go.transform, i));
-                    float s = attrCam.orthographicSize;
-                    var rr = go.GetComponentsInChildren<Renderer>();
-                    Bounds b = new Bounds(); bool hv = false;
-                    foreach (var r in rr) { var rb = r.bounds; if (float.IsNaN(rb.center.x) || rb.size.sqrMagnitude < 1e-8f) continue; if (!hv) { b = rb; hv = true; } else b.Encapsulate(rb); }
-                    float nd = hv ? Mathf.Max(0.001f, b.size.y) : 1f;
-                    go.transform.localScale *= (0.055f * 2f * s) / nd;   // base size; compTabScale applied LIVE in PositionFrame
-                    frameBase[go.transform] = go.transform.localScale;
-                    frameEdge[go.transform] = new Vector3((i - 1f) * cfg.compTabSpacing, cfg.compTabY, 4f);   // 3 tabs centered on col 1
-                    if (cfg.debug == 1) Dbg($"HKDS tab{i} '{labels[i]}' rends={rr.Length} bX={(hv ? b.size.x : 0):F2} bY={(hv ? b.size.y : 0):F2} lossy={go.transform.lossyScale.x:F3} tmpEnabled={(tmp as Behaviour)?.enabled}");
+                    r.gameObject.SetActive(true);
+                    r.enabled = true;
+                    r.sortingLayerName = "Inventory";
+                    r.sortingOrder = 10080 + i;
                 }
-                finally { Destroy(staging); }
+                Component tmp = null;
+                foreach (var c in go.GetComponentsInChildren<Component>(true))
+                {
+                    if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
+                    tmp = c;
+                    try { c.GetType().GetProperty("text")?.SetValue(c, labels[i], null); } catch { }
+                    try { c.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(c, null); } catch { }
+                    break;
+                }
+                frameTabs.Add((tmp, go.transform, i));
+                float s = attrCam.orthographicSize;
+                var rr = go.GetComponentsInChildren<Renderer>();
+                Bounds b = new Bounds(); bool hv = false;
+                foreach (var r in rr) { var rb = r.bounds; if (float.IsNaN(rb.center.x) || rb.size.sqrMagnitude < 1e-8f) continue; if (!hv) { b = rb; hv = true; } else b.Encapsulate(rb); }
+                float nd = hv ? Mathf.Max(0.001f, b.size.y) : 1f;
+                go.transform.localScale *= (0.055f * 2f * s) / nd;   // base size; compTabScale applied LIVE in PositionFrame
+                frameBase[go.transform] = go.transform.localScale;
+                frameEdge[go.transform] = new Vector3((i - 1f) * cfg.compTabSpacing, cfg.compTabY, 4f);   // 3 tabs centered on col 1
+                if (cfg.debug == 1) Dbg($"HKDS tab{i} '{labels[i]}' rends={rr.Length} bX={(hv ? b.size.x : 0):F2} bY={(hv ? b.size.y : 0):F2} lossy={go.transform.lossyScale.x:F3}");
             }
             BuildSelBox();   // B5: the selection-highlight fallback box lives with the frame (destroyed with it)
         }

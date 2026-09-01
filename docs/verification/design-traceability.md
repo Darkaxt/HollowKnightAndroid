@@ -1,21 +1,23 @@
 # Unified Platform Design Traceability
 
-Last cross-check: 2026-09-01, after the first signed Hollow Knight H2
-lower-companion matrix and the host-green correction batch, while retaining the
-Hollow Knight HUD/pages/Mods/skins-first order.
+Last cross-check: 2026-09-01, after signed Hollow Knight H2 affected-row run
+`33525049660` and the third host-green correction batch, while retaining the
+Hollow Knight HUD/pages/Mods/skins-first order and the no-gameplay device-pass
+boundary.
 
 States follow the design contract: `COMPLETE`, `IN-PROGRESS`, `BLOCKER`,
-`DEFERRED`, and `NOT-STARTED`. `NOT-STARTED` means the planned milestone has not begun. The
-The final fork package is the only matching Dual Souls/Hollow Knight package on
-the Thor and retains current generations for both profiles. Signed candidate
-`c2eb819` updated it in place without changing the UID or first-install
+`DEFERRED`, and `NOT-STARTED`. `NOT-STARTED` means the planned milestone has not
+begun. The final fork package is the only matching Dual Souls/Hollow Knight
+package on the Thor and retains current generations for both profiles. Signed
+candidate `672724c` updated it in place without changing the UID or first-install
 timestamp and published exact Hollow Knight generation
-`gen-be61fa68-e065-4cdb-9972-d595c93a7698`. Its lower-companion matrix proves
+`gen-8b38e8dc-3117-4236-9c7c-1fc3b91ebc01`. Its lower-companion passes prove
 live HUD routing, clean primary HUD, lower page switching and selection,
-blurred/dimmed backdrop, pause presentation, and teardown. Resident TMP tab
-text and remaining controlled/static-state H2 rows are still blockers; Mods,
-skins, shared extraction, Silksong adaptation, and the physical
-detach/single-display deferral remain open.
+blurred/dimmed backdrop, pause presentation, persistent opening-credit routing,
+live masks/Soul, Inventory, and teardown. Resident TMP tab text and remaining
+controlled/static-state H2 rows are still blockers; Mods, skins, shared
+extraction, Silksong adaptation, and the physical detach/single-display deferral
+remain open.
 
 | Requirement | Planned milestone | State | Evidence or gap | Dependency | Acceptance test |
 |---|---:|---|---|---|---|
@@ -73,7 +75,7 @@ detach/single-display deferral remain open.
 | Architecture: duplicate skin IDs require safe resolution | 5 | NOT-STARTED | Skin registry has not begun | Tree hashes | Identical/different duplicate tests pass without flattening |
 | Architecture: one active skin per game | 5 | NOT-STARTED | Activation store has not begun | Profile storage | Independent selection persists for both profiles |
 | Architecture: death selects; stable respawn applies | 5 | BLOCKER | `SkinRotationStateMachine` passes 6 host tests and the lab game calls the same death/stable-respawn API; real Hollow Knight and Silksong lifecycle/apply adapters are absent | Tasks 12–14 lifecycle adapters | Ordered/shuffled/rollback state tests and both device checks pass |
-| Architecture: shared Unity Vulkan multi-display renderer | H1–H6 | IN-PROGRESS | The minimum shared seam is proven, and Hollow Knight H2 is source-complete on it: 25 focused contracts, 58 shared tests, 103 Python tests, both exact compiles, and a 222,720-byte exact patch pass. Signed Thor evidence proves display-1 HUD routing, primary cleanup, dark blurred backdrop, safe panes, bounded ornaments, lower-controller page switching, selection/prompt, pause presentation, and persistent opening-credit routing | TMP tab text still has valid geometry but no pixels in run `33520627292`; the reference-faithful dependency-preservation/startup-log correction, controlled/static-state lifecycle rows, H3–H5, and physical detach/true single-display proof remain | Complete Hollow Knight companion passes display 1, touch, lifecycle, fallback, Mods, and skins before H6 extraction; every H2 device pass remains lower-HUD-only with no gameplay testing |
+| Architecture: shared Unity Vulkan multi-display renderer | H1–H6 | IN-PROGRESS | The minimum shared seam is proven, and Hollow Knight H2 is source-complete on it: 25 focused contracts, 58 shared tests, 103 Python tests, both exact compiles, and a 222,720-byte exact patch pass. Signed Thor evidence proves display-1 HUD routing, primary cleanup, dark blurred backdrop, safe panes, bounded ornaments, lower-controller page switching, selection/prompt, pause presentation, persistent opening-credit routing, live masks/Soul, and Inventory | TMP tab text still has valid geometry but no pixels in run `33525049660`; the exact direct-clone lifecycle/final quiet-scan correction, controlled/static-state lifecycle rows, H3–H5, and physical detach/true single-display proof remain | Complete Hollow Knight companion passes display 1, touch, lifecycle, fallback, Mods, and skins before H6 extraction; every remaining device pass uses a targeted static/debug fixture with no gameplay testing |
 | Architecture: game adapters supply screens/state only | H6, S1 | NOT-STARTED | Hollow Knight adapter and later shared boundary are absent | Accepted H5 behavior | Shared runtime references no game-specific types and the H5 regression remains unchanged |
 | Architecture: Dual Souls composition port with semantic Silksong extensions | H2–H6, S1 | IN-PROGRESS | The rejected prototype path is dormant and Silksong source work is preserved. The exact pinned Hollow Knight composition is source-complete/device-partial through direct display; Hollow Knight H5/H6 precede shared contracts and Silksong resident adapters | Close H2–H6, then `DsPort*` successor work | No production `DsShell` path remains; live Hollow Knight first passes the full matrix; then both exact compiles and side-by-side captures satisfy the same composition and behavior matrix |
 | Architecture: promotional launcher art stays out of in-game themes | 3, 6 | IN-PROGRESS | Launcher resources remain isolated; the live Silksong surface used only runtime/procedural UI and no supplied promotional image | Resident ornament resolution, deterministic fallback audit, and Hollow Knight adapter remain | Resource audit finds promotional art only in launcher/shortcut resources and resident game art behind adapters |

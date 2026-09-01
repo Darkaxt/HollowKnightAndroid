@@ -113,7 +113,7 @@ public partial class HKDualScreen : MonoBehaviour
         // scene, which SceneManager.sceneCount does not enumerate. Scan its
         // persistent root explicitly so newly spawned attack/focus prompts
         // cannot remain on the primary display.
-        var cameras = GameCameras.instance;
+        var cameras = resolvedGameCameras;
         Transform persistentRoot = cameras != null ? cameras.transform.root : null;
         if (persistentRoot != null) ScanNode(persistentRoot, layer);
     }

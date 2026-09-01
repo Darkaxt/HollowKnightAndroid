@@ -119,20 +119,19 @@ attributed to `RelayerHud`. Restoration covers only properties changed by the
 adapter and must not roll back driver-owned health, Silk, currency, active, or
 visual state.
 
-Static frame ornaments and tab labels must be instantiated under an inactive
-staging parent. Every cloned `MonoBehaviour` except the explicitly retained
-static visual type (`UnityEngine.UI.Image` for ornaments/fleurs or
-`TMProOld.TextMeshPro` for Pane Name labels) must be removed immediately from
-the owned clone while it remains inactive in hierarchy. Exactly one component
-whose runtime type equals the requested visual type must remain; zero, multiple,
-subclass, or incomplete-removal results fail closed. The retained visual and
-renderer objects are made active/enabled before reparenting and first
-activation. This reproduces
-the Dual Souls treatment of these objects as static chrome. It is not a
-universal resident-clone policy. HUD, page, and overlay work in Stages 3–7
-must reproduce the Hollow Knight oracle's own activate/open, settle,
-selective-freeze or retained-driver sequence and its observable consequences;
-it must not reuse a blanket static-clone sanitizer.
+Static frame ornaments/fleurs must be instantiated under an inactive staging
+parent and reduced to their one exact retained visual before first activation.
+Pane Name tab labels are the explicit legacy-TMP exception: the pinned Hollow
+Knight oracle clones them directly under the live frame, preserves every
+component dependency, disables each non-TMP `MonoBehaviour`, explicitly
+activates the clone/renderers, and only then assigns localized text and forces
+the mesh. The Android port must reproduce that sequence; it must not apply the
+ornament or pane-clone staging policy to resident labels. This distinction is
+device-proven: staged label clones retained valid geometry but produced no glyph
+pixels on exact `1.5.12620`. HUD, page, and overlay work in Stages 3–7 likewise
+must reproduce the oracle's own activate/open, settle, selective-freeze or
+retained-driver sequence and observable consequences; no blanket resident-clone
+sanitizer is acceptable.
 
 The retained tab row is laid out from the generated glyph bounds on the actual
 lower panel. All labels and their selected-tab fleurs must remain fully inside
@@ -219,15 +218,18 @@ the corresponding Dual Souls source module. A stage passes only with:
 
 Rendering something on display 1 is not acceptance evidence by itself.
 
-Every H2 reference-device pass for this work—including first checks, rechecks,
-lifecycle checks, and release-candidate checks—is a lower-companion validation
-pass only. It may inspect rendering, layout, primary-HUD cleanup, the blurred
-backdrop, page switching, lower-display touch, selection/prompts,
-pause/resume/restoration, and teardown. It must not navigate, fight, collect,
-progress, alter saves, or repeat general gameplay. State-dependent companion
-behavior is exercised through focused host contracts or a controlled debug
-harness/current static state. This restriction changes the verification method,
-not the required Dual Souls behavior.
+Every remaining reference-device pass for this work—from H2 through final
+cross-game acceptance, including first checks, rechecks, lifecycle checks, and
+release-candidate checks—is a targeted feature validation pass only. It may use
+the minimum unmoving static scene needed to host the lower companion and inspect
+rendering, layout, primary-HUD cleanup, backdrop, page/modal controls,
+display-specific touch, persistence, pause/resume/restoration, and teardown. It
+must not navigate, fight, collect, progress, mutate saves through play, or run
+general gameplay. State-dependent HUD, Mods, skin, death/respawn, and rotation
+behavior must be exercised through focused host contracts, controlled debug
+injection, synthetic state, or an already-present static state. Each device pass
+closes the game immediately after its affected rows. This restriction changes
+the verification method, not the required production behavior.
 
 ## Architecture
 

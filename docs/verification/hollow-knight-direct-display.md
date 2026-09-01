@@ -217,6 +217,7 @@ matrix.
 | Selection, details, and action prompt | PASS | Selecting Old Nail rendered selection corners, its name/description, and the native X glyph |
 | Tab glyph/fleur bounds | PASS | All ornaments remain centered and bounded to their tab cells |
 | Resident Inventory/Map/Charms text | FAIL | TMP objects retain valid geometry but produce no pixels |
+| Quiet pre-manager startup | FAIL | Per-frame singleton-log flooding is gone, but the latest affected-row pass retained two isolated `GameCameras` lookups |
 | Pause lower surface | PASS | Pausing presents the Hollow Knight title card on display 1 |
 | Tutorial/dialogue/item/fade state routing | PENDING | One observed attack-tutorial state exposed a persistent-HUD scan gap; the batched correction is host-green. Recheck uses controlled/static lower-HUD state only, not gameplay traversal |
 | Background/resume and restoration retry | PENDING | Host contracts cover retry ownership; affected signed lower-HUD lifecycle rows remain |
@@ -242,14 +243,29 @@ opening credit routed to the lower screen while the primary remained clean,
 and display-associated lower touch opened Inventory. Resident labels still
 produced no pixels, so H2 remains blocked.
 
-The second source correction follows the pinned Dual Souls behavior exactly:
-the resident tab clone now preserves every component dependency and disables
-every non-TMP `MonoBehaviour` before activation instead of destroying all but
-`TextContainer`. The frame loop also uses Unity's quiet scene-object lookup and
-does no HUD work until both scene managers exist, eliminating expected-startup
-singleton log spam without changing HUD behavior. Twenty-five focused
-companion contracts, all 58 shared tests, all 103 Python tests, both exact
-patch compiles, and the exact 222,720-byte `1.5.12620` patch are green. One
-affected-row signed lower-HUD-only recheck remains. Navigation, combat,
-collection, progression, save mutation, and general gameplay testing are
-outside every H2 companion pass.
+The second source correction preserved every component dependency and disabled
+every non-TMP `MonoBehaviour` instead of destroying all but `TextContainer`.
+Signed dry-run `33525049660` built commit `672724c`; the downloaded APK SHA-256
+is `637d379143c1d306e105b5ed2249b8889edbefb5b3d6b87ef7c3b9fffd1ddf6d`,
+APK Signature Scheme v2/v3 and the pinned signer verify, and the in-place update
+preserved UID and first-install time. It rebuilt exact generation
+`gen-8b38e8dc-3117-4236-9c7c-1fc3b91ebc01`.
+
+The affected-row pass used the unmoving initial King's Pass state solely as a
+lower-HUD host. Live masks/Soul rendered on display 1, the primary HUD stayed
+clean, lower touch opened Inventory, and no navigation, combat, collection,
+progression, or save assertion occurred. The three resident labels remained
+absent and two isolated `GameCameras` startup lookups remained; the game was
+force-stopped immediately after capture and `stay_on_while_plugged_in` was `0`.
+
+That pass proves the dependency-preservation correction was necessary but not
+sufficient: the added inactive staging lifecycle still diverged from the pinned
+Dual Souls label method. The third source correction now restores the oracle's
+direct clone under the live frame, dependency-preserving driver disable,
+explicit activation/renderer enable, final text assignment, and forced mesh
+sequence. `ScanTutorials` now uses the already quietly resolved camera owner,
+closing the remaining pre-manager getter path. Twenty-five focused companion
+contracts, all 58 shared tests, all 103 Python tests, both exact patch compiles,
+and the exact 222,720-byte `1.5.12620` patch are green. One affected-row signed
+lower-HUD-only recheck remains. Every later device pass is likewise targeted
+and excludes gameplay testing.

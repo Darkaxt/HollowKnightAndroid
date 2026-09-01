@@ -333,20 +333,13 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         tabs = method_body(frame, r"void\s+BuildTabRow\s*\([^)]*\)")
         position = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
-        self.assertIn("tmpBehaviour.enabled = true", tabs)
+        self.assertIn("Instantiate(src.gameObject, frameRoot.transform)", tabs)
+        self.assertNotIn("HKTabCloneStaging", tabs)
         first_activation = tabs.index("go.SetActive(true)")
         text_assignment = tabs.index('GetProperty("text")')
         mesh_update = tabs.index("ForceMeshUpdate")
-        self.assertLess(
-            tabs.index("tmpBehaviour.enabled = true"),
-            first_activation,
-        )
         self.assertLess(first_activation, text_assignment)
         self.assertLess(text_assignment, mesh_update)
-        final_renderer_enable = tabs.index(
-            "tabRenderer.enabled = true", mesh_update
-        )
-        self.assertLess(mesh_update, final_renderer_enable)
         self.assertIn("glyphRenderer.enabled = true", position)
         self.assertLess(
             position.index("glyphRenderer.enabled = true"),
@@ -358,8 +351,11 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
         )
         tabs = method_body(frame, r"void\s+BuildTabRow\s*\([^)]*\)")
-        self.assertIn('driverName.Contains("TextMeshPro")', tabs)
-        self.assertIn("mb.enabled = false", tabs)
+        self.assertIn(
+            'if (mb != null && !mb.GetType().Name.Contains("TextMeshPro")) '
+            "mb.enabled = false;",
+            tabs,
+        )
         self.assertLess(tabs.index("mb.enabled = false"), tabs.index("go.SetActive(true)"))
         self.assertNotRegex(tabs, r"Destroy(?:Immediate)?\s*\(\s*mb\s*\)")
 
@@ -530,8 +526,9 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
         scan = method_body(main, r"void\s+ScanTutorials\s*\([^)]*\)")
         node = method_body(main, r"void\s+ScanNode\s*\([^)]*\)")
-        self.assertIn("GameCameras.instance", scan)
-        self.assertIn("persistentRoot", scan)
+        self.assertIn("resolvedGameCameras", scan)
+        self.assertNotIn("GameCameras.instance", scan)
+        self.assertIn("ScanNode(persistentRoot, layer)", scan)
         self.assertIn("go.layer == hudLayer", node)
 
     def test_adapter_routes_geometry_visibility_touch_and_teardown_to_reference(self):
