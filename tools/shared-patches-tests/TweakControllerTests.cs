@@ -22,19 +22,19 @@ public sealed class TweakControllerTests
     public void DeferredRequiresNonblankUnavailableReason(string unavailableReason)
     {
         Assert.Throws<ArgumentException>(() => TweakDescriptor.Deferred(
-            "bench_teleport", "MOVEMENT", "BENCH TELEPORT", "Teleport to benches.", "H3-BENCH-TELEPORT", unavailableReason));
+            "bench_teleport", "MOVEMENT", "BENCH TELEPORT", "Teleport to benches.", "HKMOD-017", unavailableReason));
     }
 
     [Fact]
     public void DeferredIsUnavailableAndFixedOff()
     {
         var descriptor = TweakDescriptor.Deferred(
-            "bench_teleport", "MOVEMENT", "BENCH TELEPORT", "Teleport to benches.", "H3-BENCH-TELEPORT", "The game adapter does not support bench teleport yet.");
+            "bench_teleport", "MOVEMENT", "BENCH TELEPORT", "Teleport to benches.", "HKMOD-017", "The game adapter does not support bench teleport yet.");
 
         Assert.False(descriptor.IsAvailable);
         Assert.Equal("off", descriptor.DefaultValue);
         Assert.Equal(new[] { "off" }, descriptor.Values);
-        Assert.Equal("H3-BENCH-TELEPORT", descriptor.TrackingId);
+        Assert.Equal("HKMOD-017", descriptor.TrackingId);
         Assert.Equal("The game adapter does not support bench teleport yet.", descriptor.UnavailableReason);
     }
 
@@ -60,7 +60,7 @@ public sealed class TweakControllerTests
         Assert.Empty(adapter.Applied);
         Assert.False(cycled.Success);
         Assert.Contains("BENCH TELEPORT", cycled.Error);
-        Assert.Contains("H3-BENCH-TELEPORT", cycled.Error);
+        Assert.Contains("HKMOD-017", cycled.Error);
         Assert.Contains("The game adapter does not support bench teleport yet.", cycled.Error);
         Assert.Empty(adapter.Applied);
     }
@@ -367,7 +367,7 @@ public sealed class TweakControllerTests
         public IReadOnlyList<TweakDescriptor> Descriptors { get; } = new[]
         {
             TweakDescriptor.Deferred(
-                "bench_teleport", "MOVEMENT", "BENCH TELEPORT", "Teleport to benches.", "H3-BENCH-TELEPORT", "The game adapter does not support bench teleport yet.")
+                "bench_teleport", "MOVEMENT", "BENCH TELEPORT", "Teleport to benches.", "HKMOD-017", "The game adapter does not support bench teleport yet.")
         };
         public List<(string Id, string Value)> Applied { get; } = new();
 
