@@ -48,6 +48,7 @@ class LauncherActivity : Activity() {
     private lateinit var btnPush: Button
     private lateinit var spinPull: ProgressBar
     private lateinit var spinPush: ProgressBar
+    private lateinit var btnMods: Button
     private lateinit var btnSettings: Button
     private lateinit var btnLogs: Button
     private lateinit var btnLaunch: Button
@@ -89,6 +90,7 @@ class LauncherActivity : Activity() {
         btnPush = findViewById(R.id.btn_push)
         spinPull = findViewById(R.id.spin_pull)
         spinPush = findViewById(R.id.spin_push)
+        btnMods = findViewById(R.id.btn_mods)
         btnSettings = findViewById(R.id.btn_settings)
         btnLogs = findViewById(R.id.btn_logs)
         btnLaunch = findViewById(R.id.btn_launch)
@@ -117,6 +119,9 @@ class LauncherActivity : Activity() {
         btnLogin.setOnClickListener { onLoginClicked() }
         btnPull.setOnClickListener { onPullClicked() }
         btnPush.setOnClickListener { onPushClicked() }
+        btnMods.setOnClickListener {
+            startActivity(Intent(this, ModsActivity::class.java))
+        }
         btnSettings.setOnClickListener { onSettingsClicked() }
         btnLogs.setOnClickListener {
             startActivity(Intent(this, LogActivity::class.java))

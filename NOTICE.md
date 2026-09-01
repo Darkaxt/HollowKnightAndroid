@@ -17,6 +17,11 @@ Stated first because it is the point of the whole design:
   their own device, with their own account.
 * **No Unity binaries.** `libunity.so`, `libmain.so` and `libil2cpp.so` are
   fetched or built on the device.
+* **No mods, and no BepInEx.** The `BepInEx` and `0Harmony` assemblies a plugin
+  references are this project's own shims (`tools/bepinex-shim`, MIT), not
+  BepInEx's — the real ones assume a runtime loader that does not exist here.
+  Plugins are files the user downloaded and put in the mods folder, and it is
+  the user's own device that compiles them into their own build of the game.
 
 ## Redistributed in the APK
 

@@ -34,7 +34,7 @@ APK     ?= $(APK_DIR)/SilksongAndroid-$(VERSION).apk
 FILES   := /sdcard/Android/data/$(PKG)/files
 
 .PHONY: help dev dev-fast device-wipe install logcat game-logcat build-log \
-        game-reset check surgery player devices clean \
+        game-reset check mod-check surgery player devices clean \
         docker-image docker-apk docker-up docker-dev docker-down docker-shell
 
 help: ## Show this help
@@ -143,6 +143,16 @@ player: ## Fetch Unity's Android player module (instead of installing Unity)
 # device started compiling the sources itself.
 check: ## Compile-check the patch sources against your depot (fast, thorough)
 	@pwsh -NoProfile -File tools/silksong-patches/check.ps1
+
+# The same question, asked about somebody else's mod.
+#
+# A plugin DLL references BepInEx and 0Harmony by name, and here those are our
+# shims. This compiles them against your depot and runs the real weaver over
+# the plugin, so "will this mod work" is answered in seconds rather than by a
+# twenty-minute build on the phone that fails at the end.
+mod-check: ## Check a plugin against the shims (PLUGIN=a.dll[,b.dll])
+	@test -n "$(PLUGIN)" || { echo "usage: make mod-check PLUGIN=path/to/Plugin.dll"; exit 2; }
+	@pwsh -NoProfile -File tools/bepinex-shim/check.ps1 -Plugin $(PLUGIN)
 
 clean: ## Remove build outputs
 	rm -rf "$(BUILD_ROOT)" "$(APK_DIR)" src/SilksongLauncher.Launcher/app/build tools/bundle-surgery/bin tools/bundle-surgery/obj tools/mod-weaver/bin tools/mod-weaver/obj

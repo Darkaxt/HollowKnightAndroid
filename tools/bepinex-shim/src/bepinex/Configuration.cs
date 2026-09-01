@@ -13,6 +13,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -270,6 +271,82 @@ namespace BepInEx.Configuration
                 throw new InvalidOperationException("Cannot convert \"" + text + "\" to " + valueType.Name);
             return value;
         }
+
+        /// <summary>
+        /// Whether a setting of this type can be stored in a .cfg at all.
+        ///
+        /// The list is what <see cref="ConvertToString"/> and
+        /// <see cref="TryConvertToValue"/> above actually round-trip, and it is
+        /// what <see cref="ConfigFile.Bind{T}(ConfigDefinition,T,ConfigDescription)"/>
+        /// refuses on.
+        /// </summary>
+        public static bool CanConvert(Type type)
+        {
+            return type != null
+                && (type.IsEnum
+                    || type == typeof(string)
+                    || type == typeof(bool)
+                    || type == typeof(byte) || type == typeof(sbyte)
+                    || type == typeof(short) || type == typeof(ushort)
+                    || type == typeof(int) || type == typeof(uint)
+                    || type == typeof(long) || type == typeof(ulong)
+                    || type == typeof(float) || type == typeof(double) || type == typeof(decimal)
+                    || type == typeof(char)
+                    || type == typeof(KeyboardShortcut));
+        }
+
+        public static IEnumerable<Type> GetSupportedTypes()
+        {
+            return new[]
+            {
+                typeof(string), typeof(bool), typeof(byte), typeof(sbyte), typeof(short), typeof(ushort),
+                typeof(int), typeof(uint), typeof(long), typeof(ulong), typeof(float), typeof(double),
+                typeof(decimal), typeof(char), typeof(KeyboardShortcut),
+            };
+        }
+
+        /// <summary>
+        /// The pair of functions for one type, or null if there is no such pair.
+        ///
+        /// A settings UI asks for this rather than calling the methods above:
+        /// null is how it decides that a setting of some exotic type can be
+        /// shown but not edited. The two delegates close over nothing, so one
+        /// converter per type is made once and handed out.
+        /// </summary>
+        public static TypeConverter GetConverter(Type type)
+        {
+            if (!CanConvert(type)) return null;
+
+            lock (_converters)
+            {
+                TypeConverter converter;
+                if (!_converters.TryGetValue(type, out converter))
+                {
+                    converter = new TypeConverter
+                    {
+                        ConvertToString = ConvertToString,
+                        ConvertToObject = ConvertToValue,
+                    };
+                    _converters[type] = converter;
+                }
+                return converter;
+            }
+        }
+
+        static readonly Dictionary<Type, TypeConverter> _converters = new Dictionary<Type, TypeConverter>();
+    }
+
+    /// <summary>
+    /// One type's string form, as a pair of functions.
+    ///
+    /// BepInEx's own registry of these is extensible; this one is not, because
+    /// the conversions here are fixed by what the .cfg format can hold. The
+    /// type exists because a plugin that draws settings asks for it by name.
+    /// </summary>
+    public class TypeConverter
+    {
+        public Func<object, Type, string> ConvertToString { get; set; }
+        public Func<string, Type, object> ConvertToObject { get; set; }
     }
 
     /// <summary>
@@ -328,27 +405,17 @@ namespace BepInEx.Configuration
         public bool IsUp() { return false; }
         public bool IsPressed() { return Poll(true); }
 
-        static bool _warned;
-
         bool Poll(bool held)
         {
             if (MainKey == UnityEngine.KeyCode.None) return false;
-            try
-            {
-                foreach (var modifier in Modifiers ?? new UnityEngine.KeyCode[0])
-                    if (!UnityEngine.Input.GetKey(modifier)) return false;
-                return held ? UnityEngine.Input.GetKey(MainKey) : UnityEngine.Input.GetKeyDown(MainKey);
-            }
-            catch (Exception)
-            {
-                if (!_warned)
-                {
-                    _warned = true;
-                    UnityEngine.Debug.LogWarning(
-                        "[BepInEx] Keyboard shortcuts are unavailable: this player has no legacy input backend.");
-                }
-                return false;
-            }
+
+            // Through UnityInput rather than UnityEngine.Input: a player built
+            // against the new input system throws from every legacy call, and
+            // that decision belongs in one place.
+            var input = UnityInput.Current;
+            foreach (var modifier in Modifiers ?? new UnityEngine.KeyCode[0])
+                if (!input.GetKey(modifier)) return false;
+            return held ? input.GetKey(MainKey) : input.GetKeyDown(MainKey);
         }
 
         public bool Equals(KeyboardShortcut other)
@@ -381,8 +448,14 @@ namespace BepInEx.Configuration
         }
     }
 
-    /// <summary>One plugin's settings, backed by one .cfg file.</summary>
-    public class ConfigFile
+    /// <summary>
+    /// One plugin's settings, backed by one .cfg file.
+    ///
+    /// A dictionary, as BepInEx's is, and for one reason: a settings UI is
+    /// handed a plugin's <see cref="ConfigFile"/> and iterates it. Everything
+    /// else here would work as an opaque object.
+    /// </summary>
+    public class ConfigFile : IDictionary<ConfigDefinition, ConfigEntryBase>
     {
         readonly Dictionary<ConfigDefinition, ConfigEntryBase> _entries =
             new Dictionary<ConfigDefinition, ConfigEntryBase>();
@@ -391,6 +464,27 @@ namespace BepInEx.Configuration
         readonly Dictionary<ConfigDefinition, string> _orphans = new Dictionary<ConfigDefinition, string>();
 
         readonly object _lock = new object();
+
+        static ConfigFile _core;
+
+        /// <summary>
+        /// The loader's own settings, as opposed to a plugin's.
+        ///
+        /// Internal and static because that is exactly how a settings UI looks
+        /// for it -- BepInEx's own is `internal static`, and Configuration
+        /// Manager fetches it by name with BindingFlags.NonPublic | Static and
+        /// logs an error when it is not there. Naming it the same means the
+        /// one setting in it, the chord that opens the window, is listed in
+        /// the window it opens.
+        /// </summary>
+        internal static ConfigFile CoreConfig
+        {
+            get
+            {
+                if (_core == null) _core = new ConfigFile(Path.Combine(Paths.ConfigPath, "BepInEx.cfg"), true);
+                return _core;
+            }
+        }
 
         public string ConfigFilePath { get; private set; }
 
@@ -401,6 +495,20 @@ namespace BepInEx.Configuration
         public event EventHandler ConfigReloaded;
 
         public ICollection<ConfigDefinition> Keys { get { lock (_lock) return _entries.Keys.ToArray(); } }
+
+        public ICollection<ConfigEntryBase> Values { get { lock (_lock) return _entries.Values.ToArray(); } }
+
+        /// <summary>Every setting, as an array. BepInEx's own name for it.</summary>
+        public ConfigEntryBase[] GetConfigEntries() { lock (_lock) return _entries.Values.ToArray(); }
+
+        public ReadOnlyCollection<ConfigDefinition> ConfigDefinitions
+        {
+            get { lock (_lock) return new ReadOnlyCollection<ConfigDefinition>(_entries.Keys.ToArray()); }
+        }
+
+        public int Count { get { lock (_lock) return _entries.Count; } }
+
+        public bool IsReadOnly { get { return false; } }
 
         public ConfigFile(string configPath, bool saveOnInit) : this(configPath, saveOnInit, null) { }
 
@@ -418,7 +526,7 @@ namespace BepInEx.Configuration
 
         public ConfigEntry<T> Bind<T>(ConfigDefinition definition, T defaultValue, ConfigDescription configDescription = null)
         {
-            if (!TomlIsSupported(typeof(T)))
+            if (!TomlTypeConverter.CanConvert(typeof(T)))
                 throw new ArgumentException("Type " + typeof(T).Name + " is not supported by the config system.");
 
             lock (_lock)
@@ -482,14 +590,90 @@ namespace BepInEx.Configuration
             lock (_lock) _entries.Clear();
         }
 
+        /// <summary>
+        /// Get only, as in BepInEx. An entry is made by <see cref="Bind{T}"/>,
+        /// which is what gives it a type, a default and a description; one
+        /// assigned here would have none of those and would be written back to
+        /// the file as a line nothing can read.
+        /// </summary>
         public ConfigEntryBase this[ConfigDefinition key]
         {
             get { lock (_lock) return _entries[key]; }
         }
 
+        ConfigEntryBase IDictionary<ConfigDefinition, ConfigEntryBase>.this[ConfigDefinition key]
+        {
+            get { return this[key]; }
+            set { throw new InvalidOperationException("Use Bind instead of setting entries directly"); }
+        }
+
         public ConfigEntryBase this[string section, string key]
         {
             get { return this[new ConfigDefinition(section, key)]; }
+        }
+
+        public bool ContainsKey(ConfigDefinition key)
+        {
+            lock (_lock) return _entries.ContainsKey(key);
+        }
+
+        public void Add(ConfigDefinition key, ConfigEntryBase value)
+        {
+            throw new InvalidOperationException("Use Bind instead of adding entries directly");
+        }
+
+        /// <summary>
+        /// A snapshot, deliberately: a plugin binding a new setting while
+        /// something else walks the file is ordinary, and would otherwise
+        /// invalidate the enumerator.
+        /// </summary>
+        public IEnumerator<KeyValuePair<ConfigDefinition, ConfigEntryBase>> GetEnumerator()
+        {
+            lock (_lock) return ((IEnumerable<KeyValuePair<ConfigDefinition, ConfigEntryBase>>)_entries.ToArray()).GetEnumerator();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() { return GetEnumerator(); }
+
+        public bool Contains(KeyValuePair<ConfigDefinition, ConfigEntryBase> item)
+        {
+            lock (_lock)
+            {
+                ConfigEntryBase found;
+                return _entries.TryGetValue(item.Key, out found) && Equals(found, item.Value);
+            }
+        }
+
+        bool IDictionary<ConfigDefinition, ConfigEntryBase>.TryGetValue(ConfigDefinition key, out ConfigEntryBase value)
+        {
+            lock (_lock) return _entries.TryGetValue(key, out value);
+        }
+
+        void ICollection<KeyValuePair<ConfigDefinition, ConfigEntryBase>>.Add(
+            KeyValuePair<ConfigDefinition, ConfigEntryBase> item)
+        {
+            Add(item.Key, item.Value);
+        }
+
+        /// <summary>
+        /// One lock, not two: between a Contains and a Remove taken separately
+        /// another thread can replace the entry, and this would then remove
+        /// the replacement -- something the caller never asked to remove.
+        /// </summary>
+        bool ICollection<KeyValuePair<ConfigDefinition, ConfigEntryBase>>.Remove(
+            KeyValuePair<ConfigDefinition, ConfigEntryBase> item)
+        {
+            lock (_lock)
+            {
+                ConfigEntryBase found;
+                if (!_entries.TryGetValue(item.Key, out found) || !Equals(found, item.Value)) return false;
+                return _entries.Remove(item.Key);
+            }
+        }
+
+        void ICollection<KeyValuePair<ConfigDefinition, ConfigEntryBase>>.CopyTo(
+            KeyValuePair<ConfigDefinition, ConfigEntryBase>[] array, int arrayIndex)
+        {
+            lock (_lock) ((ICollection<KeyValuePair<ConfigDefinition, ConfigEntryBase>>)_entries).CopyTo(array, arrayIndex);
         }
 
         public void Reload()
@@ -580,20 +764,6 @@ namespace BepInEx.Configuration
             var handler = SettingChanged;
             if (handler != null) handler(sender, new SettingChangedEventArgs(changedEntry));
             if (SaveOnConfigSet) Save();
-        }
-
-        static bool TomlIsSupported(Type type)
-        {
-            return type.IsEnum
-                || type == typeof(string)
-                || type == typeof(bool)
-                || type == typeof(byte) || type == typeof(sbyte)
-                || type == typeof(short) || type == typeof(ushort)
-                || type == typeof(int) || type == typeof(uint)
-                || type == typeof(long) || type == typeof(ulong)
-                || type == typeof(float) || type == typeof(double) || type == typeof(decimal)
-                || type == typeof(char)
-                || type == typeof(KeyboardShortcut);
         }
     }
 }

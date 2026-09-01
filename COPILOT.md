@@ -150,6 +150,21 @@ BepInEx 5 plugins are woven into the game at build time, not loaded at runtime
 Transpilers, runtime-computed targets and `Reflection.Emit` cannot work. The
 weaver says so per plugin before the native compile starts.
 
+So does a shape that does not match. A published plugin was compiled against
+the real BepInEx, so the shims have to agree with it down to the signature: a
+field where BepInEx has a property, or `object` where it has a type, is a
+member the plugin cannot resolve, and il2cpp is what discovers that. To ask in
+five seconds instead:
+
+```sh
+make mod-check PLUGIN=path/to/Plugin.dll
+```
+
+It compiles both shims against your depot, stages them beside the game's
+assemblies and runs the real weaver over the plugin, printing the report the
+launcher would show. It found five such mismatches when Configuration Manager
+was first tried.
+
 ### Check before you build
 
 ```sh

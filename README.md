@@ -93,6 +93,23 @@ Launch and the launcher offers to rebuild, or to play the build you have.
 by the time the game runs, so nothing can be patched then. The mods screen
 names every patch a plugin could not apply, before the build starts.
 
+### The configuration menu
+
+Mods that expose settings expect
+[BepInEx's Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager/releases)
+to be there to draw them. It works here — download the BepInEx 5 build, put
+`ConfigurationManager.dll` in the mods folder like any other plugin, and rebuild.
+
+It opens with F1 on a PC, which a phone does not have, so here it opens by
+**clicking both sticks (L3+R3)** on a controller. That binding lives in
+`mods/config/BepInEx.cfg` and is read at startup, so it can be changed to any
+key or button without rebuilding — and because it is a BepInEx setting like any
+other, the menu lists it, under Advanced settings.
+
+It is not shipped with the app, and neither is BepInEx: mods are your files,
+downloaded by you, and the build that compiles them into the game happens on
+your device.
+
 ## Steam Cloud Saves
 
 If you sign in to Steam, you also get your Steam Cloud saves. Pull before you play, push
