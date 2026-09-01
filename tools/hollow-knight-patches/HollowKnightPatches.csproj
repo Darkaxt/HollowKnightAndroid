@@ -5,7 +5,7 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <AssemblyName>HollowKnightPatches</AssemblyName>
     <Nullable>disable</Nullable>
-    <DefineConstants>UNITY_ANDROID</DefineConstants>
+    <DefineConstants>UNITY_ANDROID;ENABLE_INPUT_SYSTEM</DefineConstants>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
   <ItemGroup>
@@ -13,6 +13,26 @@
     <Compile Include="../shared-patches/src/**/*.cs" Link="Shared/%(RecursiveDir)%(Filename)%(Extension)" />
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>$(UnityManaged)/UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(UnityManaged)/UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>$(UnityManaged)/UnityEngine.UIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(UnityManaged)/UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(HollowKnightManaged)/UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.InputSystem">
+      <HintPath>$(HollowKnightManaged)/Unity.InputSystem.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="Assembly-CSharp">

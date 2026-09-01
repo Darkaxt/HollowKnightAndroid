@@ -15,8 +15,13 @@ SOURCE_AUDIT = REPO_ROOT / "docs" / "verification" / "dualscreen-source-audit.md
 DUALSCREEN_SOURCES = (
     REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen"
 )
+SHARED_DUALSCREEN_SOURCES = (
+    REPO_ROOT / "tools" / "shared-patches" / "src" / "DualScreen"
+)
 DUAL_SCREEN = DUALSCREEN_SOURCES / "DualScreenV2.cs"
-PRESENTATION = DUALSCREEN_SOURCES / "DsPresentation.cs"
+PRESENTATION = SHARED_DUALSCREEN_SOURCES / "DirectDisplayPresentation.cs"
+PRESENTATION_SHIM = DUALSCREEN_SOURCES / "DsPresentation.cs"
+DISPLAY_HOST = SHARED_DUALSCREEN_SOURCES / "DirectDisplayHost.cs"
 PORT_RUNTIME = DUALSCREEN_SOURCES / "DsPortRuntime.cs"
 PORT_LAYERS = DUALSCREEN_SOURCES / "DsPortLayers.cs"
 PORT_UTIL = DUALSCREEN_SOURCES / "DsPortUtil.cs"
@@ -437,13 +442,17 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         self.assertRegex(source, r"\bDsPortRuntime\s+_port\s*;")
         self.assertRegex(
             source,
-            r"_port\s*=\s*new\s+DsPortRuntime\s*\(\s*_screen\s*\)\s*;",
+            r"_port\s*=\s*new\s+DsPortRuntime\s*\(\s*screen\s*\)\s*;",
         )
-        presentation_assignment = source.index("_screen = screen;")
+        presentation_assignment = source.index("_screen = new DsPresentation(transform);")
+        host_construction = source.index("_host = new DirectDisplayHost(")
+        presence_publication = source.index("_host.SetDisplayPresent(")
         bringup_yield = source.index("yield return screen.Bringup();")
-        ready_guard = source.index("if (!screen.Ready)")
-        runtime_construction = source.index("_port = new DsPortRuntime(_screen);")
-        self.assertLess(presentation_assignment, bringup_yield)
+        ready_guard = source.index("if (!present || !screen.Ready)")
+        runtime_construction = source.index("_port = new DsPortRuntime(screen);")
+        self.assertLess(presentation_assignment, host_construction)
+        self.assertLess(host_construction, presence_publication)
+        self.assertLess(presence_publication, bringup_yield)
         self.assertLess(bringup_yield, ready_guard)
         self.assertLess(ready_guard, runtime_construction)
         for rejected in (
@@ -465,22 +474,32 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
 
     def test_presentation_owns_only_the_proven_content_and_overlay_layers(self):
         source = read(PRESENTATION)
-        self.assertRegex(source, r"public\s+const\s+int\s+CONTENT_LAYER\s*=\s*6\s*;")
-        self.assertRegex(source, r"public\s+const\s+int\s+OVERLAY_LAYER\s*=\s*3\s*;")
+        shim = read(PRESENTATION_SHIM)
+        self.assertRegex(shim, r"public\s+const\s+int\s+DISPLAY\s*=\s*1\s*;")
+        self.assertRegex(shim, r"public\s+const\s+int\s+CONTENT_LAYER\s*=\s*6\s*;")
+        self.assertRegex(shim, r"public\s+const\s+int\s+OVERLAY_LAYER\s*=\s*3\s*;")
+        self.assertRegex(shim, r"const\s+int\s+FALLBACK_W\s*=\s*1240\s*;")
+        self.assertRegex(shim, r"const\s+int\s+FALLBACK_H\s*=\s*1080\s*;")
         self.assertRegex(
             source,
-            r"OWNED_LAYER_MASK\s*=\s*\(1\s*<<\s*CONTENT_LAYER\)\s*\|\s*"
-            r"\(1\s*<<\s*OVERLAY_LAYER\)\s*;",
+            r"_ownedLayerMask\s*=\s*\(1\s*<<\s*contentLayer\)\s*\|\s*"
+            r"\(1\s*<<\s*overlayLayer\)\s*;",
         )
         self.assertEqual(2, len(re.findall(r"AddComponent<Camera>\s*\(\s*\)", source)))
         self.assertEqual(
             [("CONTENT_LAYER", "6"), ("OVERLAY_LAYER", "3")],
-            re.findall(r"const\s+int\s+(\w*LAYER\w*)\s*=\s*(\d+)\s*;", source),
+            re.findall(r"const\s+int\s+(\w*LAYER\w*)\s*=\s*(\d+)\s*;", shim),
+        )
+        self.assertRegex(
+            shim,
+            r":\s*base\s*\(\s*parent\s*,\s*DISPLAY\s*,\s*CONTENT_LAYER\s*,\s*"
+            r"OVERLAY_LAYER\s*,\s*FALLBACK_W\s*,\s*FALLBACK_H\s*,\s*"
+            r"DsConfig\.Int\s*\)",
         )
 
         for camera, layer in (
-            ("Camera", "CONTENT_LAYER"),
-            ("OverlayCamera", "OVERLAY_LAYER"),
+            ("Camera", "ContentLayer"),
+            ("OverlayCamera", "OverlayLayer"),
         ):
             with self.subTest(camera=camera):
                 block = re.search(
@@ -490,14 +509,14 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
                 )
                 self.assertIsNotNone(block, f"missing construction block for {camera}")
                 body = block.group("body")
-                self.assertRegex(body, rf"\b{camera}\.targetDisplay\s*=\s*DISPLAY\s*;")
+                self.assertRegex(body, rf"\b{camera}\.targetDisplay\s*=\s*DisplayIndex\s*;")
                 self.assertRegex(body, rf"\b{camera}\.cullingMask\s*=\s*1\s*<<\s*{layer}\s*;")
 
         self.assertRegex(
             source,
-            r"if\s*\(\s*c\s*==\s*null\s*\|\|\s*IsOwnedCamera\s*\(\s*c\s*\)\s*\)\s*continue\s*;",
+            r"if\s*\(\s*camera\s*==\s*null\s*\|\|\s*IsOwnedCamera\s*\(\s*camera\s*\)\s*\)\s*continue\s*;",
         )
-        self.assertRegex(source, r"c\.cullingMask\s*&=\s*~OWNED_LAYER_MASK\s*;")
+        self.assertRegex(source, r"camera\.cullingMask\s*&=\s*~_ownedLayerMask\s*;")
         owned_check = re.search(
             r"bool\s+IsOwnedCamera\s*\(\s*Camera\s+camera\s*\)\s*\{(?P<body>.*?)\}",
             source,
@@ -506,6 +525,89 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         self.assertIsNotNone(owned_check)
         self.assertIn("camera == Camera", owned_check.group("body"))
         self.assertIn("camera == OverlayCamera", owned_check.group("body"))
+
+    def test_shared_presentation_validates_config_and_owns_compatibility_statics(self):
+        source = read(PRESENTATION)
+        constructor = csharp_method_body(
+            source,
+            r"public\s+DirectDisplayPresentation\s*\([^)]*\)",
+        )
+        self.assertTrue(constructor)
+        for guard in (
+            r"displayIndex\s*<\s*0",
+            r"contentLayer\s*<\s*0\s*\|\|\s*contentLayer\s*>\s*31",
+            r"overlayLayer\s*<\s*0\s*\|\|\s*overlayLayer\s*>\s*31",
+            r"contentLayer\s*==\s*overlayLayer",
+            r"fallbackWidth\s*<=\s*0",
+            r"fallbackHeight\s*<=\s*0",
+        ):
+            with self.subTest(guard=guard):
+                self.assertRegex(constructor, guard)
+
+        positive_config = csharp_method_body(
+            source,
+            r"int\s+PositiveConfigInt\s*\(\s*string\s+key\s*,\s*int\s+fallback\s*\)",
+        )
+        self.assertTrue(positive_config)
+        self.assertIn(
+            "int value = _readConfigInt != null ? _readConfigInt(key, fallback) : fallback;",
+            re.sub(r"\s+", " ", positive_config).strip(),
+        )
+        self.assertRegex(
+            positive_config,
+            r"return\s+value\s*>\s*0\s*\?\s*value\s*:\s*fallback\s*;",
+        )
+        for key, fallback in (
+            ("settle_ms", "1500"),
+            ("sweep_ms", "500"),
+            ("panel_w", "_fallbackWidth"),
+            ("panel_h", "_fallbackHeight"),
+        ):
+            with self.subTest(key=key):
+                self.assertRegex(
+                    source,
+                    rf'PositiveConfigInt\s*\(\s*"{key}"\s*,\s*{fallback}\s*\)',
+                )
+
+        self.assertRegex(
+            source,
+            r"static\s+DirectDisplayPresentation\s+_compatibilityOwner\s*;",
+        )
+        publish = csharp_method_body(
+            source, r"void\s+PublishCompatibilityState\s*\(\s*\)"
+        )
+        self.assertTrue(publish)
+        self.assertIn("_compatibilityOwner = this;", publish)
+        self.assertIn("PanelW = Width;", publish)
+        self.assertIn("PanelH = Height;", publish)
+        self.assertIn("UiCamera = Camera;", publish)
+
+        bringup = csharp_method_body(
+            source, r"public\s+IEnumerator\s+Bringup\s*\(\s*\)"
+        )
+        self.assertLess(
+            bringup.index("PublishCompatibilityState();"),
+            bringup.index("Ready = true;"),
+        )
+
+        dispose = csharp_method_body(
+            source, r"public\s+void\s+Dispose\s*\(\s*\)"
+        )
+        owner_clear = re.search(
+            r"if\s*\(\s*ReferenceEquals\s*\(\s*_compatibilityOwner\s*,\s*this\s*\)\s*\)"
+            r"\s*\{(?P<body>.*?)\}",
+            dispose,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(owner_clear)
+        for statement in (
+            "_compatibilityOwner = null;",
+            "PanelW = 0;",
+            "PanelH = 0;",
+            "UiCamera = null;",
+        ):
+            self.assertIn(statement, owner_clear.group("body"))
+        self.assertEqual(1, dispose.count("UiCamera = null;"))
 
     def test_empty_port_layer_roots_preserve_content_and_overlay_roles(self):
         if not PORT_LAYERS.is_file():
@@ -572,15 +674,17 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         revision_capture = presentation.index(
             "int availabilityRevision = _availabilityRevision;"
         )
-        activate = presentation.index("displays[DISPLAY].Activate();")
+        activate = presentation.index("displays[DisplayIndex].Activate();")
         settle = presentation.index("while (Time.realtimeSinceStartup < until)", activate)
         refreshed = presentation.index("displays = Display.displays;", settle)
-        presence_check = presentation.index("if (displays.Length <= DISPLAY)", refreshed)
+        presence_check = presentation.index(
+            "if (displays.Length <= DisplayIndex)", refreshed
+        )
         revision_check = presentation.index(
             "if (availabilityRevision != _availabilityRevision)",
             presence_check,
         )
-        measure = presentation.index("MeasurePanel(displays[DISPLAY]);", presence_check)
+        measure = presentation.index("MeasurePanel(displays[DisplayIndex]);", presence_check)
         ready = presentation.index("Ready = true;", measure)
         self.assertLess(revision_capture, activate)
         self.assertLess(activate, settle)
@@ -592,8 +696,13 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
 
     def test_bringup_serializes_one_retained_presentation_without_timeout(self):
         host = read(DUAL_SCREEN)
-        retained = host.index("_screen = screen;")
+        retained = host.index("_screen = new DsPresentation(transform);")
+        host_construction = host.index("_host = new DirectDisplayHost(")
+        presence_publication = host.index("_host.SetDisplayPresent(")
         yielded = host.index("yield return screen.Bringup();")
+        self.assertLess(retained, host_construction)
+        self.assertLess(host_construction, presence_publication)
+        self.assertLess(presence_publication, yielded)
         self.assertLess(retained, yielded)
 
         presentation = read(PRESENTATION)
@@ -604,23 +713,76 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         )
         self.assertNotRegex(presentation, r"bringup.{0,80}(?:timeout|deadline)")
 
+    def test_inflight_activation_cannot_outlive_disposal(self):
+        violations = []
+
+        presentation = read(PRESENTATION)
+        bringup = csharp_method_body(
+            presentation, r"public\s+IEnumerator\s+Bringup\s*\(\s*\)"
+        )
+        settle = bringup.find("while (Time.realtimeSinceStartup < until)")
+        refresh = bringup.find("displays = Display.displays;", settle + 1)
+        disposed_guard = re.search(
+            r"if\s*\(\s*_disposed\s*\)\s*yield\s+break\s*;",
+            bringup[settle + 1:refresh] if settle >= 0 and refresh >= 0 else "",
+        )
+        if disposed_guard is None:
+            violations.append("presentation missing post-settle disposed guard")
+
+        dispose = csharp_method_body(
+            presentation, r"public\s+void\s+Dispose\s*\(\s*\)"
+        )
+        if "_availabilityRevision++;" not in dispose:
+            violations.append("presentation disposal does not invalidate generation")
+
+        entry = read(DUAL_SCREEN)
+        host_bringup = csharp_method_body(
+            entry, r"IEnumerator\s+Bringup\s*\(\s*\)"
+        )
+        retained_screen = host_bringup.find("var screen = _screen;")
+        retained_host = host_bringup.find("var host = _host;")
+        yielded = host_bringup.find("yield return screen.Bringup();")
+        presence_read = host_bringup.find(
+            "bool present = Display.displays.Length > DsPresentation.DISPLAY;",
+            yielded + 1,
+        )
+        owner_guard = re.search(
+            r"if\s*\(\s*host\.IsDisposed\s*\|\|\s*"
+            r"!ReferenceEquals\s*\(\s*_host\s*,\s*host\s*\)\s*\|\|\s*"
+            r"!ReferenceEquals\s*\(\s*_screen\s*,\s*screen\s*\)\s*\)\s*"
+            r"yield\s+break\s*;",
+            host_bringup[yielded + 1:presence_read]
+            if yielded >= 0 and presence_read >= 0 else "",
+        )
+        if not (0 <= retained_screen < yielded and 0 <= retained_host < yielded):
+            violations.append("entry bringup does not retain screen and host before yield")
+        if owner_guard is None:
+            violations.append("entry bringup missing post-yield disposed/identity guard")
+        if re.search(
+            r"(?m)^\s*host\.SetDisplayPresent\s*\(\s*present\s*\)\s*;",
+            host_bringup[yielded + 1:],
+        ) is None:
+            violations.append("entry bringup does not use retained host after yield")
+
+        self.assertEqual([], violations)
+
     def test_host_active_state_requires_unpaused_present_ready_display(self):
         source = read(DUAL_SCREEN)
-        self.assertRegex(source, r"bool\s+_displayPresent\s*;")
+        host = read(DISPLAY_HOST)
         self.assertIn(
-            "bool active = !_paused && _displayPresent && _screen != null && _screen.Ready;",
-            source,
+            "bool shouldBeActive = _displayPresent && _presentationReady && !_paused;",
+            host,
         )
-        self.assertRegex(source, r"_displayPresent\s*=\s*now\s*>\s*DsPresentation\.DISPLAY\s*;")
+        self.assertRegex(source, r"bool\s+present\s*=\s*now\s*>\s*DsPresentation\.DISPLAY\s*;")
+        self.assertIn("host.SetPresentationReady(true, screen.Width, screen.Height);", source)
         self.assertRegex(source, r"if\s*\(\s*DsTouch\.Enabled\s*&&\s*Time\.unscaledTime")
-        pause = re.search(
-            r"void\s+OnApplicationPause\s*\(\s*bool\s+paused\s*\)\s*\{(?P<body>.*?)\}",
+        pause = csharp_method_body(
             source,
-            re.DOTALL,
+            r"void\s+OnApplicationPause\s*\(\s*bool\s+paused\s*\)",
         )
-        self.assertIsNotNone(pause)
-        self.assertIn("ApplyActiveState();", pause.group("body"))
-        self.assertNotIn("SetActive(!paused)", pause.group("body"))
+        self.assertTrue(pause)
+        self.assertIn("_host.SetPaused(paused);", pause)
+        self.assertNotIn("SetActive(!paused)", pause)
 
     def test_all_empty_port_roots_full_stretch_their_parent(self):
         source = read(PORT_LAYERS)

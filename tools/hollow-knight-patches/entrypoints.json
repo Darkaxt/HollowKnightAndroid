@@ -5,6 +5,12 @@
       "className": "InjectionProbe",
       "methodName": "Start",
       "loadTypes": 2
+    },
+    {
+      "nameSpace": "HollowKnightPatches",
+      "className": "DirectDisplayProbe",
+      "methodName": "Bootstrap",
+      "loadTypes": 0
     }
   ]
 }
