@@ -7,7 +7,9 @@
 
 **Goal:** Replace the rejected Silksong authored shell with a module-by-module
 port of the Hollow Knight Dual Souls companion UI, using Silksong resident UI
-objects and assets on SilksongAndroid's direct display-1 renderer.
+objects and assets on SilksongAndroid's direct display-1 renderer. Hollow
+Knight owns visible behavior, state transitions, and their consequences;
+SilksongAndroid owns only the lower-level display/render/input technology.
 
 **Architecture:** Preserve the proven direct-display transport, touch fence,
 lifecycle, diagnostics, and fallback. Replace `DsShell` and its independently
@@ -54,7 +56,8 @@ tests, Android Gradle/Robolectric, GitHub Actions signing.
 - `DsPortLayers.cs`: direct-display equivalent of `Bottom.Layering`.
 - `DsPortFrame.cs`: frame, ornaments, tab row, page clone cache, page fit, and
   slide orchestration equivalent of `Bottom.Frame`.
-- `DsPortHud.cs`: native Silksong HUD clone/re-layer, area/status, currencies,
+- `DsPortHud.cs`: native Silksong HUD elements composed in the Hollow Knight
+  layout, area/status, currencies,
   and equipped-loadout row equivalent of `Bottom.Hud`.
 - `DsPortInventory.cs`: native inventory clone, settle/freeze, availability,
   counters, content/detail arrangement, and refresh fingerprint equivalent of
@@ -313,24 +316,37 @@ must not treat Stage 2 as visually complete until that blocker closes.
 
 - [ ] **Step 1: Add failing HUD contracts**
 
-Require cloning/re-layering of Silksong health and Silk HUD renderers, native
-currency sprites, area localization, equipped Crest/Tool summary, FPS/battery
-gutters, resident asset provenance, and display-loss restoration. Reject the
-authored `MaxHealthGlyphs`/procedural Silk bar implementation.
+Require exact Hollow Knight HUD region/slot geometry populated by resident
+Silksong health, Silk, currency, area, and equipped Crest/Tool elements plus
+FPS/battery gutters, provenance, and display-loss restoration. Silksong-only
+status is appended inside the same layout grammar. Reject the authored
+`MaxHealthGlyphs`/procedural Silk bar, an intact Silksong HUD layout, duplicate
+stacked HUDs, or Hollow Knight widgets/art dumped over Silksong elements.
+Require the same top-screen, pause, inventory, companion-disable, scene-change,
+and teardown consequences as `Bottom.Hud`.
 
 - [ ] **Step 2: Verify red, then port `Bottom.Hud` semantics**
 
-Clone the live Silksong HUD subtree after it becomes resident; isolate the
-clone on the HUD layer; freeze only drivers that would mutate primary-game
-state; mirror live visual state; add area/status/loadout widgets by cloning
-compatible resident text/icon objects; and preserve main-screen HUD behavior
-unless the user explicitly enables the already specified safe move option.
+Locate the live Silksong HUD elements after residency, map each semantic object
+to its Hollow Knight HUD slot, and re-parent/re-layer the resident renderers or
+their required live subtrees into that single composition. Retain only native
+drivers needed for state and visual updates; adapt or selectively freeze any
+driver whose layout, routing, lifecycle, or consequence conflicts with
+`Bottom.Hud`. Route relocated objects back at the same pause, inventory,
+companion-off, display-loss, scene-change, and teardown boundaries as the
+oracle. Reassert layer assignment for later-spawned children without
+reintroducing Silksong's original HUD geometry. Add area/status/loadout and
+Silksong-only widgets by adapting compatible resident text/icon objects to the
+oracle's geometry and selective-driver rules. Do not create a second HUD,
+retain an intact Silksong layout under the port, or overlay Hollow Knight art.
 
 - [ ] **Step 3: Verify compile and runtime provenance diagnostics**
 
 Both exact patch compiles must pass. Runtime diagnostics must log every cloned
-source path and must fail closed if required native HUD objects cannot be
-located.
+or moved source path and must fail closed if required native HUD objects cannot
+be located. Runtime evidence must record the live HUD hierarchy's parent,
+layer, driver inventory, active state, destination, and exact restoration
+state.
 
 - [ ] **Step 4: Reconcile and commit**
 

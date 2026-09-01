@@ -35,6 +35,15 @@ touch, pause/resume handling, diagnostics, and single-display fallback. The
 Dual Souls Android `Presentation`, EGL blitter, and Java touch bridge are not
 ported where the direct-display equivalents already satisfy the same role.
 
+This boundary is technological, not presentational and not a safety wrapper
+around the game UI. Hollow Knight Dual Souls remains authoritative for the
+bottom-screen hierarchy, slots, geometry, transitions, lifecycle, and every
+resulting gameplay and main-screen consequence. Silksong's native UI objects
+and assets must be re-parented, re-layered, adapted, or extended into that
+design. The port may translate the mechanism needed to make that behavior work
+on SilksongAndroid's direct renderer, but it may not replace or suppress an
+oracle consequence merely to leave the original Silksong UI untouched.
+
 ## Requirements
 
 ### DSUI-01 — Dual Souls is the design oracle
@@ -42,7 +51,8 @@ ported where the direct-display equivalents already satisfy the same role.
 The Hollow Knight companion defines the production UI's region hierarchy,
 geometry, framing, page composition, information density, navigation,
 selection treatment, typography roles, animation vocabulary, modal ordering,
-and lifecycle behavior. A surface that is merely inspired by it or that
+state ownership, lifecycle behavior, and observable consequences. A surface
+that is merely inspired by it or that
 recreates its result with unrelated widgets does not satisfy this requirement.
 
 ### DSUI-02 — Port the composition pipeline
@@ -53,7 +63,8 @@ It must retain the same separation between private layers, dedicated cameras,
 persistent HUD/frame content, page clones, contextual overlays, and touch
 selection. The exact number of layers or cameras may change only when the
 direct renderer makes one redundant and the resulting composition remains
-structurally and behaviorally equivalent.
+structurally and behaviorally equivalent, including the same state transitions
+and consequences outside the bottom display.
 
 ### DSUI-03 — Reuse resident game UI
 
@@ -62,6 +73,20 @@ tutorial, item, cursor, font, ornament, or other suitable UI object, the
 companion must clone, re-parent, re-layer, or otherwise reuse that object and
 its resident assets. Reading game state and drawing an independent substitute
 is prohibited when a usable resident equivalent exists.
+
+The result is one composed HUD. Hollow Knight UI assets or widgets must not be
+dumped over an intact Silksong HUD, and Silksong's original HUD layout must not
+be copied wholesale merely because it is resident. Each semantic Silksong
+element—health, Silk, currencies, Crests/Tools, and later Silksong-only
+features—must occupy or extend the corresponding Hollow Knight design slot
+using Silksong sprites, fonts, labels, and data. Where live Silksong objects are
+re-parented or re-layered, retain only the native drivers required to provide
+their game state and visual updates. `Bottom.Hud` remains authoritative for
+layout, ownership, routing, transitions, lifecycle, and consequences; any
+Silksong driver that would impose conflicting behavior must be adapted or
+selectively frozen while its required visual output is preserved. Original
+relationships are restored only at the oracle's corresponding pause, disable,
+display-loss, scene, or teardown boundary.
 
 Static frame ornaments and tab labels must be instantiated under an inactive
 staging parent. Every cloned `MonoBehaviour` except the explicitly retained
@@ -85,6 +110,10 @@ system: masks become Silksong health; Soul becomes Silk; Geo becomes the
 appropriate Silksong currencies; Charms become Crests and Tools; Hollow Knight
 inventory items become Silksong inventory items; and the map remains the map.
 Labels and data come from the running game wherever its APIs expose them.
+Silksong concepts with no Hollow Knight equivalent are appended to the nearest
+semantic region using the same Hollow Knight hierarchy, spacing, typography,
+selection, transition, and modal rules; they do not preserve or introduce a
+second Silksong-specific layout system.
 
 ### DSUI-05 — New pages extend, never replace, the pattern
 

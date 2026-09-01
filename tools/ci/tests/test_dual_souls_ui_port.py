@@ -205,8 +205,51 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
                 with self.subTest(
                     document=document.relative_to(REPO_ROOT),
                     requirement=requirement,
-                ):
+                    ):
                     self.assertIn(requirement, source)
+
+    def test_hud_contract_is_one_hollow_knight_layout_populated_by_silksong(self):
+        spec = " ".join(read(SPEC).split())
+        plan = " ".join(read(PLAN).split())
+        matrix = " ".join(read(MATRIX).split())
+
+        for required in (
+            "The result is one composed HUD",
+            "Hollow Knight UI assets or widgets must not be",
+            "Silksong's original HUD layout must not",
+            "`Bottom.Hud` remains authoritative for",
+            "layout, ownership, routing, transitions, lifecycle, and consequences",
+            "Each semantic Silksong element—health, Silk, currencies, Crests/Tools",
+            "must occupy or extend the corresponding Hollow Knight design slot",
+        ):
+            self.assertIn(required, spec)
+
+        for required in (
+            "Hollow Knight owns visible behavior, state transitions, and their consequences",
+            "an intact Silksong HUD layout, duplicate",
+            "stacked HUDs, or Hollow Knight widgets/art dumped over Silksong elements",
+            "Do not create a second HUD",
+            "adapt or selectively freeze any",
+            "driver whose layout, routing, lifecycle, or consequence conflicts",
+            "exact Hollow Knight HUD region/slot geometry populated by resident "
+            "Silksong health, Silk, currency, area, and equipped Crest/Tool elements",
+        ):
+            self.assertIn(required, plan)
+
+        self.assertIn(
+            "map each resident Silksong semantic element into the corresponding "
+            "Hollow Knight slot",
+            matrix,
+        )
+        self.assertIn(
+            "An intact Silksong HUD layout, duplicate stacked HUDs, or Hollow Knight "
+            "art/widgets overlaid on Silksong elements is explicitly rejected",
+            matrix,
+        )
+        self.assertNotIn(
+            "preserve main-screen HUD behavior unless the user explicitly enables",
+            plan,
+        )
 
     def test_matrix_covers_every_reference_module(self):
         matrix = read(MATRIX)
