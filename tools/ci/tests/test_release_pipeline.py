@@ -10,6 +10,19 @@ HELPER = ROOT / "tools" / "ci" / "release_contract.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 BUILD_SCRIPT = ROOT / "tools" / "depot-to-apk" / "build.sh"
 IL2CPP_BUILD_SCRIPT = ROOT / "tools" / "ondevice-il2cpp" / "build-il2cpp.sh"
+IL2CPP_CONVERTER = (
+    ROOT
+    / "src"
+    / "SilksongLauncher.Launcher"
+    / "app"
+    / "src"
+    / "main"
+    / "kotlin"
+    / "dev"
+    / "silksong"
+    / "launcher"
+    / "Il2cppConverter.kt"
+)
 
 
 def load_helper():
@@ -103,6 +116,22 @@ class ReleasePipelineContractTest(unittest.TestCase):
 
         self.assertNotIn("safe=${rel//[^", script)
         self.assertEqual(3, script.count(portable))
+
+    def test_interrupted_il2cpp_conversion_cannot_publish_partial_output(self):
+        source = IL2CPP_CONVERTER.read_text(encoding="utf-8")
+
+        self.assertIn('File(root, "convert.complete")', source)
+        self.assertIn("completionMarker(root).readText().trim()", source)
+        self.assertIn("file.exists() && !file.delete()", source)
+        self.assertIn("if (!part.renameTo(marker))", source)
+        self.assertLess(
+            source.index("invalidateCompletion(root)"),
+            source.index('send(Progress("Preparing the converter"'),
+        )
+        self.assertGreater(
+            source.index("markComplete(root)"),
+            source.index("if (!result.ok)"),
+        )
 
 
 if __name__ == "__main__":

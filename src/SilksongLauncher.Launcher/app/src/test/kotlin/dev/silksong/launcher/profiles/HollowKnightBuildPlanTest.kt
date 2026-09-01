@@ -8,6 +8,7 @@ import dev.silksong.launcher.DepotLocation
 import dev.silksong.launcher.Il2cppConverter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -46,6 +47,49 @@ class HollowKnightBuildPlanTest {
     fun `classic conversion reads its source without requiring in-place writes`() {
         assertFalse(DepotLocation.requiresWritableContent(hollowKnight))
         assertTrue(DepotLocation.requiresWritableContent(silksong))
+    }
+
+    @Test
+    fun `interrupted il2cpp output is never treated as a completed conversion`() {
+        val root = temp.newFolder("interrupted-conversion")
+        File(Il2cppConverter.cppDir(root), "partial.cpp").apply {
+            parentFile.mkdirs()
+            writeText("// converter was killed after writing only part of the tree")
+        }
+        Il2cppConverter.metadata(root).apply {
+            parentFile.mkdirs()
+            writeBytes(byteArrayOf(1))
+        }
+
+        Il2cppConverter.markComplete(root)
+        assertTrue(Il2cppConverter.isPresent(root))
+
+        Il2cppConverter.invalidateCompletion(root)
+        File(Il2cppConverter.cppDir(root), "partial.cpp").writeText("// overwritten partial tree")
+        assertFalse(Il2cppConverter.isPresent(root))
+
+        File(root, "${Il2cppConverter.completionMarker(root).name}.part").writeText("complete")
+        assertFalse(Il2cppConverter.isPresent(root))
+
+        Il2cppConverter.markComplete(root)
+        assertTrue(Il2cppConverter.isPresent(root))
+        assertFalse(File(root, "${Il2cppConverter.completionMarker(root).name}.part").exists())
+    }
+
+    @Test
+    fun `conversion aborts when an old completion marker cannot be invalidated`() {
+        val root = temp.newFolder("failed-invalidation")
+        val marker = Il2cppConverter.completionMarker(root).apply {
+            mkdirs()
+            File(this, "held").writeText("prevents deletion")
+        }
+
+        val failure = assertThrows(java.io.IOException::class.java) {
+            Il2cppConverter.invalidateCompletion(root)
+        }
+
+        assertTrue(failure.message.orEmpty().contains("invalidate"))
+        assertTrue(marker.isDirectory)
     }
 
     @Test

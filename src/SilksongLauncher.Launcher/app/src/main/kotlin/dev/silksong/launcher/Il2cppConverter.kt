@@ -58,6 +58,16 @@ object Il2cppConverter {
     /** global-metadata.dat is the one output nothing else can substitute for. */
     fun metadata(root: File): File = File(dataDir(root), "Metadata/global-metadata.dat")
 
+    /**
+     * Written only after il2cpp returns success and its required outputs have
+     * been verified. A process kill cannot run a catch/finally block, so the
+     * output tree itself needs a durable commit marker: metadata plus one C++
+     * file merely proves that an interrupted converter had started writing.
+     */
+    internal fun completionMarker(root: File): File = File(root, "convert.complete")
+
+    private const val COMPLETE = "complete"
+
     /** How often the output directory is counted while il2cpp works. */
     private const val PROGRESS_POLL_MS = 2_000L
 
@@ -93,7 +103,8 @@ object Il2cppConverter {
     private const val DEFAULT_SOURCES = 1148
 
     fun isPresent(root: File): Boolean =
-        metadata(root).length() > 0 &&
+        runCatching { completionMarker(root).readText().trim() }.getOrNull() == COMPLETE &&
+            metadata(root).length() > 0 &&
             cppDir(root).listFiles()?.any { it.name.endsWith(".cpp") } == true
 
     /**
@@ -194,6 +205,11 @@ object Il2cppConverter {
         if (!bcl.isDirectory) throw IOException("the unityaot class library is missing: $bcl")
         if (!engine.isDirectory) throw IOException("the Android player's Managed folder is missing: $engine")
         if (!File(deploy, "il2cpp.dll").isFile) throw IOException("il2cpp.dll is missing: $deploy")
+
+        // Invalidate the previous commit before touching staged assemblies.
+        // If Android kills this process at any later instruction, the next run
+        // must convert again instead of compiling a half-written C++ tree.
+        invalidateCompletion(root)
 
         send(Progress("Preparing the converter", -1f, "assemblies"))
         var assemblies = stageAssemblies(bcl, engine, managed, PackageCompiler.outputDir(root), asmDir(root))
@@ -354,8 +370,29 @@ object Il2cppConverter {
         // Only now: the stamp says "this build contains that mod set", and it
         // would be a lie if the conversion had failed anywhere above.
         if (mods != null) Mods.markCurrent(mods, root, assets)
+        markComplete(root)
         send(Progress("Converted", 1f, "$cpp C++ files in ${seconds}s"))
     }.flowOn(Dispatchers.IO)
+
+    internal fun invalidateCompletion(root: File) {
+        val marker = completionMarker(root)
+        val part = File(root, "${marker.name}.part")
+        for (file in listOf(marker, part)) {
+            if (file.exists() && !file.delete()) {
+                throw IOException("could not invalidate the previous il2cpp conversion marker: $file")
+            }
+        }
+    }
+
+    internal fun markComplete(root: File) {
+        val marker = completionMarker(root)
+        val part = File(root, "${marker.name}.part")
+        part.writeText(COMPLETE)
+        if (!part.renameTo(marker)) {
+            part.delete()
+            throw IOException("could not commit the completed il2cpp conversion marker")
+        }
+    }
 
     /**
      * The last thing il2cpp said, for a failure that said nothing error-shaped.

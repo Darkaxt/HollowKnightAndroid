@@ -314,3 +314,22 @@ The follow-up passes 30 focused companion contracts, all 58 shared tests, all
 `1.5.12620` patch. H2 remains blocked only until one lower-HUD-only menu fixture
 shows the finalized labels and clean teardown. Every later device pass follows
 the same no-gameplay rule.
+
+Signed dry-run `33540377737` then built commit `b96655b`; its 72,886,447-byte
+APK has SHA-256
+`20ffeed6bddba9895bf41f01e8be5a957170ba60c1762fb6fadcf9b70e815206`,
+verified v2/v3 signatures, and the pinned signer. The in-place install preserved
+UID and first-install time. This run produced no HUD acceptance evidence: the
+first on-device IL2CPP conversion was killed under critical memory pressure,
+and the retry reused its incomplete generated C++ tree. A direct linker check
+identified the resulting unresolved managed symbol before Unity could start;
+the fixture never entered gameplay and received no input.
+
+The converter now removes a durable completion marker before staging or output
+mutation, fails closed if invalidation cannot be completed, and atomically
+commits the marker only after successful conversion and required-output checks.
+Partial C++ plus metadata, and a `.part` marker, are explicitly rejected. The
+regressions cover the prior-success/interrupted-rewrite sequence and pass within
+the full 122-test Android suite, alongside 110 Python contracts, 58 shared-patch
+tests, and 38 bundle-surgery tests. H2 remains device-blocked for exactly one
+clean, locked lower-HUD label/teardown pass.
