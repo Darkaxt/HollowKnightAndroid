@@ -56,7 +56,7 @@ public partial class HKDualScreen
             try { var kf = am[i].GetType().GetField("playerDataInt"); r.amountKeys[i] = kf != null ? kf.GetValue(am[i]) as string : null; } catch { }
             var tl = new List<Component>(); var rl = new List<Renderer>();
             foreach (var t in am[i].GetComponentsInChildren<Component>(true))
-                if (t != null && t.GetType().Name.Contains("TextMeshPro")) { tl.Add(t); rl.Add(t.GetComponent<Renderer>()); }
+                if (IsTextMeshProGraphic(t)) { tl.Add(t); rl.Add(t.GetComponent<Renderer>()); }
             r.amountTmps[i] = tl.ToArray(); r.amountRs[i] = rl.ToArray();
         }
         r.eq = FindDeep(pane.transform, "Equipment");

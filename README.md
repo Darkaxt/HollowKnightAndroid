@@ -34,8 +34,15 @@ lower camera/layer, Map mask, and spatial stencil clipping. Signed runs
 `33520627292` and `33525049660` had earlier narrowed the lifecycle while
 preserving persistent opening-credit routing, live masks/Soul, primary cleanup,
 lower touch, and Inventory. The direct-clone lifecycle and pinned scale are now
-restored with post-frame finalization and await one menu-only lower-HUD signed
-recheck. Two isolated
+restored. Signed run `33544518172` then proved the interrupted-IL2CPP safeguard
+on ARM64, published clean exact generation
+`gen-49b4e6f5-be4b-4221-9904-b753c9734157`, and ran only the locked menu
+fixture. Separators, fleurs, and the battery icon rendered, but every detached
+native text clone remained clipped. Exact source/assembly analysis found the
+pinned reference's loose type-name filter retained Hollow Knight's
+`TextMeshProClipRect` driver outside its original inventory hierarchy. The
+clip-safe exact-type correction is host-green and awaits one menu-only
+lower-HUD signed recheck. Two isolated
 `GameCameras` startup messages were traced to Hollow Knight's own
 `Platform:SetSceneLoadState`, not the patch.
 
@@ -59,13 +66,13 @@ not used for project artwork.
 
 | Area | Current evidence | Remaining gate |
 |---|---|---|
-| Hollow Knight `1.5.12620` | Exact Linux manifest accepted; 1,005 serialized files converted with complete Vulkan coverage; the current fork generation built a 267,870,152-byte AArch64 `libil2cpp.so`, a ZIP32 base player image plus main OBB, and reached the playable-room architecture gate. Cumulative signed evidence proves routed pages, lower touch, selection/prompt, backdrop, pause presentation, persistent opening-credit routing, live masks/Soul, and Inventory. Signed run `33536682728` published exact generation `gen-0815d295-5ed7-4011-b3d9-41ef0cd79983` and rechecked only the input-locked menu fixture, without save/gameplay access | Prove the post-frame native label finalization in one lower-HUD-only signed recheck, then port Mods and skins |
+| Hollow Knight `1.5.12620` | Exact Linux manifest accepted; 1,005 serialized files converted with complete Vulkan coverage. Signed run `33544518172` cleanly converted, linked the 268,705,088-byte AArch64 library, published generation `gen-49b4e6f5-be4b-4221-9904-b753c9734157`, and proved the durable conversion marker. Cumulative evidence covers routed pages, lower touch, selection/prompt, backdrop, pause presentation, persistent opening-credit routing, live masks/Soul, and Inventory; the latest device pass used only the input-locked menu fixture | Prove the clip-safe native labels in one lower-HUD-only signed recheck, then port Mods and skins |
 | Silksong `1.0.29980` | Fork-signed `1.0.3` built the exact current source on the Thor, atomically published a verified ARM64 generation, reached gameplay, and rendered the redesigned companion directly on both physical displays | Prove lower-panel touch, effects, restart persistence, and two-game switching |
 | One launcher | Both profiles, independent storage, atomic generations, and cold-process selection exist and have host/emulator coverage | Prove both switch directions with the production ARM64 Unity processes |
 | Mods | The parent's build-time BepInEx 5/Harmony weaver is merged and routed through each selected profile's patch, IL2CPP, generation, and status paths | Real plugin compatibility for each game, compatibility manifests, dependencies, load order, and per-profile enablement remain unverified |
 | Built-in tweaks | A shared, game-qualified controller hosts a persistent Mods overlay from the standalone HUD gear. Silksong `1.0.29980` exposes typed damage mode, one-hit kills, unlimited Silk, and equip-anywhere adapters; the standalone gear and first-run master OFF are proved in the signed production process | Prove physical gear/overlay touch, effects, process-exit persistence for each game, the Hollow Knight adapter, and later parity rows |
 | Skins | Shared death/respawn rotation state machine has host coverage; the MIT-licensed Hollow Knight reference already contains a CustomKnight-compatible texture engine and pack registry to port | First port and device-prove Hollow Knight scanning/application/rotation/rollback through controlled state injection, not gameplay; then extract the shared library and add Silksong mappings |
-| Dual screen | Hollow Knight H2 is host-green: 30 focused companion contracts, 122 Android tests, 58 shared tests, 38 bundle-surgery tests, and 110 Python tests pass; both patch targets compile, and the exact Hollow Knight patch is 226,816 bytes. Signed Thor evidence proves live HUD routing, pane construction, dark blurred backdrop, lower-controller page switching, selection/prompt, pause presentation, persistent opening-credit routing, bounded tab ornaments, and the input-locked menu fixture. Run `33540377737` installed the post-frame label correction, but its first device conversion was killed for memory and the retry exposed an interrupted-output reuse bug before Unity started. Conversion now requires an atomic success marker, so an interrupted tree cannot be compiled or published as complete; Silksong UI work remains parked | Repeat only the locked lower-HUD fixture on a clean conversion, then complete every later feature pass through title/menu fixtures or controlled synthetic/debug injection without gameplay or save access. Physical detach/true single-display proof remains one tracked H1 deferral and must close by H5 |
+| Dual screen | Hollow Knight H2 is host-green: 32 focused companion contracts, 122 Android tests, 58 shared tests, 38 bundle-surgery tests, and 112 Python tests pass; the exact Hollow Knight patch is 226,816 bytes. Run `33544518172` proved clean conversion/publication and the locked fixture, then isolated the remaining visual blocker to the inherited `TextMeshProClipRect` lifecycle. Detached labels now retain only the exact TMP graphic, disable the stale clip driver, and neutralize main/submesh clip bounds after mesh generation. Silksong UI work remains parked | Repeat only the locked lower-HUD fixture for the clip-safe correction, then complete every later feature pass through title/menu fixtures or controlled synthetic/debug injection without gameplay or save access. Physical detach/true single-display proof remains one tracked H1 deferral and must close by H5 |
 | Releases | Fork identity and GitHub signing pipeline have a signed dry-run proof | No release until source reproducibility, targeted device acceptance, migration, tag/version, and fresh-download gates pass |
 
 The detailed requirement ledger is

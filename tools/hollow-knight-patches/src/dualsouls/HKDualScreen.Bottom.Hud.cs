@@ -60,14 +60,13 @@ public partial class HKDualScreen
             if (src == null) return;
             var go = Instantiate(src.gameObject, frameRoot.transform);
             go.name = "F_AreaName";
-            foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true))
-                if (mb != null && !mb.GetType().Name.Contains("TextMeshPro")) mb.enabled = false;
+            SanitizeDetachedTmpClone(go);
             SetLayerRecursive(go.transform, ATTR_LAYER);
             go.SetActive(true);
             foreach (var r in go.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = true; }
             foreach (var c in go.GetComponentsInChildren<Component>(true))
             {
-                if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
+                if (!IsTextMeshProGraphic(c)) continue;
                 areaNameTmp = c;
                 try { c.GetType().GetProperty("text")?.SetValue(c, "", null); } catch { }
                 break;
@@ -96,14 +95,13 @@ public partial class HKDualScreen
             if (src == null) return;
             var go = Instantiate(src.gameObject, frameRoot.transform);
             go.name = "F_Stats";
-            foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true))
-                if (mb != null && !mb.GetType().Name.Contains("TextMeshPro")) mb.enabled = false;
+            SanitizeDetachedTmpClone(go);
             SetLayerRecursive(go.transform, ATTR_LAYER);
             go.SetActive(true);
             foreach (var r in go.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = true; }
             foreach (var c in go.GetComponentsInChildren<Component>(true))
             {
-                if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
+                if (!IsTextMeshProGraphic(c)) continue;
                 statsTmp = c;
                 try { c.GetType().GetProperty("text")?.SetValue(c, "", null); } catch { }
                 try { var rr2 = c.GetComponent<Renderer>(); if (rr2 != null) rr2.sortingOrder = 52; } catch { }   // fps in FRONT of battery icon (50)
@@ -125,10 +123,10 @@ public partial class HKDualScreen
             battIconT = bgo.transform; SetLayerRecursive(battIconT, ATTR_LAYER);
             // second TMP: the battery % (so the readout reads  fps | icon | level  left-to-right).
             var lgo = Instantiate(src.gameObject, frameRoot.transform); lgo.name = "F_BattLevel";
-            foreach (var mb in lgo.GetComponentsInChildren<MonoBehaviour>(true)) if (mb != null && !mb.GetType().Name.Contains("TextMeshPro")) mb.enabled = false;
+            SanitizeDetachedTmpClone(lgo);
             SetLayerRecursive(lgo.transform, ATTR_LAYER); lgo.SetActive(true);
             foreach (var r in lgo.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = true; }
-            foreach (var c in lgo.GetComponentsInChildren<Component>(true)) { if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue; battLevelTmp = c; try { c.GetType().GetProperty("text")?.SetValue(c, "", null); } catch { } try { var rr3 = c.GetComponent<Renderer>(); if (rr3 != null) rr3.sortingOrder = 52; } catch { } break; }   // level % in FRONT of battery icon (50)
+            foreach (var c in lgo.GetComponentsInChildren<Component>(true)) { if (!IsTextMeshProGraphic(c)) continue; battLevelTmp = c; try { c.GetType().GetProperty("text")?.SetValue(c, "", null); } catch { } try { var rr3 = c.GetComponent<Renderer>(); if (rr3 != null) rr3.sortingOrder = 52; } catch { } break; }   // level % in FRONT of battery icon (50)
             battLevelT = lgo.transform; battLevelT.localScale = go.transform.localScale; frameBase[battLevelT] = battLevelT.localScale;
             try { var fsp2 = battLevelTmp.GetType().GetProperty("fontStyle"); if (fsp2 != null) fsp2.SetValue(battLevelTmp, Enum.ToObject(fsp2.PropertyType, 1), null); } catch { }
         }
@@ -233,14 +231,13 @@ public partial class HKDualScreen
             if (src == null) return;
             var go = Instantiate(src.gameObject, frameRoot.transform);
             go.name = "F_NoMap";
-            foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true))
-                if (mb != null && !mb.GetType().Name.Contains("TextMeshPro")) mb.enabled = false;
+            SanitizeDetachedTmpClone(go);
             SetLayerRecursive(go.transform, ATTR_LAYER);
             go.SetActive(true);
             foreach (var r in go.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = true; }
             foreach (var c in go.GetComponentsInChildren<Component>(true))
             {
-                if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
+                if (!IsTextMeshProGraphic(c)) continue;
                 noMapTmp = c;
                 try { c.GetType().GetProperty("text")?.SetValue(c, "", null); } catch { }
                 break;
@@ -290,6 +287,7 @@ public partial class HKDualScreen
                     lastAreaName = want;
                     try { areaNameTmp.GetType().GetProperty("text")?.SetValue(areaNameTmp, want, null); } catch { }
                     try { areaNameTmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(areaNameTmp, null); } catch { }
+                    NeutralizeDetachedTmpClip(areaNameT.gameObject);
                     SetTmpColor(areaNameTmp, new Color(1f, 1f, 1f, 0.92f));   // constant tint — on text change, not per frame
                 }
             }
@@ -323,6 +321,7 @@ public partial class HKDualScreen
                 lastStats = fwant;
                 try { statsTmp.GetType().GetProperty("text")?.SetValue(statsTmp, fwant, null); } catch { }
                 try { statsTmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(statsTmp, null); } catch { }
+                NeutralizeDetachedTmpClip(statsT.gameObject);
             }
             if (battStrFor != battShown) { battStrFor = battShown; battStr = battShown >= 0 ? battShown + "%" : ""; }
             string lwant = showStats ? battStr : "";
@@ -332,6 +331,7 @@ public partial class HKDualScreen
                 lastBattLevel = lwant;
                 try { battLevelTmp.GetType().GetProperty("text")?.SetValue(battLevelTmp, lwant, null); } catch { }
                 try { battLevelTmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(battLevelTmp, null); } catch { }
+                NeutralizeDetachedTmpClip(battLevelT.gameObject);
             }
             if (frameBase.TryGetValue(statsT, out var stbs)) statsT.localScale = stbs * scl;
             if (battLevelT != null && frameBase.TryGetValue(battLevelT, out var lbs)) battLevelT.localScale = lbs * scl;
@@ -456,6 +456,7 @@ public partial class HKDualScreen
                     noMapShownText = benchToastText;
                     try { noMapTmp.GetType().GetProperty("text")?.SetValue(noMapTmp, benchToastText, null); } catch { }
                     try { noMapTmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(noMapTmp, null); } catch { }
+                    NeutralizeDetachedTmpClip(noMapT.gameObject);
                     try { noMapTmp.GetType().GetProperty("color")?.SetValue(noMapTmp, new Color(0.08f, 0.08f, 0.08f, 1f), null); } catch { }   // BLACK on the white pill
                     try { if (noMapR != null) noMapR.sortingOrder = 30052; } catch { }
                 }
@@ -492,6 +493,7 @@ public partial class HKDualScreen
                 noMapTextSet = true; noMapShownText = null;
                 try { noMapTmp.GetType().GetProperty("text")?.SetValue(noMapTmp, "Map not acquired yet", null); } catch { }
                 try { noMapTmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(noMapTmp, null); } catch { }
+                NeutralizeDetachedTmpClip(noMapT.gameObject);
                 try { noMapTmp.GetType().GetProperty("color")?.SetValue(noMapTmp, new Color(0.72f, 0.72f, 0.72f, 0.55f), null); } catch { }
             }
             if (noMapR == null) { try { noMapR = (noMapTmp as Component).GetComponent<Renderer>(); } catch { } }   // PERF: cached
@@ -768,7 +770,7 @@ public partial class HKDualScreen
     {
         if (t == null) return null;
         foreach (var c in t.GetComponents<Component>())
-            if (c != null && c.GetType().Name.Contains("TextMeshPro")) return c;
+            if (IsTextMeshProGraphic(c)) return c;
         return null;
     }
 
@@ -819,8 +821,7 @@ public partial class HKDualScreen
             dlgNameSrcLossy = dlgNameT.lossyScale;
             var go = Instantiate(dlgNameT.gameObject, dlgBoxT);   // the WHOLE group: Super + Main + Sub, laid out as HK authored it
             go.name = "F_DlgName";
-            foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true))
-                if (mb != null && !mb.GetType().Name.Contains("TextMeshPro")) mb.enabled = false;   // no FadeGroup/FSM driving our copy
+            SanitizeDetachedTmpClone(go);   // no FadeGroup/FSM/legacy clip driver on our detached copy
             SetLayerRecursive(go.transform, tutLayer);
             go.SetActive(true);
             dlgNameClone = go.transform;
@@ -867,12 +868,14 @@ public partial class HKDualScreen
             try
             {
                 TmpProp(c, "text")?.SetValue(c, t, null);
+                c.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(c, null);
                 var pi = TmpProp(c, "color");
                 if (pi != null) { var v = pi.GetValue(c, null); if (v is Color) { var col = (Color)v; if (col.a < 0.999f) { col.a = 1f; pi.SetValue(c, col, null); } } }
             }
             catch { }
             if (dlgNameCloneRs[i] != null) dlgNameCloneRs[i].enabled = t.Length > 0;
         }
+        NeutralizeDetachedTmpClip(dlgNameClone.gameObject);
     }
 
     // The ornament and page glyphs sit under DialogueBox, whose scale HK ANIMATES as the box opens. Converting
@@ -897,7 +900,7 @@ public partial class HKDualScreen
         {
             foreach (var c in dlgNameT.GetComponentsInChildren<Component>(true))
             {
-                if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
+                if (!IsTextMeshProGraphic(c)) continue;
                 var pi = TmpProp(c, "color");
                 if (pi == null) continue;
                 var v = pi.GetValue(c, null);
@@ -924,7 +927,7 @@ public partial class HKDualScreen
                 float a = -1f;
                 foreach (var c in r.GetComponents<Component>())
                 {
-                    if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
+                    if (!IsTextMeshProGraphic(c)) continue;
                     var pi = TmpProp(c, "color");
                     if (pi != null) { var v = pi.GetValue(c, null); if (v is Color) a = ((Color)v).a; }
                     break;
@@ -959,7 +962,7 @@ public partial class HKDualScreen
                     {
                         if (c == null) continue;
                         var n = c.GetType().Name;
-                        if (n.Contains("TextMeshPro")) dlgTmp = c;
+                        if (IsTextMeshProGraphic(c)) dlgTmp = c;
                         else if (n == "TextContainer") dlgTc = c;
                     }
                     if (dlgTmp != null) { dlgRt = mb.transform as RectTransform; break; }

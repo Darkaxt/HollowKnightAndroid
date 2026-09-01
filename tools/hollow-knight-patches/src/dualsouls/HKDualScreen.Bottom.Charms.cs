@@ -32,7 +32,7 @@ public partial class HKDualScreen
         {
             if (tmpT == null) return false;
             Component tmp = null;
-            foreach (var ccc in tmpT.GetComponents<Component>()) { if (ccc != null && ccc.GetType().Name.Contains("TextMeshPro")) { tmp = ccc; break; } }
+            foreach (var ccc in tmpT.GetComponents<Component>()) { if (IsTextMeshProGraphic(ccc)) { tmp = ccc; break; } }
             if (tmp == null) return false;
             if (_tmpTextBoundsPI == null || _tmpTextBoundsPI.DeclaringType != tmp.GetType()) _tmpTextBoundsPI = tmp.GetType().GetProperty("textBounds");
             if (_tmpTextBoundsPI == null) return false;

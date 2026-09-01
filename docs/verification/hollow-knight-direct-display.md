@@ -333,3 +333,44 @@ regressions cover the prior-success/interrupted-rewrite sequence and pass within
 the full 122-test Android suite, alongside 110 Python contracts, 58 shared-patch
 tests, and 38 bundle-surgery tests. H2 remains device-blocked for exactly one
 clean, locked lower-HUD label/teardown pass.
+
+Signed dry-run `33544518172` built converter-safeguard commit `c0e3ff3`. Its
+72,886,447-byte APK has SHA-256
+`589a62c311c162633bb30b875d808ca77764232b1999b8d6aada7e3c222952de`,
+verified v2/v3 signatures, and the pinned signer. The in-place update preserved
+UID `10198` and first-install time. The launcher correctly rejected the
+markerless interrupted tree, completed a clean conversion, wrote exact
+`convert.complete` content only after success, linked a 268,705,088-byte
+`libil2cpp.so` with SHA-256
+`9abc9cd7aebf7e92dcf9a4caff3888363e67d83f291bbf96d406ef8feedfa673`,
+and published generation `gen-49b4e6f5-be4b-4221-9904-b753c9734157`.
+A direct device linker check returned success. This closes the interrupted
+conversion reuse defect on the production ARM64 path.
+
+The subsequent pass used only `compLowerHudFixture=1` at `MAIN_MENU`, with the
+native input lock held. It selected no save, started no session, entered no
+room, issued no gameplay input, and was closed immediately after the affected
+capture. Display 1 rendered the frame separators, bounded fleurs, and battery
+icon, but none of the detached native text clones produced pixels. The stable
+lower capture has SHA-256
+`e036223a16df2f05a85e3d97c7577ad861dc0a413f4bab4cad232a0bb18dd939`.
+Valid renderer bounds therefore remain diagnostic evidence only, not visual
+acceptance.
+
+Comparison against pinned Dual Souls commit
+`5c22451435b772acde0c7e6456f9019bc1baef73` and the exact `1.5.12620`
+assemblies identified the shared defect. The reference's loose
+`Name.Contains("TextMeshPro")` filter also preserves Hollow Knight's
+`TextMeshProClipRect` controller. Its `LateUpdate` writes the original
+inventory `_ClipRect` property block onto each detached clone, which can leave
+valid glyph bounds while the shader discards every fragment; the same loose
+test can also identify the controller instead of the graphic. The correction
+now recognizes only exact `TMProOld`/`TMPro` `TextMeshPro` graphics, disables
+the legacy clip driver before activation, and assigns an unbounded renderer
+property block without mutating the shared font material. Tabs, area/status,
+battery, no-map, dialogue-name, and control-prompt clones use this shared path.
+The correction passes 32 focused companion contracts, all 112 Python tests,
+all 58 shared tests, all 38 bundle-surgery tests, all 122 Android tests, and the
+exact Hollow Knight compile (226,816 bytes). H2 remains `DEVICE-BLOCKED` until this clip-safe path
+produces the locked lower-HUD labels and clean teardown. Every recheck remains
+fixture- or injection-only; gameplay is not a permitted validation host.

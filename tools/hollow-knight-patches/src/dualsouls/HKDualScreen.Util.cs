@@ -68,6 +68,57 @@ public partial class HKDualScreen
     // TMP reflection, CACHED. HK's TextMeshPro isn't referenced at compile time, so we drive TMPs by reflection —
     // but `c.GetType().GetProperty("color")` was being re-resolved on ~7 labels EVERY frame. Resolve once per (Type, name).
     static readonly Dictionary<Type, Dictionary<string, System.Reflection.PropertyInfo>> _tmpProps = new Dictionary<Type, Dictionary<string, System.Reflection.PropertyInfo>>();
+    static readonly int TMP_CLIP_RECT = Shader.PropertyToID("_ClipRect");
+
+    static bool IsTextMeshProGraphic(Component component)
+    {
+        if (component == null) return false;
+        var type = component.GetType();
+        bool knownNamespace = type.Namespace == "TMProOld" || type.Namespace == "TMPro";
+        return knownNamespace && (type.Name == "TextMeshPro" || type.Name == "TextMeshProUGUI");
+    }
+
+    // Detached HK labels must not keep TextMeshProClipRect. That controller is
+    // valid only inside the original inventory hierarchy and otherwise writes
+    // its old clip rectangle over a bottom-screen clone every LateUpdate. The
+    // clone can then report valid glyph bounds while the shader discards every
+    // pixel. Keep only the actual TMP graphic and make its inherited property
+    // block explicitly unbounded without mutating the shared font material.
+    static void SanitizeDetachedTmpClone(GameObject clone)
+    {
+        if (clone == null) return;
+        foreach (var mb in clone.GetComponentsInChildren<MonoBehaviour>(true))
+            if (mb != null && !IsTextMeshProGraphic(mb)) mb.enabled = false;
+
+        foreach (var component in clone.GetComponentsInChildren<Component>(true))
+        {
+            if (!IsTextMeshProGraphic(component)) continue;
+            var renderer = component.GetComponent<Renderer>();
+            if (renderer == null) continue;
+            renderer.gameObject.SetActive(true);
+            renderer.enabled = true;
+        }
+        NeutralizeDetachedTmpClip(clone);
+    }
+
+    // Text assignment may create fallback-material TMP_SubMesh renderers after
+    // the initial clone sanitation. Reapply the unbounded property block after
+    // every detached-clone mesh generation and cover every renderer, matching
+    // the complete set touched by TextMeshProClipRect.LateUpdate.
+    static void NeutralizeDetachedTmpClip(GameObject clone)
+    {
+        if (clone == null) return;
+        var block = new MaterialPropertyBlock();
+        foreach (var renderer in clone.GetComponentsInChildren<Renderer>(true))
+        {
+            if (renderer == null) continue;
+            block.Clear();
+            renderer.GetPropertyBlock(block);
+            block.SetVector(TMP_CLIP_RECT, new Vector4(-32767f, -32767f, 32767f, 32767f));
+            renderer.SetPropertyBlock(block);
+        }
+    }
+
     static System.Reflection.PropertyInfo TmpProp(Component c, string name)
     {
         var ty = c.GetType();
@@ -211,7 +262,7 @@ public partial class HKDualScreen
         var comps = r.GetComponents<Component>();
         for (int i = 0; i < comps.Length; i++)
         {
-            var c = comps[i]; if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
+            var c = comps[i]; if (!IsTextMeshProGraphic(c)) continue;
             try { var a = c.GetType().GetProperty("alpha")?.GetValue(c); if (a is float af) return af; } catch { }
             try { var col = c.GetType().GetProperty("color")?.GetValue(c); if (col is Color cc) return cc.a; } catch { }
         }
@@ -239,7 +290,7 @@ public partial class HKDualScreen
         var comps = t.GetComponents<Component>();
         for (int i = 0; i < comps.Length; i++)
         {
-            var c = comps[i]; if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
+            var c = comps[i]; if (!IsTextMeshProGraphic(c)) continue;
             // HK's TMP labels ship with enableAutoSizing=true, which IGNORES fontSize and auto-fits to the rect —
             // so compCharmsNameFont/DescFont had no effect (apparent size was just the framing zoom). Disable it first.
             try { c.GetType().GetProperty("enableAutoSizing")?.SetValue(c, false, null); c.GetType().GetProperty("fontSize")?.SetValue(c, size, null); c.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(c, null); } catch { }
@@ -253,7 +304,7 @@ public partial class HKDualScreen
         var comps = t.GetComponents<Component>();
         for (int i = 0; i < comps.Length; i++)
         {
-            var c = comps[i]; if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
+            var c = comps[i]; if (!IsTextMeshProGraphic(c)) continue;
             try { var ty = c.GetType(); ty.GetProperty("lineSpacing")?.SetValue(c, spacing, null); ty.GetProperty("paragraphSpacing")?.SetValue(c, spacing, null); ty.GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(c, null); } catch { }
             break;
         }
@@ -265,7 +316,7 @@ public partial class HKDualScreen
         var comps = t.GetComponents<Component>();
         for (int i = 0; i < comps.Length; i++)
         {
-            var c = comps[i]; if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
+            var c = comps[i]; if (!IsTextMeshProGraphic(c)) continue;
             try { c.GetType().GetProperty("enableWordWrapping")?.SetValue(c, true, null); } catch { }
             var rt = t.GetComponent<RectTransform>();
             if (rt != null) { float sx = Mathf.Abs(t.lossyScale.x) < 1e-4f ? 1f : Mathf.Abs(t.lossyScale.x); try { rt.sizeDelta = new Vector2(worldWidth / sx, Mathf.Max(rt.sizeDelta.y, 4f)); } catch { } }
@@ -302,7 +353,7 @@ public partial class HKDualScreen
         var t = FindDeep(root, goName); if (t == null) return;
         foreach (var c in t.GetComponentsInChildren<Component>(true))
         {
-            if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
+            if (!IsTextMeshProGraphic(c)) continue;
             try { c.GetType().GetProperty("text")?.SetValue(c, text ?? "", null); } catch { }
             try { c.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(c, null); } catch { }
             try { var rr = c.GetComponent<Renderer>(); if (rr != null) rr.enabled = !string.IsNullOrEmpty(text); } catch { }

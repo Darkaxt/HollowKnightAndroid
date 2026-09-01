@@ -387,6 +387,26 @@ focused contracts, 58 shared tests, 109 Python tests, both exact compiles, and
 produces a 226,816-byte Hollow Knight patch. Step 6 remains open for one
 lower-HUD-only label/teardown recheck.
 
+Signed dry-run `33544518172` then installed converter-safeguard commit
+`c0e3ff3` in place, rejected the interrupted markerless tree, completed a clean
+conversion, linked a 268,705,088-byte ARM64 library, and published exact
+generation `gen-49b4e6f5-be4b-4221-9904-b753c9734157`. The durable completion
+marker and a direct linker check both passed, closing the interrupted-output
+reuse defect. The subsequent input-locked `MAIN_MENU` fixture selected no save,
+started no session, entered no room, issued no gameplay input, and was closed
+after the affected capture. Separators, fleurs, and the battery icon rendered,
+but every detached native text clone remained invisible despite valid bounds.
+Exact-source comparison and `1.5.12620` assembly inspection found the pinned
+reference's `Name.Contains("TextMeshPro")` filter also retained
+`TextMeshProClipRect`; its `LateUpdate` kept writing the original inventory
+`_ClipRect` to the detached renderer and submeshes. The current correction keeps
+only exact `TMProOld`/`TMPro` graphics, disables the stale driver before
+activation, and neutralizes every main/submesh property block after mesh
+generation. It passes 32 focused contracts, 122 Android tests, 58 shared tests,
+38 bundle-surgery tests, 112 Python tests, and the exact 226,816-byte Hollow
+Knight compile. Step 6 remains `DEVICE-BLOCKED` for one locked clip-safe
+label/teardown recheck. No later pass may use gameplay as a validation host.
+
 - [ ] **Step 7: Reconcile and commit**
 
 Update the verification document, traceability, matrix, and README. Commit
@@ -646,7 +666,7 @@ the installed app, and smoke-test both profiles. Close the running game.
 | --- | --- | --- | --- | --- |
 | H0 | DSUI-00/08/10 | `COMPLETE` | None | Both specifications, both parent plans, matrix, traceability, README, and 5/5 ordering contracts agree; the existing 38-contract Silksong suite remains green after the status correction |
 | H1 | DSUI-00/02/10 | `IMPLEMENTED / DEVICE-PARTIAL` | No implementation blocker; one tracked physical detach/true single-display deferral must close by H5 | 49/49 shared tests, 78/78 Python tests, both exact compiles, signed run `33494317664`, update-preserving Thor transport and pause/resume captures |
-| H2 | DSUI-00/01/02/07/10 | `HOST-GREEN / DEVICE-BLOCKED` | Signed lower-HUD evidence proves routed live HUD, clean primary HUD, blurred/dimmed backdrop, real lower-controller page switching, selection/details/prompt, bounded ornaments, pause title presentation, persistent opening-credit routing, and live Inventory under the direct transport. Menu-only run `33536682728` proves the fixture/input-lock path and pinned `2.7` chrome scale, but the three native glyphs remain absent. A known-good native label stayed visible in the tab band, ruling out camera/layer, Map-mask, and spatial-stencil clipping; post-frame finalization is device-unproved. Run `33540377737` reached no Unity/HUD code after an LMK-interrupted conversion was reused; conversion completion is now atomically committed | Run `33515971125` established the broad matrix. Earlier room-hosted evidence is historical and is not an allowed future validation method. Run `33536682728` used only the input-locked `MAIN_MENU` production frame fixture, controlled label-position injection, and clean teardown. The correction and converter safeguard pass 30 focused contracts, 122 Android tests, 58 shared tests, 38 bundle-surgery tests, 110 Python tests, both exact compiles, and a 226,816-byte Hollow Knight patch. Base-game `Platform:SetSceneLoadState` singleton messages are not an H2 blocker; one clean lower-HUD-only label/teardown recheck remains |
+| H2 | DSUI-00/01/02/07/10 | `HOST-GREEN / DEVICE-BLOCKED` | Signed lower-HUD evidence proves routed live HUD, clean primary HUD, blurred/dimmed backdrop, real lower-controller page switching, selection/details/prompt, bounded ornaments, pause title presentation, persistent opening-credit routing, and live Inventory under the direct transport. Run `33544518172` proves clean conversion/publication and the locked menu fixture, but all detached TMP labels remain absent. Exact analysis identifies the inherited `TextMeshProClipRect` controller/property block as the remaining visual cause; the clip-safe correction is device-unproved | Earlier room-hosted evidence is historical and is not an allowed future validation method. Current evidence uses only the input-locked `MAIN_MENU` fixture, controlled injection, and clean teardown. The correction passes 32 focused contracts, 122 Android tests, 58 shared tests, 38 bundle-surgery tests, 112 Python tests, and a 226,816-byte exact patch. Base-game `Platform:SetSceneLoadState` singleton messages are not an H2 blocker; one locked clip-safe label/teardown recheck remains |
 | H3 | DSUI-00/05/09/10 | `PENDING` | Hollow Knight Mods behavior and persistence | Host isolation plus Thor effect/relaunch matrix |
 | H4 | DSUI-00/05/09/10 | `PENDING` | Scanner, application, rotation, rollback | Host pack matrix plus controlled Thor death/respawn-state injection proof; no gameplay testing |
 | H5 | DSUI-00–10 | `PENDING` | Hollow Knight blockers and deferrals must both reach zero | Clean host and complete Thor reference matrix |

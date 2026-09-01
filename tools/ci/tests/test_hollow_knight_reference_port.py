@@ -346,18 +346,133 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             position.index("var glyphBounds = glyphRenderer.bounds"),
         )
 
-    def test_frame_tab_sanitization_preserves_every_dependency_but_disables_non_tmp_drivers(self):
+    def test_frame_tab_sanitization_keeps_only_the_actual_tmp_graphic(self):
         frame = strip_csharp_comments(
             read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
         )
         tabs = method_body(frame, r"void\s+BuildTabRow\s*\([^)]*\)")
-        self.assertIn(
-            'if (mb != null && !mb.GetType().Name.Contains("TextMeshPro")) '
-            "mb.enabled = false;",
-            tabs,
+        self.assertIn("SanitizeDetachedTmpClone(go)", tabs)
+        self.assertLess(
+            tabs.index("SanitizeDetachedTmpClone(go)"),
+            tabs.index("go.SetActive(true)"),
         )
-        self.assertLess(tabs.index("mb.enabled = false"), tabs.index("go.SetActive(true)"))
+        self.assertNotIn('Name.Contains("TextMeshPro")', tabs)
         self.assertNotRegex(tabs, r"Destroy(?:Immediate)?\s*\(\s*mb\s*\)")
+
+    def test_detached_tmp_clone_sanitizer_disables_clip_driver_and_neutralizes_clip_bounds(self):
+        util = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Util.cs")
+        )
+        identify = method_body(
+            util,
+            r"bool\s+IsTextMeshProGraphic\s*\([^)]*\)",
+        )
+        sanitize = method_body(
+            util,
+            r"void\s+SanitizeDetachedTmpClone\s*\([^)]*\)",
+        )
+        neutralize = method_body(
+            util,
+            r"void\s+NeutralizeDetachedTmpClip\s*\([^)]*\)",
+        )
+        self.assertIn('type.Name == "TextMeshPro"', identify)
+        self.assertIn('type.Name == "TextMeshProUGUI"', identify)
+        self.assertIn('type.Namespace == "TMProOld"', identify)
+        self.assertIn('type.Namespace == "TMPro"', identify)
+        self.assertIn("!IsTextMeshProGraphic(mb)", sanitize)
+        self.assertIn("mb.enabled = false", sanitize)
+        self.assertIn("NeutralizeDetachedTmpClip(clone)", sanitize)
+        self.assertIn('Shader.PropertyToID("_ClipRect")', util)
+        self.assertIn(
+            "clone.GetComponentsInChildren<Renderer>(true)", neutralize
+        )
+        self.assertIn("renderer.GetPropertyBlock(block)", neutralize)
+        self.assertIn("block.SetVector(TMP_CLIP_RECT", neutralize)
+        self.assertIn("renderer.SetPropertyBlock(block)", neutralize)
+        self.assertRegex(
+            neutralize,
+            r"new\s+Vector4\s*\(\s*-32767f\s*,\s*-32767f\s*,\s*32767f\s*,\s*32767f\s*\)",
+        )
+
+    def test_all_detached_frame_text_clones_use_the_clip_safe_sanitizer(self):
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        hud = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Hud.cs")
+        )
+        for source, signature, minimum_calls in (
+            (frame, r"void\s+BuildFrame\s*\(\s*\)", 1),
+            (frame, r"void\s+BuildTabRow\s*\([^)]*\)", 1),
+            (hud, r"void\s+BuildAreaName\s*\([^)]*\)", 1),
+            (hud, r"void\s+BuildStats\s*\([^)]*\)", 2),
+            (hud, r"void\s+BuildNoMapLabel\s*\([^)]*\)", 1),
+            (hud, r"void\s+EnsureNameClone\s*\(\s*\)", 1),
+        ):
+            body = method_body(source, signature)
+            self.assertGreaterEqual(
+                body.count("SanitizeDetachedTmpClone("), minimum_calls
+            )
+            self.assertNotIn('Name.Contains("TextMeshPro")', body)
+
+        select = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Select.cs")
+        )
+        control = method_body(
+            select,
+            r"void\s+EnsureCtrlOverlay\s*\([^)]*\)",
+        )
+        self.assertIn("SanitizeDetachedTmpClone(v)", control)
+
+        finalize = method_body(
+            frame,
+            r"void\s+FinalizeFrameTabLabels\s*\(\s*\)",
+        )
+        position_hud = method_body(
+            hud,
+            r"void\s+PositionHudStrip\s*\([^)]*\)",
+        )
+        set_name = method_body(hud, r"void\s+SetNameClone\s*\([^)]*\)")
+        populate_control = method_body(
+            select,
+            r"void\s+PopulateControlPrompt\s*\([^)]*\)",
+        )
+        build_frame = method_body(frame, r"void\s+BuildFrame\s*\(\s*\)")
+        reset_start = build_frame.index('go.name = "F_MapReset"')
+        reset_end = build_frame.index('Dbg($"HKDS frame built', reset_start)
+        map_reset = build_frame[reset_start:reset_end]
+        self.assertLess(
+            map_reset.index("ForceMeshUpdate"),
+            map_reset.index("NeutralizeDetachedTmpClip(go)"),
+        )
+        self.assertLess(
+            finalize.index("ForceMeshUpdate"),
+            finalize.index("NeutralizeDetachedTmpClip(t.gameObject)"),
+        )
+        for clone in (
+            "areaNameT.gameObject",
+            "statsT.gameObject",
+            "battLevelT.gameObject",
+            "noMapT.gameObject",
+        ):
+            call = f"NeutralizeDetachedTmpClip({clone})"
+            starts = [m.start() for m in re.finditer(re.escape(call), position_hud)]
+            self.assertTrue(starts, clone)
+            previous_neutral = -1
+            for start in starts:
+                force = position_hud.rfind("ForceMeshUpdate", 0, start)
+                self.assertGreater(force, previous_neutral, clone)
+                previous_neutral = start
+        self.assertIn("ForceMeshUpdate", set_name)
+        self.assertIn("NeutralizeDetachedTmpClip(dlgNameClone.gameObject)", set_name)
+        self.assertLess(
+            set_name.index("ForceMeshUpdate"),
+            set_name.index("NeutralizeDetachedTmpClip(dlgNameClone.gameObject)"),
+        )
+        self.assertLess(
+            populate_control.index("ForceMeshUpdate"),
+            populate_control.index("NeutralizeDetachedTmpClip(ctrlMyVerbT.gameObject)"),
+        )
 
     def test_tick_waits_for_scene_managers_without_calling_logging_singleton_getters(self):
         source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))

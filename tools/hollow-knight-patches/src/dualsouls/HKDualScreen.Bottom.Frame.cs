@@ -328,16 +328,17 @@ public partial class HKDualScreen
             {
                 var go = Instantiate(src.gameObject, frameRoot.transform);
                 go.name = "F_MapReset";
-                foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true)) if (mb != null && !mb.GetType().Name.Contains("TextMeshPro")) mb.enabled = false;
+                SanitizeDetachedTmpClone(go);
                 SetLayerRecursive(go.transform, ATTR_LAYER);
                 go.SetActive(true);
                 foreach (var r in go.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = false; r.sortingLayerName = "Inventory"; r.sortingOrder = 30050; }
                 foreach (var c in go.GetComponentsInChildren<Component>(true))
                 {
-                    if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
+                    if (!IsTextMeshProGraphic(c)) continue;
                     mapResetTmp = c;
                     try { c.GetType().GetProperty("text")?.SetValue(c, "RESET", null); } catch { }
                     try { c.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(c, null); } catch { }
+                    NeutralizeDetachedTmpClip(go);
                     mapResetR = (c as Component).GetComponent<Renderer>();
                     break;
                 }
@@ -401,8 +402,7 @@ public partial class HKDualScreen
                 // signed 1.5.12620 pass produced no glyph pixels from it.
                 var go = Instantiate(src.gameObject, frameRoot.transform);
                 go.name = "F_Tab" + i;
-                foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true))
-                    if (mb != null && !mb.GetType().Name.Contains("TextMeshPro")) mb.enabled = false;
+                SanitizeDetachedTmpClone(go);
                 SetLayerRecursive(go.transform, ATTR_LAYER);
                 go.SetActive(true);
                 foreach (var r in go.GetComponentsInChildren<Renderer>(true))
@@ -415,7 +415,7 @@ public partial class HKDualScreen
                 Component tmp = null;
                 foreach (var c in go.GetComponentsInChildren<Component>(true))
                 {
-                    if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
+                    if (!IsTextMeshProGraphic(c)) continue;
                     tmp = c;
                     // Match the working resident-label lifecycle used by the
                     // no-map label: keep the clone blank while the rest of the
@@ -424,6 +424,7 @@ public partial class HKDualScreen
                     // finished creating and sorting every sibling clone.
                     try { c.GetType().GetProperty("text")?.SetValue(c, "", null); } catch { }
                     try { c.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(c, null); } catch { }
+                    NeutralizeDetachedTmpClip(go);
                     break;
                 }
                 frameTabs.Add((tmp, go.transform, i));
@@ -475,6 +476,7 @@ public partial class HKDualScreen
             }
             catch { }
             if (!textSet || !meshUpdated) { complete = false; continue; }
+            NeutralizeDetachedTmpClip(t.gameObject);
             var glyphRenderer = (tmp as Component).GetComponent<Renderer>();
             if (glyphRenderer == null) { complete = false; continue; }
             glyphRenderer.enabled = true;

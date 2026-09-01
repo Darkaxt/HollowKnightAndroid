@@ -388,7 +388,7 @@ public partial class HKDualScreen
             var t = FindDeep(pane.transform, nm); if (t == null) continue;
             foreach (var c in t.GetComponentsInChildren<Component>(true))
             {
-                if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
+                if (!IsTextMeshProGraphic(c)) continue;
                 try
                 {
                     if (cfg.debug == 1) { var fs = c.GetType().GetProperty("fontSize")?.GetValue(c); Dbg($"HKDS detailfont '{nm}' orig={fs} -> {want}"); }
@@ -489,10 +489,10 @@ public partial class HKDualScreen
             {
                 var src = FindDeep(pane.transform, "Text Name"); if (src == null) return;
                 var v = Instantiate(src.gameObject, compRoot); v.name = "HKCtrlVerb";
-                foreach (var mb in v.GetComponentsInChildren<MonoBehaviour>(true)) if (mb != null && !mb.GetType().Name.Contains("TextMeshPro")) mb.enabled = false;
+                SanitizeDetachedTmpClone(v);
                 SetLayerRecursive(v.transform, ATTR_LAYER); v.SetActive(true);
                 foreach (var r in v.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = true; try { r.sortingOrder = 60; } catch { } }
-                foreach (var c in v.GetComponentsInChildren<Component>(true)) { if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue; ctrlMyVerbTmp = c; break; }
+                foreach (var c in v.GetComponentsInChildren<Component>(true)) { if (!IsTextMeshProGraphic(c)) continue; ctrlMyVerbTmp = c; break; }
                 ctrlMyVerbT = v.transform;
             }
         }
@@ -677,6 +677,7 @@ public partial class HKDualScreen
                 try { ctrlMyVerbTmp.GetType().GetProperty("text")?.SetValue(ctrlMyVerbTmp, verbTxt, null); } catch { }
                 try { if (cfg.compCtrlFont > 0f) ctrlMyVerbTmp.GetType().GetProperty("fontSize")?.SetValue(ctrlMyVerbTmp, cfg.compCtrlFont, null); } catch { }
                 try { ctrlMyVerbTmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(ctrlMyVerbTmp, null); } catch { }
+                NeutralizeDetachedTmpClip(ctrlMyVerbT.gameObject);
                 try { var r = (ctrlMyVerbTmp as Component).GetComponent<Renderer>(); if (r != null) r.enabled = false; } catch { }
             }
 
