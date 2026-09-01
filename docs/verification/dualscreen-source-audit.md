@@ -77,13 +77,86 @@ authoritative. SilksongAndroid contributes only the direct-display transport,
 touch, lifecycle, diagnostics, and fallback technology. The UI composition is
 a port of Dual Souls' `HKDualScreen.Bottom.*` pipeline.
 
-Silksong adapters must clone, re-parent, re-layer, and drive resident game UI
-objects wherever equivalents exist. Independently authored widgets are
-allowed only as documented fallbacks for genuinely missing native objects.
+Silksong adapters must reuse resident game UI through the operation prescribed
+by the corresponding Dual Souls module. The persistent gameplay health, Silk,
+and currency HUD uses the same live instances and drivers and is moved, never
+cloned. The separate area/equipped/FPS/battery/status chrome may clone resident
+Silksong visual donors or create renderer pools where `Bottom.Hud` does so.
+Independently authored widgets are allowed only as documented fallbacks for
+genuinely missing native objects.
 Silksong asset identity replaces Hollow Knight asset identity, but structural,
 compositional, and behavioral fidelity to Dual Souls is required. The authored
 `DsShell` path is rejected prototype work, and render success does not satisfy
 the corrected acceptance gate.
+
+## Stage 3 combat-HUD source finding
+
+The Hollow Knight reference behavior is source-proven, not inferred:
+
+- `HKDualScreen.cs:500-526` defines pause, inventory, or dual-screen-off as
+  the route-back condition and calls `RelayerHud` every active frame;
+- `HKDualScreen.cs:655-674` selects the one live `Hud Canvas` grandparent
+  (`Anchor TL` when available), recursively assigns `hudLayer` for normal play
+  or `UI_LAYER` for the route-back condition, and reasserts every ten frames to
+  adopt later-spawned masks/Soul children; and
+- `HKDualScreen.Bottom.Hud.cs:620-633` points `hudCam2` only at `hudLayer` and
+  derives its bottom-panel geometry from the live source HUD camera.
+
+Therefore the main gameplay HUD contract is **move the one live HUD down and
+clean the top screen**, then return that same hierarchy at the oracle's
+boundaries. Clone-and-mirror is not an equivalent implementation.
+
+The exact `1.0.29980` static bundles do not contain the live combat-HUD
+hierarchy. `hud_assets_all.bundle` contains the `HUD Cln`, `HUD Extras Cln`,
+and `Area Title Cln` tk2d collections plus `HUD Anim.prefab`; the UIManager
+bundle contains menu HUD settings and frame fleurs, not the runtime health,
+Silk, currency, or Crest hierarchy. Literal runtime transform paths therefore
+remain a probe gate and must not be guessed from prefab names.
+
+The managed assemblies do expose the typed runtime anchors:
+
+- `GameCameras.SilentInstance.hudCamera.GetComponent<HUDCamera>().GameplayChild`;
+- `GameCameras.SilentInstance.hudCanvasSlideOut`, including FSM bool
+  `Is Visible`;
+- `GameCameras.SilentInstance.silkSpool`; and
+- `HudCanvas.IsVisible`.
+
+The single Hollow Knight-layout HUD maps those sources as follows:
+
+| Hollow Knight role | Resident Silksong source | Port boundary |
+| --- | --- | --- |
+| Masks/health | `health_display` PlayMaker FSM descendants under `HUDCamera.GameplayChild`, with `tk2dSprite`/`tk2dSpriteAnimator`; special health uses `BlueHealth` and `HealthSpecialHealIndicator` | Move the one live health subtree into the Hollow Knight mask row with its existing drivers attached; never clone the FSM, poison/static-count, or event drivers |
+| Soul | `SilkSpool` and its `SilkChunk` visual children | Move the one live spool/active visual hierarchy into the Soul slot; retain the original singleton, pooling, audio, and event ownership and never clone it |
+| Geo | unique Money and Shard `CurrencyCounter` instances with `CurrencyCounterIcon`, `TextBridge`, and `CurrencyCounterStack` | Move both live currencies inside the one Hollow Knight currency region; retain and accommodate their original counter/stack ownership rather than cloning it |
+| Area | `GameManager.GetFormattedMapZoneString(GetCurrentMapZoneEnum())` using the `Map Zones` language sheet | Drive a resident text donor in the Hollow Knight area slot; do not run a cloned `AreaTitleController` |
+| Equipped charms | current `ToolCrest.CrestSprite` plus `ToolItemManager.GetEquippedToolsForCrest(CurrentCrestID)`, `ExtraToolEquips`, and each Tool's native HUD/inventory sprite | Put the Crest and Tool sprites in the Hollow Knight equipped row; no Hollow Knight charm art |
+| Soul/loadout context | live `BindOrbHudFrame` and `ToolHudIcon : RadialHudIcon` visual subtrees | Move only the required live subtree into its Hollow Knight slot; retain its original subscriptions/coroutines and never clone global drivers |
+
+The gameplay HUD must be moved, not cloned or mirrored. Each routed object must
+keep the same instance ID and native driver instances. The port must record its
+original parent, sibling index, moved-root local position/rotation/scale, and
+every descendant layer it changes before placing it in the Hollow Knight slot
+and private HUD layer. Like Dual Souls, routing must be reasserted after native
+updates so spawned or driver-reparented children remain on the bottom. Direct
+route-back occurs on pause, inventory, or full dual-screen-off/display loss;
+the separate companion-page toggle leaves the live gameplay HUD on the bottom.
+Before scene replacement or routing-rig teardown, the port must proactively
+restore any still-valid moved object as a direct-transport safety operation.
+Restoration must cover only adapter-mutated routing properties and must not
+overwrite current driver-owned active, health, Silk, currency, or visual state.
+Moving the live elements naturally clears them from the primary display; there
+is no second copy to suppress. Runtime proof of same-instance routing,
+reassertion, and exact restoration remains pending. Missing, duplicated, or
+unproven sources fail Stage 3 closed and do not produce a generic fallback.
+
+The static art evidence is sufficient to validate discovered runtime output:
+regular health idle source frames are 74x99 with a 126x167 backboard; normal
+Silk chunks are 67x168, with a 34x46 cap, 80x15 rod, and 24x61 bind notch;
+Money `HUD_coin_v020004` and Shard `shell_shard_icon0004` are 62x62 source
+frames; the default Crest frame `HUD_frame_v020005 1` is 423x148, while
+Crest-specific frame sequences use 767x247 sources. These identities validate
+resident output but do not authorize selecting a static frame instead of the
+live object's current state.
 
 ## Signed Silksong device finding
 

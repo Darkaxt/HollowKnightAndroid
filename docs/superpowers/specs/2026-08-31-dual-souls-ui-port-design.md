@@ -80,13 +80,21 @@ be copied wholesale merely because it is resident. Each semantic Silksong
 element—health, Silk, currencies, Crests/Tools, and later Silksong-only
 features—must occupy or extend the corresponding Hollow Knight design slot
 using Silksong sprites, fonts, labels, and data. Where live Silksong objects are
-re-parented or re-layered, retain only the native drivers required to provide
-their game state and visual updates. `Bottom.Hud` remains authoritative for
-layout, ownership, routing, transitions, lifecycle, and consequences; any
-Silksong driver that would impose conflicting behavior must be adapted or
-selectively frozen while its required visual output is preserved. Original
-relationships are restored only at the oracle's corresponding pause, disable,
-display-loss, scene, or teardown boundary.
+re-parented or re-layered for the gameplay HUD, every existing driver instance
+must remain attached and running on that same live object. Layout conflicts
+must be handled by slot routing and post-update reassertion, never by removing
+or freezing gameplay-HUD drivers. The separate static/status chrome may clone
+resident visual donors and sanitize or manually drive those clones only where
+`Bottom.Hud` itself follows that lifecycle. `Bottom.Hud` remains authoritative
+for layout, ownership, routing, transitions, lifecycle, and consequences. Original
+relationships are routed back under the oracle's actual conditions: pause,
+inventory, or full dual-screen off/display unavailable. The separate companion
+page toggle does not return the live gameplay HUD to the top. Scene replacement
+or port teardown must proactively restore any still-valid moved objects before
+destroying the routing rig; that is direct-transport safety, not behavior
+attributed to `RelayerHud`. Restoration covers only properties changed by the
+adapter and must not roll back driver-owned health, Silk, currency, active, or
+visual state.
 
 Static frame ornaments and tab labels must be instantiated under an inactive
 staging parent. Every cloned `MonoBehaviour` except the explicitly retained

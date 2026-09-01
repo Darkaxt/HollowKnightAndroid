@@ -314,6 +314,23 @@ must not treat Stage 2 as visually complete until that blocker closes.
 - Delete after green: `DsHudStrip.cs`, `DsHornetPanel.cs`
 - Test: `tools/ci/tests/test_dual_souls_ui_port.py`
 
+- [x] **Step 0: Audit the two native HUD implementations**
+
+The Hollow Knight oracle moves its already-correct live `Hud Canvas`, retains
+native health/Soul/Geo drivers, and adds area, equipped, FPS, and battery chrome
+using its own HUD camera geometry. Silksong does not expose one equivalent safe
+pane: its static bundles contain tk2d collections and animations, while its
+runtime health, Silk, Money/Shard, Crest, and Tool visuals are owned by separate
+singleton, event, pooling, audio, stack, or PlayMaker drivers.
+
+Typed runtime anchors are `HUDCamera.GameplayChild`,
+`GameCameras.hudCanvasSlideOut`, `GameCameras.silkSpool`, and
+`HudCanvas.IsVisible`. The semantic sources are `health_display` tk2d
+descendants, `SilkSpool`/`SilkChunk`, Money and Shard `CurrencyCounter`
+instances, `ToolCrest.CrestSprite`, `BindOrbHudFrame`, and
+`ToolHudIcon : RadialHudIcon`. Exact transform paths remain a runtime probe
+gate because the live combat hierarchy is absent from the supplied prefabs.
+
 - [ ] **Step 1: Add failing HUD contracts**
 
 Require exact Hollow Knight HUD region/slot geometry populated by resident
@@ -322,23 +339,45 @@ FPS/battery gutters, provenance, and display-loss restoration. Silksong-only
 status is appended inside the same layout grammar. Reject the authored
 `MaxHealthGlyphs`/procedural Silk bar, an intact Silksong HUD layout, duplicate
 stacked HUDs, or Hollow Knight widgets/art dumped over Silksong elements.
-Require the same top-screen, pause, inventory, companion-disable, scene-change,
-and teardown consequences as `Bottom.Hud`.
+Require the same active-play bottom routing and top-screen cleanup as
+`Bottom.Hud`. Direct route-back occurs on pause, inventory, or full
+dual-screen-off/display loss; the separate companion-page toggle leaves the
+live gameplay HUD on the bottom. Scene replacement and routing-rig teardown
+must restore still-valid moved objects as a direct-transport safety operation,
+not as behavior attributed to `RelayerHud`.
+
+Require unique typed discovery beneath each proven semantic anchor, full
+path/type/driver provenance, same-instance routing into Hollow Knight slots,
+recursive private-layer assignment, and exact original-state restoration.
+Reject cloned or mirrored gameplay HUDs and reject cloned
+`PlayMakerFSM`, `SilkSpool`, `SilkChunk`, `CurrencyCounter`,
+`CurrencyCounterStack`, `BindOrbHudFrame`, `ToolHudIcon`, `AreaTitle`,
+`HUDCamera`, or `HudCanvas` drivers. Require the live object to leave the top
+screen only by being routed to the bottom and require exact restoration at
+every oracle boundary.
 
 - [ ] **Step 2: Verify red, then port `Bottom.Hud` semantics**
 
 Locate the live Silksong HUD elements after residency, map each semantic object
-to its Hollow Knight HUD slot, and re-parent/re-layer the resident renderers or
-their required live subtrees into that single composition. Retain only native
-drivers needed for state and visual updates; adapt or selectively freeze any
-driver whose layout, routing, lifecycle, or consequence conflicts with
-`Bottom.Hud`. Route relocated objects back at the same pause, inventory,
-companion-off, display-loss, scene-change, and teardown boundaries as the
-oracle. Reassert layer assignment for later-spawned children without
-reintroducing Silksong's original HUD geometry. Add area/status/loadout and
-Silksong-only widgets by adapting compatible resident text/icon objects to the
-oracle's geometry and selective-driver rules. Do not create a second HUD,
-retain an intact Silksong layout under the port, or overlay Hollow Knight art.
+to its Hollow Knight HUD slot, and move the one live object or required live
+subtree into that composition. Keep the same object and driver instances;
+record original parent, sibling index, moved-root local transform (position,
+rotation, and scale), and every descendant layer changed by the adapter before routing. Do
+not change driver-owned active or visual state. Apply the private HUD layer
+recursively and reassert
+slot placement after native updates so spawned or driver-reparented health,
+Silk, and currency children remain on the bottom. Route every object back to
+its exact adapter-mutated routing state on pause, inventory, or full
+dual-screen-off/display loss; do not route it back for the separate companion
+page toggle. Before scene replacement or routing-rig teardown, proactively
+restore any still-valid moved object as direct-transport safety. Never restore
+an old active/visual value that the live driver changed while routed. Add
+area/status/loadout and Silksong-only widgets from compatible resident
+text/icon sources using the oracle's geometry and lifecycle rules. This static
+chrome follows the oracle's separate clone/renderer-pool behavior and is not a
+gameplay-HUD clone. Do not create a second gameplay HUD, retain an intact
+Silksong layout under the port, mirror the live gameplay HUD, or overlay Hollow
+Knight art.
 
 - [ ] **Step 3: Verify compile and runtime provenance diagnostics**
 
@@ -347,6 +386,14 @@ or moved source path and must fail closed if required native HUD objects cannot
 be located. Runtime evidence must record the live HUD hierarchy's parent,
 layer, driver inventory, active state, destination, and exact restoration
 state.
+
+Device diagnostics must also prove every mask and special-health renderer;
+every `SilkSpool` serialized visual and spawned `SilkChunk`; both currency
+counter/icon/text/stack ancestries; current Crest frame and Tool HUD objects;
+and the live-object routing round trip across damage/heal, Silk gain/use/break,
+currency changes, Crest/Tool changes, HUD hide, pause, scene replacement, and
+display loss/restoration. Static bundle identity is supporting evidence, not a
+replacement for these runtime paths.
 
 - [ ] **Step 4: Reconcile and commit**
 
@@ -589,7 +636,7 @@ release only if all repository release gates are also green.
 | 0 | DSUI-01/02/03/06/08/10 | COMPLETE | None | None | `python -m unittest tools.ci.tests.test_dual_souls_ui_port -v`: 7 tests passed; contract covers DSUI-01–10, distinct first-column rows for all nine reference modules, exactly one valid disposition row for each of the 24 current dualscreen C# filenames, prototype/port status, and README/traceability acceptance language |
 | 1 | DSUI-02/08/10 | HOST-VERIFIED-BOUNDARY | None | Frame/tabs to Stage 2; resident HUD to Stage 3; Map/Inventory/Loadout/progress pages to Stages 4–6; overlays/fade to Stage 7 | Initial RED: 12 tests ran with 7 Stage 0 contracts green, 4 intended failures, and 2 absent-source skips. First review RED: 14 tests ran with 12 green and 2 intended failures for empty composition lifecycle and overbroad status. Second review RED: 18 tests ran with 13 green and 5 failures covering four defects: stale reattach readiness, presentation retention/serialization, pause/presence/readiness activation, and unstretched roots. GREEN: 18/18 tests; exact Silksong compile 42 sources/10 entry points; exact Hollow Knight compile 4 sources, 0 warnings/errors, 16,896-byte DLL/1 entry point. These host checks verify only the source boundary: `DualScreenV2` retains one presentation before yielding; `DsPresentation` serializes activation without a cancellation timeout, rechecks presence after settle, remeasures, and force-sweeps the reused rig; cameras, roots, and touch fencing activate only when the app is unpaused and display 1 is present and ready. Layers remain exactly 6/3. No device or UI parity is claimed. |
 | 2 | DSUI-01/02/03/06/10 | HOST-VERIFIED-SOURCE / DEVICE-BLOCKED | Live UGUI residency, rendered clone/glyph/fleur geometry, functional cover clipping, and side-by-side parity are not device-proven | Native page content/clone settle/fit to Stages 4–6; HUD/status data to Stage 3; Mods control content to Stage 8 | Fix-pass RED: 27 tests with nine failures for obsolete art discovery, geometry, sorting/masks, and interrupted slides. Re-review RED: 28 tests with six assertions failing across the two defects: conflated Sprite/source-rect validation and missing selected-tab alpha. Quality-review RED: 32 tests with five intended failures for unsafe clone activation, non-unique/suffix/unloaded discovery, repeated scans, and missing executable production-state proof. Final spec-review RED: 32 tests with one intended failure because the five-family sanitizer did not disable arbitrary cloned `MonoBehaviour` drivers. Quality re-review RED: 33 tests with two intended failures because disabled drivers could still receive `Awake` and the executable harness hard-coded `D:/Temp`. GREEN: 33/33 focused and 59/59 full Python tests, including a compiled/executed pure production-source harness and structural exact-type/removal/lifecycle checks. Exact Silksong compile: 46 sources/10 entry points. Exact Hollow Knight compile: 4 sources, 0 warnings/errors, 16,896-byte DLL/1 entry point. Exact UGUI identity, revision-cached discovery, exact-type static pre-activation removal, portable automatic-cleanup harness storage, separate Sprite/source-rect dimensions, selected/inactive alpha, hit boundaries, slide decisions, and native Pane Name APIs are source-proven; no device/UI parity is claimed. |
-| 3 | DSUI-01/03/04/07/10 | PENDING | Depends on Stage 2 | None | — |
+| 3 | DSUI-01/03/04/07/10 | IN-PROGRESS / AUDIT-COMPLETE | Exact runtime paths, same-instance slot routing, spawned-child adoption, driver-reparent resistance, exact restoration, and device parity are unproved | None | Source audit proves the Hollow Knight live-HUD move/return/reassert lifecycle, Silksong typed anchors and semantic driver owners, and static tk2d art identities. It rejects the earlier mirror proposal: Stage 3 must move the same live Silksong objects into Hollow Knight slots, preserving instance/driver ownership and naturally clearing the top screen. Implementation, both exact compiles, runtime provenance, and side-by-side proof remain pending. |
 | 4 | DSUI-01–07/10 | PENDING | Depends on Stage 3 | None | — |
 | 5 | DSUI-01–07/10 | PENDING | Depends on Stage 4 | None | — |
 | 6 | DSUI-01/03–07/10 | PENDING | Depends on Stage 5 | None | — |

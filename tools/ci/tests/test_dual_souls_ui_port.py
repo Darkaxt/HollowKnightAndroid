@@ -11,6 +11,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 SPEC = REPO_ROOT / "docs" / "superpowers" / "specs" / "2026-08-31-dual-souls-ui-port-design.md"
 PLAN = REPO_ROOT / "docs" / "superpowers" / "plans" / "2026-08-31-dual-souls-ui-port.md"
 MATRIX = REPO_ROOT / "docs" / "verification" / "dual-souls-ui-port-matrix.md"
+SOURCE_AUDIT = REPO_ROOT / "docs" / "verification" / "dualscreen-source-audit.md"
 DUALSCREEN_SOURCES = (
     REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen"
 )
@@ -212,6 +213,7 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         spec = " ".join(read(SPEC).split())
         plan = " ".join(read(PLAN).split())
         matrix = " ".join(read(MATRIX).split())
+        source_audit = " ".join(read(SOURCE_AUDIT).split())
 
         for required in (
             "The result is one composed HUD",
@@ -221,6 +223,13 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
             "layout, ownership, routing, transitions, lifecycle, and consequences",
             "Each semantic Silksong element—health, Silk, currencies, Crests/Tools",
             "must occupy or extend the corresponding Hollow Knight design slot",
+            "every existing driver instance must remain attached and running on that same live object",
+            "never by removing or freezing gameplay-HUD drivers",
+            "separate static/status chrome may clone resident visual donors",
+            "pause, inventory, or full dual-screen off/display unavailable",
+            "separate companion page toggle does not return the live gameplay HUD",
+            "direct-transport safety, not behavior attributed to `RelayerHud`",
+            "must not roll back driver-owned health, Silk, currency, active, or visual state",
         ):
             self.assertIn(required, spec)
 
@@ -228,27 +237,68 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
             "Hollow Knight owns visible behavior, state transitions, and their consequences",
             "an intact Silksong HUD layout, duplicate",
             "stacked HUDs, or Hollow Knight widgets/art dumped over Silksong elements",
-            "Do not create a second HUD",
-            "adapt or selectively freeze any",
-            "driver whose layout, routing, lifecycle, or consequence conflicts",
+            "Do not create a second gameplay HUD",
             "exact Hollow Knight HUD region/slot geometry populated by resident "
             "Silksong health, Silk, currency, area, and equipped Crest/Tool elements",
+            "same-instance routing into Hollow Knight slots",
+            "beneath each proven semantic anchor",
+            "Reject cloned or mirrored gameplay HUDs",
+            "live object to leave the top screen only by being routed to the bottom",
+            "move the one live object or required live subtree",
+            "Keep the same object and driver instances",
+            "Direct route-back occurs on pause, inventory, or full dual-screen-off/display loss",
+            "separate companion-page toggle leaves the live gameplay HUD on the bottom",
+            "original parent, sibling index, moved-root local transform (position, rotation, and scale)",
+            "every descendant layer changed by the adapter",
+            "Do not change driver-owned active or visual state",
+            "Never restore an old active/visual value",
+            "static chrome follows the oracle's separate clone/renderer-pool behavior",
         ):
             self.assertIn(required, plan)
 
         self.assertIn(
-            "map each resident Silksong semantic element into the corresponding "
-            "Hollow Knight slot",
+            "move the same live Silksong semantic objects/subtrees into Hollow Knight slots",
             matrix,
         )
         self.assertIn(
-            "An intact Silksong HUD layout, duplicate stacked HUDs, or Hollow Knight "
-            "art/widgets overlaid on Silksong elements is explicitly rejected",
+            "move the one live HUD down and clean the top screen",
+            source_audit,
+        )
+        for required in (
+            "same instance ID and native driver instances",
+            "original parent, sibling index, moved-root local position/rotation/scale",
+            "every descendant layer it changes",
+            "Direct route-back occurs on pause, inventory, or full dual-screen-off/display loss",
+            "separate companion-page toggle leaves the live gameplay HUD on the bottom",
+            "Restoration must cover only adapter-mutated routing properties",
+            "separate area/equipped/FPS/battery/status chrome may clone resident Silksong visual donors",
+            "Runtime proof of same-instance routing, reassertion, and exact restoration remains pending",
+        ):
+            self.assertIn(required, source_audit)
+        self.assertIn(
+            "Clone-and-mirror is not an equivalent implementation",
+            source_audit,
+        )
+        self.assertIn(
+            "A cloned/mirrored gameplay HUD, intact Silksong layout, duplicate "
+            "stacked HUD, or Hollow Knight art/widgets overlaid on Silksong is rejected",
             matrix,
         )
+        for required in (
+            "original drivers and instance IDs",
+            "restore only adapter-mutated parent/sibling/moved-root-transform/layer properties",
+            "separate companion-page toggle leaves it routed",
+            "Proactively restore still-valid objects before scene/routing-rig teardown as transport safety",
+            "routing-only restoration, and side-by-side evidence remain unproved",
+        ):
+            self.assertIn(required, matrix)
         self.assertNotIn(
             "preserve main-screen HUD behavior unless the user explicitly enables",
             plan,
+        )
+        self.assertNotIn(
+            "must clone, re-parent, re-layer, and drive resident game UI objects",
+            source_audit,
         )
 
     def test_matrix_covers_every_reference_module(self):
