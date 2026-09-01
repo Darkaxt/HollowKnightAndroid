@@ -225,10 +225,73 @@ object Mods {
 
     fun markCurrent(mods: File, root: File, assets: android.content.res.AssetManager? = null) {
         stampFile(root).writeText(stamp(mods, assets))
+        writeBuilt(mods, root)
     }
 
     fun clearStamp(root: File) {
         stampFile(root).delete()
+        builtFile(root).delete()
+    }
+
+    // ── what is in the build, per mod ──────────────────────────────────────
+
+    /**
+     * Every plugin the current build was made from, by content.
+     *
+     * The stamp above answers "is anything different" for the whole folder,
+     * which is the question a rebuild prompt needs. This answers "is THIS file
+     * in the game you are about to play", which is the question somebody
+     * looking at a list of six mods has -- and the two are not the same
+     * question: a folder is stale the moment one mod is replaced, and the
+     * other five are still built.
+     *
+     * By content, not by name, so that a mod updated in place is correctly no
+     * longer the one that was compiled in.
+     */
+    private fun builtFile(root: File): File = File(root, "mods.built")
+
+    private fun writeBuilt(mods: File, root: File) {
+        try {
+            val lines = all(mods).map { "${digest(it)}  ${relativePath(mods, it)}" }
+            if (lines.isEmpty()) builtFile(root).delete()
+            else builtFile(root).writeText(lines.joinToString("\n") + "\n")
+        } catch (t: Throwable) {
+            LauncherLog.log("mods: could not record what was built: $t")
+        }
+    }
+
+    /** Digests of the plugins in the build, by the path the user sees. */
+    fun built(root: File): Map<String, String> {
+        val f = builtFile(root)
+        if (!f.isFile) return emptyMap()
+        return try {
+            f.readLines().mapNotNull { line ->
+                val parts = line.trim().split("  ", limit = 2)
+                if (parts.size == 2 && parts[0].isNotEmpty()) parts[1] to parts[0] else null
+            }.toMap()
+        } catch (t: Throwable) {
+            emptyMap()
+        }
+    }
+
+    /**
+     * Whether this exact file is in the build.
+     *
+     * Null means "cannot tell": a build made before this was recorded has no
+     * list, and answering "no" for every mod in it would be a screen full of
+     * red about a game that is working. The caller falls back to the stamp,
+     * which is what that build was judged by.
+     */
+    fun isBuilt(mods: File, root: File, dll: File): Boolean? {
+        val known = built(root)
+        if (known.isEmpty()) return null
+        return known[relativePath(mods, dll)] == digest(dll)
+    }
+
+    private fun digest(file: File): String {
+        val sha = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { sha.updateFrom(it) }
+        return sha.digest().joinToString("") { "%02x".format(it) }
     }
 
     // ── the weaver ─────────────────────────────────────────────────────────

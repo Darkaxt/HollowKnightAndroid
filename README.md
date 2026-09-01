@@ -72,16 +72,21 @@ game from starting. The app leaves a `SILKSONG-DO-NOT-DELETE.txt` in there sayin
 
 ## Mods
 
-BepInEx 5 plugins work, with one catch: they are compiled **into** the game
-rather than loaded by it, so installing or removing a mod means rebuilding.
-Turning one off does not — every plugin in the folder is built in, and the
-switch decides at startup which of them run. Config files are read at startup,
-so those you can change freely.
+BepInEx 5 plugins work, with one catch: since the games compiles to C++ code to get
+maximum performance, mods need to be compiled too, so installing or removing a mod means
+rebuilding. You can still enable/disable mods without rebuilding. 
 
-1. Put plugin DLLs in `Android/data/com.jakobkhansen.silksong/files/mods`.
-   A mod distributed as a folder can go in whole; the launcher looks inside.
-2. Rebuild from the launcher. Settings → Mods lists what it found.
+1. Open **Mods** from the launcher and press **Install a mod from a folder**.
+   Pick the folder the mod came in — the whole folder is copied in, so a mod
+   that is a plugin plus its own libraries and config needs no sorting out.
+2. Say yes when it offers to rebuild, or carry on and rebuild later.
 3. Config files appear in `mods/config` after the first launch.
+
+The Mods screen lists everything it found, marks each one **built** or **not
+built**, and says what the weaver made of it — how many patches it applied and
+every one it could not. Copying DLLs into
+`Android/data/com.jakobkhansen.silksong/files/mods` by hand still works and is
+picked up the same way.
 
 The rebuild only redoes the conversion and the native compile, and only when
 the folder actually changed — and the compile is incremental, so it is a few
@@ -97,8 +102,8 @@ names every patch a plugin could not apply, before the build starts.
 
 Mods that expose settings expect
 [BepInEx's Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager/releases)
-to be there to draw them. It works here — download the BepInEx 5 build, put
-`ConfigurationManager.dll` in the mods folder like any other plugin, and rebuild.
+to be there to draw them. It works here — download the BepInEx 5 build and
+install its folder the same way as any other mod.
 
 It opens with F1 on a PC, which a phone does not have, so here it opens by
 **clicking both sticks (L3+R3)** on a controller. That binding lives in
