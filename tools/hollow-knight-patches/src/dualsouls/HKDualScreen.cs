@@ -397,6 +397,7 @@ public partial class HKDualScreen : MonoBehaviour
         return activeInstance;
     }
     static HKDualScreen activeInstance;
+    bool lowerHudFixtureActive;
 
     // Config hot-reload: check the file's mtime a few times a second and only re-parse on change
     // (avoids per-frame disk I/O + GC while keeping the adb-push live-tuning workflow).
@@ -520,6 +521,7 @@ public partial class HKDualScreen : MonoBehaviour
         GameCameras gc;
         GameManager gm;
         if (!TryResolveSceneManagers(out gc, out gm)) return;
+        if (TryRunLowerHudFixture(gc, gm)) return;
         HkStageHooks.Tick(cfg, cfg.debug == 1);
         SyncDumpHook();   // B1: RT->PNG dump hook only while compDumpRT=1
         // A touch tab-select (tab.tap) overrides cfg.compTab indefinitely; if the config tab actually

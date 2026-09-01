@@ -174,6 +174,7 @@ class HKLayout
 
     // ==== DEBUG — leave all 0 / -1 in the shipped JSON ================================================================
     public int debug = 0;            // 1 = verbose HKDS logging (field triage; also enables the sim-tap harness below)
+    public int compLowerHudFixture = 0; // 1 + debug=1: render only the production lower frame/tab row at MAIN_MENU; no session/gameplay input
     public int compDumpRT = 0;       // 1 = save the bottom-screen RenderTexture to hkds_rt.png (~1/s) — the only way to SEE the bottom screen without display capture. LAGGY: arm for one capture, then 0
     public float compSimTapX = -1f;  // simulate a bottom-screen tap at this normalized X (0..1, top-left) — emulator testing (needs debug=1)
     public float compSimTapY = -1f;  // ...and Y; bump compSimTapN to fire it

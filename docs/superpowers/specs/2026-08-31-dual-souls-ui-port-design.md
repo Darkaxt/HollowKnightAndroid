@@ -231,6 +231,13 @@ injection, synthetic state, or an already-present static state. Each device pass
 closes the game immediately after its affected rows. This restriction changes
 the verification method, not the required production behavior.
 
+The static-scene allowance is not authorization to select a save, start a new
+game, skip an intro, enter or traverse a room, or manufacture state through
+gameplay input. Prefer a title/menu-bound fixture for any row it can host. When a
+runtime-only production object must be bootstrapped, the validation seam must do
+so explicitly with gameplay input disabled and save writes prevented; the pass
+still exercises only the named lower-screen row and teardown.
+
 ## Architecture
 
 The production implementation has four ordered boundaries:

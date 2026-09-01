@@ -377,6 +377,101 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("FindFirstObjectByType<GameCameras>()", resolver)
         self.assertIn("FindFirstObjectByType<GameManager>()", resolver)
 
+    def test_lower_hud_fixture_is_default_off_menu_bound_and_preempts_gameplay_hooks(self):
+        layout = strip_csharp_comments(read(REFERENCE_ROOT / "HKLayout.cs"))
+        main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        tick = method_body(main, r"void\s+Tick\s*\(\s*\)")
+        fixture = method_body(
+            frame,
+            r"bool\s+TryRunLowerHudFixture\s*\([^)]*\)",
+        )
+        self.assertRegex(layout, r"compLowerHudFixture\s*=\s*0")
+        self.assertIn("TryRunLowerHudFixture(gc, gm)", tick)
+        self.assertLess(
+            tick.index("TryRunLowerHudFixture(gc, gm)"),
+            tick.index("HkStageHooks.Tick"),
+        )
+        self.assertIn("cfg.debug == 1", fixture)
+        self.assertIn("cfg.compLowerHudFixture == 1", fixture)
+        self.assertIn("directDisplayActive", fixture)
+        self.assertIn("cfg.dualScreen != 0", fixture)
+        self.assertIn("GlobalEnums.GameState.MAIN_MENU", fixture)
+        for forbidden in (
+            "PollTouch(",
+            "BuildCompanionTab(",
+            "RelayerHud(",
+            "SendEvent(",
+            "PlayerData",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, fixture)
+
+    def test_lower_hud_fixture_uses_real_frame_path_and_tears_down_cleanly(self):
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        fixture = method_body(
+            frame,
+            r"bool\s+TryRunLowerHudFixture\s*\([^)]*\)",
+        )
+        for required in (
+            "ApplyDualScreenToggle()",
+            "EnsureCompRoot()",
+            "ApplyCompanionCamera(compRoot.position)",
+            "BuildFrame()",
+            "PositionFrame()",
+            "PushToBottom()",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, fixture)
+        self.assertIn("TeardownCompanion()", fixture)
+        self.assertIn("lowerHudFixtureActive = false", fixture)
+        self.assertRegex(
+            fixture,
+            r"if\s*\(\s*!lowerHudFixtureActive\s*\)\s*\{\s*"
+            r"TeardownCompanion\(\);\s*"
+            r"if\s*\(\s*!TryAcquireLowerHudFixtureInputLock\(\)\s*\)",
+        )
+        self.assertLess(
+            fixture.index("TryAcquireLowerHudFixtureInputLock()"),
+            fixture.index("BuildFrame()"),
+        )
+
+    def test_lower_hud_fixture_owns_and_exactly_restores_native_menu_input_lock(self):
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        acquire = method_body(
+            frame,
+            r"bool\s+TryAcquireLowerHudFixtureInputLock\s*\(\s*\)",
+        )
+        release = method_body(
+            frame,
+            r"void\s+ReleaseLowerHudFixtureInputLock\s*\(\s*\)",
+        )
+        for required in (
+            "InputHandler.Instance",
+            "EventSystem.current",
+            "allowMouseInput",
+            "acceptingInput = false",
+            "sendNavigationEvents = false",
+            "allowMouseInput = false",
+        ):
+            with self.subTest(acquire=required):
+                self.assertIn(required, acquire)
+        for required in (
+            "lowerHudFixtureInputWasAccepting",
+            "lowerHudFixtureNavigationWasEnabled",
+            "lowerHudFixtureMouseWasEnabled",
+        ):
+            with self.subTest(release=required):
+                self.assertIn(required, release)
+        teardown = method_body(frame, r"void\s+TeardownCompanion\s*\(\s*\)")
+        self.assertIn("ReleaseLowerHudFixtureInputLock()", teardown)
+
     def test_frame_tab_row_uses_device_safe_scale_and_centres_real_glyph_bounds(self):
         layout = strip_csharp_comments(read(REFERENCE_ROOT / "HKLayout.cs"))
         frame = strip_csharp_comments(

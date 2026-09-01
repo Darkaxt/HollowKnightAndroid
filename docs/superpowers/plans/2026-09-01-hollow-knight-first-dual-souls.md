@@ -72,6 +72,14 @@ controlled debug injection, or synthetic state instead of navigation, combat,
 collection, progression, or save mutation through play. Close the game after
 each affected-row capture.
 
+This rule applies to every pass, including first checks, defect rechecks,
+lifecycle checks, and release-candidate checks. Starting a new game, selecting a
+save, skipping an intro, or entering a room is not part of a validation pass when
+a title/menu-bound fixture can exercise the affected row. If a production object
+only exists after scene bootstrap, the fixture must reach it through an explicit
+input-disabled, save-neutral state seam; it must not obtain that state through
+played input.
+
 ## File structure and ownership
 
 ### Direct-display technology
@@ -323,8 +331,10 @@ defect set before changing source, and close the game after capture.
 
 Convert every observed defect into a focused regression contract, implement
 the complete correction batch, rerun host verification and exact compilation,
-then repeat only the affected lower-HUD signed rows plus one clean launch,
-pause/resume, and teardown smoke. No gameplay traversal is part of the recheck.
+then repeat only the affected lower-HUD signed rows through the controlled
+title/menu fixture plus process pause/resume and teardown smoke. Do not select a
+save, start a game, skip an intro, enter a room, or issue gameplay input during
+the recheck.
 A missing module or visual/behavioral difference is a blocker, not a Silksong
 deferral.
 
@@ -348,8 +358,13 @@ pinned reference. The third correction now restores the oracle's direct
 live-frame clone/disable/activate/text/mesh sequence and makes the persistent-HUD
 scan use the already resolved quiet camera owner. It passes 25 focused contracts,
 58 shared tests, 103 Python tests, both exact compiles, and the exact 222,720-byte
-Hollow Knight patch. Step 6 remains open until one affected-row, lower-HUD-only
-signed recheck proves the labels and startup log behavior.
+Hollow Knight patch. Signed dry-run `33528905347` installed commit `0dd27b7`,
+preserved the package identity and app UID, and rebuilt exact generation
+`gen-77e25023-d93d-412d-ae4f-e614b2b02bd8`. The attempted pass was stopped
+before acceptance when its setup path reached new-game/intro state; no save file
+was created and no result from that path is counted. Step 6 remains open until a
+title/menu-bound, controlled lower-HUD fixture proves the labels and startup log
+behavior without entering gameplay.
 
 - [ ] **Step 7: Reconcile and commit**
 

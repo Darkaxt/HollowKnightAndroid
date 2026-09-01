@@ -12,6 +12,15 @@ public partial class HKDualScreen
     // ---- bottom-screen companion state ----
     Transform compRoot;            // our own parent (DontDestroyOnLoad); pan = move it, zoom = scale it
 
+    InputHandler lowerHudFixtureInputHandler;
+    UnityEngine.EventSystems.EventSystem lowerHudFixtureEventSystem;
+    InControl.HollowKnightInputModule lowerHudFixtureInputModule;
+    bool lowerHudFixtureInputLockHeld;
+    bool lowerHudFixtureInputWasAccepting;
+    bool lowerHudFixtureNavigationWasEnabled;
+    bool lowerHudFixtureMouseWasEnabled;
+    bool lowerHudFixtureInputLockFailureLogged;
+
     GameObject paneClone;          // ALIAS -> the pane clone currently shown (invCloneCache or charmCloneCache)
 
     GameObject invCloneCache;      // cached Inventory pane clone (built once; SetActive-toggled on tab switch)
@@ -708,6 +717,179 @@ public partial class HKDualScreen
         compRoot = go.transform;
     }
 
+    // Controlled device-proof seam for lower-frame regressions. It is default-off,
+    // accepted only at the title/main menu with the direct-display transport active,
+    // and deliberately returns before every gameplay/session hook in Tick(). The
+    // fixture uses the production frame and positioning path, never selects a save,
+    // starts a session, polls touch, sends gameplay events, or writes PlayerData.
+    // Disabling it tears down all owned frame objects before normal orchestration.
+    bool TryRunLowerHudFixture(GameCameras cameras, GameManager manager)
+    {
+        bool atMenu = false;
+        try { atMenu = manager != null && manager.gameState == GlobalEnums.GameState.MAIN_MENU; }
+        catch { }
+        bool requested = cfg.debug == 1 && cfg.compLowerHudFixture == 1 &&
+                         directDisplayActive && cfg.dualScreen != 0 && atMenu;
+        if (!requested)
+        {
+            if (lowerHudFixtureActive)
+            {
+                TeardownCompanion();
+                if (attrCam != null) attrCam.cullingMask = 0;
+                lowerHudFixtureActive = false;
+                Debug.Log("HKDS lower-HUD fixture stopped");
+            }
+            return false;
+        }
+
+        if (!lowerHudFixtureActive)
+        {
+            // A menu transition can leave a fully built gameplay companion in
+            // memory. Never reuse it as fixture evidence: destroy all owned
+            // state first, then acquire the native menu-input lock, and only
+            // then build the production frame from the resident menu donor.
+            TeardownCompanion();
+            if (!TryAcquireLowerHudFixtureInputLock())
+            {
+                BlankLowerHudFixture();
+                PushToBottom();
+                return true;
+            }
+            lowerHudFixtureActive = true;
+            Debug.Log("HKDS lower-HUD fixture active (MAIN_MENU, input-free, save-neutral)");
+        }
+        else if (!TryAcquireLowerHudFixtureInputLock())
+        {
+            lowerHudFixtureActive = false;
+            TeardownCompanion();
+            BlankLowerHudFixture();
+            PushToBottom();
+            return true;
+        }
+
+        StripPrivateLayers();
+        if (!ApplyDualScreenToggle())
+        {
+            PushToBottom();
+            return true;
+        }
+
+        // Menu-resident native inventory chrome supplies the exact Pane Name TMP
+        // donor. Only the real production frame/tab path is exercised; content
+        // panes, HUD routing, tutorial hooks, Mods/skins and touch are not ticked.
+        TryBakeTabFleurs();
+        EnsureCompRoot();
+        fit.valid = false;
+        tab.cur = Mathf.Clamp(cfg.compTab, 0, 2);
+        ApplyCompanionCamera(compRoot.position);
+        BuildFrame();
+        PositionFrame();
+
+        if (clearCam != null) clearCam.enabled = true;
+        if (attrCam != null) attrCam.cullingMask = 1 << ATTR_LAYER;
+        if (hudCam2 != null) hudCam2.cullingMask = 0;
+        if (promptCam != null) promptCam.cullingMask = 0;
+        if (logoGo != null && logoGo.activeSelf) logoGo.SetActive(false);
+        PushToBottom();
+        return true;
+    }
+
+    void BlankLowerHudFixture()
+    {
+        if (clearCam != null) clearCam.enabled = true;
+        if (attrCam != null) attrCam.cullingMask = 0;
+        if (hudCam2 != null) hudCam2.cullingMask = 0;
+        if (promptCam != null) promptCam.cullingMask = 0;
+        if (logoGo != null && logoGo.activeSelf) logoGo.SetActive(false);
+    }
+
+    bool TryAcquireLowerHudFixtureInputLock()
+    {
+        if (lowerHudFixtureInputLockHeld)
+        {
+            bool stillLocked = lowerHudFixtureInputHandler != null &&
+                               lowerHudFixtureEventSystem != null &&
+                               lowerHudFixtureInputModule != null &&
+                               !lowerHudFixtureInputHandler.acceptingInput &&
+                               !lowerHudFixtureEventSystem.sendNavigationEvents &&
+                               !lowerHudFixtureInputModule.allowMouseInput;
+            if (stillLocked) return true;
+            ReleaseLowerHudFixtureInputLock();
+        }
+
+        InputHandler handler = null;
+        UnityEngine.EventSystems.EventSystem eventSystem = null;
+        InControl.HollowKnightInputModule inputModule = null;
+        bool wasAccepting = false, navigationWasEnabled = false, mouseWasEnabled = false;
+        bool captured = false;
+        try
+        {
+            handler = InputHandler.Instance;
+            eventSystem = UnityEngine.EventSystems.EventSystem.current;
+            UIManager ui = null;
+            var managers = Resources.FindObjectsOfTypeAll<UIManager>();
+            for (int i = 0; i < managers.Length; i++)
+                if (managers[i] != null && managers[i].inputModule != null) { ui = managers[i]; break; }
+            inputModule = ui != null ? ui.inputModule : null;
+            if (handler == null || eventSystem == null || inputModule == null)
+                throw new InvalidOperationException("native menu input owners are not resident");
+
+            wasAccepting = handler.acceptingInput;
+            navigationWasEnabled = eventSystem.sendNavigationEvents;
+            mouseWasEnabled = inputModule.allowMouseInput;
+            captured = true;
+
+            handler.acceptingInput = false;
+            eventSystem.sendNavigationEvents = false;
+            inputModule.allowMouseInput = false;
+            if (handler.acceptingInput || eventSystem.sendNavigationEvents || inputModule.allowMouseInput)
+                throw new InvalidOperationException("native menu input lock did not hold");
+
+            lowerHudFixtureInputHandler = handler;
+            lowerHudFixtureEventSystem = eventSystem;
+            lowerHudFixtureInputModule = inputModule;
+            lowerHudFixtureInputWasAccepting = wasAccepting;
+            lowerHudFixtureNavigationWasEnabled = navigationWasEnabled;
+            lowerHudFixtureMouseWasEnabled = mouseWasEnabled;
+            lowerHudFixtureInputLockHeld = true;
+            lowerHudFixtureInputLockFailureLogged = false;
+            return true;
+        }
+        catch (Exception e)
+        {
+            if (captured)
+            {
+                try { if (handler != null) handler.acceptingInput = wasAccepting; } catch { }
+                try { if (eventSystem != null) eventSystem.sendNavigationEvents = navigationWasEnabled; } catch { }
+                try { if (inputModule != null) inputModule.allowMouseInput = mouseWasEnabled; } catch { }
+            }
+            if (!lowerHudFixtureInputLockFailureLogged)
+            {
+                lowerHudFixtureInputLockFailureLogged = true;
+                Debug.LogError("HKDS lower-HUD fixture refused: " + e.Message);
+            }
+            return false;
+        }
+    }
+
+    void ReleaseLowerHudFixtureInputLock()
+    {
+        if (!lowerHudFixtureInputLockHeld) return;
+        var failures = new List<Exception>();
+        try { if (lowerHudFixtureInputHandler != null) lowerHudFixtureInputHandler.acceptingInput = lowerHudFixtureInputWasAccepting; }
+        catch (Exception e) { failures.Add(e); }
+        try { if (lowerHudFixtureEventSystem != null) lowerHudFixtureEventSystem.sendNavigationEvents = lowerHudFixtureNavigationWasEnabled; }
+        catch (Exception e) { failures.Add(e); }
+        try { if (lowerHudFixtureInputModule != null) lowerHudFixtureInputModule.allowMouseInput = lowerHudFixtureMouseWasEnabled; }
+        catch (Exception e) { failures.Add(e); }
+        lowerHudFixtureInputLockHeld = false;
+        lowerHudFixtureInputHandler = null;
+        lowerHudFixtureEventSystem = null;
+        lowerHudFixtureInputModule = null;
+        if (failures.Count > 0)
+            Debug.LogError(new AggregateException("HKDS lower-HUD fixture input restore failed", failures));
+    }
+
     // PRE-WARM: deep-cloning HK's ~1000-object panes is the one unavoidable hitch of a first tab open. Do it while the
     // player is NOT looking: as soon as the game session exists (inventoryFSM present = the load fade-in), build the
     // Inventory then the Charms clone, ONE per frame, PARKED far below compRoot (off every camera), and run their settle
@@ -1072,6 +1254,7 @@ public partial class HKDualScreen
 
     void TeardownCompanion()
     {
+        ReleaseLowerHudFixtureInputLock();
         if (mapClone != null) { Destroy(mapClone); mapClone = null; mapGm = null; mapContentVisible = false; mapAreaBValid = false; mapAreaBFor = null; mapFitIsArea = false; }
         if (invCloneCache != null) { Destroy(invCloneCache); invCloneCache = null; }
         if (charmCloneCache != null) { Destroy(charmCloneCache); charmCloneCache = null; }
