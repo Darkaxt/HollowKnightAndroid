@@ -57,22 +57,79 @@ public sealed class HollowKnightModsSessionTests
     }
 
     [Fact]
-    public void InitializationFailureRecordsErrorAndDoesNotRetry()
+    public void TransientInitializationFailureRecoversAfterReadyTickBackoffWithFreshPipeline()
     {
-        var api = new RecordingApi { ThrowOnCapture = true };
-        var store = new RecordingStore();
+        const int retryReadyTicks = 60;
+        var api = new RecordingApi { BackdropFailuresRemaining = 1 };
+        var store = new RecordingStore
+        {
+            [Prefix + "master"] = "1",
+            [Prefix + "value.companion_backdrop"] = "black",
+        };
         using var session = new HollowKnightModsSession(api, store, visibleRows: 5);
 
         session.Tick();
-        string firstError = session.LastError;
-        session.Tick();
-        session.SetPresenterAttached(true);
+        TweakController failedController = session.Controller;
+        TweakMenuModel failedMenu = session.Menu;
+        string initializationError = session.LastError;
+
+        api.IsReady = false;
+        for (int i = 0; i < retryReadyTicks * 2; i++) session.Tick();
+        Assert.Equal(1, api.CaptureCount);
+        Assert.Equal(0, store.WriteCount);
+        Assert.Equal("1", store[Prefix + "master"]);
+        Assert.Equal("black", store[Prefix + "value.companion_backdrop"]);
+        Assert.Equal(initializationError, session.LastError);
+
+        api.IsReady = true;
+        for (int i = 0; i < retryReadyTicks - 1; i++) session.Tick();
+        Assert.False(session.IsReady);
+        Assert.Equal(1, api.CaptureCount);
+        Assert.Equal(initializationError, session.LastError);
+
         session.Tick();
 
+        Assert.True(session.IsReady);
+        Assert.Equal(string.Empty, session.LastError);
+        Assert.Equal(2, api.CaptureCount);
+        Assert.Equal(2, api.RestoreCount);
+        Assert.NotSame(failedController, session.Controller);
+        Assert.NotSame(failedMenu, session.Menu);
+        Assert.True(session.Controller.MasterEnabled);
+        Assert.Equal("black", session.Controller.Value("companion_backdrop"));
+        Assert.Equal(
+            new[]
+            {
+                "capture", "backdrop:True", "restore", "restore",
+                "capture", "backdrop:True",
+            },
+            api.Calls);
+    }
+
+    [Fact]
+    public void PersistentInitializationFailureRetriesOnlyAtReadyTickBoundaries()
+    {
+        const int retryReadyTicks = 60;
+        var api = new RecordingApi { AlwaysFailCapture = true };
+        using var session = new HollowKnightModsSession(
+            api, new RecordingStore(), visibleRows: 5);
+
+        session.Tick();
+        string firstError = session.LastError;
+        for (int i = 0; i < retryReadyTicks - 1; i++) session.Tick();
+
         Assert.False(session.IsReady);
-        Assert.Contains("capture", firstError, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, api.CaptureCount);
         Assert.Equal(firstError, session.LastError);
-        Assert.Equal(new[] { "capture" }, api.Calls);
+
+        session.Tick();
+        string secondError = session.LastError;
+        for (int i = 0; i < retryReadyTicks - 1; i++) session.Tick();
+
+        Assert.False(session.IsReady);
+        Assert.Equal(2, api.CaptureCount);
+        Assert.Equal(2, api.RestoreCount);
+        Assert.Equal(secondError, session.LastError);
     }
 
     [Fact]
@@ -195,19 +252,35 @@ public sealed class HollowKnightModsSessionTests
     private sealed class RecordingApi : IHollowKnightTweakApi
     {
         public bool IsReady { get; set; } = true;
-        public bool ThrowOnCapture { get; set; }
+        public int BackdropFailuresRemaining { get; set; }
+        public bool AlwaysFailCapture { get; set; }
+        public int CaptureCount { get; private set; }
+        public int RestoreCount { get; private set; }
         public List<string> Calls { get; } = new();
 
         public void CaptureBaseline()
         {
+            CaptureCount++;
             Calls.Add("capture");
-            if (ThrowOnCapture) throw new InvalidOperationException("capture failed");
+            if (AlwaysFailCapture)
+                throw new InvalidOperationException("capture failed");
         }
 
-        public void RestoreBaseline() => Calls.Add("restore");
+        public void RestoreBaseline()
+        {
+            RestoreCount++;
+            Calls.Add("restore");
+        }
 
-        public void SetCompanionBackdropBlack(bool black) =>
+        public void SetCompanionBackdropBlack(bool black)
+        {
             Calls.Add($"backdrop:{black}");
+            if (BackdropFailuresRemaining > 0)
+            {
+                BackdropFailuresRemaining--;
+                throw new InvalidOperationException("backdrop failed");
+            }
+        }
 
         public void SetLifebloodFlash(HollowKnightFlashMode mode) =>
             Calls.Add($"flash:{mode}");
