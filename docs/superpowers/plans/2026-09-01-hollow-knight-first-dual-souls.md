@@ -278,13 +278,18 @@ Run the focused Python contract and exact Hollow Knight patch compile. Build,
 sign, install as an update, launch Hollow Knight `1.5.12620`, enter gameplay,
 and capture the live HUD on display 1 with the top screen cleaned exactly as in
 Dual Souls. Exercise damage/heal, Soul change, Geo change, pause, inventory,
-and display loss/restoration. Close the game after capture.
+and display loss/restoration. Confirm the lower scenery is both blurred and
+dimmed by the configured Dual Souls values rather than rendered as a clear
+second gameplay view. Close the game after capture.
 
 - [ ] **Step 5: Complete the companion-module matrix**
 
 Exercise Inventory, Charms, Map, selection/action prompts, dialogue/tutorial,
 item popups, fade/death, background/resume, and lower-display touch. A missing
 module or visual/behavioral difference is a blocker, not a Silksong deferral.
+Resident tab labels must remain visible after the source inventory closes, and
+resident pane cloning must not run source-only animation drivers before the
+clone is sanitized.
 
 - [ ] **Step 6: Reconcile and commit**
 
@@ -539,7 +544,7 @@ the installed app, and smoke-test both profiles. Close the running game.
 | --- | --- | --- | --- | --- |
 | H0 | DSUI-00/08/10 | `COMPLETE` | None | Both specifications, both parent plans, matrix, traceability, README, and 5/5 ordering contracts agree; the existing 38-contract Silksong suite remains green after the status correction |
 | H1 | DSUI-00/02/10 | `IMPLEMENTED / DEVICE-PARTIAL` | No implementation blocker; one tracked physical detach/true single-display deferral must close by H5 | 49/49 shared tests, 78/78 Python tests, both exact compiles, signed run `33494317664`, update-preserving Thor transport and pause/resume captures |
-| H2 | DSUI-00/01/02/07/10 | `PENDING` | Complete existing Dual Souls companion on display 1 | Source matrix, exact compile, full UI/touch/lifecycle capture |
+| H2 | DSUI-00/01/02/07/10 | `IN PROGRESS / DEVICE-BLOCKED` | Missing resident tab labels, pane-clone `iTween.Awake` exception, and insufficiently dimmed/blurred backdrop must all pass on display 1 | 96/96 host tests, exact 1.5.12620 compile, signed update and full UI/touch/lifecycle recapture |
 | H3 | DSUI-00/05/09/10 | `PENDING` | Hollow Knight Mods behavior and persistence | Host isolation plus Thor effect/relaunch matrix |
 | H4 | DSUI-00/05/09/10 | `PENDING` | Scanner, application, rotation, rollback | Host pack matrix plus Thor death/respawn proof |
 | H5 | DSUI-00–10 | `PENDING` | Hollow Knight blockers and deferrals must both reach zero | Clean host and complete Thor reference matrix |

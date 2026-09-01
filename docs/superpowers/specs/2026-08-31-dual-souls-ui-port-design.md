@@ -172,6 +172,14 @@ synchronization; background/resume; display loss; and single-display
 fallback. Unsupported Silksong equivalents are blockers or tracked deferrals,
 not silent omissions.
 
+During active gameplay, the lower display must preserve Dual Souls' backdrop
+treatment: scenery-only capture, the configured low-resolution bilinear blur,
+and the configured brightness multiplication behind the HUD. Rendering a
+sharp or normally exposed second copy of the gameplay camera is a visual and
+behavioral blocker. The direct-display implementation may replace the native
+blitter, but its shader/material path must demonstrably support the brightness
+multiplier and its output must be checked on the target panel.
+
 ### DSUI-08 — The authored shell is rejected
 
 The `DsShell`, `DsHudStrip`, `DsIconGrid`, and separately authored page path

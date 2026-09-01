@@ -131,3 +131,22 @@ are replaced; the existing HUD, inventory, charms, map, selection, routing,
 and restore behavior remain the presentation oracle. H3 tweaks/mods and H4
 skins are represented by an explicit inert stage boundary in H2 rather than
 silently approximated or imported ahead of their gates.
+
+## H2 active device findings
+
+The first signed H2 candidate moved Hollow Knight's live masks/Soul HUD to the
+lower panel and left the primary gameplay view clean on exact version
+`1.5.12620`. It did not pass H2: the three resident tab labels were absent,
+cloning the Inventory pane ran a source `iTween.Awake` with invalid cloned
+arguments, and the direct-display backdrop retained too much of the original
+scene exposure instead of the reference's subdued blurred wash.
+
+The host correction is protected by RED/GREEN contracts that require the
+retained TMP behavior to be enabled before mesh generation, pane clones to be
+instantiated under an inactive staging parent and stripped of copied `iTween`
+drivers before activation, and the replacement dimmer to use a material with
+an actual `_Color` property. The full host suite is 96/96 and the exact
+`1.5.12620` patch compiles at 221,696 bytes with two entry points. These are
+component gates only; all three findings remain H2 device blockers until a
+new signed candidate is rebuilt and visually/logically verified on the lower
+panel.

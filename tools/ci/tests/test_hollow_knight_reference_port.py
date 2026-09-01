@@ -280,6 +280,42 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("RenderTexture.GetTemporary", adapter)
         self.assertIn("RenderTexture.ReleaseTemporary", adapter)
 
+    def test_backdrop_uses_a_tint_capable_shader_for_reference_dimming(self):
+        adapter = strip_csharp_comments(read(ADAPTER))
+        render = method_body(
+            adapter,
+            r"void\s+OnRenderImage\s*\(\s*RenderTexture\s+source\s*,\s*RenderTexture\s+destination\s*\)",
+        )
+        self.assertIn('Shader.Find("Sprites/Default")', render)
+        self.assertIn('HasProperty("_Color")', render)
+        self.assertNotIn('Shader.Find("Unlit/Texture")', render)
+
+    def test_frame_tab_clones_reenable_the_retained_tmp_visual(self):
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        tabs = method_body(frame, r"void\s+BuildTabRow\s*\([^)]*\)")
+        self.assertIn("tmpBehaviour.enabled = true", tabs)
+        self.assertLess(
+            tabs.index("tmpBehaviour.enabled = true"),
+            tabs.index("ForceMeshUpdate"),
+        )
+
+    def test_pane_clones_are_sanitized_while_inactive_before_activation(self):
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        pane = method_body(frame, r"GameObject\s+BuildPaneClone\s*\([^)]*\)")
+        staging_off = pane.index("staging.SetActive(false)")
+        instantiate = pane.index("Instantiate(srcT.gameObject, staging.transform)")
+        strip_tween = pane.index("DestroyImmediate(tween)")
+        reparent = pane.index("pane.transform.SetParent(compRoot, false)")
+        activate = pane.index("pane.SetActive(true)")
+        self.assertLess(staging_off, instantiate)
+        self.assertLess(instantiate, strip_tween)
+        self.assertLess(strip_tween, reparent)
+        self.assertLess(reparent, activate)
+
     def test_final_teardown_retries_restore_before_discarding_owner(self):
         direct = strip_csharp_comments(
             read(REFERENCE_ROOT / "HKDualScreen.DirectDisplay.cs")

@@ -460,13 +460,22 @@ namespace HollowKnightPatches
         {
             if (_material == null)
             {
-                Shader shader = Shader.Find("Unlit/Texture");
-                if (shader != null) _material = new Material(shader);
+                // The reference native blitter multiplies the backdrop RGB by
+                // cfg.dim. Unity's built-in Unlit/Texture shader has no
+                // _Color property, so assigning Material.color was a no-op and
+                // the second display received an almost unmodified scene copy.
+                Shader shader = Shader.Find("Sprites/Default");
+                if (shader != null)
+                {
+                    var candidate = new Material(shader);
+                    if (candidate.HasProperty("_Color")) _material = candidate;
+                    else Destroy(candidate);
+                }
             }
 
             if (_material != null)
-                _material.color = new Color(
-                    _brightness, _brightness, _brightness, 1f);
+                _material.SetColor("_Color", new Color(
+                    _brightness, _brightness, _brightness, 1f));
 
             int divisor = Mathf.Max(1, _blurFactor);
             if (divisor == 1)

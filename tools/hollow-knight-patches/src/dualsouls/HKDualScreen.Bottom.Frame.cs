@@ -377,35 +377,49 @@ public partial class HKDualScreen
             };
             for (int i = 0; i < labels.Length; i++)
             {
-                var go = Instantiate(src.gameObject, frameRoot.transform);
-                go.name = "F_Tab" + i;
-                // keep only the TextMeshPro graphic; disable the language-font-switcher + sorting setter etc.
-                foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true))
-                    if (mb != null && !mb.GetType().Name.Contains("TextMeshPro")) mb.enabled = false;
-                SetLayerRecursive(go.transform, ATTR_LAYER);
-                go.SetActive(true);
-                // Force renderers on + GameObjects active (the inventory-closed fade disables them, same
-                // as the ornaments) — else the tab labels build but never render.
-                foreach (var r in go.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = true; }
-                Component tmp = null;
-                foreach (var c in go.GetComponentsInChildren<Component>(true))
+                var staging = new GameObject("HKTabCloneStaging");
+                staging.SetActive(false);
+                GameObject go = null;
+                try
                 {
-                    if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
-                    tmp = c;
-                    try { c.GetType().GetProperty("text")?.SetValue(c, labels[i], null); } catch { }
-                    try { c.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(c, null); } catch { }
-                    break;
+                    // Keep the clone inactive in hierarchy until every driver
+                    // except the retained TMP visual has been removed. This
+                    // prevents the inventory's close/fade behaviours from
+                    // running Awake/OnEnable on our resident tab label.
+                    go = Instantiate(src.gameObject, staging.transform);
+                    go.SetActive(false);
+                    go.name = "F_Tab" + i;
+                    foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true))
+                        if (mb != null && !mb.GetType().Name.Contains("TextMeshPro")) DestroyImmediate(mb);
+                    SetLayerRecursive(go.transform, ATTR_LAYER);
+                    // Force renderers and the retained TMP Behaviour on. The
+                    // closed inventory can leave both disabled independently.
+                    foreach (var r in go.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = true; }
+                    Component tmp = null;
+                    foreach (var c in go.GetComponentsInChildren<Component>(true))
+                    {
+                        if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
+                        tmp = c;
+                        var tmpBehaviour = c as Behaviour;
+                        if (tmpBehaviour != null) tmpBehaviour.enabled = true;
+                        try { c.GetType().GetProperty("text")?.SetValue(c, labels[i], null); } catch { }
+                        try { c.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(c, null); } catch { }
+                        break;
+                    }
+                    go.transform.SetParent(frameRoot.transform, false);
+                    go.SetActive(true);
+                    frameTabs.Add((tmp, go.transform, i));
+                    float s = attrCam.orthographicSize;
+                    var rr = go.GetComponentsInChildren<Renderer>();
+                    Bounds b = new Bounds(); bool hv = false;
+                    foreach (var r in rr) { var rb = r.bounds; if (float.IsNaN(rb.center.x) || rb.size.sqrMagnitude < 1e-8f) continue; if (!hv) { b = rb; hv = true; } else b.Encapsulate(rb); }
+                    float nd = hv ? Mathf.Max(0.001f, b.size.y) : 1f;
+                    go.transform.localScale *= (0.055f * 2f * s) / nd;   // base size; compTabScale applied LIVE in PositionFrame
+                    frameBase[go.transform] = go.transform.localScale;
+                    frameEdge[go.transform] = new Vector3((i - 1f) * cfg.compTabSpacing, cfg.compTabY, 4f);   // 3 tabs centered on col 1
+                    if (cfg.debug == 1) Dbg($"HKDS tab{i} '{labels[i]}' rends={rr.Length} bX={(hv ? b.size.x : 0):F2} bY={(hv ? b.size.y : 0):F2} lossy={go.transform.lossyScale.x:F3} tmpEnabled={(tmp as Behaviour)?.enabled}");
                 }
-                frameTabs.Add((tmp, go.transform, i));
-                float s = attrCam.orthographicSize;
-                var rr = go.GetComponentsInChildren<Renderer>();
-                Bounds b = new Bounds(); bool hv = false;
-                foreach (var r in rr) { var rb = r.bounds; if (float.IsNaN(rb.center.x) || rb.size.sqrMagnitude < 1e-8f) continue; if (!hv) { b = rb; hv = true; } else b.Encapsulate(rb); }
-                float nd = hv ? Mathf.Max(0.001f, b.size.y) : 1f;
-                go.transform.localScale *= (0.055f * 2f * s) / nd;   // base size; compTabScale applied LIVE in PositionFrame
-                frameBase[go.transform] = go.transform.localScale;
-                frameEdge[go.transform] = new Vector3((i - 1f) * cfg.compTabSpacing, cfg.compTabY, 4f);   // 3 tabs centered on col 1
-                if (cfg.debug == 1) Dbg($"HKDS tab{i} '{labels[i]}' rends={rr.Length} bX={(hv ? b.size.x : 0):F2} bY={(hv ? b.size.y : 0):F2} lossy={go.transform.lossyScale.x:F3}");
+                finally { Destroy(staging); }
             }
             BuildSelBox();   // B5: the selection-highlight fallback box lives with the frame (destroyed with it)
         }
@@ -973,28 +987,47 @@ public partial class HKDualScreen
     GameObject BuildPaneClone(int tab, Transform srcT)
     {
         bool charms = tab == COMP_CHARM;
-        var pane = Instantiate(srcT.gameObject, compRoot);
-        pane.name = charms ? "HKCharmClone" : "HKInvClone";
-        pane.transform.localPosition = Vector3.zero;
-        SetLayerRecursive(pane.transform, ATTR_LAYER);
-        // POPULATE FSMs read PlayerData + lay out the dynamic lists — keep enabled (INV is kicked below). NAV/INPUT
-        // FSMs fight the real menu -> stay disabled. "UI Charms" idles (enabled, not kicked). This is the
-        // known-good enabled set (kicking/enabling more re-lays the charm grid to 67u).
-        foreach (var fsm in pane.GetComponentsInChildren<PlayMakerFSM>(true))
+        var staging = new GameObject("HKPaneCloneStaging");
+        staging.SetActive(false);
+        GameObject pane = null;
+        try
         {
-            string n = fsm.FsmName;
-            if (charms) fsm.enabled = (n == "UI Charms" || n == "charm_show_if_collected");
-            else        fsm.enabled = (n == "Check Active" || n == "Build Equipment List" || n == "Set Pieces");
+            // Instantiate below an inactive parent so no cloned behaviour gets
+            // Awake/OnEnable before the resident pane has been sanitized. The
+            // live inventory hierarchy is never deactivated or otherwise
+            // mutated by this operation.
+            pane = Instantiate(srcT.gameObject, staging.transform);
+            pane.SetActive(false);
+            pane.name = charms ? "HKCharmClone" : "HKInvClone";
+            pane.transform.localPosition = Vector3.zero;
+            SetLayerRecursive(pane.transform, ATTR_LAYER);
+            // Runtime iTween instances carry launch arguments that are valid
+            // only for the source menu. Their Awake dereferences those stale
+            // arguments when a clone becomes active, so remove those visual
+            // animation drivers before first activation.
+            foreach (var tween in pane.GetComponentsInChildren<MonoBehaviour>(true))
+                if (tween != null && tween.GetType().Name == "iTween") DestroyImmediate(tween);
+            // POPULATE FSMs read PlayerData + lay out the dynamic lists — keep enabled (INV is kicked below). NAV/INPUT
+            // FSMs fight the real menu -> stay disabled. "UI Charms" idles (enabled, not kicked). This is the
+            // known-good enabled set (kicking/enabling more re-lays the charm grid to 67u).
+            foreach (var fsm in pane.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                string n = fsm.FsmName;
+                if (charms) fsm.enabled = (n == "UI Charms" || n == "charm_show_if_collected");
+                else        fsm.enabled = (n == "Check Active" || n == "Build Equipment List" || n == "Set Pieces");
+            }
+            pane.transform.SetParent(compRoot, false);
+            pane.SetActive(true);
+            if (!charms) InvPaneInit(pane);      // B4: soul-vessel renderers on
+            else         CharmsPaneInit(pane);   // B7: equipped row + default detail (needs an ACTIVE pane: it reads renderer bounds)
+            paneNeedsFit = true;
+            var run = RunFor(charms); run.finalized = false;
+            run.kicks = charms ? 0 : 8;   // kick only INV's populate FSMs; charms need no kick (more kicks: let Build Equipment List finish activating the ability/key/consumable row, not just the trinkets)
+            run.settle = charms ? 20 : 45;   // populate, THEN freeze all pane FSMs (stops the per-frame NRE leak source); INV needs longer for the equipment row to build
+            if (cfg.debug == 1) Dbg($"HKDS pane clone built tab={tab} renderers={pane.GetComponentsInChildren<Renderer>(true).Length}");
+            return pane;
         }
-        pane.SetActive(true);
-        if (!charms) InvPaneInit(pane);      // B4: soul-vessel renderers on
-        else         CharmsPaneInit(pane);   // B7: equipped row + default detail (needs an ACTIVE pane: it reads renderer bounds)
-        paneNeedsFit = true;
-        var run = RunFor(charms); run.finalized = false;
-        run.kicks = charms ? 0 : 8;   // kick only INV's populate FSMs; charms need no kick (more kicks: let Build Equipment List finish activating the ability/key/consumable row, not just the trinkets)
-        run.settle = charms ? 20 : 45;   // populate, THEN freeze all pane FSMs (stops the per-frame NRE leak source); INV needs longer for the equipment row to build
-        if (cfg.debug == 1) Dbg($"HKDS pane clone built tab={tab} renderers={pane.GetComponentsInChildren<Renderer>(true).Length}");
-        return pane;
+        finally { Destroy(staging); }
     }
 
     // Fingerprint the PlayerData that drives a pane's content, so the cached clone is rebuilt only when it changes.
