@@ -369,16 +369,23 @@ commit `55dceea`, preserved package identity/UID/first-install time, and rebuilt
 exact generation `gen-b38920f7-580d-47bb-96d6-f5abcecdb2e5`. Its default-off
 `MAIN_MENU` fixture locked native menu input, invoked only the production
 frame/tab path, and closed without selecting a save, starting a game, entering a
-room, issuing gameplay input, or creating a save. The capture reduced the
-remaining visual blocker to a prior Android-only scale divergence: `b866732`
-changed the pinned `compTabScale` from `2.7` to `0.6`, so the labels rendered at
-22% of the reference size. Complete log stacks also show both isolated
+room, issuing gameplay input, or creating a save. The capture exposed a real
+prior Android-only scale divergence: `b866732` changed the pinned
+`compTabScale` from `2.7` to `0.6`, reducing the associated tab chrome to 22%
+of the reference size. Complete log stacks also show both isolated
 `GameCameras` messages came from Hollow Knight's own
 `Platform:SetSceneLoadState`, not the patch. The next correction restores the
 pinned `2.7` scale and eliminates all remaining patch-owned logging singleton
-getters. It passes 29 focused contracts, 58 shared tests, 108 Python tests, both
-exact compiles, and produces a 225,792-byte Hollow Knight patch. Step 6 remains
-open for one menu-only label/teardown recheck.
+getters. Signed run `33536682728` proved the scale correction and exact
+generation `gen-0815d295-5ed7-4011-b3d9-41ef0cd79983` through the same locked
+menu fixture, but the native glyphs remained absent on both Map and Inventory.
+A controlled `compNoMapY` probe kept the known-good native label visible inside
+the tab band, ruling out camera/layer, Map-mask, and spatial-stencil causes.
+The working native lifecycle instead finalizes text after all frame siblings
+exist; the tab clones now follow that path from `PositionFrame`. It passes 30
+focused contracts, 58 shared tests, 109 Python tests, both exact compiles, and
+produces a 226,816-byte Hollow Knight patch. Step 6 remains open for one
+lower-HUD-only label/teardown recheck.
 
 - [ ] **Step 7: Reconcile and commit**
 
@@ -639,7 +646,7 @@ the installed app, and smoke-test both profiles. Close the running game.
 | --- | --- | --- | --- | --- |
 | H0 | DSUI-00/08/10 | `COMPLETE` | None | Both specifications, both parent plans, matrix, traceability, README, and 5/5 ordering contracts agree; the existing 38-contract Silksong suite remains green after the status correction |
 | H1 | DSUI-00/02/10 | `IMPLEMENTED / DEVICE-PARTIAL` | No implementation blocker; one tracked physical detach/true single-display deferral must close by H5 | 49/49 shared tests, 78/78 Python tests, both exact compiles, signed run `33494317664`, update-preserving Thor transport and pause/resume captures |
-| H2 | DSUI-00/01/02/07/10 | `SOURCE-COMPLETE / DEVICE-BLOCKED` | Signed lower-HUD evidence proves routed live HUD, clean primary HUD, blurred/dimmed backdrop, real lower-controller page switching, selection/details/prompt, bounded ornaments, pause title presentation, persistent opening-credit routing, and live Inventory under the direct transport. Menu-only run `33532750369` proves the fixture/input-lock path and narrows the remaining blocker to unreadably small tab text caused by the Android-only `0.6` scale; the pinned `2.7` scale is restored but device-unproved | Run `33515971125` established the broad matrix. Earlier room-hosted evidence is historical and is not an allowed future validation method. Run `33532750369` used only the input-locked `MAIN_MENU` production frame fixture and clean teardown. The correction passes 29 focused contracts, 58 shared tests, 108 Python tests, both exact compiles, and a 225,792-byte Hollow Knight patch. Base-game `Platform:SetSceneLoadState` singleton messages are not an H2 blocker; one menu-only label/teardown recheck remains |
+| H2 | DSUI-00/01/02/07/10 | `HOST-GREEN / DEVICE-BLOCKED` | Signed lower-HUD evidence proves routed live HUD, clean primary HUD, blurred/dimmed backdrop, real lower-controller page switching, selection/details/prompt, bounded ornaments, pause title presentation, persistent opening-credit routing, and live Inventory under the direct transport. Menu-only run `33536682728` proves the fixture/input-lock path and pinned `2.7` chrome scale, but the three native glyphs remain absent. A known-good native label stayed visible in the tab band, ruling out camera/layer, Map-mask, and spatial-stencil clipping; post-frame finalization is device-unproved | Run `33515971125` established the broad matrix. Earlier room-hosted evidence is historical and is not an allowed future validation method. Run `33536682728` used only the input-locked `MAIN_MENU` production frame fixture, controlled label-position injection, and clean teardown. The correction passes 30 focused contracts, 58 shared tests, 109 Python tests, both exact compiles, and a 226,816-byte Hollow Knight patch. Base-game `Platform:SetSceneLoadState` singleton messages are not an H2 blocker; one lower-HUD-only label/teardown recheck remains |
 | H3 | DSUI-00/05/09/10 | `PENDING` | Hollow Knight Mods behavior and persistence | Host isolation plus Thor effect/relaunch matrix |
 | H4 | DSUI-00/05/09/10 | `PENDING` | Scanner, application, rotation, rollback | Host pack matrix plus controlled Thor death/respawn-state injection proof; no gameplay testing |
 | H5 | DSUI-00–10 | `PENDING` | Hollow Knight blockers and deferrals must both reach zero | Clean host and complete Thor reference matrix |

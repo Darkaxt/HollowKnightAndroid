@@ -62,6 +62,10 @@ public partial class HKDualScreen
 
     readonly List<(Component tmp, Transform t, int col)> frameTabs = new List<(Component, Transform, int)>();  // tab TMP + transform + column
 
+    readonly List<string> frameTabLabels = new List<string>();   // localized text finalized only after BuildFrame completes
+    bool frameTabLabelsPending;
+    bool frameTabBuildFailed;
+
 
     Transform botFleurT, botFleur2T;   // botFleurT = fleur ABOVE selected tab (#3); botFleur2T = BELOW (#2)
 
@@ -376,7 +380,7 @@ public partial class HKDualScreen
         try
         {
             var src = FindDeep(root, "Pane Name");
-            if (src == null) { Dbg("HKDS frame: no 'Pane Name'"); return; }
+            if (src == null) { frameTabBuildFailed = true; Dbg("HKDS frame: no 'Pane Name'"); return; }
             // Localized tab names (fall back to English if the key isn't found). Candidate keys cover HK's known
             // inventory-pane title conventions; the discovery dump below reveals the exact ones per language.
             // Exact HK pane-title keys (UI sheet), verified by decrypting EN_UI.txt: PANE_INVENTORY/PANE_MAP/PANE_CHARMS.
@@ -385,6 +389,8 @@ public partial class HKDualScreen
                 LocalizedLabel("Map",       "PANE_MAP"),
                 LocalizedLabel("Charms",    "PANE_CHARMS"),
             };
+            frameTabBuildFailed = false;
+            frameTabLabelsPending = true;
             for (int i = 0; i < labels.Length; i++)
             {
                 // Preserve the proven Dual Souls label lifecycle: clone the
@@ -411,24 +417,89 @@ public partial class HKDualScreen
                 {
                     if (c == null || !c.GetType().Name.Contains("TextMeshPro")) continue;
                     tmp = c;
-                    try { c.GetType().GetProperty("text")?.SetValue(c, labels[i], null); } catch { }
+                    // Match the working resident-label lifecycle used by the
+                    // no-map label: keep the clone blank while the rest of the
+                    // frame's native TMP hierarchy is constructed, then set
+                    // the final text from PositionFrame after BuildFrame has
+                    // finished creating and sorting every sibling clone.
+                    try { c.GetType().GetProperty("text")?.SetValue(c, "", null); } catch { }
                     try { c.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(c, null); } catch { }
                     break;
                 }
                 frameTabs.Add((tmp, go.transform, i));
-                float s = attrCam.orthographicSize;
-                var rr = go.GetComponentsInChildren<Renderer>();
-                Bounds b = new Bounds(); bool hv = false;
-                foreach (var r in rr) { var rb = r.bounds; if (float.IsNaN(rb.center.x) || rb.size.sqrMagnitude < 1e-8f) continue; if (!hv) { b = rb; hv = true; } else b.Encapsulate(rb); }
-                float nd = hv ? Mathf.Max(0.001f, b.size.y) : 1f;
-                go.transform.localScale *= (0.055f * 2f * s) / nd;   // base size; compTabScale applied LIVE in PositionFrame
-                frameBase[go.transform] = go.transform.localScale;
+                frameTabLabels.Add(labels[i]);
                 frameEdge[go.transform] = new Vector3((i - 1f) * cfg.compTabSpacing, cfg.compTabY, 4f);   // 3 tabs centered on col 1
-                if (cfg.debug == 1) Dbg($"HKDS tab{i} '{labels[i]}' rends={rr.Length} bX={(hv ? b.size.x : 0):F2} bY={(hv ? b.size.y : 0):F2} lossy={go.transform.lossyScale.x:F3}");
             }
+            frameTabLabelsPending = frameTabs.Count > 0;
             BuildSelBox();   // B5: the selection-highlight fallback box lives with the frame (destroyed with it)
         }
-        catch (Exception e) { Dbg($"HKDS frame tabs err {e.Message}"); }
+        catch (Exception e)
+        {
+            // PositionFrame tears down this partial frame and the next Tick
+            // retries from a clean native donor. Never strand already-created
+            // labels blank after a partial construction failure.
+            frameTabBuildFailed = true;
+            frameTabLabelsPending = true;
+            Dbg($"HKDS frame tabs err {e.Message}");
+        }
+    }
+
+    // Hollow Knight's legacy TMP clones share native initialization state.
+    // Finalizing the tab glyphs inside BuildTabRow produces valid bounds but
+    // no fragments on 1.5.12620, while the no-map clone that receives its text
+    // after BuildFrame renders correctly in the same camera/layer. Complete
+    // the three native labels once, from PositionFrame, after every frame
+    // sibling and sorting adjustment exists.
+    void FinalizeFrameTabLabels()
+    {
+        if (!frameTabLabelsPending || attrCam == null) return;
+        float s = attrCam.orthographicSize;
+        bool complete = true;
+        if (frameTabs.Count == 0 || frameTabs.Count != frameTabLabels.Count) complete = false;
+        for (int i = 0; i < frameTabs.Count && i < frameTabLabels.Count; i++)
+        {
+            var (tmp, t, col) = frameTabs[i];
+            if (tmp == null || t == null) { complete = false; continue; }
+            bool textSet = false;
+            try
+            {
+                var textProperty = tmp.GetType().GetProperty("text");
+                if (textProperty != null) { textProperty.SetValue(tmp, frameTabLabels[i], null); textSet = true; }
+            }
+            catch { }
+            bool meshUpdated = false;
+            try
+            {
+                var forceMesh = tmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes);
+                if (forceMesh != null) { forceMesh.Invoke(tmp, null); meshUpdated = true; }
+            }
+            catch { }
+            if (!textSet || !meshUpdated) { complete = false; continue; }
+            var glyphRenderer = (tmp as Component).GetComponent<Renderer>();
+            if (glyphRenderer == null) { complete = false; continue; }
+            glyphRenderer.enabled = true;
+
+            var rr = t.GetComponentsInChildren<Renderer>();
+            Bounds b = new Bounds(); bool hv = false;
+            foreach (var r in rr)
+            {
+                if (r == null) continue;
+                var rb = r.bounds;
+                if (float.IsNaN(rb.center.x) || rb.size.sqrMagnitude < 1e-8f) continue;
+                if (!hv) { b = rb; hv = true; } else b.Encapsulate(rb);
+            }
+            if (!hv) { complete = false; continue; }
+            if (!frameBase.ContainsKey(t))
+            {
+                float nd = Mathf.Max(0.001f, b.size.y);
+                t.localScale *= (0.055f * 2f * s) / nd;
+                frameBase[t] = t.localScale;
+            }
+            if (cfg.debug == 1)
+                Dbg($"HKDS tab{col} '{frameTabLabels[i]}' rends={rr.Length} bX={(hv ? b.size.x : 0):F2} bY={(hv ? b.size.y : 0):F2} lossy={t.lossyScale.x:F3}");
+        }
+        frameTabLabelsPending = !complete;
+        if (complete) tabColorCol = -1;
     }
 
     // Each frame: keep the ornaments pinned at the panel edges + a constant apparent size as the map's
@@ -436,6 +507,7 @@ public partial class HKDualScreen
     void PositionFrame()
     {
         if (frameRoot == null || attrCam == null) return;
+        if (frameTabBuildFailed) { TeardownFrame(); return; }
         float s = attrCam.orthographicSize, asp = attrCam.aspect;
         // The fleur ornaments frame the whole CONTEXT BOX, not just the map — show them on EVERY companion
         // tab (Map / Inventory / Charms), always, whenever the frame is up. (They used to be gated on
@@ -453,6 +525,7 @@ public partial class HKDualScreen
         // area-name label lives TOP-RIGHT (live-tunable X/Y)
         if (areaNameT != null && frameEdge.ContainsKey(areaNameT))
             frameEdge[areaNameT] = new Vector3(cfg.compAreaNameX, cfg.compAreaNameY, 4f);
+        FinalizeFrameTabLabels();
         foreach (var kv in frameEdge)
         {
             var t = kv.Key; if (t == null) continue;
@@ -625,7 +698,7 @@ public partial class HKDualScreen
         hudFpsHalfMax = 0f;   // fix(1.0.0/B10): stale gear anchor after a rebuild at another ortho size
         if (frameRoot != null) { Destroy(frameRoot); frameRoot = null; }
         DestroyOwnedAssets();   // Materials / Meshes / Textures / Sprites we created for the frame (see Own)
-        frameEdge.Clear(); frameBase.Clear(); frameTabs.Clear();
+        frameEdge.Clear(); frameBase.Clear(); frameTabs.Clear(); frameTabLabels.Clear(); frameTabLabelsPending = false; frameTabBuildFailed = false;
         botFleurT = botFleur2T = sepTopT = sepBotT = null; mapMaskTopT = mapMaskBotT = null; mapMaskTopR = mapMaskBotR = null; mapResetT = null; mapResetTmp = null; mapResetR = null; mapResetPillSR = null; tabColorCol = -1; frameInnerBotFrac = frameInnerTopFrac = float.NaN; selBox = null; sel.item = null; sel.invKey = null; sel.charmN = 0; sel.kind = -1; paneCursor = null; paneCursorFor = null;
         costPipRoot = null; charmBoardsFor = null;   // redesign: re-create cost pips + rebuild the per-clone charm cache for the fresh pane
         areaNameT = null; areaNameTmp = null; areaNameR = null; lastAreaZoneRaw = "\u0001"; lastAreaName = "\u0001";   // sentinel: the rebuilt TMP starts blank — force a re-set even for the same zone

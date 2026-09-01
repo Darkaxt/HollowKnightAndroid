@@ -216,7 +216,7 @@ matrix.
 | Inventory, Charms, and Map switching | PASS | The display-associated `fts_ts_3` event path selected all three bottom pages; high-level ADB display injection is not counted |
 | Selection, details, and action prompt | PASS | Selecting Old Nail rendered selection corners, its name/description, and the native X glyph |
 | Tab glyph/fleur bounds | PASS | All ornaments remain centered and bounded to their tab cells |
-| Resident Inventory/Map/Charms text | FAIL | Menu-only run `33532750369` produced only tiny unreadable fragments. Root cause is the Android port's `0.6` tab scale versus the pinned Dual Souls `2.7`; the reference scale is restored host-side and awaits one visual recheck |
+| Resident Inventory/Map/Charms text | FAIL | Menu-only run `33536682728` proved the pinned `2.7` chrome scale but the glyphs remained absent on Map and Inventory. A known-good native label remained visible inside the tab band, ruling out camera/layer, Map-mask, and spatial-stencil clipping. Post-frame label finalization is host-green and awaits one lower-HUD-only visual recheck |
 | Quiet patch-owned pre-manager startup | PASS | Every patch-owned pre-fixture/lifecycle path now uses `resolvedGameCameras`. The two remaining messages in run `33532750369` have complete stacks in Hollow Knight's own `Platform:SetSceneLoadState`, so they are a base-game startup baseline rather than an H2 defect |
 | Pause lower surface | PASS | Pausing presents the Hollow Knight title card on display 1 |
 | Tutorial/dialogue/item/fade state routing | PENDING | One earlier attack-tutorial observation exposed a persistent-HUD scan gap; the batched correction is host-green. Recheck uses host contracts or controlled injected lower-HUD state only, never gameplay |
@@ -283,15 +283,34 @@ directory were removed; the verified generation was preserved.
 
 The fixture proved all three labels have live TMP renderer bounds, but the
 surface showed only tiny unreadable fragments. Comparison with the complete
-pinned reference found the root cause: commit `b866732` had changed
-`compTabScale` from the reference's `2.7` to `0.6`, reducing the final
-typography to 22% of its intended size. A RED/GREEN contract now pins `2.7`.
+pinned reference found one real divergence: commit `b866732` had changed
+`compTabScale` from the reference's `2.7` to `0.6`, reducing the associated tab
+chrome to 22% of its intended size. A RED/GREEN contract now pins `2.7`; the
+next signed pass proved this was necessary but not sufficient for glyph pixels.
 Every patch-owned remaining `GameCameras.instance` helper was also converted to
 the quiet resolved owner. Complete stack traces prove the two isolated startup
 messages came instead from Hollow Knight's own `Platform:SetSceneLoadState`.
 
-The correction passes 29 focused companion contracts, all 58 shared tests, all
-108 Python tests, both exact patch compiles, and the exact 225,792-byte
-`1.5.12620` patch. H2 remains blocked only until one affected-row menu fixture
-shows readable reference-scale labels and clean teardown. Every later device
-pass follows the same no-gameplay rule.
+Signed dry-run `33536682728` built commit `ca05392`; its downloaded APK SHA-256
+is `62cd41be054c35fc6f19f67824338a4d8ef8fbfc35772438010d5d3331ef5e6f`,
+APK Signature Scheme v2/v3 and the pinned signer verify, and the in-place update
+preserved UID and first-install time. The exact source rebuilt as generation
+`gen-0815d295-5ed7-4011-b3d9-41ef0cd79983`.
+
+That pass remained entirely inside the input-locked `MAIN_MENU` fixture and
+issued no game input. The pinned `2.7` scale restored the two tab fleurs to a
+readable bounded size, but the three native tab glyphs still produced no
+pixels on either the Map or Inventory fixture page. Moving the known-good
+`Map not acquired yet` clone down through the exact tab band kept it visible,
+which rules out the lower camera/layer, Map clip mask, and a spatial stencil
+region as the cause. The remaining lifecycle difference is that the working
+clone receives its final text and mesh refresh only after `BuildFrame` has
+constructed and sorted all native TMP siblings. The correction now keeps tab
+clones blank during construction and finalizes/normalizes them once from
+`PositionFrame`, matching that proven path.
+
+The follow-up passes 30 focused companion contracts, all 58 shared tests, all
+109 Python tests, both exact patch compiles, and the exact 226,816-byte
+`1.5.12620` patch. H2 remains blocked only until one lower-HUD-only menu fixture
+shows the finalized labels and clean teardown. Every later device pass follows
+the same no-gameplay rule.

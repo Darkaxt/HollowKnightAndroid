@@ -124,11 +124,17 @@ parent and reduced to their one exact retained visual before first activation.
 Pane Name tab labels are the explicit legacy-TMP exception: the pinned Hollow
 Knight oracle clones them directly under the live frame, preserves every
 component dependency, disables each non-TMP `MonoBehaviour`, explicitly
-activates the clone/renderers, and only then assigns localized text and forces
-the mesh. The Android port must reproduce that sequence; it must not apply the
-ornament or pane-clone staging policy to resident labels. This distinction is
-device-proven: staged label clones retained valid geometry but produced no glyph
-pixels on exact `1.5.12620`. HUD, page, and overlay work in Stages 3–7 likewise
+activates the clone/renderers, and never applies the ornament or pane-clone
+staging policy to resident labels. Exact Android `1.5.12620` adds one required
+settle boundary: each direct live clone remains blank while `BuildFrame`
+constructs and sorts all native TMP siblings; `PositionFrame` then assigns the
+localized text, forces the mesh, enables its renderer, and normalizes the live
+glyph bounds. Failed text/mesh/bounds finalization retains retry ownership, and
+a partial construction tears down the frame for a clean next-tick rebuild.
+This preserves the oracle's live-clone dependency and activation sequence while
+matching the only resident-label timing that produces pixels on this target.
+Staged label clones retained valid geometry but produced no glyph pixels and
+remain forbidden. HUD, page, and overlay work in Stages 3–7 likewise
 must reproduce the oracle's own activate/open, settle, selective-freeze or
 retained-driver sequence and observable consequences; no blanket resident-clone
 sanitizer is acceptable.

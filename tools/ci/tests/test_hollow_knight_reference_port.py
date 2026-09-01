@@ -534,6 +534,50 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("Mathf.Min(charmsW", position)
         self.assertIn("float textBot = actB.min.y", position)
 
+    def test_frame_tab_labels_finalize_after_frame_construction(self):
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        tabs = method_body(frame, r"void\s+BuildTabRow\s*\([^)]*\)")
+        finalize = method_body(
+            frame,
+            r"void\s+FinalizeFrameTabLabels\s*\(\s*\)",
+        )
+        position = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
+        self.assertIn('SetValue(c, "", null)', tabs)
+        self.assertNotIn("SetValue(c, labels[i]", tabs)
+        self.assertIn("frameTabLabels.Add(labels[i])", tabs)
+        self.assertLess(
+            tabs.index("frameTabLabelsPending = true"),
+            tabs.index("for (int i = 0; i < labels.Length; i++)"),
+        )
+        self.assertIn("frameTabBuildFailed = true", tabs)
+        self.assertIn(
+            "if (frameTabBuildFailed) { TeardownFrame(); return; }",
+            position,
+        )
+        self.assertIn("FinalizeFrameTabLabels()", position)
+        self.assertLess(
+            position.index("FinalizeFrameTabLabels()"),
+            position.index("foreach (var kv in frameEdge)"),
+        )
+        self.assertIn("frameTabLabels[i]", finalize)
+        self.assertIn("ForceMeshUpdate", finalize)
+        self.assertIn("glyphRenderer.enabled = true", finalize)
+        self.assertIn("bool textSet = false", finalize)
+        self.assertIn("bool meshUpdated = false", finalize)
+        self.assertIn(
+            "if (!textSet || !meshUpdated) { complete = false; continue; }",
+            finalize,
+        )
+        self.assertIn("bool complete = true", finalize)
+        self.assertIn("if (!hv) { complete = false; continue; }", finalize)
+        self.assertIn("if (!frameBase.ContainsKey(t))", finalize)
+        self.assertIn("frameBase[t] = t.localScale", finalize)
+        self.assertIn("frameTabLabelsPending = !complete", finalize)
+        teardown = method_body(frame, r"void\s+TeardownFrame\s*\(\s*\)")
+        self.assertIn("frameTabBuildFailed = false", teardown)
+
     def test_pane_clones_are_sanitized_while_inactive_before_activation(self):
         frame = strip_csharp_comments(
             read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
