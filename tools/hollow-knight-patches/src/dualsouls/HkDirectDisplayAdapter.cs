@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using DualSouls.DualScreen;
+using DualSouls.Mods.HollowKnight;
 using UnityEngine;
 
 namespace HollowKnightPatches
@@ -69,6 +70,7 @@ namespace HollowKnightPatches
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         public static void Bootstrap()
         {
+            HollowKnightModsRuntime.EnsureStarted();
             if (!IsProductionEnabled() || _instance != null) return;
 
             var go = new GameObject("__HollowKnightDualSoulsTransport__");

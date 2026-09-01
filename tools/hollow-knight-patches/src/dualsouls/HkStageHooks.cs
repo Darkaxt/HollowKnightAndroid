@@ -1,19 +1,55 @@
+using System;
 using System.Collections.Generic;
+using DualSouls.Mods.HollowKnight;
 using UnityEngine;
 
 // Explicit boundary for plan stages H3 (Mods/tweaks) and H4 (skins).
-// It is deliberately inert in H2 and is replaced, not expanded into a second
-// UI implementation, when those source modules are ported.
+// The inert HKDualScreen partial remains below until the Task 6 presenter
+// supplies those existing H2 call sites.
 static class HkStageHooks
 {
     static KeyCode joyBase = KeyCode.Joystick1Button0;
     static int joySlot = 1;
     static float nextJoyPoll;
+    static bool? _backdropBlackOverride;
+    static HollowKnightFlashMode? _flashOverride;
 
-    internal const bool TweaksAvailable = false;
-    internal static bool TweaksMenuVisible => false;
-    internal static bool BlackBackground => false;
+    internal static bool TweaksAvailable =>
+        HollowKnightModsRuntime.Current != null &&
+        HollowKnightModsRuntime.Current.Session.IsReady;
+    internal static bool TweaksMenuVisible =>
+        TweaksAvailable && HollowKnightModsRuntime.Current.Session.Menu.IsOpen;
+    internal static bool BlackBackground => _backdropBlackOverride == true;
+    internal static HollowKnightFlashMode? FlashOverride => _flashOverride;
     internal static int SkinStamp => 0;
+
+    internal static void SetBackdropOverride(bool black)
+    {
+        _backdropBlackOverride = black;
+    }
+
+    internal static void SetFlashOverride(HollowKnightFlashMode mode)
+    {
+        switch (mode)
+        {
+            case HollowKnightFlashMode.Soft:
+                _flashOverride = null;
+                return;
+            case HollowKnightFlashMode.Vanilla:
+            case HollowKnightFlashMode.Off:
+                _flashOverride = mode;
+                return;
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(mode), mode, "Unsupported Hollow Knight flash mode.");
+        }
+    }
+
+    internal static void ClearPresentationOverrides()
+    {
+        _backdropBlackOverride = null;
+        _flashOverride = null;
+    }
 
     internal static void Tick(HKLayout layout, bool debug)
     {

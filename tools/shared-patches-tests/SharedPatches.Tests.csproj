@@ -21,5 +21,6 @@
     <Compile Include="..\shared-patches\src\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\silksong-patches\src\mods\SilksongTweakAdapter.cs" Link="Silksong\SilksongTweakAdapter.cs" Condition="Exists('..\silksong-patches\src\mods\SilksongTweakAdapter.cs')" />
     <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightTweakAdapter.cs" Link="HollowKnight\HollowKnightTweakAdapter.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightTweakAdapter.cs')" />
+    <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightModsSession.cs" Link="HollowKnight\HollowKnightModsSession.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightModsSession.cs')" />
   </ItemGroup>
 </Project>
