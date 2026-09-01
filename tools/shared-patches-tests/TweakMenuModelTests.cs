@@ -144,6 +144,43 @@ public sealed class TweakMenuModelTests
     }
 
     [Fact]
+    public void RowNavigationClearsErrorOnlyWhenSelectionChanges()
+    {
+        var fixture = MenuFixture.Create(visibleRows: 2);
+        fixture.Model.MoveRow(2);
+        Assert.False(fixture.Model.CycleSelected().Success);
+        string error = fixture.Model.Message;
+
+        fixture.Model.MoveRow(3);
+        Assert.Equal(2, fixture.Model.SelectedRowIndex);
+        Assert.Equal(error, fixture.Model.Message);
+        Assert.True(fixture.Model.MessageIsError);
+
+        fixture.Model.MoveRow(1);
+        Assert.Equal(0, fixture.Model.SelectedRowIndex);
+        Assert.Equal("", fixture.Model.Message);
+        Assert.False(fixture.Model.MessageIsError);
+    }
+
+    [Fact]
+    public void GroupNavigationClearsSuccessOnlyWhenSelectionChanges()
+    {
+        var fixture = MenuFixture.Create(visibleRows: 2);
+        Assert.True(fixture.Model.ToggleMaster().Success);
+        string message = fixture.Model.Message;
+
+        fixture.Model.MoveGroup(2);
+        Assert.Equal(0, fixture.Model.SelectedGroupIndex);
+        Assert.Equal(message, fixture.Model.Message);
+        Assert.False(fixture.Model.MessageIsError);
+
+        fixture.Model.MoveGroup(1);
+        Assert.Equal(1, fixture.Model.SelectedGroupIndex);
+        Assert.Equal("", fixture.Model.Message);
+        Assert.False(fixture.Model.MessageIsError);
+    }
+
+    [Fact]
     public void CycleSelectedForwardsAvailableSelectionAndReportsSuccess()
     {
         var fixture = MenuFixture.Create(visibleRows: 2);

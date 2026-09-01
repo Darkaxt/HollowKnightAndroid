@@ -74,6 +74,7 @@ namespace DualSouls.Mods
             SelectedGroupIndex = next;
             SelectedRowIndex = 0;
             WindowStart = 0;
+            ClearMessage();
         }
 
         public void MoveRow(int delta)
@@ -81,8 +82,12 @@ namespace DualSouls.Mods
             int count = CurrentRows.Count;
             if (count == 0) return;
 
-            SelectedRowIndex = Wrap(SelectedRowIndex, delta, count);
+            int next = Wrap(SelectedRowIndex, delta, count);
+            if (next == SelectedRowIndex) return;
+
+            SelectedRowIndex = next;
             KeepSelectionVisible();
+            ClearMessage();
         }
 
         public TweakActionResult ToggleMaster()
@@ -106,6 +111,12 @@ namespace DualSouls.Mods
         public TweakActionResult Reset()
         {
             return Record(_controller.Reset(), "All values reset.");
+        }
+
+        void ClearMessage()
+        {
+            Message = "";
+            MessageIsError = false;
         }
 
         void KeepSelectionVisible()
