@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using DualSouls.Mods.HollowKnight;
 using UnityEngine;
 
 // Dual-screen for the AYN Thor (native GPU blit, GLES3). Three private/empty Unity layers are
@@ -51,6 +52,10 @@ public partial class HKDualScreen : MonoBehaviour
     bool bgSetup; int bgCullMask; bool bgShow;
 
     Transform tk2dCamT;                                         // cached tk2dCamera (holds "Screen Flash(Clone)")
+
+    struct FlashBaseline { public bool Enabled; public Color Color; }
+    readonly Dictionary<SpriteRenderer, FlashBaseline> flashBaselines = new Dictionary<SpriteRenderer, FlashBaseline>();
+    readonly List<SpriteRenderer> flashDead = new List<SpriteRenderer>();
 
     Transform dreamLoreT;                                       // cached tk2dCamera/Audio/Dream Dialogue (focus-tablet lore)
 
@@ -137,13 +142,21 @@ public partial class HKDualScreen : MonoBehaviour
         for (int i = 0; i < t.childCount; i++) ScanNode(t.GetChild(i), layer);
     }
 
-    // ---- lifeblood flash: soften "Screen Flash(Clone)" -----------------------------------------
+    // ---- lifeblood flash: reversible "Screen Flash(Clone)" policy -------------------------------
     // The fullscreen lifeblood flash is "Screen Flash(Clone)", a layer-0 SpriteRenderer spawned as a
-    // direct child of tk2dCamera (DontDestroyOnLoad). It renders as an opaque cyan wall; clamping the
-    // SpriteRenderer's alpha scales the whole flash (peak + fade) down to a translucent pulse.
+    // direct child of tk2dCamera (DontDestroyOnLoad). Capture each renderer before touching it so Mods
+    // and config policy changes can always return to the exact state Hollow Knight supplied.
     void SoftenLifebloodFlash()
     {
-        if (cfg.killBlueFlash != 1) return;
+        HollowKnightFlashMode mode = HkStageHooks.FlashOverride ?? (cfg.killBlueFlash == 1 ? HollowKnightFlashMode.Soft : HollowKnightFlashMode.Vanilla);
+
+        flashDead.Clear();
+        foreach (var renderer in flashBaselines.Keys)
+            if (renderer == null) flashDead.Add(renderer);
+        for (int i = 0; i < flashDead.Count; i++)
+            flashBaselines.Remove(flashDead[i]);
+        flashDead.Clear();
+
         if (tk2dCamT == null)
         {
             var c = GameObject.Find("_GameCameras/CameraParent/tk2dCamera");
@@ -156,9 +169,49 @@ public partial class HKDualScreen : MonoBehaviour
             if (!ch.name.StartsWith("Screen Flash")) continue;
             var sr = ch.GetComponent<SpriteRenderer>();
             if (sr == null) continue;
-            if (cfg.flashAlpha <= 0f) { if (sr.enabled) sr.enabled = false; }
-            else { var c = sr.color; if (c.a > cfg.flashAlpha) { c.a = cfg.flashAlpha; sr.color = c; } }
+
+            FlashBaseline baseline;
+            if (!flashBaselines.TryGetValue(sr, out baseline))
+            {
+                baseline = new FlashBaseline { Enabled = sr.enabled, Color = sr.color };
+                flashBaselines.Add(sr, baseline);
+            }
+
+            // Every policy starts from Hollow Knight's captured state. Unknown enum values therefore
+            // fail closed to Vanilla by taking no action after this restoration.
+            sr.enabled = baseline.Enabled;
+            sr.color = baseline.Color;
+            switch (mode)
+            {
+                case HollowKnightFlashMode.Soft:
+                    Color softened = baseline.Color;
+                    if (cfg.flashAlpha <= 0f) softened.a = 0f;
+                    else if (softened.a > cfg.flashAlpha) softened.a = cfg.flashAlpha;
+                    sr.color = softened;
+                    break;
+                case HollowKnightFlashMode.Vanilla:
+                    break;
+                case HollowKnightFlashMode.Off:
+                    sr.enabled = false;
+                    break;
+                default:
+                    break;
+            }
         }
+    }
+
+    void RestoreLifebloodFlashBaselines()
+    {
+        foreach (var kv in flashBaselines)
+        {
+            var renderer = kv.Key;
+            var baseline = kv.Value;
+            if (renderer == null) continue;
+            renderer.enabled = baseline.Enabled;
+            renderer.color = baseline.Color;
+        }
+        flashBaselines.Clear();
+        flashDead.Clear();
     }
 
     // ---- focus-heal splash: route "HP Up Particles(Clone)" to the bottom -----------------------

@@ -327,6 +327,146 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn('HasProperty("_Color")', render)
         self.assertNotIn('Shader.Find("Unlit/Texture")', render)
 
+    def test_backdrop_has_one_stage_hook_decision_in_the_capture_policy(self):
+        main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
+        sync = method_body(main, r"void\s+SyncBgCapture\s*\([^)]*\)")
+        self.assertTrue(sync, "missing SyncBgCapture")
+        self.assertEqual(1, sync.count("HkStageHooks.BlackBackground"))
+        self.assertRegex(
+            " ".join(sync.split()),
+            r"bgDimmer\.Brightness\s*=\s*HkStageHooks\.BlackBackground\s*"
+            r"\?\s*0f\s*:\s*cfg\.dim\s*;",
+        )
+
+    def test_lifeblood_flash_policy_captures_baseline_before_mode_mutations(self):
+        main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
+        soften = method_body(main, r"void\s+SoftenLifebloodFlash\s*\(\s*\)")
+        self.assertTrue(soften, "missing SoftenLifebloodFlash")
+        self.assertRegex(
+            main,
+            r"struct\s+FlashBaseline\s*\{\s*public\s+bool\s+Enabled\s*;\s*"
+            r"public\s+Color\s+Color\s*;\s*\}",
+        )
+        self.assertRegex(
+            main,
+            r"readonly\s+Dictionary<SpriteRenderer,\s*FlashBaseline>\s+"
+            r"flashBaselines\s*=\s*new\s+Dictionary<SpriteRenderer,\s*FlashBaseline>\s*\(\s*\)",
+        )
+        normalized = " ".join(soften.split())
+        self.assertRegex(
+            normalized,
+            r"HollowKnightFlashMode mode\s*=\s*HkStageHooks\.FlashOverride\s*\?\?\s*"
+            r"\(cfg\.killBlueFlash\s*==\s*1\s*\?\s*HollowKnightFlashMode\.Soft\s*"
+            r":\s*HollowKnightFlashMode\.Vanilla\)\s*;",
+        )
+        self.assertIn('ch.name.StartsWith("Screen Flash")', soften)
+        self.assertIn("ch.GetComponent<SpriteRenderer>()", soften)
+        self.assertRegex(
+            normalized,
+            r"if\s*\(\s*!flashBaselines\.TryGetValue\(sr,\s*out baseline\)\s*\)\s*"
+            r"\{.*?new FlashBaseline.*?flashBaselines\.Add\(sr,\s*baseline\)",
+        )
+        self.assertEqual(1, soften.count("flashBaselines.Add"))
+        self.assertNotIn("flashBaselines[sr]", soften)
+        capture = soften.index("new FlashBaseline")
+        track = soften.index("flashBaselines.Add", capture)
+        renderer_mutations = [
+            match.start()
+            for match in re.finditer(r"sr\.(?:enabled|color)\s*=", soften)
+        ]
+        self.assertTrue(renderer_mutations)
+        self.assertLess(capture, min(renderer_mutations))
+        restore_enabled = soften.index("sr.enabled = baseline.Enabled", track)
+        restore_color = soften.index("sr.color = baseline.Color", track)
+        policy = soften.index("switch (mode)", track)
+        self.assertLess(capture, track)
+        self.assertLess(track, restore_enabled)
+        self.assertLess(track, restore_color)
+        self.assertLess(restore_enabled, policy)
+        self.assertLess(restore_color, policy)
+        for mode in ("Soft", "Vanilla", "Off"):
+            self.assertIn(f"case HollowKnightFlashMode.{mode}:", soften)
+        self.assertRegex(soften, r"case\s+HollowKnightFlashMode\.Vanilla\s*:\s*break\s*;")
+        self.assertRegex(soften, r"default\s*:\s*break\s*;")
+
+        soft_start = soften.index("case HollowKnightFlashMode.Soft:")
+        off_start = soften.index("case HollowKnightFlashMode.Off:", soft_start)
+        soft_policy = soften[soft_start:off_start]
+        self.assertIn("Color softened = baseline.Color", soft_policy)
+        self.assertIn("cfg.flashAlpha <= 0f", soft_policy)
+        self.assertIn("softened.a = 0f", soft_policy)
+        self.assertIn("softened.a = cfg.flashAlpha", soft_policy)
+        self.assertIn("sr.color = softened", soft_policy)
+
+        default_start = soften.index("default:", off_start)
+        off_policy = soften[off_start:default_start]
+        self.assertIn("sr.enabled = false", off_policy)
+        self.assertNotIn("sr.color =", off_policy)
+
+    def test_lifeblood_flash_prunes_destroyed_keys_and_restores_survivors(self):
+        main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
+        soften = method_body(main, r"void\s+SoftenLifebloodFlash\s*\(\s*\)")
+        restore = method_body(
+            main,
+            r"void\s+RestoreLifebloodFlashBaselines\s*\(\s*\)",
+        )
+        self.assertTrue(soften, "missing SoftenLifebloodFlash")
+        self.assertTrue(restore, "missing RestoreLifebloodFlashBaselines")
+        prune_clear = soften.index("flashDead.Clear()")
+        enumerate_keys = soften.index("foreach (var renderer in flashBaselines.Keys)")
+        collect_dead = soften.index("flashDead.Add(renderer)", enumerate_keys)
+        remove_dead = soften.index("flashBaselines.Remove(flashDead[i])", collect_dead)
+        self.assertLess(prune_clear, enumerate_keys)
+        self.assertLess(enumerate_keys, collect_dead)
+        self.assertLess(collect_dead, remove_dead)
+        self.assertIn("if (renderer == null)", soften[enumerate_keys:remove_dead])
+
+        loop = restore.index("foreach (var kv in flashBaselines)")
+        renderer = restore.index("var renderer = kv.Key", loop)
+        baseline = restore.index("var baseline = kv.Value", renderer)
+        surviving = restore.index("if (renderer == null) continue", baseline)
+        enabled = restore.index("renderer.enabled = baseline.Enabled", surviving)
+        color = restore.index("renderer.color = baseline.Color", enabled)
+        clear_baselines = restore.index("flashBaselines.Clear()", color)
+        clear_scratch = restore.index("flashDead.Clear()", clear_baselines)
+        self.assertLess(loop, renderer)
+        self.assertLess(renderer, baseline)
+        self.assertLess(baseline, surviving)
+        self.assertLess(surviving, enabled)
+        self.assertLess(enabled, color)
+        self.assertLess(color, clear_baselines)
+        self.assertLess(clear_baselines, clear_scratch)
+
+    def test_lifeblood_flash_restores_before_companion_and_reference_teardown(self):
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        teardown = method_body(frame, r"void\s+TeardownCompanion\s*\(\s*\)")
+        self.assertIn("RestoreLifebloodFlashBaselines()", teardown)
+        restore_flash = teardown.index("RestoreLifebloodFlashBaselines()")
+        release_fixture = teardown.index("ReleaseLowerHudFixtureInputLock()")
+        discard_companion = teardown.index("mapClone = null")
+        self.assertLess(restore_flash, release_fixture)
+        self.assertLess(restore_flash, discard_companion)
+
+        direct = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.DirectDisplay.cs")
+        )
+        restore_reference = method_body(
+            direct,
+            r"void\s+RestoreReferenceRouting\s*\(\s*\)",
+        )
+        self.assertIn("RestoreLifebloodFlashBaselines()", restore_reference)
+        restore_flash = restore_reference.index("RestoreLifebloodFlashBaselines()")
+        release_fixture = restore_reference.index(
+            "TryDirectStep(ReleaseLowerHudFixtureInputLockOrThrow"
+        )
+        restore_routes = restore_reference.index(
+            "TryDirectStep(RestoreRoutedLayers"
+        )
+        self.assertLess(restore_flash, release_fixture)
+        self.assertLess(restore_flash, restore_routes)
+
     def test_frame_tab_clones_reenable_the_retained_tmp_visual(self):
         frame = strip_csharp_comments(
             read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")

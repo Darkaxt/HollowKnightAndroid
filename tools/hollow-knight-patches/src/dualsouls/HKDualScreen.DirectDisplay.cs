@@ -64,6 +64,7 @@ public partial class HKDualScreen
 
     void RestoreReferenceRouting()
     {
+        RestoreLifebloodFlashBaselines();
         var failures = new List<Exception>();
         TryDirectStep(ReleaseLowerHudFixtureInputLockOrThrow, failures);
         TryDirectStep(() =>
