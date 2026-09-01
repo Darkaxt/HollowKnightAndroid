@@ -91,8 +91,66 @@ object Il2cppConverter {
      */
     private const val DEFAULT_SOURCES = 1148
 
+    /**
+     * Proof that a conversion ran all the way to the end.
+     *
+     * [isPresent] used to ask only whether global-metadata.dat and some .cpp
+     * existed, and a conversion killed near the end satisfies both -- the
+     * metadata lands before the last of eleven hundred sources do. So an
+     * interrupted run was inherited by the next build as finished work: the
+     * conversion was skipped, the compile took whatever partial tree was on
+     * disk, and the link accepted it because it allows undefined symbols. The
+     * result was a libil2cpp.so nine megabytes short of the real one, twelve
+     * minutes later, which the engine reported at launch as
+     *
+     *   dlopen failed: library "libil2cpp.so" not found
+     *
+     * -- naming neither the file it did find nor anything that happened here.
+     *
+     * That is not a rare shape. The conversion is three and a half minutes of
+     * a memory-hungry .NET process, and a device that reclaims the app during
+     * it drops the user back on a launcher with a Play button, because the
+     * build screen has already finished itself and only the launcher is
+     * restored. The recovery that worked was "Reset build", which is a thing
+     * somebody has to know to do.
+     *
+     * Written last and deleted first, so it never outlives the output it
+     * describes. Same reasoning as SetupActivity's .built marker and
+     * NativeBuild's .stamp, one layer down.
+     */
+    private fun doneMarker(root: File) = File(root, "cpp.done")
+
+    /**
+     * What a finished conversion looks like, as a string.
+     *
+     * The source count and the metadata's size rather than a bare "yes":
+     * those also notice a tree that has been pruned, or a metadata file
+     * replaced, since the run that wrote this.
+     */
+    private fun completionSignature(root: File): String =
+        "${cppDir(root).list()?.size ?: 0}:${metadata(root).length()}"
+
+    private fun markComplete(root: File) {
+        // Failing to write it costs a conversion that did not need to happen.
+        // Failing to notice it is missing costs a build that cannot run.
+        runCatching { doneMarker(root).writeText(completionSignature(root)) }
+    }
+
+    /**
+     * Whether the conversion on disk is one that finished.
+     *
+     * A build made before this marker existed does not carry one and converts
+     * again, once. That costs about four minutes -- the compile that follows
+     * is incremental and re-generated C++ is byte-identical, so almost
+     * nothing is rebuilt -- and it is the direction to be wrong in.
+     */
+    fun isComplete(root: File): Boolean =
+        runCatching { doneMarker(root).readText().trim() }.getOrNull() ==
+            completionSignature(root)
+
     fun isPresent(root: File): Boolean =
-        metadata(root).length() > 0 &&
+        isComplete(root) &&
+            metadata(root).length() > 0 &&
             cppDir(root).listFiles()?.any { it.name.endsWith(".cpp") } == true
 
     /**
@@ -249,6 +307,12 @@ object Il2cppConverter {
             // Any previous attempt is cleared: il2cpp is not asked to reconcile
             // a half-written tree, and a stale .cpp left behind by an
             // interrupted run would be compiled into the result.
+            //
+            // The marker goes first, and on its own line, so that a run killed
+            // anywhere below here leaves output that says outright it is
+            // unfinished rather than output the next build mistakes for work
+            // it does not have to do.
+            doneMarker(root).delete()
             cppDir(root).deleteRecursively()
             dataDir(root).deleteRecursively()
             cppDir(root).mkdirs()
@@ -342,6 +406,10 @@ object Il2cppConverter {
         val cpp = cppDir(root).listFiles()?.count { it.name.endsWith(".cpp") } ?: 0
         val c = cppDir(root).listFiles()?.count { it.name.endsWith(".c") } ?: 0
         rememberSources(root)
+        // Only now, and only after every check above: this is what the next
+        // build reads as permission to skip the four minutes it took to get
+        // here, so it has to mean the run reached this line.
+        markComplete(root)
         LauncherLog.log(
             "il2cpp: ${seconds}s, $cpp cpp + $c c, metadata ${metadata(root).length()} bytes",
         )
