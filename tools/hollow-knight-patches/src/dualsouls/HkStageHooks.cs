@@ -1,11 +1,8 @@
 using System;
-using System.Collections.Generic;
 using DualSouls.Mods.HollowKnight;
 using UnityEngine;
 
-// Explicit boundary for plan stages H3 (Mods/tweaks) and H4 (skins).
-// The inert HKDualScreen partial remains below until the Task 6 presenter
-// supplies those existing H2 call sites.
+// Explicit boundary for staged runtime delegation and joystick ownership.
 static class HkStageHooks
 {
     static KeyCode joyBase = KeyCode.Joystick1Button0;
@@ -82,24 +79,4 @@ static class HkStageHooks
     {
         return (KeyCode)((int)joyBase + index);
     }
-}
-
-public partial class HKDualScreen
-{
-    bool tweaksOpen;
-    GameObject tweaksRoot;
-    readonly List<GameObject> tweakRows = new List<GameObject>();
-    Transform gearT;
-    SpriteRenderer gearSR;
-    Texture2D gearTex;
-    Vector3 hudGearAnchor;
-    float hudGearH;
-    bool hudGearOk;
-    Bounds hudFpsB;
-
-    void TweaksPaneTick(Camera source) { }
-    void PositionGear(float scale, float aspect, float tabY) { }
-    bool GearTapN(float x, float y) => false;
-    void ToggleTweaksPane() { }
-    void CloseTweaksPane() { tweaksOpen = false; }
 }

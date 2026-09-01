@@ -713,7 +713,7 @@ public partial class HKDualScreen
         //     Net effect: one build-time config edit blanked the row until the process restarted.
         equipRowRoot = null; equipCharmSRs.Clear(); lastEquipStamp = int.MinValue;
         if (battIconSR != null) { Destroy(battIconSR.gameObject); battIconSR = null; } battIconT = null; battIconTex = null; battIconLvl = -2;
-        gearT = null; gearSR = null; gearTex = null;   // B8: gear is a frameRoot child; sprite/tex are Own()-tracked
+        ClearModsFrameReferences();   // gear objects/assets died with frameRoot/DestroyOwnedAssets
         if (battLevelT != null) { Destroy(battLevelT.gameObject); battLevelT = null; } battLevelTmp = null; lastBattLevel = "z";
     }
 
@@ -1391,7 +1391,7 @@ public partial class HKDualScreen
         try { if (ctrlMyVerbTmp != null) { var vr = (ctrlMyVerbTmp as Component).GetComponent<Renderer>(); if (vr != null) vr.enabled = false; } } catch { }
         prewarmDone = false;
         mapSrcRef = null; paneSrcRef = null; invStamp = int.MinValue; charmStamp = int.MinValue;
-        if (tweaksRoot != null) { Destroy(tweaksRoot); tweaksRoot = null; } tweakRows.Clear(); tweaksOpen = false;   // B8: pane clones die with the session
+        TeardownModsPresenter();   // Mods presentation detaches without disposing the process-owned session
         TeardownFrame();
         tab.built = -1;
         fit.valid = false;

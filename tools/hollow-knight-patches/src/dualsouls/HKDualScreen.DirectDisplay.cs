@@ -40,6 +40,7 @@ public partial class HKDualScreen
         if (!active)
         {
             var failures = new List<Exception>();
+            TryDirectStep(() => TeardownModsPresenter(), failures);
             TryDirectStep(RestoreReferenceRouting, failures);
             TryDirectStep(() => SetRoleCamerasEnabled(false), failures);
             directDisplayRestorePending = failures.Count > 0;

@@ -9,6 +9,7 @@ PATCH_ROOT = REPO_ROOT / "tools" / "hollow-knight-patches"
 SOURCE_ROOT = PATCH_ROOT / "src"
 REFERENCE_ROOT = SOURCE_ROOT / "dualsouls"
 ADAPTER = REFERENCE_ROOT / "HkDirectDisplayAdapter.cs"
+MODS_PRESENTER = REFERENCE_ROOT / "HollowKnightModsPresenter.cs"
 ENTRYPOINTS = PATCH_ROOT / "entrypoints.json"
 PROJECT = PATCH_ROOT / "HollowKnightPatches.csproj"
 PROVENANCE = REPO_ROOT / "docs" / "verification" / "hollow-knight-direct-display.md"
@@ -180,6 +181,231 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             for token in required_tokens:
                 with self.subTest(module=filename, token=token):
                     self.assertIn(token, source)
+
+    def test_h3_mods_presenter_owns_the_h2_view_boundary(self):
+        presenter = strip_csharp_comments(read(MODS_PRESENTER))
+        hooks = strip_csharp_comments(read(REFERENCE_ROOT / "HkStageHooks.cs"))
+        self.assertTrue(presenter, "missing HollowKnightModsPresenter.cs")
+        self.assertRegex(presenter, r"public\s+partial\s+class\s+HKDualScreen\b")
+
+        required_fields = (
+            "tweaksOpen", "tweaksRoot", "tweakRows", "gearT", "gearSR",
+            "gearTex", "hudGearAnchor", "hudGearH", "hudGearOk", "hudFpsB",
+        )
+        for field in required_fields:
+            with self.subTest(presenter_field=field):
+                self.assertRegex(presenter, rf"\b{field}\b")
+                self.assertNotRegex(hooks, rf"\b{field}\b")
+
+        required_methods = (
+            "TweaksPaneTick", "PositionGear", "GearTapN", "ToggleTweaksPane",
+            "CloseTweaksPane", "TeardownModsPresenter",
+        )
+        for method in required_methods:
+            with self.subTest(presenter_method=method):
+                self.assertRegex(presenter, rf"\b{method}\s*\(")
+                self.assertNotRegex(hooks, rf"\b{method}\s*\(")
+
+        self.assertNotRegex(hooks, r"\bpartial\s+class\s+HKDualScreen\b")
+
+    def test_h3_mods_presenter_borrows_the_process_owned_session_and_menu(self):
+        presenter = strip_csharp_comments(read(MODS_PRESENTER))
+        self.assertIn("HollowKnightModsRuntime.Current", presenter)
+        self.assertRegex(presenter, r"\.Session\b")
+        self.assertRegex(presenter, r"\.Menu\b")
+        self.assertIn("TweakMenuModel", presenter)
+        for forbidden in (
+            "new TweakController", "new TweakMenuModel", "new HollowKnightModsSession",
+            "new HollowKnightModsRuntime", "new PlayerPrefsTweakStore",
+            "new HollowKnightTweakAdapter", "HollowKnightModsRuntime.EnsureStarted",
+        ):
+            with self.subTest(second_authority=forbidden):
+                self.assertNotIn(forbidden, presenter)
+        self.assertNotRegex(presenter, r"\bITweakStore\b")
+
+    def test_h3_mods_presenter_preserves_the_three_accepted_tabs(self):
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        presenter = strip_csharp_comments(read(MODS_PRESENTER))
+        tab_row = method_body(frame, r"void\s+BuildTabRow\s*\([^)]*\)")
+        self.assertRegex(frame, r"TAB_TO_COL\s*=\s*\{\s*1\s*,\s*0\s*,\s*2\s*\}")
+        self.assertRegex(
+            frame,
+            r"const\s+int\s+COMP_MAP\s*=\s*0\s*,\s*COMP_INV\s*=\s*1\s*,\s*COMP_CHARM\s*=\s*2",
+        )
+        self.assertEqual(3, len(re.findall(r"LocalizedLabel\(", tab_row)))
+        for label in ("Inventory", "Map", "Charms"):
+            self.assertIn(f'LocalizedLabel("{label}"', tab_row)
+        self.assertNotIn('LocalizedLabel("Mods"', tab_row)
+        self.assertNotIn("TAB_TO_COL", presenter)
+        self.assertNotRegex(presenter, r"\b(?:tab\.tap|cfg\.compTab)\b")
+
+    def test_h3_mods_modal_renders_model_rows_and_deferred_truthfully(self):
+        presenter = strip_csharp_comments(read(MODS_PRESENTER))
+        repaint = method_body(
+            presenter,
+            r"void\s+RepaintModsModal\s*\([^)]*\)",
+        )
+        value = method_body(
+            presenter,
+            r"string\s+FriendlyModsValue\s*\([^)]*\)",
+        )
+        set_text = method_body(
+            presenter,
+            r"void\s+SetModsText\s*\([^)]*\)",
+        )
+        self.assertTrue(repaint, "missing bounded Mods repaint")
+        for required in (
+            "VisibleRows", "CurrentRows", "WindowStart", "SelectedRowIndex",
+            "Controller.Value", "IsAvailable", '"DEFERRED"', "Description",
+            "TrackingId", "UnavailableReason", "Message", "MessageIsError",
+            '"MODS"',
+        ):
+            with self.subTest(repaint=required):
+                self.assertIn(required, repaint)
+        self.assertIn("ToUpperInvariant()", value)
+        self.assertNotIn("catch", set_text)
+        self.assertIn("InvalidOperationException", set_text)
+        self.assertNotIn("new GameObject", repaint)
+        self.assertNotIn("Instantiate(", repaint)
+
+    def test_h3_mods_view_teardown_detaches_without_stopping_active_mods(self):
+        presenter = strip_csharp_comments(read(MODS_PRESENTER))
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        teardown = method_body(
+            presenter,
+            r"void\s+TeardownModsPresenter\s*\(\s*\)",
+        )
+        companion_teardown = method_body(
+            frame,
+            r"void\s+TeardownCompanion\s*\(\s*\)",
+        )
+        frame_teardown = method_body(
+            frame,
+            r"void\s+TeardownFrame\s*\(\s*\)",
+        )
+        clear_frame = method_body(
+            presenter,
+            r"void\s+ClearModsFrameReferences\s*\(\s*\)",
+        )
+        self.assertTrue(teardown, "missing deterministic Mods view teardown")
+        self.assertRegex(teardown, r"\bClose\s*\(")
+        self.assertIn("tweaksOpen = false", teardown)
+        self.assertIn("SetPresenterAttached(false)", teardown)
+        self.assertIn("Destroy(tweaksRoot)", teardown)
+        self.assertIn("tweakRows.Clear()", teardown)
+        for cleared in ("tweaksRoot = null", "gearT = null", "gearSR = null", "gearTex = null"):
+            self.assertIn(cleared, teardown)
+        self.assertIn("frameAssets.Remove(gearSprite)", teardown)
+        self.assertIn("frameAssets.Remove(gearTex)", teardown)
+        for forbidden in (
+            ".Dispose(", "Controller.Dispose", "SetMaster(", "ToggleMaster(",
+            "RestoreBaseline", "MasterEnabled =",
+        ):
+            with self.subTest(teardown_mutation=forbidden):
+                self.assertNotIn(forbidden, teardown)
+        self.assertIn("TeardownModsPresenter()", companion_teardown)
+        self.assertNotIn("Destroy(tweaksRoot)", companion_teardown)
+        self.assertNotIn("tweakRows.Clear()", companion_teardown)
+        self.assertNotIn("tweaksOpen = false", companion_teardown)
+        self.assertIn("ClearModsFrameReferences()", frame_teardown)
+        for cleared in ("gearT = null", "gearSR = null", "gearTex = null", "hudGearOk = false"):
+            self.assertIn(cleared, clear_frame)
+        self.assertNotIn("Destroy(", clear_frame)
+
+        direct = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.DirectDisplay.cs")
+        )
+        display_active = method_body(
+            direct,
+            r"internal\s+void\s+SetDirectDisplayActive\s*\([^)]*\)",
+        )
+        self.assertIn("TeardownModsPresenter()", display_active)
+        self.assertLess(
+            display_active.index("TeardownModsPresenter()"),
+            display_active.index("SetRoleCamerasEnabled(false)"),
+        )
+
+    def test_h3_mods_presenter_uses_frame_geometry_and_the_clean_touch_stream(self):
+        presenter = strip_csharp_comments(read(MODS_PRESENTER))
+        select = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Select.cs")
+        )
+        build_gear = method_body(presenter, r"void\s+BuildModsGear\s*\(\s*\)")
+        position_gear = method_body(
+            presenter,
+            r"void\s+PositionGear\s*\([^)]*\)",
+        )
+        gear_tap = method_body(presenter, r"bool\s+GearTapN\s*\([^)]*\)")
+        build_modal = method_body(
+            presenter,
+            r"void\s+BuildModsModal\s*\([^)]*\)",
+        )
+        set_text = method_body(
+            presenter,
+            r"void\s+SetModsText\s*\([^)]*\)",
+        )
+        stow = method_body(
+            presenter,
+            r"void\s+StowModsCoveredContent\s*\(\s*\)",
+        )
+        tick = method_body(presenter, r"void\s+TweaksPaneTick\s*\([^)]*\)")
+        tap = method_body(presenter, r"void\s+HandleModsCleanTap\s*\([^)]*\)")
+        poll = method_body(select, r"void\s+PollTouch\s*\(\s*\)")
+
+        for required in ("frameRoot", "Texture2D", "Sprite.Create", "Own(", "ATTR_LAYER", "sortingOrder"):
+            self.assertIn(required, build_gear)
+        self.assertIn("frameRoot.GetComponentsInChildren<Renderer>(true)", build_gear)
+        self.assertIn("modsSortingOrder = highestChromeOrder + 10", build_gear)
+        self.assertIn("sortingOrder = modsSortingOrder", build_gear)
+        self.assertIn("sortingOrder = modsSortingOrder + 10", set_text)
+        for required in ("hudGearAnchor", "hudGearH", "hudFpsB", "attrCam", "orthographicSize", "aspect", "tabY"):
+            self.assertIn(required, position_gear)
+        for required in ("attrCam.rect", "Contains", "ViewportToWorldPoint", "gearSR.bounds", "hudFpsB", "Expand"):
+            self.assertIn(required, gear_tap)
+        self.assertIn("frameRoot", build_modal)
+        self.assertIn("compRoot", build_modal)
+        self.assertIn("SanitizeDetachedTmpClone", build_modal)
+        self.assertIn("ForceMeshUpdate", presenter)
+        self.assertIn("NeutralizeDetachedTmpClip", presenter)
+        self.assertNotRegex(presenter, r"\bCanvas\b")
+
+        self.assertIn("transport.CleanTapSequence", tick)
+        self.assertIn("StowModsCoveredContent()", tick)
+        for covered in ("mapClone", "invCloneCache", "charmCloneCache"):
+            self.assertIn(covered, stow)
+        self.assertGreaterEqual(stow.count("SetActive(false)"), 3)
+        self.assertNotRegex(tick, r"\bInput\.")
+        for action in ("MoveGroup(", "MoveRow(", "ToggleMaster(", "CycleSelected(", "Reset("):
+            self.assertIn(action, tap)
+        self.assertIn("modsClosePending = true", tap)
+        self.assertIn("CloseTweaksPane()", tick)
+        self.assertLess(
+            tick.index("if (modsClosePending)"),
+            tick.index("transport.CleanTapSequence"),
+        )
+        self.assertIn("if (tweaksOpen) return", poll)
+        self.assertRegex(
+            poll,
+            r"if\s*\(hitTab\s*>=\s*0\)\s*\{\s*CloseTweaksPane\(\);\s*tab\.tap\s*=\s*hitTab",
+        )
+
+    def test_h3_mods_presenter_has_no_copied_h3_or_native_bridge_surface(self):
+        compiled = "\n".join(
+            strip_csharp_comments(read(path)) for path in SOURCE_ROOT.rglob("*.cs")
+        )
+        for copied in ("HKTweaks", "HKModsMenu", "HKDualScreen.Bottom.Tweaks"):
+            self.assertNotIn(copied, compiled)
+        presenter = strip_csharp_comments(read(MODS_PRESENTER))
+        for forbidden in (
+            "DllImport", "AndroidJava", "IssuePluginEvent", "PlayerPrefs.Set",
+            "persistentDataPath", "GetJoystickNames", "GetButton", "GetAxis",
+        ):
+            with self.subTest(prohibited_surface=forbidden):
+                self.assertNotIn(forbidden, presenter)
 
     def test_adapter_is_concrete_shared_transport_content_not_authored_ui(self):
         source = strip_csharp_comments(read(ADAPTER))
