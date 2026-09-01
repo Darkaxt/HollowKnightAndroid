@@ -90,6 +90,95 @@ public sealed class HollowKnightTweakAdapterTests
     }
 
     [Fact]
+    public void CatalogRejectsMutationThroughListInterfaceAndKeepsOrder()
+    {
+        var adapter = new HollowKnightTweakAdapter(new RecordingApi());
+        var rows = Assert.IsAssignableFrom<IList<TweakDescriptor>>(adapter.Descriptors);
+        string[] expectedOrder = adapter.Descriptors.Select(row => row.Id).ToArray();
+        TweakDescriptor first = rows[0];
+        Exception mutationError = null;
+
+        try
+        {
+            mutationError = Record.Exception(() => rows[0] = rows[1]);
+        }
+        finally
+        {
+            if (!ReferenceEquals(rows[0], first)) rows[0] = first;
+        }
+
+        Assert.IsType<NotSupportedException>(mutationError);
+        Assert.Equal(expectedOrder, adapter.Descriptors.Select(row => row.Id));
+    }
+
+    [Fact]
+    public void EveryAllowedPresentationValueHasOneExactDispatch()
+    {
+        var expected = new Dictionary<string, Dictionary<string, string>>
+        {
+            ["companion_backdrop"] = new()
+            {
+                ["dimmed"] = "backdrop:False",
+                ["black"] = "backdrop:True",
+            },
+            ["lifeblood_flash"] = new()
+            {
+                ["soft"] = "flash:Soft",
+                ["vanilla"] = "flash:Vanilla",
+                ["off"] = "flash:Off",
+            },
+        };
+        var catalog = new HollowKnightTweakAdapter(new RecordingApi());
+        TweakDescriptor[] available = catalog.Descriptors.Where(row => row.IsAvailable).ToArray();
+
+        Assert.Equal(expected.Keys, available.Select(row => row.Id));
+        foreach (TweakDescriptor row in available)
+        {
+            Assert.Equal(expected[row.Id].Keys, row.Values);
+            foreach (string value in row.Values)
+            {
+                var api = new RecordingApi();
+                var adapter = new HollowKnightTweakAdapter(api);
+
+                TweakActionResult result = adapter.Apply(row.Id, value);
+
+                Assert.True(result.Success);
+                Assert.Equal(new[] { expected[row.Id][value] }, api.Calls);
+            }
+        }
+    }
+
+    [Fact]
+    public void DescriptorValueDriftFailsClosedWithoutApiCall()
+    {
+        var catalog = new HollowKnightTweakAdapter(new RecordingApi());
+
+        foreach (TweakDescriptor row in catalog.Descriptors.Where(row => row.IsAvailable))
+        {
+            var values = Assert.IsAssignableFrom<IList<string>>(row.Values);
+            string originalValue = values[0];
+            const string driftedValue = "future_value";
+
+            try
+            {
+                values[0] = driftedValue;
+                var api = new RecordingApi();
+                var adapter = new HollowKnightTweakAdapter(api);
+
+                TweakActionResult result = adapter.Apply(row.Id, driftedValue);
+
+                Assert.False(result.Success);
+                Assert.Contains(driftedValue, result.Error);
+                Assert.Empty(api.Calls);
+            }
+            finally
+            {
+                values[0] = originalValue;
+            }
+        }
+    }
+
+    [Fact]
     public void DeferredRowsHaveExactUniqueTrackingMapAndRemainVisible()
     {
         var adapter = new HollowKnightTweakAdapter(new RecordingApi());

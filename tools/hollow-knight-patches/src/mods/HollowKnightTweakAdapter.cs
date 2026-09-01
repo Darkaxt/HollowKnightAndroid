@@ -24,7 +24,7 @@ namespace DualSouls.Mods.HollowKnight
     /// <summary>Hollow Knight catalog adapter for the shared built-in Mods contract.</summary>
     public sealed class HollowKnightTweakAdapter : ITweakAdapter
     {
-        static readonly IReadOnlyList<TweakDescriptor> Rows = new[]
+        static readonly IReadOnlyList<TweakDescriptor> Rows = Array.AsReadOnly(new[]
         {
             new TweakDescriptor(
                 "companion_backdrop", "PRESENTATION", "COMPANION BACKDROP",
@@ -106,7 +106,7 @@ namespace DualSouls.Mods.HollowKnight
                 "state_slots", "STATE", "STATE SLOTS",
                 "Capture and restore transactional, versioned state snapshots.",
                 "HKMOD-018", "A versioned checksummed snapshot format and atomic failure rollback are not proven."),
-        };
+        });
 
         readonly IHollowKnightTweakApi _api;
 
@@ -140,16 +140,23 @@ namespace DualSouls.Mods.HollowKnight
 
                 if (id == "companion_backdrop")
                 {
-                    _api.SetCompanionBackdropBlack(value == "black");
+                    if (value == "dimmed")
+                        _api.SetCompanionBackdropBlack(false);
+                    else if (value == "black")
+                        _api.SetCompanionBackdropBlack(true);
+                    else
+                        return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + " value " + value + ".");
                 }
                 else if (id == "lifeblood_flash")
                 {
-                    HollowKnightFlashMode mode = value == "soft"
-                        ? HollowKnightFlashMode.Soft
-                        : value == "vanilla"
-                            ? HollowKnightFlashMode.Vanilla
-                            : HollowKnightFlashMode.Off;
-                    _api.SetLifebloodFlash(mode);
+                    if (value == "soft")
+                        _api.SetLifebloodFlash(HollowKnightFlashMode.Soft);
+                    else if (value == "vanilla")
+                        _api.SetLifebloodFlash(HollowKnightFlashMode.Vanilla);
+                    else if (value == "off")
+                        _api.SetLifebloodFlash(HollowKnightFlashMode.Off);
+                    else
+                        return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + " value " + value + ".");
                 }
                 else
                 {
