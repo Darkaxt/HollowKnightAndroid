@@ -353,6 +353,19 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             position.index("var glyphBounds = glyphRenderer.bounds"),
         )
 
+    def test_frame_tab_sanitization_preserves_the_tmp_text_container(self):
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        tabs = method_body(frame, r"void\s+BuildTabRow\s*\([^)]*\)")
+        self.assertIn('driverName == "TextContainer"', tabs)
+        self.assertIn("mb.enabled = false", tabs)
+        self.assertIn("DestroyImmediate(mb)", tabs)
+        self.assertLess(
+            tabs.index('driverName == "TextContainer"'),
+            tabs.index("DestroyImmediate(mb)"),
+        )
+
     def test_frame_tab_row_uses_device_safe_scale_and_centres_real_glyph_bounds(self):
         layout = strip_csharp_comments(read(REFERENCE_ROOT / "HKLayout.cs"))
         frame = strip_csharp_comments(
@@ -424,6 +437,47 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         self.assertIn("AcknowledgeContentInactiveAndReconcile()", recovered)
 
+    def test_reference_restoration_uses_failure_propagating_helpers(self):
+        direct = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.DirectDisplay.cs")
+        )
+        restore = method_body(
+            direct,
+            r"void\s+RestoreReferenceRouting\s*\(\s*\)",
+        )
+        self.assertIn("TryDirectStep(RestoreNameCardOrThrow", restore)
+        self.assertIn("TryDirectStep(RestoreDialogueShapeOrThrow", restore)
+
+        main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
+        strict_name = method_body(
+            main,
+            r"void\s+RestoreNameCardOrThrow\s*\(\s*\)",
+        )
+        self.assertNotIn("catch", strict_name)
+        self.assertIn("dlgNameRouted = false", strict_name)
+
+        hud = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Hud.cs")
+        )
+        strict_dialogue = method_body(
+            hud,
+            r"void\s+RestoreDialogueShapeOrThrow\s*\(\s*\)",
+        )
+        self.assertNotIn("catch", strict_dialogue)
+        self.assertIn("dlgShaped = false", strict_dialogue)
+
+    def test_bottom_fade_clears_without_a_source_and_reframes_on_aspect(self):
+        layering = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Layering.cs")
+        )
+        sync = method_body(layering, r"void\s+SyncBottomFade\s*\(\s*\)")
+        self.assertRegex(
+            sync,
+            r"fadeFsm\s*==\s*null[^{}]*\{[^{}]*fadeQuadMR\.enabled\s*=\s*false",
+        )
+        self.assertIn("asp != fadeQuadAspect", sync)
+        self.assertIn("fadeQuadAspect = asp", sync)
+
     def test_orchestrator_wires_frame_pages_selection_overlays_fade_and_lifecycle(self):
         main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
         frame = strip_csharp_comments(
@@ -456,6 +510,14 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         ):
             with self.subTest(companion_call=call):
                 self.assertIn(call, update)
+
+    def test_tutorial_scan_covers_the_persistent_hud_root_and_relayered_nodes(self):
+        main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
+        scan = method_body(main, r"void\s+ScanTutorials\s*\([^)]*\)")
+        node = method_body(main, r"void\s+ScanNode\s*\([^)]*\)")
+        self.assertIn("GameCameras.instance", scan)
+        self.assertIn("persistentRoot", scan)
+        self.assertIn("go.layer == hudLayer", node)
 
     def test_adapter_routes_geometry_visibility_touch_and_teardown_to_reference(self):
         adapter = strip_csharp_comments(read(ADAPTER))

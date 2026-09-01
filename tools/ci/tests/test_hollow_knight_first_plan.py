@@ -52,7 +52,9 @@ class HollowKnightFirstPlanTests(unittest.TestCase):
         self.assertIn("PARKED SUCCESSOR PHASE", old_plan)
         self.assertIn("DEFERRED / AUDIT-COMPLETE", matrix)
         self.assertIn("Hollow Knight H5/H6", matrix)
-        self.assertIn("| Goal 11: faithful Dual Souls bottom-screen port | H2–H6, S1–S2 | DEFERRED |", traceability)
+        self.assertIn("| Goal 11: faithful Dual Souls bottom-screen port | H2–H6, S1–S2 | IN-PROGRESS |", traceability)
+        self.assertIn("Silksong adaptation", traceability)
+        self.assertIn("stays parked", traceability)
         self.assertIn("| Dual Souls composition port | `IN-PROGRESS` |", matrix)
 
     def test_every_public_authority_links_the_new_plan(self):

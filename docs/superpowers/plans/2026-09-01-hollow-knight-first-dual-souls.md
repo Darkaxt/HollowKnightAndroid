@@ -299,25 +299,27 @@ API, lifecycle, geometry, and exact-build failures together. Run the focused
 Python contracts and exact Hollow Knight compile, but do not sign or deploy
 until this whole source-level inventory is green.
 
-- [ ] **Step 5: Run one signed functional companion gate**
+- [x] **Step 5: Run one signed lower-HUD companion gate**
 
 Build and sign once, install as an update, launch exact Hollow Knight
-`1.5.12620`, and run the complete H2 matrix in that generation: live HUD and
-clean top screen; damage/heal, Soul and Geo changes; Inventory, Charms, Map,
-selection/action prompts, dialogue/tutorial, item popups, fade/death,
-pause/inventory, background/resume, display loss/restoration, and lower-display
-touch. Confirm the lower scenery is blurred and dimmed rather than a clear
-second gameplay view. Resident tab labels must remain visible after the source
-inventory closes; glyphs and fleurs must fit their measured cells. Record all
-failures before changing source, and close the game after capture.
+`1.5.12620`, and inspect only the companion surface: live HUD and clean top
+screen; Inventory, Charms, Map; selection/action prompts; pause presentation;
+the blurred/dimmed scenery wash; and lower-display touch. Do not navigate,
+fight, collect, progress, alter saves, or run general gameplay. Dialogue,
+tutorial, item-popup, fade/death, restoration, and other state transitions use
+focused host contracts or controlled debug injection/current static state.
+Resident tab labels must remain visible after the source inventory closes;
+glyphs and fleurs must fit their measured cells. Record the entire lower-HUD
+defect set before changing source, and close the game after capture.
 
 - [ ] **Step 6: Fix the captured H2 defect set as one batch**
 
 Convert every observed defect into a focused regression contract, implement
 the complete correction batch, rerun host verification and exact compilation,
-then repeat only the affected signed acceptance rows plus one clean launch,
-pause/resume, and teardown smoke. A missing module or visual/behavioral
-difference is a blocker, not a Silksong deferral.
+then repeat only the affected lower-HUD signed rows plus one clean launch,
+pause/resume, and teardown smoke. No gameplay traversal is part of the recheck.
+A missing module or visual/behavioral difference is a blocker, not a Silksong
+deferral.
 
 - [ ] **Step 7: Reconcile and commit**
 
@@ -572,7 +574,7 @@ the installed app, and smoke-test both profiles. Close the running game.
 | --- | --- | --- | --- | --- |
 | H0 | DSUI-00/08/10 | `COMPLETE` | None | Both specifications, both parent plans, matrix, traceability, README, and 5/5 ordering contracts agree; the existing 38-contract Silksong suite remains green after the status correction |
 | H1 | DSUI-00/02/10 | `IMPLEMENTED / DEVICE-PARTIAL` | No implementation blocker; one tracked physical detach/true single-display deferral must close by H5 | 49/49 shared tests, 78/78 Python tests, both exact compiles, signed run `33494317664`, update-preserving Thor transport and pause/resume captures |
-| H2 | DSUI-00/01/02/07/10 | `SOURCE-COMPLETE / DEVICE-BLOCKED` | Signed device evidence proves the corrected per-cell fleurs and on-screen non-zero tab geometry, but the TMP labels still produce no pixels; the complete UI/touch/lifecycle matrix has not run | 20/20 focused companion contracts, 98/98 host tests, and exact `1.5.12620` compile at 222,208 bytes are green; the post-mesh/per-frame renderer re-enable correction is host-green and will enter the single signed H2 integration batch |
+| H2 | DSUI-00/01/02/07/10 | `SOURCE-COMPLETE / DEVICE-BLOCKED` | Signed lower-HUD evidence proves routed live HUD, clean primary HUD, blurred/dimmed backdrop, real lower-controller page switching, selection/details/prompt, bounded ornaments, and pause title presentation. Resident TMP tab text still has no pixels; tutorial routing and the correction batch remain device-unproved | Signed run `33515971125` installed commit `c2eb819` in place and published exact generation `gen-be61fa68-e065-4cdb-9972-d595c93a7698`. The batched correction is green in 24 focused contracts, 58 shared tests, 102 Python tests, both exact compiles, and a 222,720-byte Hollow Knight patch. Its one signed lower-HUD-only recheck remains |
 | H3 | DSUI-00/05/09/10 | `PENDING` | Hollow Knight Mods behavior and persistence | Host isolation plus Thor effect/relaunch matrix |
 | H4 | DSUI-00/05/09/10 | `PENDING` | Scanner, application, rotation, rollback | Host pack matrix plus Thor death/respawn proof |
 | H5 | DSUI-00–10 | `PENDING` | Hollow Knight blockers and deferrals must both reach zero | Clean host and complete Thor reference matrix |

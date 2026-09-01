@@ -1020,14 +1020,18 @@ public partial class HKDualScreen
     // Hand HK's box back exactly as authored (used if the feature is switched off at runtime).
     void RestoreDialogueShape()
     {
-        try
-        {
-            if (dlgTc != null && dlgSizeOrig.sqrMagnitude > 1e-5f) { TcSetSize(dlgTc, dlgSizeOrig); if (dlgRt != null) dlgRt.localPosition = dlgRtPosOrig; }
-            for (int i = 0; dlgBotBits != null && i < dlgBotBits.Length; i++)
-                if (dlgBotBits[i] != null) dlgBotBits[i].localPosition = dlgBotBitsOrig[i];
-            if (dlgBackboard != null) { dlgBackboard.localScale = dlgBackboardOrigScale; dlgBackboard.localPosition = dlgBackboardOrigPos; }
-        }
-        catch { }
+        try { RestoreDialogueShapeOrThrow(); }
+        catch (Exception e) { WarnOnce("dialogue shape restore", e); }
+    }
+
+    // Failure-propagating form used by transport shutdown. The shaped-state
+    // ownership flag clears only after every mutable reference is restored.
+    void RestoreDialogueShapeOrThrow()
+    {
+        if (dlgTc != null && dlgSizeOrig.sqrMagnitude > 1e-5f) { TcSetSize(dlgTc, dlgSizeOrig); if (dlgRt != null) dlgRt.localPosition = dlgRtPosOrig; }
+        for (int i = 0; dlgBotBits != null && i < dlgBotBits.Length; i++)
+            if (dlgBotBits[i] != null) dlgBotBits[i].localPosition = dlgBotBitsOrig[i];
+        if (dlgBackboard != null) { dlgBackboard.localScale = dlgBackboardOrigScale; dlgBackboard.localPosition = dlgBackboardOrigPos; }
         dlgShaped = false;
     }
 

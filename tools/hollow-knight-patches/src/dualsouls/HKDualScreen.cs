@@ -89,15 +89,23 @@ public partial class HKDualScreen : MonoBehaviour
             var roots = sc.GetRootGameObjects();
             for (int r = 0; r < roots.Length; r++) ScanNode(roots[r].transform, layer);
         }
+        // GameCameras/HUD can live in Unity's hidden DontDestroyOnLoad
+        // scene, which SceneManager.sceneCount does not enumerate. Scan its
+        // persistent root explicitly so newly spawned attack/focus prompts
+        // cannot remain on the primary display.
+        var cameras = GameCameras.instance;
+        Transform persistentRoot = cameras != null ? cameras.transform.root : null;
+        if (persistentRoot != null) ScanNode(persistentRoot, layer);
     }
 
     void ScanNode(Transform t, int layer)
     {
         var go = t.gameObject;
         string nm = go.name;   // PERF: match with NameHas (no ToLowerInvariant alloc per node — this recurses whole scenes)
-        bool onUI = go.layer == UI_LAYER || go.layer == layer || go.layer == ATTR_LAYER;
+        bool onUI = go.layer == UI_LAYER || go.layer == hudLayer || go.layer == layer || go.layer == ATTR_LAYER;
         bool isCredit = onUI && NameHas(nm, "credit");
-        bool isTut = go.layer == UI_LAYER && (NameHas(nm, "tutorial") || NameHas(nm, "focus_prompt"));
+        bool isTut = (go.layer == UI_LAYER || go.layer == hudLayer || go.layer == layer) &&
+                     (NameHas(nm, "tutorial") || NameHas(nm, "focus_prompt"));
         if (isCredit || isTut)
         {
             RouteToLayer(t, layer);
@@ -692,16 +700,20 @@ public partial class HKDualScreen : MonoBehaviour
     // the dialogue box — so it needs handing back explicitly, not just via the layer map.
     void RestoreNameCard()
     {
-        try
+        try { RestoreNameCardOrThrow(); }
+        catch (Exception e) { WarnOnce("name card restore", e); }
+    }
+
+    // Transport shutdown must know whether the original ownership was really
+    // restored. Keep state intact on failure so DirectDisplay can retry.
+    void RestoreNameCardOrThrow()
+    {
+        if (dlgNameRouted && dlgNameT != null)
         {
-            if (dlgNameRouted && dlgNameT != null)
-            {
-                SetLayerRecursive(dlgNameT, dlgNameOrigLayer >= 0 ? dlgNameOrigLayer : UI_LAYER);
-                dlgNameT.localPosition = dlgNameOrigLocal;
-            }
-            SetNameClone(false); dlgNameStr = "";
+            SetLayerRecursive(dlgNameT, dlgNameOrigLayer >= 0 ? dlgNameOrigLayer : UI_LAYER);
+            dlgNameT.localPosition = dlgNameOrigLocal;
         }
-        catch { }
+        SetNameClone(false); dlgNameStr = "";
         dlgNameRouted = false; dlgNameHoldT = -1f; dlgNameOrigLayer = -1; loreDialogueOpen = false;
     }
 

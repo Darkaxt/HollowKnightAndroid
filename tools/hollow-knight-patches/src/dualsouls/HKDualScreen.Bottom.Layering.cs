@@ -30,6 +30,7 @@ public partial class HKDualScreen
     float fadeGrace;                                                         // hold-black until this time after a deep sampled fade (bridges the action-exit -> load-flag gap)
     bool fadePostIn;                                                         // fade-IN under way/finished -> the hold window must not re-darken (cleared by the next fade-out)
     float fadeQuadOrtho = -1f;                                               // quad sized for this ortho (re-laid only on change)
+    float fadeQuadAspect = -1f;                                              // panel aspect can change without an ortho change
 
     bool dsWas = true;
 
@@ -195,7 +196,11 @@ public partial class HKDualScreen
         try
         {
             var gcams = GameCameras.instance; var fadeFsm = gcams != null ? gcams.cameraFadeFSM : null;
-            if (fadeFsm == null) return;
+            if (fadeFsm == null)
+            {
+                if (fadeQuadMR != null && fadeQuadMR.enabled) fadeQuadMR.enabled = false;
+                return;
+            }
             if (!ReferenceEquals(fadeSrcFor, (UnityEngine.Object)fadeFsm) || (fadeSrc1 == null && fadeSrc2 == null))
             {
                 fadeSrcFor = fadeFsm; fadeSrc1Mat = fadeSrc2Mat = null;
@@ -264,9 +269,10 @@ public partial class HKDualScreen
                 fadeQuadMR.sortingOrder = 32000;   // over everything promptCam draws (and promptCam is the last bottom cam)
             }
             float o = promptCam.orthographicSize, asp = promptCam.aspect;
-            if (o != fadeQuadOrtho)   // camera geometry is static in practice — size the quad only when it changes
+            if (o != fadeQuadOrtho || asp != fadeQuadAspect)
             {
                 fadeQuadOrtho = o;
+                fadeQuadAspect = asp;
                 fadeQuadT.localPosition = new Vector3(0f, 0f, promptCam.nearClipPlane + 0.5f);
                 fadeQuadT.localScale = new Vector3(o * 2.2f * asp, o * 2.2f, 1f);   // 10% overscan
             }

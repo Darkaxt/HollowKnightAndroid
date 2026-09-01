@@ -71,8 +71,8 @@ public partial class HKDualScreen
             if (cameras != null) RelayerHud(cameras, true);
         }, failures);
         TryDirectStep(RestoreRoutedLayers, failures);
-        TryDirectStep(RestoreNameCard, failures);
-        TryDirectStep(RestoreDialogueShape, failures);
+        TryDirectStep(RestoreNameCardOrThrow, failures);
+        TryDirectStep(RestoreDialogueShapeOrThrow, failures);
         if (failures.Count == 1) throw failures[0];
         if (failures.Count > 1)
             throw new AggregateException("Dual Souls object restoration failed", failures);

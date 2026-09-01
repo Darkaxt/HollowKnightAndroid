@@ -33,6 +33,7 @@ namespace DualSouls.DualScreen
         float _downY;
         float _lastX;
         float _lastY;
+        float _maxTravelSquared;
         int _maxPointers;
 
         public int TouchCount { get; private set; }
@@ -54,6 +55,7 @@ namespace DualSouls.DualScreen
         public void Cancel()
         {
             _gestureActive = false;
+            _maxTravelSquared = 0f;
             _maxPointers = 0;
             TouchCount = 0;
             TouchX = TouchY = -1f;
@@ -76,6 +78,7 @@ namespace DualSouls.DualScreen
                 _downTime = now;
                 _downX = _lastX = first.X;
                 _downY = _lastY = first.Y;
+                _maxTravelSquared = 0f;
                 _maxPointers = count;
                 TapSequence++;
             }
@@ -86,6 +89,11 @@ namespace DualSouls.DualScreen
                 var first = contacts[0];
                 TouchX = T0X = _lastX = first.X;
                 TouchY = T0Y = _lastY = first.Y;
+                float dx = first.X - _downX;
+                float dy = first.Y - _downY;
+                _maxTravelSquared = Math.Max(
+                    _maxTravelSquared,
+                    dx * dx + dy * dy);
                 if (count > 1)
                 {
                     T1X = contacts[1].X;
@@ -98,8 +106,7 @@ namespace DualSouls.DualScreen
 
             if (!canceled && _maxPointers == 1 &&
                 now - _downTime < CleanTapSeconds &&
-                Math.Abs(_lastX - _downX) < CleanTapTravel &&
-                Math.Abs(_lastY - _downY) < CleanTapTravel)
+                _maxTravelSquared < CleanTapTravel * CleanTapTravel)
             {
                 CleanTapX = _lastX;
                 CleanTapY = _lastY;
@@ -107,6 +114,7 @@ namespace DualSouls.DualScreen
             }
 
             _gestureActive = false;
+            _maxTravelSquared = 0f;
             _maxPointers = 0;
         }
     }

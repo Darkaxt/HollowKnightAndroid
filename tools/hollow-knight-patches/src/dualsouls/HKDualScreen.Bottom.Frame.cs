@@ -390,7 +390,23 @@ public partial class HKDualScreen
                     go.SetActive(false);
                     go.name = "F_Tab" + i;
                     foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true))
-                        if (mb != null && !mb.GetType().Name.Contains("TextMeshPro")) DestroyImmediate(mb);
+                    {
+                        if (mb == null) continue;
+                        string driverName = mb.GetType().Name;
+                        if (driverName.Contains("TextMeshPro")) continue;
+                        // Legacy TextMesh Pro keeps its RectTransform contract
+                        // in a separate TextContainer component. Removing it
+                        // before the retained TMP receives Awake produces a
+                        // non-empty mesh with valid bounds but no glyph pixels.
+                        // Keep the dependency resident but inert; all actual
+                        // menu/FSM drivers are still removed before activation.
+                        if (driverName == "TextContainer")
+                        {
+                            mb.enabled = false;
+                            continue;
+                        }
+                        DestroyImmediate(mb);
+                    }
                     SetLayerRecursive(go.transform, ATTR_LAYER);
                     // Force renderers and the retained TMP Behaviour on. The
                     // closed inventory can leave both disabled independently.

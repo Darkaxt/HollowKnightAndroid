@@ -49,6 +49,19 @@ public sealed class DirectDisplayGestureTrackerTests
     }
 
     [Fact]
+    public void RoundTripDragNeverPublishesACleanTap()
+    {
+        var tracker = new DirectDisplayGestureTracker();
+
+        tracker.Update(new[] { new DirectDisplayContact(1, 0.10f, 0.10f) }, 1f);
+        tracker.Update(new[] { new DirectDisplayContact(1, 0.40f, 0.40f) }, 1.1f);
+        tracker.Update(new[] { new DirectDisplayContact(1, 0.11f, 0.11f) }, 1.2f);
+        tracker.Update(System.Array.Empty<DirectDisplayContact>(), 1.25f);
+
+        Assert.Equal(0, tracker.CleanTapSequence);
+    }
+
+    [Fact]
     public void ActiveContactsPreserveTwoPointerCoordinates()
     {
         var tracker = new DirectDisplayGestureTracker();

@@ -192,11 +192,43 @@ it. The current RED/GREEN correction therefore re-enables every tab renderer
 after final `ForceMeshUpdate` and reasserts the co-located glyph renderer before
 each bounds/layout pass.
 
-The complete H2 source responsibility inventory is now host-green as one
-batch. Twenty focused contracts cover the original HUD/routing, frame/tabs,
-Inventory, Charms, Map, selection/prompts, tutorial/dialogue, item/lore,
-fade/backdrop, touch, and restoration paths; the full suite is 98/98 and the
-exact `1.5.12620` patch compiles at 222,208 bytes with two entry points. Per the
-batch-first verification cadence, this candidate will be signed once and run
-through the complete H2 device matrix instead of triggering a full package and
-IL2CPP cycle for each visual correction.
+Signed dry-run `33515971125` built commit `c2eb819`. Its downloaded APK has
+SHA-256
+`a0053552256e33d803a27446410c1114d8eb2d04f338ad887d2af7e2225c92e5`,
+verifies with APK Signature Scheme v2/v3 and the pinned signer, and updated the
+installed package without changing its UID or first-install time. The exact
+`1.5.12620` rebuild published generation
+`gen-be61fa68-e065-4cdb-9972-d595c93a7698`.
+
+That candidate ran one lower-companion-only matrix. It proves live HUD routing
+with a clean primary HUD, the dark blurred backdrop, bounded tab ornaments,
+Inventory/Charms/Map switching through the lower panel's associated
+`fts_ts_3` kernel event path, Inventory item selection with details and the
+native action glyph, and the Hollow Knight pause title on the lower surface.
+The game was then force-stopped and the temporary layout override and stay-awake
+setting were removed/restored. No general gameplay result is inferred from this
+matrix.
+
+| H2 lower-companion row | Result | Evidence / remaining work |
+| --- | --- | --- |
+| Live HUD routed; primary HUD clean | PASS | Masks/Soul render on display 1 while the primary gameplay HUD is absent |
+| Dark blurred lower backdrop | PASS | Lower capture retains the reference-style subdued scenery wash rather than a sharp second gameplay view |
+| Inventory, Charms, and Map switching | PASS | The display-associated `fts_ts_3` event path selected all three bottom pages; high-level ADB display injection is not counted |
+| Selection, details, and action prompt | PASS | Selecting Old Nail rendered selection corners, its name/description, and the native X glyph |
+| Tab glyph/fleur bounds | PASS | All ornaments remain centered and bounded to their tab cells |
+| Resident Inventory/Map/Charms text | FAIL | TMP objects retain valid geometry but produce no pixels |
+| Pause lower surface | PASS | Pausing presents the Hollow Knight title card on display 1 |
+| Tutorial/dialogue/item/fade state routing | PENDING | One observed attack-tutorial state exposed a persistent-HUD scan gap; the batched correction is host-green. Recheck uses controlled/static lower-HUD state only, not gameplay traversal |
+| Background/resume and restoration retry | PENDING | Host contracts cover retry ownership; affected signed lower-HUD lifecycle rows remain |
+| Physical display loss / true single-display start | TRACKED DEFERRAL | Unchanged H1 hardware/composer limitation; must close by H5 |
+| Teardown and host-setting restoration | PASS | Package PID absent after force-stop; temporary layout file removed; `stay_on_while_plugged_in` restored to `0` |
+
+The subsequent H2 correction remains one batch. It preserves TMP's associated
+`TextContainer`, keeps restoration ownership until each restore succeeds,
+clears stale fades when the source FSM disappears, reframes fades after aspect
+changes, makes clean-tap publication depend on maximum gesture travel, and
+scans the persistent HUD root for tutorial nodes. Twenty-four focused companion
+contracts, all 58 shared tests, all 102 Python tests, both exact patch compiles,
+and the exact 222,720-byte `1.5.12620` patch are green. It now requires one
+signed lower-HUD-only recheck; navigation, combat, collection, progression,
+save mutation, and general gameplay are outside every companion pass.
