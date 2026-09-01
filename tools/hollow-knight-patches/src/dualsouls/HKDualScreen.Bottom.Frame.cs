@@ -383,9 +383,13 @@ public partial class HKDualScreen
                 try
                 {
                     // Keep the clone inactive in hierarchy until every driver
-                    // except the retained TMP visual has been removed. This
+                    // except the retained TMP visual has been disabled. This
                     // prevents the inventory's close/fade behaviours from
-                    // running Awake/OnEnable on our resident tab label.
+                    // running OnEnable on our resident tab label while keeping
+                    // the complete legacy-TMP dependency graph intact. The
+                    // pinned Dual Souls reference disables these components;
+                    // destroying any of them produces valid bounds but no
+                    // glyph pixels on Hollow Knight 1.5.12620.
                     go = Instantiate(src.gameObject, staging.transform);
                     go.SetActive(false);
                     go.name = "F_Tab" + i;
@@ -394,18 +398,7 @@ public partial class HKDualScreen
                         if (mb == null) continue;
                         string driverName = mb.GetType().Name;
                         if (driverName.Contains("TextMeshPro")) continue;
-                        // Legacy TextMesh Pro keeps its RectTransform contract
-                        // in a separate TextContainer component. Removing it
-                        // before the retained TMP receives Awake produces a
-                        // non-empty mesh with valid bounds but no glyph pixels.
-                        // Keep the dependency resident but inert; all actual
-                        // menu/FSM drivers are still removed before activation.
-                        if (driverName == "TextContainer")
-                        {
-                            mb.enabled = false;
-                            continue;
-                        }
-                        DestroyImmediate(mb);
+                        mb.enabled = false;
                     }
                     SetLayerRecursive(go.transform, ATTR_LAYER);
                     // Force renderers and the retained TMP Behaviour on. The

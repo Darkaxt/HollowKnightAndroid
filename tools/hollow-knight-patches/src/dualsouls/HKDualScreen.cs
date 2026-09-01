@@ -74,6 +74,26 @@ public partial class HKDualScreen : MonoBehaviour
 
     readonly WaitForEndOfFrame _eof = new WaitForEndOfFrame();   // cached yield object (per-frame `new` is a GC alloc)
 
+    // GameCameras.instance / GameManager.instance log an error every time their
+    // singleton has not been created yet. The launcher/title startup path can
+    // legitimately run HKDualScreen before those scene owners exist, so cache
+    // them through Unity's silent scene lookup and do no HUD work until both
+    // are ready. Unity's destroyed-object null semantics automatically re-arm
+    // discovery if either owner is ever replaced.
+    GameCameras resolvedGameCameras;
+    GameManager resolvedGameManager;
+
+    bool TryResolveSceneManagers(out GameCameras cameras, out GameManager manager)
+    {
+        if (resolvedGameCameras == null)
+            resolvedGameCameras = UnityEngine.Object.FindFirstObjectByType<GameCameras>();
+        if (resolvedGameManager == null)
+            resolvedGameManager = UnityEngine.Object.FindFirstObjectByType<GameManager>();
+        cameras = resolvedGameCameras;
+        manager = resolvedGameManager;
+        return cameras != null && manager != null;
+    }
+
     // ---- narrative overlays: move onto the bottom-screen layers by name ------------------------
     // tutorials/focus popups AND the opening attribution ("Credits") (UI layer) -> tutLayer, drawn by
     // promptCam (full-frame bottom; FrameHudCams zooms it by creditScale while the credit draws — the old
@@ -497,6 +517,9 @@ public partial class HKDualScreen : MonoBehaviour
     void Tick()
     {
         LoadConfig(false);
+        GameCameras gc;
+        GameManager gm;
+        if (!TryResolveSceneManagers(out gc, out gm)) return;
         HkStageHooks.Tick(cfg, cfg.debug == 1);
         SyncDumpHook();   // B1: RT->PNG dump hook only while compDumpRT=1
         // A touch tab-select (tab.tap) overrides cfg.compTab indefinitely; if the config tab actually
@@ -504,9 +527,8 @@ public partial class HKDualScreen : MonoBehaviour
         if (cfg.compTab != tab.lastCfg) { tab.lastCfg = cfg.compTab; tab.tap = -1; }
         PushInputSettings();      // M : config -> HKControllerService / HKInputDebug
 
-        var gc = GameCameras.instance;
         bool paused = false;
-        try { paused = GameManager.instance != null && GameManager.instance.IsGamePaused(); } catch { }
+        try { paused = gm.IsGamePaused(); } catch { }
 
         bool invOpen = PollInventoryToggle(gc, paused);   // M : invBtn toggle + is-inventory-open
         GameInventoryOpen = invOpen;                      // B8: HKTweaks charms-anywhere gates its atBench force on this
@@ -530,7 +552,7 @@ public partial class HKDualScreen : MonoBehaviour
         // load starts fresh on cfg.compTab (Map) with re-cloned panes — the new save's data and any language
         // changed in the menu included. (Pause/inventory only HIDE the clones — deliberately, to avoid rebuild
         // stutter; the menu is the one real reset point. Without this the old tab + stale-language clones survived.)
-        bool atMenu = false; try { var gMenu = GameManager.instance; atMenu = gMenu != null && gMenu.gameState == GlobalEnums.GameState.MAIN_MENU; } catch { }
+        bool atMenu = false; try { atMenu = gm.gameState == GlobalEnums.GameState.MAIN_MENU; } catch { }
         if (atMenu && !wasAtMenu && (mapClone != null || invCloneCache != null || charmCloneCache != null || tab.built != -1))
         {
             TeardownCompanion();

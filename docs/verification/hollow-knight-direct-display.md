@@ -223,12 +223,33 @@ matrix.
 | Physical display loss / true single-display start | TRACKED DEFERRAL | Unchanged H1 hardware/composer limitation; must close by H5 |
 | Teardown and host-setting restoration | PASS | Package PID absent after force-stop; temporary layout file removed; `stay_on_while_plugged_in` restored to `0` |
 
-The subsequent H2 correction remains one batch. It preserves TMP's associated
-`TextContainer`, keeps restoration ownership until each restore succeeds,
+The first subsequent H2 correction preserves TMP's associated `TextContainer`,
+keeps restoration ownership until each restore succeeds,
 clears stale fades when the source FSM disappears, reframes fades after aspect
 changes, makes clean-tap publication depend on maximum gesture travel, and
-scans the persistent HUD root for tutorial nodes. Twenty-four focused companion
-contracts, all 58 shared tests, all 102 Python tests, both exact patch compiles,
-and the exact 222,720-byte `1.5.12620` patch are green. It now requires one
-signed lower-HUD-only recheck; navigation, combat, collection, progression,
-save mutation, and general gameplay are outside every companion pass.
+scans the persistent HUD root for tutorial nodes.
+
+Signed dry-run `33520627292` built commit `0f9f398`. The downloaded APK SHA-256
+is `6b74b3dfdb108d8453726212433f05bf10b83622082a21c0c3824fa0c5921c96`;
+APK Signature Scheme v2/v3 and signer certificate SHA-256
+`324b3a3e854b69d567d1527ae52e96a1051adf13550b485e320f8ce8cf678c38`
+verify, and the in-place update preserved UID and first-install time. Exact
+Hollow Knight `1.5.12620` generation
+`gen-b947d3af-d366-4107-93dc-9bb9a494a724` was rebuilt. A minimum static
+King's Pass room hosted the lower HUD with no movement, navigation, combat,
+collection, progression, save assertion, or gameplay result. The persistent
+opening credit routed to the lower screen while the primary remained clean,
+and display-associated lower touch opened Inventory. Resident labels still
+produced no pixels, so H2 remains blocked.
+
+The second source correction follows the pinned Dual Souls behavior exactly:
+the resident tab clone now preserves every component dependency and disables
+every non-TMP `MonoBehaviour` before activation instead of destroying all but
+`TextContainer`. The frame loop also uses Unity's quiet scene-object lookup and
+does no HUD work until both scene managers exist, eliminating expected-startup
+singleton log spam without changing HUD behavior. Twenty-five focused
+companion contracts, all 58 shared tests, all 103 Python tests, both exact
+patch compiles, and the exact 222,720-byte `1.5.12620` patch are green. One
+affected-row signed lower-HUD-only recheck remains. Navigation, combat,
+collection, progression, save mutation, and general gameplay testing are
+outside every H2 companion pass.

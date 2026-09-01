@@ -321,6 +321,21 @@ pause/resume, and teardown smoke. No gameplay traversal is part of the recheck.
 A missing module or visual/behavioral difference is a blocker, not a Silksong
 deferral.
 
+Progress checkpoint: signed dry-run `33520627292` installed commit `0f9f398`
+in place and rebuilt exact generation
+`gen-b947d3af-d366-4107-93dc-9bb9a494a724`. A minimum static King's Pass room
+hosted the lower HUD without movement or gameplay testing. The persistent
+opening credit routed to display 1 and lower touch still opened Inventory, but
+the three resident tab labels remained absent. Comparison with the pinned Dual
+Souls source found the remaining divergence: the reference preserves every
+cloned label dependency and disables each non-TMP `MonoBehaviour`, while the
+Android port destroyed all but `TextContainer`. The second correction now
+matches that reference behavior and silently waits for real scene managers
+without polling their logging singleton getters. It passes 25 focused
+contracts, 58 shared tests, 103 Python tests, both exact compiles, and the exact
+222,720-byte Hollow Knight patch. Step 6 remains open until one affected-row,
+lower-HUD-only signed recheck proves the labels and startup log behavior.
+
 - [ ] **Step 7: Reconcile and commit**
 
 Update the verification document, traceability, matrix, and README. Commit
@@ -574,7 +589,7 @@ the installed app, and smoke-test both profiles. Close the running game.
 | --- | --- | --- | --- | --- |
 | H0 | DSUI-00/08/10 | `COMPLETE` | None | Both specifications, both parent plans, matrix, traceability, README, and 5/5 ordering contracts agree; the existing 38-contract Silksong suite remains green after the status correction |
 | H1 | DSUI-00/02/10 | `IMPLEMENTED / DEVICE-PARTIAL` | No implementation blocker; one tracked physical detach/true single-display deferral must close by H5 | 49/49 shared tests, 78/78 Python tests, both exact compiles, signed run `33494317664`, update-preserving Thor transport and pause/resume captures |
-| H2 | DSUI-00/01/02/07/10 | `SOURCE-COMPLETE / DEVICE-BLOCKED` | Signed lower-HUD evidence proves routed live HUD, clean primary HUD, blurred/dimmed backdrop, real lower-controller page switching, selection/details/prompt, bounded ornaments, and pause title presentation. Resident TMP tab text still has no pixels; tutorial routing and the correction batch remain device-unproved | Signed run `33515971125` installed commit `c2eb819` in place and published exact generation `gen-be61fa68-e065-4cdb-9972-d595c93a7698`. The batched correction is green in 24 focused contracts, 58 shared tests, 102 Python tests, both exact compiles, and a 222,720-byte Hollow Knight patch. Its one signed lower-HUD-only recheck remains |
+| H2 | DSUI-00/01/02/07/10 | `SOURCE-COMPLETE / DEVICE-BLOCKED` | Signed lower-HUD evidence proves routed live HUD, clean primary HUD, blurred/dimmed backdrop, real lower-controller page switching, selection/details/prompt, bounded ornaments, pause title presentation, and persistent opening-credit routing. Resident TMP tab text still has no pixels in signed run `33520627292`; the reference-faithful dependency-preservation correction and startup-log guard remain device-unproved | Run `33515971125` established the broad matrix. Run `33520627292` installed `0f9f398`, published `gen-b947d3af-d366-4107-93dc-9bb9a494a724`, proved lower credit/touch, and reproduced the label blocker without gameplay testing. The second correction passes 25 focused contracts, 58 shared tests, 103 Python tests, both exact compiles, and a 222,720-byte Hollow Knight patch. One affected-row lower-HUD-only signed recheck remains |
 | H3 | DSUI-00/05/09/10 | `PENDING` | Hollow Knight Mods behavior and persistence | Host isolation plus Thor effect/relaunch matrix |
 | H4 | DSUI-00/05/09/10 | `PENDING` | Scanner, application, rotation, rollback | Host pack matrix plus Thor death/respawn proof |
 | H5 | DSUI-00–10 | `PENDING` | Hollow Knight blockers and deferrals must both reach zero | Clean host and complete Thor reference matrix |

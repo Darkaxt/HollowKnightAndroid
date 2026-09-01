@@ -219,10 +219,11 @@ the corresponding Dual Souls source module. A stage passes only with:
 
 Rendering something on display 1 is not acceptance evidence by itself.
 
-Reference-device passes for this work are lower-companion validation passes
-only. They may inspect rendering, layout, primary-HUD cleanup, the blurred
+Every H2 reference-device pass for this work—including first checks, rechecks,
+lifecycle checks, and release-candidate checks—is a lower-companion validation
+pass only. It may inspect rendering, layout, primary-HUD cleanup, the blurred
 backdrop, page switching, lower-display touch, selection/prompts,
-pause/resume/restoration, and teardown. They must not navigate, fight, collect,
+pause/resume/restoration, and teardown. It must not navigate, fight, collect,
 progress, alter saves, or repeat general gameplay. State-dependent companion
 behavior is exercised through focused host contracts or a controlled debug
 harness/current static state. This restriction changes the verification method,

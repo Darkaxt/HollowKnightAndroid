@@ -353,18 +353,33 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             position.index("var glyphBounds = glyphRenderer.bounds"),
         )
 
-    def test_frame_tab_sanitization_preserves_the_tmp_text_container(self):
+    def test_frame_tab_sanitization_preserves_every_dependency_but_disables_non_tmp_drivers(self):
         frame = strip_csharp_comments(
             read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
         )
         tabs = method_body(frame, r"void\s+BuildTabRow\s*\([^)]*\)")
-        self.assertIn('driverName == "TextContainer"', tabs)
+        self.assertIn('driverName.Contains("TextMeshPro")', tabs)
         self.assertIn("mb.enabled = false", tabs)
-        self.assertIn("DestroyImmediate(mb)", tabs)
-        self.assertLess(
-            tabs.index('driverName == "TextContainer"'),
-            tabs.index("DestroyImmediate(mb)"),
+        self.assertLess(tabs.index("mb.enabled = false"), tabs.index("go.SetActive(true)"))
+        self.assertNotRegex(tabs, r"Destroy(?:Immediate)?\s*\(\s*mb\s*\)")
+
+    def test_tick_waits_for_scene_managers_without_calling_logging_singleton_getters(self):
+        source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
+        tick = method_body(source, r"void\s+Tick\s*\(\s*\)")
+        resolver = method_body(
+            source,
+            r"bool\s+TryResolveSceneManagers\s*\([^)]*\)",
         )
+        self.assertIn("TryResolveSceneManagers(out gc, out gm)", tick)
+        self.assertLess(
+            tick.index("TryResolveSceneManagers(out gc, out gm)"),
+            tick.index("HkStageHooks.Tick"),
+        )
+        pre_resolution = tick[: tick.index("HkStageHooks.Tick")]
+        self.assertNotIn("GameCameras.instance", pre_resolution)
+        self.assertNotIn("GameManager.instance", pre_resolution)
+        self.assertIn("FindFirstObjectByType<GameCameras>()", resolver)
+        self.assertIn("FindFirstObjectByType<GameManager>()", resolver)
 
     def test_frame_tab_row_uses_device_safe_scale_and_centres_real_glyph_bounds(self):
         layout = strip_csharp_comments(read(REFERENCE_ROOT / "HKLayout.cs"))

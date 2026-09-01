@@ -21,14 +21,15 @@ adaptation.
 The Hollow Knight companion is source-complete on the direct-display
 transport: the pinned Dual Souls HUD, frame, Inventory, Charms, Map,
 selection/prompts, tutorial/dialogue, item/lore, fade, touch, and restoration
-responsibilities are present, pass 24 focused contracts, and compile exactly
+responsibilities are present, pass 25 focused contracts, and compile exactly
 against `1.5.12620`. Signed Thor evidence proves the live HUD routing, clean
 primary HUD, blurred/dimmed lower backdrop, Inventory/Charms/Map switching
 through the lower-panel controller, item selection/details/prompt, safe pane
 cloning, bounded tab ornaments, and the pause title surface. The current device
 blocker is resident TMP tab text that has valid on-screen geometry but does not
-yet draw pixels; its batched source correction is host-green and awaits one
-lower-HUD-only signed recheck.
+yet draw pixels. Signed run `33520627292` reproduced it while proving persistent
+opening-credit routing and lower touch. The remaining source divergence is now
+corrected exactly like Dual Souls and awaits one lower-HUD-only signed recheck.
 
 <p align="center">
   <img src="docs/icon.png" alt="Hollow Knight Android combined Hollow Knight and Silksong app icon" width="220" />
@@ -50,13 +51,13 @@ not used for project artwork.
 
 | Area | Current evidence | Remaining gate |
 |---|---|---|
-| Hollow Knight `1.5.12620` | Exact Linux manifest accepted; 1,005 serialized files converted with complete Vulkan coverage; the current fork generation built a 267,870,152-byte AArch64 `libil2cpp.so`, a ZIP32 base player image plus main OBB, and reached gameplay. Signed run `33515971125` installed the current H2 source batch in place and published exact generation `gen-be61fa68-e065-4cdb-9972-d595c93a7698`; its lower-HUD pass proves routed pages, lower touch, selection/prompt, backdrop, and pause presentation | Prove the batched TMP/tutorial/restoration/fade/touch corrections in one lower-HUD-only signed recheck, then port Mods and skins |
+| Hollow Knight `1.5.12620` | Exact Linux manifest accepted; 1,005 serialized files converted with complete Vulkan coverage; the current fork generation built a 267,870,152-byte AArch64 `libil2cpp.so`, a ZIP32 base player image plus main OBB, and reached the playable-room architecture gate. Signed runs `33515971125` and `33520627292` prove routed pages, lower touch, selection/prompt, backdrop, pause presentation, and persistent opening-credit routing; the latter published exact generation `gen-b947d3af-d366-4107-93dc-9bb9a494a724` | Prove the reference-faithful resident-label and startup-log correction in one affected-row lower-HUD-only signed recheck, then port Mods and skins |
 | Silksong `1.0.29980` | Fork-signed `1.0.3` built the exact current source on the Thor, atomically published a verified ARM64 generation, reached gameplay, and rendered the redesigned companion directly on both physical displays | Prove lower-panel touch, effects, restart persistence, and two-game switching |
 | One launcher | Both profiles, independent storage, atomic generations, and cold-process selection exist and have host/emulator coverage | Prove both switch directions with the production ARM64 Unity processes |
 | Mods | The parent's build-time BepInEx 5/Harmony weaver is merged and routed through each selected profile's patch, IL2CPP, generation, and status paths | Real plugin compatibility for each game, compatibility manifests, dependencies, load order, and per-profile enablement remain unverified |
 | Built-in tweaks | A shared, game-qualified controller hosts a persistent Mods overlay from the standalone HUD gear. Silksong `1.0.29980` exposes typed damage mode, one-hit kills, unlimited Silk, and equip-anywhere adapters; the standalone gear and first-run master OFF are proved in the signed production process | Prove physical gear/overlay touch, effects, process-exit persistence for each game, the Hollow Knight adapter, and later parity rows |
 | Skins | Shared death/respawn rotation state machine has host coverage; the MIT-licensed Hollow Knight reference already contains a CustomKnight-compatible texture engine and pack registry to port | First port and device-prove Hollow Knight scanning/application/rotation/rollback; then extract the shared library and add Silksong mappings |
-| Dual screen | Hollow Knight H2 is source-complete: 24 focused companion contracts, 58 shared tests, and 102 Python tests pass; both patch targets compile, and the exact Hollow Knight patch is 222,720 bytes. Signed Thor evidence proves live HUD routing, pane construction, dark blurred backdrop, lower-controller page switching, selection/prompt, pause presentation, and bounded tab ornaments. Silksong UI work remains parked | Close the resident TMP-label/device recheck and complete the remaining lower-HUD/lifecycle rows without gameplay traversal. Physical detach/true single-display proof remains one tracked H1 deferral and must close by H5 |
+| Dual screen | Hollow Knight H2 is source-complete: 25 focused companion contracts, 58 shared tests, and 103 Python tests pass; both patch targets compile, and the exact Hollow Knight patch is 222,720 bytes. Signed Thor evidence proves live HUD routing, pane construction, dark blurred backdrop, lower-controller page switching, selection/prompt, pause presentation, persistent opening-credit routing, and bounded tab ornaments. Silksong UI work remains parked | Close the resident TMP-label/startup-log device recheck and complete the remaining lower-HUD/lifecycle rows without gameplay testing. Physical detach/true single-display proof remains one tracked H1 deferral and must close by H5 |
 | Releases | Fork identity and GitHub signing pipeline have a signed dry-run proof | No release until source reproducibility, device, gameplay, migration, tag/version, and fresh-download gates pass |
 
 The detailed requirement ledger is
