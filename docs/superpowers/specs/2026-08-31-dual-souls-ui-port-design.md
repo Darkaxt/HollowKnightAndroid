@@ -8,6 +8,13 @@ This document is the authoritative specification for the unified game's
 bottom-screen user interface. It replaces the earlier interpretation that a
 new game-neutral shell could merely imitate selected Dual Souls features.
 
+The implementation priority is Hollow Knight first. The existing Dual Souls
+HUD, pages, Mods presentation, tweak behavior, and CustomKnight-compatible
+skin engine must run through the direct-display technology as one executable
+reference before the shared composition is generalized or further Silksong UI
+work resumes. Silksong is the second game adapter, not the place where the
+reference design is invented.
+
 The user-approved target is a port of the Hollow Knight Dual Souls companion
 interface. Hollow Knight defines the design pattern. Silksong supplies its own
 resident sprites, fonts, labels, data, and additional feature content inside
@@ -45,6 +52,22 @@ on SilksongAndroid's direct renderer, but it may not replace or suppress an
 oracle consequence merely to leave the original Silksong UI untouched.
 
 ## Requirements
+
+### DSUI-00 — Establish the executable Hollow Knight reference first
+
+The first production vertical slice is Hollow Knight `1.5.12620` running the
+existing Dual Souls companion, Mods, and skin behavior through the proven
+Unity display-1 transport. Porting may replace the old Presentation/EGL/Java
+transport mechanisms, but it must not redesign, approximate, or independently
+recreate the working Hollow Knight composition.
+
+No further Silksong composition implementation may advance beyond its parked
+diagnostic/source-evidence state until Hollow Knight has passed its HUD,
+pages, Mods persistence, skin scanning/application/rotation, lower-display
+touch, lifecycle, and single-display fallback gates on the reference device.
+Shared UI contracts are extracted from that accepted implementation. The
+paused Silksong probe and Stage 2 source work remain useful successor-phase
+evidence; they are neither discarded nor allowed to gate the reference slice.
 
 ### DSUI-01 — Dual Souls is the design oracle
 
@@ -171,7 +194,8 @@ the corresponding Dual Souls source module. A stage passes only with:
 
 1. source-to-source responsibility coverage;
 2. automated structural or behavioral tests that first failed;
-3. exact Silksong and Hollow Knight patch compilation;
+3. exact compilation for every patch target touched by the stage, with both
+   Hollow Knight and Silksong required after a boundary becomes shared;
 4. a port-matrix update identifying satisfied requirements, blockers, and
    tracked deferrals; and
 5. when visually relevant, side-by-side capture evidence against the running
@@ -181,45 +205,68 @@ Rendering something on display 1 is not acceptance evidence by itself.
 
 ## Architecture
 
-The production implementation has three boundaries:
+The production implementation has four ordered boundaries:
 
-1. **Direct-display transport:** activates and owns display 1, private render
-   layers/cameras, display-specific touch, lifecycle, diagnostics, and
-   fallback. This is game-neutral and contains no game UI design.
-2. **Dual Souls composition port:** implements the frame, HUD, page clone,
-   selection, overlay, fade, and transition behavior defined by the Hollow
-   Knight modules. This is the shared design pattern.
-3. **Game object adapter:** locates and safely clones/re-layers the active
-   game's resident objects, supplies typed state and localized terminology,
-   and reports capabilities. It does not invent a replacement layout.
+1. **Direct-display transport:** the proven SilksongAndroid technology that
+   activates display 1, owns isolated cameras/layers, fences display-specific
+   touch, handles lifecycle/display loss, emits diagnostics, and falls back to
+   one screen. It contains no game-specific UI design.
+2. **Hollow Knight reference adapter:** connects the existing Dual Souls
+   modules to that transport while preserving their object ownership,
+   hierarchy, geometry, pages, transitions, Mods behavior, skin behavior, and
+   consequences. This must work before any UI abstraction is accepted.
+3. **Shared companion contracts:** extracted only from the accepted Hollow
+   Knight implementation. They describe transport hosting, composition
+   lifecycle, profile-scoped feature state, skin-library access, and adapter
+   capabilities without referencing either game's concrete types.
+4. **Silksong adapter:** locates and safely clones/re-parents/re-layers
+   Silksong resident objects, supplies typed state and localized terminology,
+   and maps them into the proven shared composition. It extends the reference
+   for Tasks/Journal and other Silksong-only semantics without inventing a
+   replacement layout.
 
-Hollow Knight continues to use its proven Dual Souls companion behavior.
-Silksong uses the same composition port with Silksong-specific object
-discovery and semantic substitutions.
+Temporary duplication is allowed only inside the Hollow Knight reference
+adapter while proving the transport boundary. It must be removed during the
+explicit extraction stage, with the accepted Hollow Knight device matrix kept
+green before Silksong consumes the shared contracts.
 
 ## Implementation order
 
-The corrective implementation proceeds in dependency order:
+The corrective implementation proceeds in this dependency order:
 
-1. Freeze the current authored shell as a non-production prototype and create
-   the file-by-file port matrix.
-2. Extract the direct-display transport from the authored shell.
-3. Port layer/camera isolation and the frame/tab composition.
-4. Port the persistent HUD using Silksong's real HUD objects and assets.
-5. Port Map using Silksong's real map render hierarchy.
-6. Port Inventory and selection/action prompts using native inventory objects.
-7. Port Charms semantics to Crests/Tools and add Tasks/Journal in the same
-   composition pattern.
-8. Port contextual overlays and lifecycle/fade synchronization.
-9. Reattach Mods and later skin controls as pattern-conforming overlays.
-10. Remove the rejected production code path and run the full cross-game,
-    fallback, persistence, and device acceptance matrix.
+1. Rebaseline the documents and park the unfinished Silksong composition
+   branch state without deleting its evidence.
+2. Isolate the minimum proven direct-display transport seam needed to host a
+   game adapter; retain Silksong's currently working transport behavior.
+3. Port the complete Hollow Knight Dual Souls companion onto that seam,
+   beginning with the persistent HUD and then the existing frame, pages,
+   selection, overlays, fades, and lifecycle behavior.
+4. Port Hollow Knight's Mods menu and `HKTweaks` behavior with a first-run
+   master default of off and independent persistent switch values.
+5. Port Hollow Knight's CustomKnight-compatible multi-pack scanner,
+   activation/rollback, and death-to-stable-respawn rotation.
+6. Pass the complete Hollow Knight host and reference-device matrix.
+7. Extract shared companion, Mods, and skin contracts from the proven Hollow
+   Knight result, rerunning its full regression after every extraction step.
+8. Resume the parked Silksong source probes and adapt its resident HUD, Map,
+   Inventory, Crests/Tools, Tasks/Journal, overlays, Mods, and skins into the
+   shared composition.
+9. Remove the rejected authored Silksong shell and run the cross-game,
+   fallback, persistence, switching, update, and release matrices.
+
+The authoritative task sequence is
+`docs/superpowers/plans/2026-09-01-hollow-knight-first-dual-souls.md`. The
+earlier Silksong-first plan remains only as a record of completed source work
+and parked successor tasks.
 
 ## Acceptance criteria
 
 The feature is complete only when blockers and tracked deferrals are both
 zero and all of the following are true:
 
+- Hollow Knight runs the existing Dual Souls companion, Mods, and skin system
+  through the direct-display transport before Silksong-specific composition
+  work is accepted;
 - Silksong's bottom screen is immediately recognizable as the Hollow Knight
   Dual Souls interface with Silksong content, rather than as a separate UI;
 - every Dual Souls bottom-screen responsibility has a ported implementation or

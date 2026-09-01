@@ -1007,7 +1007,28 @@ git add src/SilksongLauncher.Launcher tools/depot-to-apk/shell/GameActivity.java
 git commit -m "feat: select and switch game profiles"
 ```
 
-## Milestone 5: Shared skins, rotation, and mods
+## Hollow Knight-first execution correction
+
+The original Task 12–15 ordering below was written before the project proved
+that it had inverted the dependency chain by designing the Silksong companion
+before migrating the executable Hollow Knight reference. It is retained for
+historical file-level requirements, but it is not the executable order.
+
+The authoritative sequence is now
+`docs/superpowers/plans/2026-09-01-hollow-knight-first-dual-souls.md`:
+
+1. isolate only the proven direct-display transport seam;
+2. migrate the complete Hollow Knight Dual Souls companion;
+3. migrate Hollow Knight Mods and multi-pack skins/death rotation;
+4. close the Hollow Knight device reference gate;
+5. extract shared contracts from that accepted result; and
+6. adapt Silksong afterward.
+
+No unfinished Silksong UI stage may advance before the Hollow Knight reference
+gate. The detailed Tasks 12–15 below supply requirements to the new plan only
+when their corresponding Hollow Knight-first stage begins.
+
+## Superseded Task 12–15 sequence (historical requirements)
 
 ### Task 12: Implement the shared skin-pack library
 
@@ -1219,11 +1240,15 @@ git commit -m "feat: add per-profile mod builds and safe mode"
 
 ### Task 15: Port the Dual Souls companion onto the direct renderer
 
-The earlier game-neutral authored-shell plan is superseded. It produced the
-rejected `DsShell` prototype rather than a port. Task 15 is now governed by:
+The earlier game-neutral authored-shell plan and its later Silksong-first
+correction are both superseded as execution orders. They produced or continued
+from the rejected `DsShell` prototype before establishing Hollow Knight as an
+executable reference. Task 15 is now governed by:
 
 - `docs/superpowers/specs/2026-08-31-dual-souls-ui-port-design.md`;
-- `docs/superpowers/plans/2026-08-31-dual-souls-ui-port.md`; and
+- `docs/superpowers/plans/2026-09-01-hollow-knight-first-dual-souls.md`;
+- `docs/superpowers/plans/2026-08-31-dual-souls-ui-port.md` as parked
+  Silksong successor evidence; and
 - `docs/verification/dual-souls-ui-port-matrix.md`.
 
 The retained boundary is narrow: Unity display 1 activation, direct Vulkan
@@ -1242,12 +1267,17 @@ replace the prior “shared shell” interpretation. The signed device runs prov
 only the direct-display transport; the authored shell is not accepted UI
 evidence.
 
-- [ ] **Steps 1–8: Execute the module port**
+- [ ] **Steps H1–H6: Establish the Hollow Knight reference and shared seam**
 
-Follow Stages 1–8 of the dedicated plan in order. Each stage uses failing
-source/behavior contracts, both exact game patch compiles, specification
-reconciliation, and zero unresolved stage blockers before advancing. Current
-authored files are deleted only after their ported replacement is green.
+Follow the Hollow Knight-first plan through complete HUD/pages, Mods, skins,
+device acceptance, and shared-contract extraction. Each stage uses failing
+source/behavior contracts, applicable exact patch compiles, specification
+reconciliation, and zero unresolved stage blockers before advancing.
+
+- [ ] **Steps S1–S2: Execute the Silksong module/adapters port**
+
+Only after H5/H6, resume the parked Silksong probe and port. Current authored
+files are deleted only after their resident-object replacements are green.
 
 - [ ] **Step 9: Close the side-by-side device matrix**
 

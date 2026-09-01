@@ -397,16 +397,19 @@ same textures fit both protagonists.
 
 ### Shared Vulkan dual-screen renderer
 
-The shared renderer is extracted from Silksong's `DualScreenV2` implementation
-into game-neutral presentation, display, input, theme, and diagnostic units.
-It continues to use Unity multi-display with a second camera targeting display
-1. Touch input uses the Input System's display attribution where available.
+SilksongAndroid's proven `DualScreenV2` implementation supplies the transport
+technology, but Hollow Knight is the first production consumer. The minimum
+display, camera/layer, touch, lifecycle, diagnostic, and fallback seam is
+isolated, then the existing Dual Souls companion is migrated onto it without
+redesign. Only after that complete Hollow Knight vertical slice passes on the
+reference device may the seam be generalized into shared presentation and
+adapter contracts for Silksong.
 
 Game adapters provide state and screens, not rendering infrastructure.
-Silksong initially preserves its existing map, inventory, crests, tasks, and
-journal screens. Hollow Knight receives equivalent screens incrementally,
-using DualSouls behavior as a functional reference without retaining its
-native EGL compositor.
+Hollow Knight retains its existing Dual Souls HUD/pages/Mods/skin behavior.
+Silksong later supplies resident objects and semantic extensions through the
+contracts extracted from that accepted reference. No shared UI abstraction is
+accepted merely because it compiles or renders a synthetic test surface.
 
 Single-display devices remain supported. The renderer must degrade to the
 primary display without creating an unusable invisible UI path.
@@ -419,6 +422,9 @@ surface is a port of Dual Souls' Hollow Knight companion composition, not a
 new shell that approximates its appearance. Silksong substitutes its resident
 sprites, fonts, terminology, data, and additional features while preserving
 that design pattern.
+
+The authoritative execution order is
+`docs/superpowers/plans/2026-09-01-hollow-knight-first-dual-souls.md`.
 
 The bottom screen is one product surface with two game adapters. Both games
 use the same shell geometry, tab behavior, gesture vocabulary, touch-target
@@ -660,12 +666,17 @@ The implementation is divided into independently reviewable milestones:
 2. Hollow Knight source validation and classic serialized-content converter.
 3. Hollow Knight on-device Unity/IL2CPP build and first playable scene.
 4. Game selection and reliable profile switching in one package.
-5. Shared patch core and Hollow Knight adapter.
-6. Shared skin library, scanner, activation, and death rotation.
-7. Shared Vulkan dual-screen extraction and Hollow Knight screens.
-8. Mod library and per-profile compilation/loading.
+5. Minimal direct-display transport seam plus the complete Hollow Knight Dual
+   Souls HUD and companion behavior.
+6. Hollow Knight Mods, CustomKnight-compatible multi-pack skins, and
+   death-to-stable-respawn rotation, all proved on the reference device.
+7. Shared companion/Mods/skin contracts extracted from the accepted Hollow
+   Knight implementation with unchanged Hollow Knight regression results.
+8. Silksong resident-object adapters and semantic extensions using those
+   shared contracts; remove the rejected authored shell.
 9. Launcher branding, accessibility, recovery UX, and final icon.
-10. Signing CI, device regression, and release verification.
+10. Cross-game signing CI, device regression, switching, update/rollback, and
+    release verification.
 
 Each milestone must preserve the last working Silksong path. Failure of the
 Hollow Knight spike stops Hollow Knight-specific expansion but does not require

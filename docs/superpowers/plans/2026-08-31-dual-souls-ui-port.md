@@ -1,5 +1,14 @@
 # Dual Souls Bottom-Screen UI Port Implementation Plan
 
+> **Execution status (2026-09-01): PARKED SUCCESSOR PHASE.** This plan retains
+> the completed Silksong transport/frame evidence and the unfinished HUD/page
+> tasks, but it no longer controls execution order. The authoritative
+> Hollow Knight-first sequence is
+> `docs/superpowers/plans/2026-09-01-hollow-knight-first-dual-souls.md`.
+> Stages 3–9 below may resume only after that plan's Hollow Knight reference
+> gate (H5) and shared-contract extraction (H6) pass. Existing blockers and
+> evidence in this file remain valid and must not be erased.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:executing-plans` task by task. Every production change follows
 > red-green-refactor, and every stage reconciles the authoritative
@@ -301,7 +310,7 @@ but live residency, rendered geometry, cover clipping, and side-by-side parity
 still require device evidence. The dormant shell is not deleted and Stage 3
 must not treat Stage 2 as visually complete until that blocker closes.
 
-## Stage 3: Port the persistent HUD from resident Silksong objects
+## Stage 3: Port the persistent HUD from resident Silksong objects (PARKED)
 
 **Requirements:** DSUI-01, DSUI-03, DSUI-04, DSUI-07, DSUI-10.
 
@@ -636,7 +645,7 @@ release only if all repository release gates are also green.
 | 0 | DSUI-01/02/03/06/08/10 | COMPLETE | None | None | `python -m unittest tools.ci.tests.test_dual_souls_ui_port -v`: 7 tests passed; contract covers DSUI-01–10, distinct first-column rows for all nine reference modules, exactly one valid disposition row for each of the 24 current dualscreen C# filenames, prototype/port status, and README/traceability acceptance language |
 | 1 | DSUI-02/08/10 | HOST-VERIFIED-BOUNDARY | None | Frame/tabs to Stage 2; resident HUD to Stage 3; Map/Inventory/Loadout/progress pages to Stages 4–6; overlays/fade to Stage 7 | Initial RED: 12 tests ran with 7 Stage 0 contracts green, 4 intended failures, and 2 absent-source skips. First review RED: 14 tests ran with 12 green and 2 intended failures for empty composition lifecycle and overbroad status. Second review RED: 18 tests ran with 13 green and 5 failures covering four defects: stale reattach readiness, presentation retention/serialization, pause/presence/readiness activation, and unstretched roots. GREEN: 18/18 tests; exact Silksong compile 42 sources/10 entry points; exact Hollow Knight compile 4 sources, 0 warnings/errors, 16,896-byte DLL/1 entry point. These host checks verify only the source boundary: `DualScreenV2` retains one presentation before yielding; `DsPresentation` serializes activation without a cancellation timeout, rechecks presence after settle, remeasures, and force-sweeps the reused rig; cameras, roots, and touch fencing activate only when the app is unpaused and display 1 is present and ready. Layers remain exactly 6/3. No device or UI parity is claimed. |
 | 2 | DSUI-01/02/03/06/10 | HOST-VERIFIED-SOURCE / DEVICE-BLOCKED | Live UGUI residency, rendered clone/glyph/fleur geometry, functional cover clipping, and side-by-side parity are not device-proven | Native page content/clone settle/fit to Stages 4–6; HUD/status data to Stage 3; Mods control content to Stage 8 | Fix-pass RED: 27 tests with nine failures for obsolete art discovery, geometry, sorting/masks, and interrupted slides. Re-review RED: 28 tests with six assertions failing across the two defects: conflated Sprite/source-rect validation and missing selected-tab alpha. Quality-review RED: 32 tests with five intended failures for unsafe clone activation, non-unique/suffix/unloaded discovery, repeated scans, and missing executable production-state proof. Final spec-review RED: 32 tests with one intended failure because the five-family sanitizer did not disable arbitrary cloned `MonoBehaviour` drivers. Quality re-review RED: 33 tests with two intended failures because disabled drivers could still receive `Awake` and the executable harness hard-coded `D:/Temp`. GREEN: 33/33 focused and 59/59 full Python tests, including a compiled/executed pure production-source harness and structural exact-type/removal/lifecycle checks. Exact Silksong compile: 46 sources/10 entry points. Exact Hollow Knight compile: 4 sources, 0 warnings/errors, 16,896-byte DLL/1 entry point. Exact UGUI identity, revision-cached discovery, exact-type static pre-activation removal, portable automatic-cleanup harness storage, separate Sprite/source-rect dimensions, selected/inactive alpha, hit boundaries, slide decisions, and native Pane Name APIs are source-proven; no device/UI parity is claimed. |
-| 3 | DSUI-01/03/04/07/10 | IN-PROGRESS / AUDIT-COMPLETE | Exact runtime paths, same-instance slot routing, spawned-child adoption, driver-reparent resistance, exact restoration, and device parity are unproved | None | Source audit proves the Hollow Knight live-HUD move/return/reassert lifecycle, Silksong typed anchors and semantic driver owners, and static tk2d art identities. It rejects the earlier mirror proposal: Stage 3 must move the same live Silksong objects into Hollow Knight slots, preserving instance/driver ownership and naturally clearing the top screen. Implementation, both exact compiles, runtime provenance, and side-by-side proof remain pending. |
+| 3 | DSUI-01/03/04/07/10 | DEFERRED / AUDIT-COMPLETE | Exact runtime paths, same-instance slot routing, spawned-child adoption, driver-reparent resistance, exact restoration, and device parity are unproved | Entire implementation is assigned to successor Stage S1 after Hollow Knight H5/H6 | Source audit proves the Hollow Knight live-HUD move/return/reassert lifecycle, Silksong typed anchors and semantic driver owners, and static tk2d art identities. It rejects the earlier mirror proposal: Stage 3 must move the same live Silksong objects into Hollow Knight slots, preserving instance/driver ownership and naturally clearing the top screen. Probe RED contracts and unverified implementation remain preserved; both exact compiles, runtime provenance, and side-by-side proof remain pending. |
 | 4 | DSUI-01–07/10 | PENDING | Depends on Stage 3 | None | — |
 | 5 | DSUI-01–07/10 | PENDING | Depends on Stage 4 | None | — |
 | 6 | DSUI-01/03–07/10 | PENDING | Depends on Stage 5 | None | — |

@@ -11,10 +11,12 @@ The exact Hollow Knight `1.5.12620` Linux build now completes on-device
 conversion, ARM64 compilation, packaging, installation, first boot, and the
 playable-room gate on the AYN Thor. The fork-signed Silksong `1.0.29980`
 generation also builds and reaches live dual-display gameplay. Those runs
-prove the direct Unity display path. The separately authored companion UI is
-now rejected prototype work: production is being corrected to a module-by-
-module port of Hollow Knight Dual Souls' bottom-screen composition using
-Silksong's resident UI objects and assets.
+prove the direct Unity display path. The separately authored Silksong
+companion UI is rejected prototype work. The corrected execution order now
+ports Hollow Knight's existing Dual Souls HUD/pages, Mods, and skins onto the
+direct-display technology first, proves that reference on the Thor, extracts
+shared contracts from it, and only then resumes the Silksong resident-object
+adaptation.
 
 <p align="center">
   <img src="docs/icon.png" alt="Hollow Knight Android combined Hollow Knight and Silksong app icon" width="220" />
@@ -41,8 +43,8 @@ not used for project artwork.
 | One launcher | Both profiles, independent storage, atomic generations, and cold-process selection exist and have host/emulator coverage | Prove both switch directions with the production ARM64 Unity processes |
 | Mods | The parent's build-time BepInEx 5/Harmony weaver is merged and routed through each selected profile's patch, IL2CPP, generation, and status paths | Real plugin compatibility for each game, compatibility manifests, dependencies, load order, and per-profile enablement remain unverified |
 | Built-in tweaks | A shared, game-qualified controller hosts a persistent Mods overlay from the standalone HUD gear. Silksong `1.0.29980` exposes typed damage mode, one-hit kills, unlimited Silk, and equip-anywhere adapters; the standalone gear and first-run master OFF are proved in the signed production process | Prove physical gear/overlay touch, effects, process-exit persistence for each game, the Hollow Knight adapter, and later parity rows |
-| Skins | Shared death/respawn rotation state machine has host coverage | Pack scanner/import, persistence, real game lifecycle hooks, texture adapters, rollback, and both-game runtime proof |
-| Dual screen | Silksong's direct Vulkan display-1 transport is proved in signed live gameplay. Stage 2 now source-compiles exact native UGUI chrome mappings: Options `Warning_Fleur0008` and Keep Resolution `bottom_fleur0008` frame the content; Pause Menu `pause_top_fleur0000` / `bottom_fleur0000` track the selected native Pane Name glyph bounds. Tabs are bottom-centred from measured meshes, preserve native RGB, and use Dual Souls' active/inactive alpha of 1.0/0.6; hit slots are panel-relative, native art preserves aspect, inner edges drive uGUI plus renderer-cover masks, page/frame/HUD sorting is explicit, and interrupted slides normalize the page cache. Static chrome is cloned under inactive staging; exactly one concrete native `Image` or `TextMeshPro` visual is retained, every other owned-clone `MonoBehaviour` is removed and the result reverified before activation, and renderers are normalized active before reparenting. Discovery runs once per in-game/source revision, requires one loaded exact path/Sprite/Sprite-rect/source-rect match, caches misses, and otherwise fails closed. Pure frame decisions execute in a host-compiled production-source harness with portable automatic-cleanup temp storage. This static sanitizer does not apply to later native HUD/page/overlay lifecycles | **Blocker:** prove those UGUI objects are live and the clones, glyph/fleur geometry, functional cover clipping, slide interruption, and overall Dual Souls frame parity render correctly on the physical second screen. Then continue resident HUD, Map, Inventory, Loadout, selection, overlays, fades, and the side-by-side matrix |
+| Skins | Shared death/respawn rotation state machine has host coverage; the MIT-licensed Hollow Knight reference already contains a CustomKnight-compatible texture engine and pack registry to port | First port and device-prove Hollow Knight scanning/application/rotation/rollback; then extract the shared library and add Silksong mappings |
+| Dual screen | Silksong's direct Vulkan display-1 transport is proved in signed gameplay. Its Stage 2 native UGUI source work and Stage 3 HUD audit/probe are preserved but parked. Hollow Knight currently has no direct-display companion adapter | First migrate and device-prove the complete existing Hollow Knight Dual Souls companion; extract shared contracts from that accepted result; then resume the Silksong resident-object port and remove the rejected shell |
 | Releases | Fork identity and GitHub signing pipeline have a signed dry-run proof | No release until source reproducibility, device, gameplay, migration, tag/version, and fresh-download gates pass |
 
 The detailed requirement ledger is
@@ -52,6 +54,7 @@ The current Hollow Knight device evidence is
 The corrected bottom-screen port contract, plan, and source matrix are recorded
 in
 [`docs/superpowers/specs/2026-08-31-dual-souls-ui-port-design.md`](docs/superpowers/specs/2026-08-31-dual-souls-ui-port-design.md),
+[`docs/superpowers/plans/2026-09-01-hollow-knight-first-dual-souls.md`](docs/superpowers/plans/2026-09-01-hollow-knight-first-dual-souls.md), the parked historical
 [`docs/superpowers/plans/2026-08-31-dual-souls-ui-port.md`](docs/superpowers/plans/2026-08-31-dual-souls-ui-port.md), and
 [`docs/verification/dual-souls-ui-port-matrix.md`](docs/verification/dual-souls-ui-port-matrix.md).
 The typed Silksong tweak seams and current host-only proof are recorded in
