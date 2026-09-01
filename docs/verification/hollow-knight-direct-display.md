@@ -174,14 +174,29 @@ non-zero bounds (`Inventory 5.39x0.75`, `Map 4.71x0.74`, `Charms 5.13x0.57`),
 the backdrop remained a dark blurred wash, both pane clones built, and the
 earlier `iTween`/null-reference failure did not recur.
 
-That candidate still does not pass H2. The retained source pivot plus the
-reference tree's `2.7` live scale placed the real glyph meshes outside the
-1240x1080 companion viewport; the fleurs followed those off-screen bounds and
-the lower fleur was visibly oversized and clipped. The next RED/GREEN
-correction centers each live renderer bounds on its measured tab slot, reduces
-the default label scale to the panel-relative target, assigns explicit label
-sorting above chrome, uses the real glyph minimum for the lower edge, and caps
-both fleurs to 82% of one tab slot. The full host suite is now 98/98 and the
-exact patch compile is green at 222,208 bytes with two entry points. This
-remains `DEVICE-BLOCKED` until a new signed update visibly proves the row and
-fleurs on display 1.
+Signed dry-run `33513252509` built follow-up commit `b866732`. Its downloaded
+APK has SHA-256
+`de67a7ae26cc2c0cf18fb6df3c6e4b584e171d1cd577f5c4de0a4f387ebc1fc3`,
+verifies with APK Signature Scheme v2/v3 and the pinned signer, and updated the
+installed package without changing its UID or first-install time. The exact
+`1.5.12620` rebuild reached King's Pass. Device capture proves the tab glyph
+bounds are now centered inside the lower panel and both fleurs are reduced,
+centered, and bounded to one tab cell; the previously oversized lower sprite
+is fixed. The dark blurred backdrop and safe pane-clone behavior remain green.
+
+H2 still does not pass because the three resident tab labels produce no pixels
+despite their valid non-zero bounds. The pinned source already documents the
+same TMP lifecycle behavior for other resident labels: an empty TMP can disable
+its mesh renderer and reflection text assignment does not reliably re-enable
+it. The current RED/GREEN correction therefore re-enables every tab renderer
+after final `ForceMeshUpdate` and reasserts the co-located glyph renderer before
+each bounds/layout pass.
+
+The complete H2 source responsibility inventory is now host-green as one
+batch. Twenty focused contracts cover the original HUD/routing, frame/tabs,
+Inventory, Charms, Map, selection/prompts, tutorial/dialogue, item/lore,
+fade/backdrop, touch, and restoration paths; the full suite is 98/98 and the
+exact `1.5.12620` patch compiles at 222,208 bytes with two entry points. Per the
+batch-first verification cadence, this candidate will be signed once and run
+through the complete H2 device matrix instead of triggering a full package and
+IL2CPP cycle for each visual correction.

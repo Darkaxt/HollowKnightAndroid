@@ -27,8 +27,10 @@ Gradle/Robolectric, ADB on `bfa98654`, and GitHub Actions signing.
 `docs/superpowers/specs/2026-08-31-dual-souls-ui-port-design.md` and
 `docs/superpowers/specs/2026-08-29-unified-hollow-knight-platform-design.md`.
 
-**Authorization state:** The documentation rewrite is authorized. Runtime
-implementation remains paused until the user explicitly resumes it.
+**Authorization state:** Runtime implementation, host verification, signed
+emulator/device verification, commit, push, and the final release workflow are
+authorized. Do not interact with a locked physical device; otherwise continue
+until completion, a genuine blocker, or an explicit pause request.
 
 ---
 
@@ -47,6 +49,21 @@ No Silksong UI implementation may pass a stage before item 5 is complete.
 The uncommitted `DsProbe.cs` and its tests are preserved as parked successor
 work. They must be validated before later use, but they are not part of the
 Hollow Knight critical path.
+
+## Batch-first verification cadence
+
+Port each complete Hollow Knight stage from the pinned Dual Souls source before
+starting signed runtime debugging. During the source pass, use fast contracts,
+reference diffs, and exact `1.5.12620` compilation; do not create a signed APK
+for individual visual or lifecycle corrections. After the complete stage is
+present and host-green, run one signed integration matrix, record every defect,
+fix that defect set as one batch, and repeat only the affected acceptance rows.
+
+Specification reconciliation still occurs after every H stage. The stage is
+the review boundary: a one-line placement correction is not a separate stage
+and must not trigger its own documentation, signing, installation, and IL2CPP
+cycle. A device cycle before the source-complete gate is permitted only when a
+host-invisible platform question genuinely blocks further migration.
 
 ## File structure and ownership
 
@@ -244,7 +261,7 @@ the diagnostic card to stand in for any H2 HUD or companion responsibility.
 - Create `tools/ci/tests/test_hollow_knight_reference_port.py`.
 - Create `docs/verification/hollow-knight-direct-display.md`.
 
-- [ ] **Step 1: Write failing module and behavior contracts**
+- [x] **Step 1: Write failing module and behavior contracts**
 
 The test must require every reference module, the exact pinned reference
 commit, a direct-display adapter, and absence of the old EGL/Java bridge in
@@ -259,42 +276,50 @@ python -m unittest tools.ci.tests.test_hollow_knight_reference_port
 
 Expected: RED because the modules and adapter are absent.
 
-- [ ] **Step 2: Import the MIT-licensed source modules without assets**
+- [x] **Step 2: Import the MIT-licensed source modules without assets**
 
 Preserve the original module boundaries and behavior. Record source SHA-256
 values and the reference commit in the verification document. Reject any
 binary/game-asset path before staging it.
 
-- [ ] **Step 3: Replace only the presentation technology**
+- [x] **Step 3: Replace only the presentation technology**
 
 `HkDirectDisplayAdapter` must translate the shared transport's panel geometry,
 layers, cameras, touch events, visibility, display loss, and teardown into the
 existing `HKDualScreen` lifecycle. Do not reimplement the HUD or pages with
 new widgets.
 
-- [ ] **Step 4: Compile and run the first functional HUD gate**
+- [x] **Step 4: Complete one source-level companion parity pass**
 
-Run the focused Python contract and exact Hollow Knight patch compile. Build,
-sign, install as an update, launch Hollow Knight `1.5.12620`, enter gameplay,
-and capture the live HUD on display 1 with the top screen cleaned exactly as in
-Dual Souls. Exercise damage/heal, Soul change, Geo change, pause, inventory,
-and display loss/restoration. Confirm the lower scenery is both blurred and
-dimmed by the configured Dual Souls values rather than rendered as a clear
-second gameplay view. Close the game after capture.
+Audit all imported H2 modules against the pinned Dual Souls source in one
+pass. Require every HUD, frame, page, selection, prompt, dialogue/tutorial,
+item/lore overlay, fade/death, pause/inventory, resume, touch, and restoration
+responsibility to exist behind the direct-display adapter. Resolve source-list,
+API, lifecycle, geometry, and exact-build failures together. Run the focused
+Python contracts and exact Hollow Knight compile, but do not sign or deploy
+until this whole source-level inventory is green.
 
-- [ ] **Step 5: Complete the companion-module matrix**
+- [ ] **Step 5: Run one signed functional companion gate**
 
-Exercise Inventory, Charms, Map, selection/action prompts, dialogue/tutorial,
-item popups, fade/death, background/resume, and lower-display touch. A missing
-module or visual/behavioral difference is a blocker, not a Silksong deferral.
-Resident tab labels must remain visible after the source inventory closes, and
-resident pane cloning must not run source-only animation drivers before the
-clone is sanitized. Tab glyphs must be centered from their generated bounds at
-the measured display size, sorted above the ornament quads, and both selected
-fleurs must be capped to the active tab cell so no source pivot, localization,
-or source-tuned scale can clip or cover the row.
+Build and sign once, install as an update, launch exact Hollow Knight
+`1.5.12620`, and run the complete H2 matrix in that generation: live HUD and
+clean top screen; damage/heal, Soul and Geo changes; Inventory, Charms, Map,
+selection/action prompts, dialogue/tutorial, item popups, fade/death,
+pause/inventory, background/resume, display loss/restoration, and lower-display
+touch. Confirm the lower scenery is blurred and dimmed rather than a clear
+second gameplay view. Resident tab labels must remain visible after the source
+inventory closes; glyphs and fleurs must fit their measured cells. Record all
+failures before changing source, and close the game after capture.
 
-- [ ] **Step 6: Reconcile and commit**
+- [ ] **Step 6: Fix the captured H2 defect set as one batch**
+
+Convert every observed defect into a focused regression contract, implement
+the complete correction batch, rerun host verification and exact compilation,
+then repeat only the affected signed acceptance rows plus one clean launch,
+pause/resume, and teardown smoke. A missing module or visual/behavioral
+difference is a blocker, not a Silksong deferral.
+
+- [ ] **Step 7: Reconcile and commit**
 
 Update the verification document, traceability, matrix, and README. Commit
 `feat: run Dual Souls through direct display` only after source tests, exact
@@ -547,7 +572,7 @@ the installed app, and smoke-test both profiles. Close the running game.
 | --- | --- | --- | --- | --- |
 | H0 | DSUI-00/08/10 | `COMPLETE` | None | Both specifications, both parent plans, matrix, traceability, README, and 5/5 ordering contracts agree; the existing 38-contract Silksong suite remains green after the status correction |
 | H1 | DSUI-00/02/10 | `IMPLEMENTED / DEVICE-PARTIAL` | No implementation blocker; one tracked physical detach/true single-display deferral must close by H5 | 49/49 shared tests, 78/78 Python tests, both exact compiles, signed run `33494317664`, update-preserving Thor transport and pause/resume captures |
-| H2 | DSUI-00/01/02/07/10 | `IN PROGRESS / DEVICE-BLOCKED` | Tab meshes are now non-zero, but the source pivot/scale placed the labels off-screen and made the bottom fleur oversized; pane-clone safety and dim/blur pass on display 1 | 98/98 host tests and exact 1.5.12620 compile are green for bounds-centering, explicit sorting, device-safe scale, and per-slot fleur caps; signed update plus full UI/touch/lifecycle recapture remain required |
+| H2 | DSUI-00/01/02/07/10 | `SOURCE-COMPLETE / DEVICE-BLOCKED` | Signed device evidence proves the corrected per-cell fleurs and on-screen non-zero tab geometry, but the TMP labels still produce no pixels; the complete UI/touch/lifecycle matrix has not run | 20/20 focused companion contracts, 98/98 host tests, and exact `1.5.12620` compile at 222,208 bytes are green; the post-mesh/per-frame renderer re-enable correction is host-green and will enter the single signed H2 integration batch |
 | H3 | DSUI-00/05/09/10 | `PENDING` | Hollow Knight Mods behavior and persistence | Host isolation plus Thor effect/relaunch matrix |
 | H4 | DSUI-00/05/09/10 | `PENDING` | Scanner, application, rotation, rollback | Host pack matrix plus Thor death/respawn proof |
 | H5 | DSUI-00–10 | `PENDING` | Hollow Knight blockers and deferrals must both reach zero | Clean host and complete Thor reference matrix |

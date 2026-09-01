@@ -425,6 +425,17 @@ public partial class HKDualScreen
                         try { tmp.GetType().GetProperty("text")?.SetValue(tmp, labels[i], null); } catch { }
                         try { tmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(tmp, null); } catch { }
                     }
+                    // TextMeshPro disables its mesh renderer while the
+                    // inherited Pane Name text is empty. Assigning text via
+                    // reflection and forcing the mesh does not reliably turn
+                    // that renderer back on, so this re-enable must happen
+                    // after the final mesh update (the area-name port uses the
+                    // same lifecycle correction).
+                    foreach (var tabRenderer in go.GetComponentsInChildren<Renderer>(true))
+                    {
+                        tabRenderer.gameObject.SetActive(true);
+                        tabRenderer.enabled = true;
+                    }
                     frameTabs.Add((tmp, go.transform, i));
                     float s = attrCam.orthographicSize;
                     var rr = go.GetComponentsInChildren<Renderer>();
@@ -493,6 +504,11 @@ public partial class HKDualScreen
                 var glyphRenderer = (tmp as Component).GetComponent<Renderer>();
                 if (glyphRenderer != null)
                 {
+                    // TMP may disable the retained renderer again during a
+                    // subsequent mesh rebuild. Keep resident tab labels live
+                    // just as the other bottom-screen TMP clones are kept
+                    // live each frame.
+                    glyphRenderer.enabled = true;
                     var glyphBounds = glyphRenderer.bounds;
                     if (glyphBounds.size.x > 1e-5f && glyphBounds.size.y > 1e-5f)
                     {

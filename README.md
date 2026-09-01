@@ -18,12 +18,15 @@ direct-display technology first, proves that reference on the Thor, extracts
 shared contracts from it, and only then resumes the Silksong resident-object
 adaptation.
 
-The first Hollow Knight transport milestone is now live: the fork-signed
-`1.0.3` package updated in place, rebuilt the exact `1.5.12620` profile, and
-rendered an opt-in transport-only panel directly on the Thor's lower display
-while Hollow Knight remained on the primary display. This proves the shared
-camera/layer/touch/lifecycle seam, not the Dual Souls HUD. The full unchanged
-Hollow Knight companion remains the next stage.
+The Hollow Knight companion is now source-complete on the direct-display
+transport: the pinned Dual Souls HUD, frame, Inventory, Charms, Map,
+selection/prompts, tutorial/dialogue, item/lore, fade, touch, and restoration
+responsibilities are present, pass 20 focused contracts, and compile exactly
+against `1.5.12620`. Signed Thor passes already prove the live HUD routing,
+clean primary screen, blurred/dimmed lower backdrop, safe pane cloning, and
+corrected tab ornaments. The complete functional device matrix remains open;
+the current visible blocker is resident TMP tab text that has valid on-screen
+geometry but does not yet draw pixels.
 
 <p align="center">
   <img src="docs/icon.png" alt="Hollow Knight Android combined Hollow Knight and Silksong app icon" width="220" />
@@ -45,13 +48,13 @@ not used for project artwork.
 
 | Area | Current evidence | Remaining gate |
 |---|---|---|
-| Hollow Knight `1.5.12620` | Exact Linux manifest accepted; 1,005 serialized files converted with complete Vulkan coverage; the current fork generation built a 267,870,152-byte AArch64 `libil2cpp.so`, a ZIP32 base player image plus main OBB, reached the title screen, and rendered the opt-in shared-transport diagnostic on display 1 | Port and prove the complete existing Dual Souls companion, then Mods, skins, save reload, and representative-scene coverage |
+| Hollow Knight `1.5.12620` | Exact Linux manifest accepted; 1,005 serialized files converted with complete Vulkan coverage; the current fork generation built a 267,870,152-byte AArch64 `libil2cpp.so`, a ZIP32 base player image plus main OBB, and reached gameplay. The complete H2 companion source inventory is host-green and signed partial passes render the routed HUD/pages on display 1 | Close the TMP tab-label renderer blocker, run the complete H2 device matrix once, then port Mods, skins, save reload, and representative-scene coverage |
 | Silksong `1.0.29980` | Fork-signed `1.0.3` built the exact current source on the Thor, atomically published a verified ARM64 generation, reached gameplay, and rendered the redesigned companion directly on both physical displays | Prove lower-panel touch, effects, restart persistence, and two-game switching |
 | One launcher | Both profiles, independent storage, atomic generations, and cold-process selection exist and have host/emulator coverage | Prove both switch directions with the production ARM64 Unity processes |
 | Mods | The parent's build-time BepInEx 5/Harmony weaver is merged and routed through each selected profile's patch, IL2CPP, generation, and status paths | Real plugin compatibility for each game, compatibility manifests, dependencies, load order, and per-profile enablement remain unverified |
 | Built-in tweaks | A shared, game-qualified controller hosts a persistent Mods overlay from the standalone HUD gear. Silksong `1.0.29980` exposes typed damage mode, one-hit kills, unlimited Silk, and equip-anywhere adapters; the standalone gear and first-run master OFF are proved in the signed production process | Prove physical gear/overlay touch, effects, process-exit persistence for each game, the Hollow Knight adapter, and later parity rows |
 | Skins | Shared death/respawn rotation state machine has host coverage; the MIT-licensed Hollow Knight reference already contains a CustomKnight-compatible texture engine and pack registry to port | First port and device-prove Hollow Knight scanning/application/rotation/rollback; then extract the shared library and add Silksong mappings |
-| Dual screen | The shared game-independent transport seam passes 49 host tests and both exact patch compiles. A signed Hollow Knight `1.5.12620` generation rendered its opt-in transport-only card on the Thor's physical display 1 and resumed in the same process. Silksong's UI work remains parked | Port and device-prove the complete existing Hollow Knight Dual Souls companion. Physical detach/true single-display proof remains one tracked H1 deferral because the Thor composer keeps both internal displays registered; it must close by H5 |
+| Dual screen | The shared game-independent transport seam passes 49 host tests. Hollow Knight H2 is source-complete: 20 focused companion contracts and the 98-test host suite pass, and the exact patch compiles at 222,208 bytes. Signed Thor evidence proves live HUD routing, pane construction, dark blurred backdrop, and corrected per-cell tab ornaments. Silksong UI work remains parked | Close the resident TMP label renderer and run the full Hollow Knight UI/touch/lifecycle matrix. Physical detach/true single-display proof remains one tracked H1 deferral and must close by H5 |
 | Releases | Fork identity and GitHub signing pipeline have a signed dry-run proof | No release until source reproducibility, device, gameplay, migration, tag/version, and fresh-download gates pass |
 
 The detailed requirement ledger is

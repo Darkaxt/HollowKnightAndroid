@@ -39,9 +39,16 @@ PINNED_MODULE_HASHES = {
 MODULE_CONTRACTS = {
     "HKDualScreen.cs": (
         "partial class HKDualScreen",
+        "void ScanTutorials(",
+        "void RouteHealParticles(",
+        "void RouteDreamLore(",
+        "void RouteLoreDialogue(",
+        "void SyncBgCapture(",
         "void Tick()",
         "void RelayerHud(",
         "void MainGameHooks(",
+        "void CenterAttribution(",
+        "void RestoreNameCard()",
     ),
     "HKDualScreen.Util.cs": (
         "partial class HKDualScreen",
@@ -50,40 +57,70 @@ MODULE_CONTRACTS = {
     ),
     "HKDualScreen.Bottom.Layering.cs": (
         "partial class HKDualScreen",
+        "void SetupBottomCameras()",
+        "void StripPrivateLayers()",
         "bool ApplyDualScreenToggle()",
+        "bool CompanionVisible(",
+        "bool CreditShowing()",
         "void SyncBottomFade()",
+        "void PushToBottom()",
     ),
     "HKDualScreen.Bottom.Frame.cs": (
         "void BuildFrame()",
+        "void BuildTabRow(",
+        "void PositionFrame()",
+        "void TabSlideTick()",
+        "void PrewarmTick()",
         "void UpdateCompanion(",
         "void BuildCompanionTab(",
+        "GameObject BuildPaneClone(",
         "void TeardownCompanion()",
     ),
     "HKDualScreen.Bottom.Hud.cs": (
+        "void BuildAreaName(",
+        "void BuildStats(",
+        "void BuildEquipCharmRow()",
+        "void UpdateEquipCharmRow(",
+        "void UpdateNotchRow(",
         "void FrameHudCams(",
         "void CenterTutorial()",
+        "void EnsureNameClone()",
         "void CenterDialogue()",
         "void RestoreDialogueShape()",
     ),
     "HKDualScreen.Bottom.Inventory.cs": (
+        "void PopulateSpellDetail(",
+        "void PopulateEquipDetail(",
+        "void PopulateGodfinderDetail(",
+        "void PopulateGeoDetail(",
+        "void PaneSettleTick(",
         "void FinalizeInvPane(",
         "void PopulateInvDetail(",
         "void RefreshInvCounters(",
+        "void ReassertEquipment(",
     ),
     "HKDualScreen.Bottom.Charms.cs": (
         "void CharmsTick()",
+        "void CharmsPaneInit(",
         "void PopulateCharmDetail(",
         "LayoutCharmsRedesign(",
     ),
     "HKDualScreen.Bottom.Map.cs": (
+        "void SetupQuickMap(",
+        "void GateMarkers(",
         "void MapTick()",
         "void MapFrameTick(",
+        "void MirrorRoomState(",
         "void BuildMapClone(",
     ),
     "HKDualScreen.Bottom.Select.cs": (
+        "void MapPinchTick()",
         "void PollTouch()",
+        "void PollItemTap(",
+        "void RefreshSelectedDetail(",
         "void PositionSelection(",
         "void ReassertControlPrompt()",
+        "void PopulateControlPrompt(",
     ),
 }
 
@@ -295,6 +332,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
         )
         tabs = method_body(frame, r"void\s+BuildTabRow\s*\([^)]*\)")
+        position = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
         self.assertIn("tmpBehaviour.enabled = true", tabs)
         first_activation = tabs.index("go.SetActive(true)")
         text_assignment = tabs.index('GetProperty("text")')
@@ -305,6 +343,15 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         self.assertLess(first_activation, text_assignment)
         self.assertLess(text_assignment, mesh_update)
+        final_renderer_enable = tabs.index(
+            "tabRenderer.enabled = true", mesh_update
+        )
+        self.assertLess(mesh_update, final_renderer_enable)
+        self.assertIn("glyphRenderer.enabled = true", position)
+        self.assertLess(
+            position.index("glyphRenderer.enabled = true"),
+            position.index("var glyphBounds = glyphRenderer.bounds"),
+        )
 
     def test_frame_tab_row_uses_device_safe_scale_and_centres_real_glyph_bounds(self):
         layout = strip_csharp_comments(read(REFERENCE_ROOT / "HKLayout.cs"))
