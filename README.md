@@ -104,7 +104,9 @@ It opens with F1 on a PC, which a phone does not have, so here it opens by
 **clicking both sticks (L3+R3)** on a controller. That binding lives in
 `mods/config/BepInEx.cfg` and is read at startup, so it can be changed to any
 key or button without rebuilding — and because it is a BepInEx setting like any
-other, the menu lists it, under Advanced settings.
+other, the menu lists it, under Advanced settings. `Settings scale` is beside
+it: the window is drawn twice its desktop size by default, because it was
+written for a monitor rather than a handheld.
 
 It is not shipped with the app, and neither is BepInEx: mods are your files,
 downloaded by you, and the build that compiles them into the game happens on

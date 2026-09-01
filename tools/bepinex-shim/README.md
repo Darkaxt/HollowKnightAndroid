@@ -55,7 +55,10 @@ It is opened with F1 on a PC. Here the chainloader binds a chord instead —
 **click both sticks (L3+R3)** — and only when a plugin that can be opened is
 installed; see `ModMenu.cs`. The chord is a setting in `mods/config/BepInEx.cfg`
 like any other, read at startup, so it can be changed to any key or button
-without a rebuild, and the menu lists it under Advanced settings.
+without a rebuild, and the menu lists it under Advanced settings. Beside it is
+`Settings scale`, which is what makes a window written for a monitor readable
+at arm's length: it grows the window, its columns and the skin's fonts while
+the window is open, and puts the skin back when it closes.
 
 The sticks are read twice: by number through the legacy input manager
 (`JoystickButton8`/`9`, which is what a `KeyboardShortcut` can express), and by
