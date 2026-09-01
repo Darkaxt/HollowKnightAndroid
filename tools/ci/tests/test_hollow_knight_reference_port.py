@@ -243,6 +243,29 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             r"Joystick1Button0\s*\+\s*index",
         )
 
+    def test_h2_only_queries_broken_flags_that_exist_in_hollow_knight_1_5_12620(self):
+        util = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Util.cs")
+        )
+        broken = method_body(
+            util,
+            r"bool\s+CharmBroken\s*\(\s*PlayerData\s+pd\s*,\s*int\s+id\s*\)",
+        )
+        self.assertTrue(broken, "missing CharmBroken compatibility guard")
+        self.assertRegex(broken, r"id\s*>=\s*23")
+        self.assertRegex(broken, r"id\s*<=\s*25")
+        self.assertIn("pd.GetBool(K_BROKEN[id])", broken)
+
+    def test_partial_layout_json_overlays_defaults_instead_of_zeroing_them(self):
+        main = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.cs")
+        )
+        load = method_body(main, r"void\s+LoadConfig\s*\(\s*bool\s+force\s*\)")
+        self.assertTrue(load, "missing LoadConfig")
+        self.assertRegex(load, r"parsed\s*=\s*new\s+HKLayout\s*\(\s*\)")
+        self.assertIn("JsonUtility.FromJsonOverwrite(txt, parsed)", load)
+        self.assertNotIn("JsonUtility.FromJson<HKLayout>(txt)", load)
+
     def test_backdrop_preserves_reference_blur_and_measured_aspect(self):
         main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
         adapter = strip_csharp_comments(read(ADAPTER))

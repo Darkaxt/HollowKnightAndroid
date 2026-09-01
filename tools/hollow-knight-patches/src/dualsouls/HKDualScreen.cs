@@ -388,14 +388,17 @@ public partial class HKDualScreen : MonoBehaviour
             // never helped.) Now a bad file keeps the previous config and is retried on the next tick.
             string txt = File.ReadAllText(p);
             if (string.IsNullOrWhiteSpace(txt)) return;   // mid-write / empty -> retry next tick, keep cfgMtime
-            HKLayout parsed;
-            try { parsed = JsonUtility.FromJson<HKLayout>(txt); }
+            // Overlay the file onto a fully initialized layout. FromJson<T>
+            // zeroes fields omitted by a partial tuning file on this IL2CPP
+            // runtime, despite HKLayout's field initializers; that can turn a
+            // harmless {"debug":1} edit into a collapsed/disabled companion.
+            HKLayout parsed = new HKLayout();
+            try { JsonUtility.FromJsonOverwrite(txt, parsed); }
             catch (Exception pe)
             {
                 if (mt != cfgBadMtime) { cfgBadMtime = mt; Debug.Log($"HKDS cfg parse error (keeping previous config, will retry): {pe.Message}"); }   // once per bad file version, not 3x/s
                 return;
             }
-            if (parsed == null) return;
             cfg = parsed; cfgMtime = mt;
             OnConfigReloaded();    // module re-apply hooks (B2 frame rebuild for build-time knobs, B4 grid, fit)
             LogUnknownConfigKeys(txt);

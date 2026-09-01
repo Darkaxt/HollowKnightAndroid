@@ -60,7 +60,10 @@ public partial class HKDualScreen
         return cs;
     }
     bool CharmGot(PlayerData pd, int id)    { BuildCharmKeys(); return id > 0 && id <= 40 && pd != null && pd.GetBool(K_GOT[id]); }
-    bool CharmBroken(PlayerData pd, int id) { BuildCharmKeys(); return id > 0 && id <= 40 && pd != null && pd.GetBool(K_BROKEN[id]); }
+    // Hollow Knight 1.5.12620 only defines brokenCharm_23..25 (the three
+    // fragile charms). PlayerData.GetBool logs a full stack trace for an
+    // unknown key, so probing brokenCharm_1..40 during prewarm floods logcat.
+    bool CharmBroken(PlayerData pd, int id) { BuildCharmKeys(); return id >= 23 && id <= 25 && pd != null && pd.GetBool(K_BROKEN[id]); }
 
     // TMP reflection, CACHED. HK's TextMeshPro isn't referenced at compile time, so we drive TMPs by reflection —
     // but `c.GetType().GetProperty("color")` was being re-resolved on ~7 labels EVERY frame. Resolve once per (Type, name).
