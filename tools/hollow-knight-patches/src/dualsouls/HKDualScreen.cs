@@ -53,7 +53,14 @@ public partial class HKDualScreen : MonoBehaviour
 
     Transform tk2dCamT;                                         // cached tk2dCamera (holds "Screen Flash(Clone)")
 
-    struct FlashBaseline { public bool Enabled; public Color Color; }
+    struct FlashBaseline
+    {
+        public bool GameEnabled;
+        public Color GameColor;
+        public bool PolicyActive;
+        public bool LastPolicyEnabled;
+        public Color LastPolicyColor;
+    }
     readonly Dictionary<SpriteRenderer, FlashBaseline> flashBaselines = new Dictionary<SpriteRenderer, FlashBaseline>();
     readonly List<SpriteRenderer> flashDead = new List<SpriteRenderer>();
 
@@ -144,8 +151,8 @@ public partial class HKDualScreen : MonoBehaviour
 
     // ---- lifeblood flash: reversible "Screen Flash(Clone)" policy -------------------------------
     // The fullscreen lifeblood flash is "Screen Flash(Clone)", a layer-0 SpriteRenderer spawned as a
-    // direct child of tk2dCamera (DontDestroyOnLoad). Capture each renderer before touching it so Mods
-    // and config policy changes can always return to the exact state Hollow Knight supplied.
+    // direct child of tk2dCamera (DontDestroyOnLoad). Track live game updates separately from our last
+    // output so softening follows Hollow Knight's fade instead of repeatedly restoring a stale color.
     void SoftenLifebloodFlash()
     {
         HollowKnightFlashMode mode = HkStageHooks.FlashOverride ?? (cfg.killBlueFlash == 1 ? HollowKnightFlashMode.Soft : HollowKnightFlashMode.Vanilla);
@@ -170,33 +177,64 @@ public partial class HKDualScreen : MonoBehaviour
             var sr = ch.GetComponent<SpriteRenderer>();
             if (sr == null) continue;
 
+            bool liveEnabled = sr.enabled;
+            Color liveColor = sr.color;
             FlashBaseline baseline;
             if (!flashBaselines.TryGetValue(sr, out baseline))
             {
-                baseline = new FlashBaseline { Enabled = sr.enabled, Color = sr.color };
+                baseline = new FlashBaseline
+                {
+                    GameEnabled = liveEnabled,
+                    GameColor = liveColor,
+                    PolicyActive = false,
+                    LastPolicyEnabled = liveEnabled,
+                    LastPolicyColor = liveColor,
+                };
                 flashBaselines.Add(sr, baseline);
             }
 
-            // Every policy starts from Hollow Knight's captured state. Unknown enum values therefore
-            // fail closed to Vanilla by taking no action after this restoration.
-            sr.enabled = baseline.Enabled;
-            sr.color = baseline.Color;
+            if (!baseline.PolicyActive)
+            {
+                baseline.GameEnabled = liveEnabled;
+                baseline.GameColor = liveColor;
+            }
+            else
+            {
+                if (liveEnabled != baseline.LastPolicyEnabled)
+                    baseline.GameEnabled = liveEnabled;
+                if (liveColor != baseline.LastPolicyColor)
+                    baseline.GameColor = liveColor;
+            }
+
             switch (mode)
             {
                 case HollowKnightFlashMode.Soft:
-                    Color softened = baseline.Color;
+                    Color softened = baseline.GameColor;
                     if (cfg.flashAlpha <= 0f) softened.a = 0f;
                     else if (softened.a > cfg.flashAlpha) softened.a = cfg.flashAlpha;
+                    sr.enabled = baseline.GameEnabled;
                     sr.color = softened;
-                    break;
-                case HollowKnightFlashMode.Vanilla:
+                    baseline.LastPolicyEnabled = sr.enabled;
+                    baseline.LastPolicyColor = sr.color;
+                    baseline.PolicyActive = true;
                     break;
                 case HollowKnightFlashMode.Off:
                     sr.enabled = false;
+                    baseline.LastPolicyEnabled = sr.enabled;
+                    baseline.LastPolicyColor = sr.color;
+                    baseline.PolicyActive = true;
                     break;
+                case HollowKnightFlashMode.Vanilla:
                 default:
+                    if (baseline.PolicyActive)
+                    {
+                        sr.enabled = baseline.GameEnabled;
+                        sr.color = baseline.GameColor;
+                        baseline.PolicyActive = false;
+                    }
                     break;
             }
+            flashBaselines[sr] = baseline;
         }
     }
 
@@ -207,8 +245,8 @@ public partial class HKDualScreen : MonoBehaviour
             var renderer = kv.Key;
             var baseline = kv.Value;
             if (renderer == null) continue;
-            renderer.enabled = baseline.Enabled;
-            renderer.color = baseline.Color;
+            renderer.enabled = baseline.GameEnabled;
+            renderer.color = baseline.GameColor;
         }
         flashBaselines.Clear();
         flashDead.Clear();

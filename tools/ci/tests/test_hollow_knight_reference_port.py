@@ -338,14 +338,15 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             r"\?\s*0f\s*:\s*cfg\.dim\s*;",
         )
 
-    def test_lifeblood_flash_policy_captures_baseline_before_mode_mutations(self):
+    def test_lifeblood_flash_tracker_samples_live_state_without_self_contamination(self):
         main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
         soften = method_body(main, r"void\s+SoftenLifebloodFlash\s*\(\s*\)")
         self.assertTrue(soften, "missing SoftenLifebloodFlash")
         self.assertRegex(
             main,
-            r"struct\s+FlashBaseline\s*\{\s*public\s+bool\s+Enabled\s*;\s*"
-            r"public\s+Color\s+Color\s*;\s*\}",
+            r"struct\s+FlashBaseline\s*\{[^}]*bool\s+GameEnabled\s*;[^}]*"
+            r"Color\s+GameColor\s*;[^}]*bool\s+PolicyActive\s*;[^}]*"
+            r"bool\s+LastPolicyEnabled\s*;[^}]*Color\s+LastPolicyColor\s*;[^}]*\}",
         )
         self.assertRegex(
             main,
@@ -361,47 +362,100 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         self.assertIn('ch.name.StartsWith("Screen Flash")', soften)
         self.assertIn("ch.GetComponent<SpriteRenderer>()", soften)
-        self.assertRegex(
-            normalized,
-            r"if\s*\(\s*!flashBaselines\.TryGetValue\(sr,\s*out baseline\)\s*\)\s*"
-            r"\{.*?new FlashBaseline.*?flashBaselines\.Add\(sr,\s*baseline\)",
-        )
-        self.assertEqual(1, soften.count("flashBaselines.Add"))
-        self.assertNotIn("flashBaselines[sr]", soften)
-        capture = soften.index("new FlashBaseline")
-        track = soften.index("flashBaselines.Add", capture)
-        renderer_mutations = [
+
+        sample_enabled = soften.index("bool liveEnabled = sr.enabled")
+        sample_color = soften.index("Color liveColor = sr.color", sample_enabled)
+        lookup = soften.index("flashBaselines.TryGetValue(sr, out baseline)", sample_color)
+        policy = soften.index("switch (mode)", lookup)
+        renderer_writes = [
             match.start()
             for match in re.finditer(r"sr\.(?:enabled|color)\s*=", soften)
         ]
-        self.assertTrue(renderer_mutations)
-        self.assertLess(capture, min(renderer_mutations))
-        restore_enabled = soften.index("sr.enabled = baseline.Enabled", track)
-        restore_color = soften.index("sr.color = baseline.Color", track)
-        policy = soften.index("switch (mode)", track)
-        self.assertLess(capture, track)
-        self.assertLess(track, restore_enabled)
-        self.assertLess(track, restore_color)
-        self.assertLess(restore_enabled, policy)
-        self.assertLess(restore_color, policy)
+        self.assertTrue(renderer_writes)
+        self.assertLess(sample_enabled, sample_color)
+        self.assertLess(sample_color, lookup)
+        self.assertLess(lookup, policy)
+        self.assertLess(policy, min(renderer_writes))
+
+        self.assertRegex(
+            normalized,
+            r"if\s*\(\s*!flashBaselines\.TryGetValue\(sr,\s*out baseline\)\s*\)\s*"
+            r"\{.*?GameEnabled\s*=\s*liveEnabled.*?GameColor\s*=\s*liveColor.*?"
+            r"PolicyActive\s*=\s*false.*?flashBaselines\.Add\(sr,\s*baseline\)",
+        )
+        self.assertRegex(
+            normalized,
+            r"if\s*\(\s*!baseline\.PolicyActive\s*\)\s*\{\s*"
+            r"baseline\.GameEnabled\s*=\s*liveEnabled\s*;\s*"
+            r"baseline\.GameColor\s*=\s*liveColor\s*;\s*\}",
+        )
+        self.assertRegex(
+            normalized,
+            r"else\s*\{\s*"
+            r"if\s*\(\s*liveEnabled\s*!=\s*baseline\.LastPolicyEnabled\s*\)\s*"
+            r"baseline\.GameEnabled\s*=\s*liveEnabled\s*;\s*"
+            r"if\s*\(\s*liveColor\s*!=\s*baseline\.LastPolicyColor\s*\)\s*"
+            r"baseline\.GameColor\s*=\s*liveColor\s*;\s*\}",
+        )
+        self.assertIn("flashBaselines[sr] = baseline", soften[policy:])
+
+    def test_lifeblood_flash_modes_preserve_animation_and_restore_only_on_exit(self):
+        main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
+        soften = method_body(main, r"void\s+SoftenLifebloodFlash\s*\(\s*\)")
+        self.assertTrue(soften, "missing SoftenLifebloodFlash")
         for mode in ("Soft", "Vanilla", "Off"):
             self.assertIn(f"case HollowKnightFlashMode.{mode}:", soften)
-        self.assertRegex(soften, r"case\s+HollowKnightFlashMode\.Vanilla\s*:\s*break\s*;")
-        self.assertRegex(soften, r"default\s*:\s*break\s*;")
 
         soft_start = soften.index("case HollowKnightFlashMode.Soft:")
-        off_start = soften.index("case HollowKnightFlashMode.Off:", soft_start)
+        off_start = soften.index("case HollowKnightFlashMode.Off:")
+        vanilla_start = soften.index("case HollowKnightFlashMode.Vanilla:")
+        default_start = soften.index("default:")
+        self.assertLess(soft_start, off_start)
+        self.assertLess(off_start, vanilla_start)
+        self.assertLess(vanilla_start, default_start)
+        writeback = soften.index("flashBaselines[sr] = baseline", default_start)
+
         soft_policy = soften[soft_start:off_start]
-        self.assertIn("Color softened = baseline.Color", soft_policy)
+        self.assertIn("Color softened = baseline.GameColor", soft_policy)
+        self.assertIn("sr.enabled = baseline.GameEnabled", soft_policy)
         self.assertIn("cfg.flashAlpha <= 0f", soft_policy)
         self.assertIn("softened.a = 0f", soft_policy)
+        self.assertIn("softened.a > cfg.flashAlpha", soft_policy)
         self.assertIn("softened.a = cfg.flashAlpha", soft_policy)
         self.assertIn("sr.color = softened", soft_policy)
+        self.assertLess(
+            soft_policy.index("softened.a > cfg.flashAlpha"),
+            soft_policy.index("softened.a = cfg.flashAlpha"),
+        )
+        self.assertIn("baseline.LastPolicyEnabled = sr.enabled", soft_policy)
+        self.assertIn("baseline.LastPolicyColor = sr.color", soft_policy)
+        self.assertIn("baseline.PolicyActive = true", soft_policy)
 
-        default_start = soften.index("default:", off_start)
-        off_policy = soften[off_start:default_start]
+        off_policy = soften[off_start:vanilla_start]
         self.assertIn("sr.enabled = false", off_policy)
         self.assertNotIn("sr.color =", off_policy)
+        self.assertIn("baseline.LastPolicyEnabled = sr.enabled", off_policy)
+        self.assertIn("baseline.LastPolicyColor = sr.color", off_policy)
+        self.assertIn("baseline.PolicyActive = true", off_policy)
+
+        vanilla_policy = soften[vanilla_start:writeback]
+        self.assertRegex(
+            " ".join(vanilla_policy.split()),
+            r"case\s+HollowKnightFlashMode\.Vanilla\s*:\s*default\s*:\s*"
+            r"if\s*\(\s*baseline\.PolicyActive\s*\)\s*\{\s*"
+            r"sr\.enabled\s*=\s*baseline\.GameEnabled\s*;\s*"
+            r"sr\.color\s*=\s*baseline\.GameColor\s*;\s*"
+            r"baseline\.PolicyActive\s*=\s*false\s*;\s*\}\s*break\s*;",
+        )
+        transition = vanilla_policy[vanilla_policy.index("if (baseline.PolicyActive)") :]
+        self.assertEqual(1, transition.count("sr.enabled ="))
+        self.assertEqual(1, transition.count("sr.color ="))
+        self.assertLess(vanilla_start, default_start)
+
+        pre_dispatch = soften[
+            soften.index("flashBaselines.TryGetValue(sr, out baseline)") : soft_start
+        ]
+        self.assertNotRegex(pre_dispatch, r"sr\.(?:enabled|color)\s*=")
 
     def test_lifeblood_flash_prunes_destroyed_keys_and_restores_survivors(self):
         main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
@@ -425,8 +479,10 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         renderer = restore.index("var renderer = kv.Key", loop)
         baseline = restore.index("var baseline = kv.Value", renderer)
         surviving = restore.index("if (renderer == null) continue", baseline)
-        enabled = restore.index("renderer.enabled = baseline.Enabled", surviving)
-        color = restore.index("renderer.color = baseline.Color", enabled)
+        self.assertIn("renderer.enabled = baseline.GameEnabled", restore[surviving:])
+        self.assertIn("renderer.color = baseline.GameColor", restore[surviving:])
+        enabled = restore.index("renderer.enabled = baseline.GameEnabled", surviving)
+        color = restore.index("renderer.color = baseline.GameColor", enabled)
         clear_baselines = restore.index("flashBaselines.Clear()", color)
         clear_scratch = restore.index("flashDead.Clear()", clear_baselines)
         self.assertLess(loop, renderer)
