@@ -402,12 +402,19 @@ public partial class HKDualScreen
                         tmp = c;
                         var tmpBehaviour = c as Behaviour;
                         if (tmpBehaviour != null) tmpBehaviour.enabled = true;
-                        try { c.GetType().GetProperty("text")?.SetValue(c, labels[i], null); } catch { }
-                        try { c.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(c, null); } catch { }
                         break;
                     }
                     go.transform.SetParent(frameRoot.transform, false);
                     go.SetActive(true);
+                    // TMP cannot construct its mesh until its first Awake,
+                    // which is intentionally deferred by the inactive staging
+                    // parent. Assign and force the final text only after the
+                    // sanitized clone has received that first activation.
+                    if (tmp != null)
+                    {
+                        try { tmp.GetType().GetProperty("text")?.SetValue(tmp, labels[i], null); } catch { }
+                        try { tmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(tmp, null); } catch { }
+                    }
                     frameTabs.Add((tmp, go.transform, i));
                     float s = attrCam.orthographicSize;
                     var rr = go.GetComponentsInChildren<Renderer>();

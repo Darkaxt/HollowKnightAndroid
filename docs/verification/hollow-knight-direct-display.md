@@ -146,7 +146,20 @@ retained TMP behavior to be enabled before mesh generation, pane clones to be
 instantiated under an inactive staging parent and stripped of copied `iTween`
 drivers before activation, and the replacement dimmer to use a material with
 an actual `_Color` property. The full host suite is 96/96 and the exact
-`1.5.12620` patch compiles at 221,696 bytes with two entry points. These are
-component gates only; all three findings remain H2 device blockers until a
-new signed candidate is rebuilt and visually/logically verified on the lower
-panel.
+`1.5.12620` patch compiles at 221,696 bytes with two entry points.
+
+Signed dry-run `33508937588` built commit `27e276a`. Its downloaded APK has
+SHA-256 `449a34ef92c64de82aa38dd49979d65b0cc50df965c09161658c37cffedfa5e3`,
+verifies with APK Signature Scheme v2/v3 and the pinned signer, and updated the
+installed package while preserving UID and first-install time. The exact
+`1.5.12620` rebuild reached gameplay. Device capture proves that the backdrop
+is now the reference-style dark blurred scenery wash and that both resident
+pane clones build without the earlier `iTween`/null-reference exception.
+
+The tab-label blocker narrowed further: all three retained TMP behaviors are
+enabled, but their renderer bounds are `0x0`. Runtime evidence shows mesh
+generation happened while the staged clone was still inactive, before TMP's
+first `Awake`. A new RED/GREEN ordering contract now requires first activation
+before final text assignment and `ForceMeshUpdate`. That follow-up is host
+green but remains a device blocker until another signed candidate shows
+non-zero bounds and visible Inventory/Map/Charms labels.

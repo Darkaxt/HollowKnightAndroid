@@ -544,7 +544,7 @@ the installed app, and smoke-test both profiles. Close the running game.
 | --- | --- | --- | --- | --- |
 | H0 | DSUI-00/08/10 | `COMPLETE` | None | Both specifications, both parent plans, matrix, traceability, README, and 5/5 ordering contracts agree; the existing 38-contract Silksong suite remains green after the status correction |
 | H1 | DSUI-00/02/10 | `IMPLEMENTED / DEVICE-PARTIAL` | No implementation blocker; one tracked physical detach/true single-display deferral must close by H5 | 49/49 shared tests, 78/78 Python tests, both exact compiles, signed run `33494317664`, update-preserving Thor transport and pause/resume captures |
-| H2 | DSUI-00/01/02/07/10 | `IN PROGRESS / DEVICE-BLOCKED` | Missing resident tab labels, pane-clone `iTween.Awake` exception, and insufficiently dimmed/blurred backdrop must all pass on display 1 | 96/96 host tests, exact 1.5.12620 compile, signed update and full UI/touch/lifecycle recapture |
+| H2 | DSUI-00/01/02/07/10 | `IN PROGRESS / DEVICE-BLOCKED` | Resident tab labels still have a zero-sized mesh; the pane-clone exception and dim/blur regressions now pass on display 1 | 96/96 host tests, exact 1.5.12620 compile, signed update and full UI/touch/lifecycle recapture |
 | H3 | DSUI-00/05/09/10 | `PENDING` | Hollow Knight Mods behavior and persistence | Host isolation plus Thor effect/relaunch matrix |
 | H4 | DSUI-00/05/09/10 | `PENDING` | Scanner, application, rotation, rollback | Host pack matrix plus Thor death/respawn proof |
 | H5 | DSUI-00–10 | `PENDING` | Hollow Knight blockers and deferrals must both reach zero | Clean host and complete Thor reference matrix |

@@ -296,10 +296,15 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         tabs = method_body(frame, r"void\s+BuildTabRow\s*\([^)]*\)")
         self.assertIn("tmpBehaviour.enabled = true", tabs)
+        first_activation = tabs.index("go.SetActive(true)")
+        text_assignment = tabs.index('GetProperty("text")')
+        mesh_update = tabs.index("ForceMeshUpdate")
         self.assertLess(
             tabs.index("tmpBehaviour.enabled = true"),
-            tabs.index("ForceMeshUpdate"),
+            first_activation,
         )
+        self.assertLess(first_activation, text_assignment)
+        self.assertLess(text_assignment, mesh_update)
 
     def test_pane_clones_are_sanitized_while_inactive_before_activation(self):
         frame = strip_csharp_comments(
