@@ -70,7 +70,7 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertRegex(shell, r"GuardMods\(\(\) => _mods\.OnGesture\([a-zA-Z]+\)\)")
         self.assertIn("new TweakController", modal_source)
         self.assertIn("new SilksongTweakAdapter", modal_source)
-        self.assertIn("new UnityTweakStore", modal_source)
+        self.assertIn("new PlayerPrefsTweakStore", modal_source)
         self.assertIn("SetMaster", modal_source)
         self.assertIn("Reset", modal_source)
         self.assertIn("CompanionShellLayout.MinimumTouchTarget", modal_source)

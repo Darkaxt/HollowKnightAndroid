@@ -64,7 +64,7 @@ public sealed class DsModsScreen
         _top = top;
         _controller = new TweakController(
             new SilksongTweakAdapter(new SilksongGameTweakApi()),
-            new UnityTweakStore());
+            new PlayerPrefsTweakStore());
 
         TweakActionResult initialized = _controller.Initialize();
         if (!initialized.Success)
