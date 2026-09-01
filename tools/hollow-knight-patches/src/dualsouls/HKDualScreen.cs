@@ -149,6 +149,24 @@ public partial class HKDualScreen : MonoBehaviour
         for (int i = 0; i < t.childCount; i++) ScanNode(t.GetChild(i), layer);
     }
 
+    static void ReconcileLifebloodFlashState(SpriteRenderer renderer, ref FlashBaseline baseline)
+    {
+        bool liveEnabled = renderer.enabled;
+        Color liveColor = renderer.color;
+        if (!baseline.PolicyActive)
+        {
+            baseline.GameEnabled = liveEnabled;
+            baseline.GameColor = liveColor;
+        }
+        else
+        {
+            if (liveEnabled != baseline.LastPolicyEnabled)
+                baseline.GameEnabled = liveEnabled;
+            if (liveColor != baseline.LastPolicyColor)
+                baseline.GameColor = liveColor;
+        }
+    }
+
     // ---- lifeblood flash: reversible "Screen Flash(Clone)" policy -------------------------------
     // The fullscreen lifeblood flash is "Screen Flash(Clone)", a layer-0 SpriteRenderer spawned as a
     // direct child of tk2dCamera (DontDestroyOnLoad). Track live game updates separately from our last
@@ -177,34 +195,13 @@ public partial class HKDualScreen : MonoBehaviour
             var sr = ch.GetComponent<SpriteRenderer>();
             if (sr == null) continue;
 
-            bool liveEnabled = sr.enabled;
-            Color liveColor = sr.color;
             FlashBaseline baseline;
             if (!flashBaselines.TryGetValue(sr, out baseline))
             {
-                baseline = new FlashBaseline
-                {
-                    GameEnabled = liveEnabled,
-                    GameColor = liveColor,
-                    PolicyActive = false,
-                    LastPolicyEnabled = liveEnabled,
-                    LastPolicyColor = liveColor,
-                };
+                baseline = new FlashBaseline();
                 flashBaselines.Add(sr, baseline);
             }
-
-            if (!baseline.PolicyActive)
-            {
-                baseline.GameEnabled = liveEnabled;
-                baseline.GameColor = liveColor;
-            }
-            else
-            {
-                if (liveEnabled != baseline.LastPolicyEnabled)
-                    baseline.GameEnabled = liveEnabled;
-                if (liveColor != baseline.LastPolicyColor)
-                    baseline.GameColor = liveColor;
-            }
+            ReconcileLifebloodFlashState(sr, ref baseline);
 
             switch (mode)
             {
@@ -245,6 +242,7 @@ public partial class HKDualScreen : MonoBehaviour
             var renderer = kv.Key;
             var baseline = kv.Value;
             if (renderer == null) continue;
+            ReconcileLifebloodFlashState(renderer, ref baseline);
             renderer.enabled = baseline.GameEnabled;
             renderer.color = baseline.GameColor;
         }

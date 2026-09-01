@@ -341,7 +341,12 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
     def test_lifeblood_flash_tracker_samples_live_state_without_self_contamination(self):
         main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
         soften = method_body(main, r"void\s+SoftenLifebloodFlash\s*\(\s*\)")
+        reconcile = method_body(
+            main,
+            r"(?:static\s+)?void\s+ReconcileLifebloodFlashState\s*\([^)]*\)",
+        )
         self.assertTrue(soften, "missing SoftenLifebloodFlash")
+        self.assertTrue(reconcile, "missing shared flash-state reconciliation")
         self.assertRegex(
             main,
             r"struct\s+FlashBaseline\s*\{[^}]*bool\s+GameEnabled\s*;[^}]*"
@@ -363,34 +368,43 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn('ch.name.StartsWith("Screen Flash")', soften)
         self.assertIn("ch.GetComponent<SpriteRenderer>()", soften)
 
-        sample_enabled = soften.index("bool liveEnabled = sr.enabled")
-        sample_color = soften.index("Color liveColor = sr.color", sample_enabled)
-        lookup = soften.index("flashBaselines.TryGetValue(sr, out baseline)", sample_color)
-        policy = soften.index("switch (mode)", lookup)
+        lookup = soften.index("flashBaselines.TryGetValue(sr, out baseline)")
+        reconcile_call = soften.index(
+            "ReconcileLifebloodFlashState(sr, ref baseline)", lookup
+        )
+        policy = soften.index("switch (mode)", reconcile_call)
         renderer_writes = [
             match.start()
             for match in re.finditer(r"sr\.(?:enabled|color)\s*=", soften)
         ]
         self.assertTrue(renderer_writes)
-        self.assertLess(sample_enabled, sample_color)
-        self.assertLess(sample_color, lookup)
-        self.assertLess(lookup, policy)
+        self.assertLess(lookup, reconcile_call)
+        self.assertLess(reconcile_call, policy)
         self.assertLess(policy, min(renderer_writes))
+        self.assertEqual(1, soften.count("ReconcileLifebloodFlashState("))
+        self.assertNotIn("bool liveEnabled", soften)
+        self.assertNotIn("Color liveColor", soften)
 
         self.assertRegex(
             normalized,
             r"if\s*\(\s*!flashBaselines\.TryGetValue\(sr,\s*out baseline\)\s*\)\s*"
-            r"\{.*?GameEnabled\s*=\s*liveEnabled.*?GameColor\s*=\s*liveColor.*?"
-            r"PolicyActive\s*=\s*false.*?flashBaselines\.Add\(sr,\s*baseline\)",
+            r"\{\s*baseline\s*=\s*new FlashBaseline\(\s*\)\s*;\s*"
+            r"flashBaselines\.Add\(sr,\s*baseline\)\s*;\s*\}",
+        )
+        normalized_reconcile = " ".join(reconcile.split())
+        self.assertRegex(
+            normalized_reconcile,
+            r"bool\s+liveEnabled\s*=\s*renderer\.enabled\s*;\s*"
+            r"Color\s+liveColor\s*=\s*renderer\.color\s*;",
         )
         self.assertRegex(
-            normalized,
+            normalized_reconcile,
             r"if\s*\(\s*!baseline\.PolicyActive\s*\)\s*\{\s*"
             r"baseline\.GameEnabled\s*=\s*liveEnabled\s*;\s*"
             r"baseline\.GameColor\s*=\s*liveColor\s*;\s*\}",
         )
         self.assertRegex(
-            normalized,
+            normalized_reconcile,
             r"else\s*\{\s*"
             r"if\s*\(\s*liveEnabled\s*!=\s*baseline\.LastPolicyEnabled\s*\)\s*"
             r"baseline\.GameEnabled\s*=\s*liveEnabled\s*;\s*"
@@ -479,16 +493,24 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         renderer = restore.index("var renderer = kv.Key", loop)
         baseline = restore.index("var baseline = kv.Value", renderer)
         surviving = restore.index("if (renderer == null) continue", baseline)
-        self.assertIn("renderer.enabled = baseline.GameEnabled", restore[surviving:])
-        self.assertIn("renderer.color = baseline.GameColor", restore[surviving:])
-        enabled = restore.index("renderer.enabled = baseline.GameEnabled", surviving)
+        self.assertIn(
+            "ReconcileLifebloodFlashState(renderer, ref baseline)",
+            restore[surviving:],
+        )
+        reconcile = restore.index(
+            "ReconcileLifebloodFlashState(renderer, ref baseline)", surviving
+        )
+        self.assertIn("renderer.enabled = baseline.GameEnabled", restore[reconcile:])
+        self.assertIn("renderer.color = baseline.GameColor", restore[reconcile:])
+        enabled = restore.index("renderer.enabled = baseline.GameEnabled", reconcile)
         color = restore.index("renderer.color = baseline.GameColor", enabled)
         clear_baselines = restore.index("flashBaselines.Clear()", color)
         clear_scratch = restore.index("flashDead.Clear()", clear_baselines)
         self.assertLess(loop, renderer)
         self.assertLess(renderer, baseline)
         self.assertLess(baseline, surviving)
-        self.assertLess(surviving, enabled)
+        self.assertLess(surviving, reconcile)
+        self.assertLess(reconcile, enabled)
         self.assertLess(enabled, color)
         self.assertLess(color, clear_baselines)
         self.assertLess(clear_baselines, clear_scratch)
