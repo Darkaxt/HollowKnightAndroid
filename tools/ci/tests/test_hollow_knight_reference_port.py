@@ -471,6 +471,29 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
                 self.assertIn(required, release)
         teardown = method_body(frame, r"void\s+TeardownCompanion\s*\(\s*\)")
         self.assertIn("ReleaseLowerHudFixtureInputLock()", teardown)
+        self.assertRegex(
+            release,
+            r"if\s*\(\s*failures\.Count\s*==\s*0\s*\)\s*\{[^}]*"
+            r"lowerHudFixtureInputLockHeld\s*=\s*false",
+        )
+        self.assertNotRegex(
+            release,
+            r"failures\.Count\s*>\s*0[^}]*lowerHudFixtureInputLockHeld\s*=\s*false",
+        )
+        self.assertIn("restoreFailures.Count > 0", acquire)
+        self.assertIn("lowerHudFixtureInputLockHeld = true", acquire)
+
+        direct = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.DirectDisplay.cs")
+        )
+        routing = method_body(
+            direct,
+            r"void\s+RestoreReferenceRouting\s*\(\s*\)",
+        )
+        self.assertIn(
+            "TryDirectStep(ReleaseLowerHudFixtureInputLockOrThrow, failures)",
+            routing,
+        )
 
     def test_frame_tab_row_uses_device_safe_scale_and_centres_real_glyph_bounds(self):
         layout = strip_csharp_comments(read(REFERENCE_ROOT / "HKLayout.cs"))

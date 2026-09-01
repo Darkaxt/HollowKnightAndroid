@@ -65,6 +65,7 @@ public partial class HKDualScreen
     void RestoreReferenceRouting()
     {
         var failures = new List<Exception>();
+        TryDirectStep(ReleaseLowerHudFixtureInputLockOrThrow, failures);
         TryDirectStep(() =>
         {
             var cameras = GameCameras.instance;

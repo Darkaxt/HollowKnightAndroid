@@ -20,6 +20,7 @@ public partial class HKDualScreen
     bool lowerHudFixtureNavigationWasEnabled;
     bool lowerHudFixtureMouseWasEnabled;
     bool lowerHudFixtureInputLockFailureLogged;
+    bool lowerHudFixtureInputRestoreFailureLogged;
 
     GameObject paneClone;          // ALIAS -> the pane clone currently shown (invCloneCache or charmCloneCache)
 
@@ -739,6 +740,14 @@ public partial class HKDualScreen
                 lowerHudFixtureActive = false;
                 Debug.Log("HKDS lower-HUD fixture stopped");
             }
+            else if (lowerHudFixtureInputLockHeld)
+                ReleaseLowerHudFixtureInputLock();
+            if (lowerHudFixtureInputLockHeld)
+            {
+                BlankLowerHudFixture();
+                PushToBottom();
+                return true;
+            }
             return false;
         }
 
@@ -815,6 +824,7 @@ public partial class HKDualScreen
                                !lowerHudFixtureInputModule.allowMouseInput;
             if (stillLocked) return true;
             ReleaseLowerHudFixtureInputLock();
+            if (lowerHudFixtureInputLockHeld) return false;
         }
 
         InputHandler handler = null;
@@ -853,15 +863,35 @@ public partial class HKDualScreen
             lowerHudFixtureMouseWasEnabled = mouseWasEnabled;
             lowerHudFixtureInputLockHeld = true;
             lowerHudFixtureInputLockFailureLogged = false;
+            lowerHudFixtureInputRestoreFailureLogged = false;
             return true;
         }
         catch (Exception e)
         {
+            var restoreFailures = new List<Exception>();
             if (captured)
             {
-                try { if (handler != null) handler.acceptingInput = wasAccepting; } catch { }
-                try { if (eventSystem != null) eventSystem.sendNavigationEvents = navigationWasEnabled; } catch { }
-                try { if (inputModule != null) inputModule.allowMouseInput = mouseWasEnabled; } catch { }
+                try { if (handler != null) handler.acceptingInput = wasAccepting; } catch (Exception re) { restoreFailures.Add(re); }
+                try { if (eventSystem != null) eventSystem.sendNavigationEvents = navigationWasEnabled; } catch (Exception re) { restoreFailures.Add(re); }
+                try { if (inputModule != null) inputModule.allowMouseInput = mouseWasEnabled; } catch (Exception re) { restoreFailures.Add(re); }
+            }
+            if (restoreFailures.Count > 0)
+            {
+                // Rollback did not complete. Retain the exact owners and
+                // baselines so the next fixture tick or transport restoration
+                // can retry instead of permanently stranding native input.
+                lowerHudFixtureInputHandler = handler;
+                lowerHudFixtureEventSystem = eventSystem;
+                lowerHudFixtureInputModule = inputModule;
+                lowerHudFixtureInputWasAccepting = wasAccepting;
+                lowerHudFixtureNavigationWasEnabled = navigationWasEnabled;
+                lowerHudFixtureMouseWasEnabled = mouseWasEnabled;
+                lowerHudFixtureInputLockHeld = true;
+                if (!lowerHudFixtureInputRestoreFailureLogged)
+                {
+                    lowerHudFixtureInputRestoreFailureLogged = true;
+                    Debug.LogError(new AggregateException("HKDS lower-HUD fixture acquisition rollback failed", restoreFailures));
+                }
             }
             if (!lowerHudFixtureInputLockFailureLogged)
             {
@@ -882,12 +912,26 @@ public partial class HKDualScreen
         catch (Exception e) { failures.Add(e); }
         try { if (lowerHudFixtureInputModule != null) lowerHudFixtureInputModule.allowMouseInput = lowerHudFixtureMouseWasEnabled; }
         catch (Exception e) { failures.Add(e); }
-        lowerHudFixtureInputLockHeld = false;
-        lowerHudFixtureInputHandler = null;
-        lowerHudFixtureEventSystem = null;
-        lowerHudFixtureInputModule = null;
-        if (failures.Count > 0)
+        if (failures.Count == 0)
+        {
+            lowerHudFixtureInputLockHeld = false;
+            lowerHudFixtureInputHandler = null;
+            lowerHudFixtureEventSystem = null;
+            lowerHudFixtureInputModule = null;
+            lowerHudFixtureInputRestoreFailureLogged = false;
+        }
+        else if (!lowerHudFixtureInputRestoreFailureLogged)
+        {
+            lowerHudFixtureInputRestoreFailureLogged = true;
             Debug.LogError(new AggregateException("HKDS lower-HUD fixture input restore failed", failures));
+        }
+    }
+
+    void ReleaseLowerHudFixtureInputLockOrThrow()
+    {
+        ReleaseLowerHudFixtureInputLock();
+        if (lowerHudFixtureInputLockHeld)
+            throw new InvalidOperationException("lower-HUD fixture input restore remains pending");
     }
 
     // PRE-WARM: deep-cloning HK's ~1000-object panes is the one unavoidable hitch of a first tab open. Do it while the
