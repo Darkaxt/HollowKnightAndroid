@@ -1,26 +1,20 @@
 # Unified Platform Design Traceability
 
-Last cross-check: 2026-09-01, after correcting the implementation order to
-establish Hollow Knight's complete Dual Souls HUD/pages/Mods/skins reference
-on the direct-display transport before extracting shared contracts or
-resuming the parked Silksong composition port.
+Last cross-check: 2026-09-01, after implementing and device-proving the first
+Hollow Knight direct-display transport consumer while retaining the corrected
+Hollow Knight HUD/pages/Mods/skins-first order.
 
 States follow the design contract: `COMPLETE`, `IN-PROGRESS`, `BLOCKER`,
 `DEFERRED`, and `NOT-STARTED`. `NOT-STARTED` means the planned milestone has not begun. The
-Task 4 is host-complete but device-blocked: the existing installation uses the
-upstream package and release certificate, while the final fork package is now
-non-colliding and signed by the stable fork identity. The two packages can
-coexist, but no preservation/adoption migration into the new package has
-occurred. That prevents either Milestone 1 or Milestone 2 from closing. The
-independently authorized identity/signing slice cannot conceal that blocker
-and does not permit native execution, migration, or release claims. Independent
-Task 10 is complete for Hollow Knight. Device attempt 4 publishes an
-independently hash-verified generation using Unity 6000.0.61f1's exact ZIP32
-APK plus main-OBB split, mounts both archives, loads Vulkan/audio/video and the
-injection probe, renders the exact 1.5.12620 menu, creates a new save, and
-enters a user-confirmed playable room. The remaining platform blockers concern
-two-way switching and later shared mod/skin/input/render milestones rather
-than either game's compilation, first boot, or basic gameplay.
+The final fork package is now the only matching Dual Souls/Hollow Knight
+package on the Thor and retains current generations for both profiles. Signed
+candidate `9fb2db2` updated it in place without changing the UID,
+first-install timestamp, or settings hash. Its current Hollow Knight
+generation mounts the exact Unity 6000.0.61f1 ZIP32 base plus main OBB, reaches
+the `1.5.12620` title, and renders the H1 diagnostic through the shared
+display-1 transport. The complete Dual Souls companion, two-way production
+switching, Mods, skins, and the one physical detach/single-display device
+deferral remain open.
 
 | Requirement | Planned milestone | State | Evidence or gap | Dependency | Acceptance test |
 |---|---:|---|---|---|---|
@@ -39,7 +33,7 @@ than either game's compilation, first boot, or basic gameplay.
 | Goal 5: classic Hollow Knight converter | 2 | COMPLETE | The exact 1.5.12620 tree converted 1,005 serialized files, preserved 610 sidecars, excluded four desktop plugins, reported all 125 shaders Vulkan-capable, reopened outputs with zero diagnostics, and retained source-tree hash `1319a0ea…daa42f8` | None for converter correctness; device consumption remains Goal 4 | Repeat real-source inventory/conversion and zero-diagnostic reopen |
 | Goal 6: shared mod and skin libraries with adapters | H3–H6, S2 | BLOCKER | The parent BepInEx/Harmony weaver, shared external DLL discovery, content stamps, toggle gates, selected-profile IL2CPP wiring, and mod UI are merged with host coverage. The corrected order first ports the existing Hollow Knight Mods and skin behavior, proves it, then extracts shared contracts and adds Silksong | H3–H6 before S2 | Hollow Knight Mods/skins pass first; extracted discovery, compatibility, dependency, safe-mode, scanner, and adapter tests then pass for both profiles |
 | Goal 7: multiple skins and death rotation | H4–H6, S2 | BLOCKER | The pure shared rotation state machine passes 6 death/repeated-death/stable-respawn/disabled/single-pack/apply-failure tests. Hollow Knight's real scanner/application/lifecycle path is now the first implementation target; Silksong follows after shared extraction | H4/H5 before H6/S2 | Hollow Knight death selects and stable respawn applies with rollback before the same shared contract is accepted for Silksong |
-| Goal 8: shared dual-screen Vulkan foundation | H1–H6 | NOT-STARTED | Silksong's direct Unity display-1 technology is proved, but Hollow Knight currently has only an injection probe. The new plan isolates the minimum transport seam, migrates the complete existing Dual Souls companion, and extracts shared contracts only after device acceptance | H1 transport, H2 reference port, H5 acceptance, H6 extraction | Hollow Knight HUD/pages/Mods/skins pass on Thor; shared extraction preserves that matrix; Silksong transport regression remains green |
+| Goal 8: shared dual-screen Vulkan foundation | H1–H6 | IN-PROGRESS | H1 isolates game-independent display/presentation/touch/content contracts, passes 49 shared tests and both exact compiles, and renders a signed opt-in Hollow Knight diagnostic on the Thor's physical display 1 with same-PID pause/resume. This is transport proof only | H2 reference port, H5 acceptance including the tracked physical detach/single-display gate, then H6 extraction | Hollow Knight HUD/pages/Mods/skins pass on Thor; shared extraction preserves that matrix; Silksong transport regression remains green |
 | Goal 11: faithful Dual Souls bottom-screen port | H2–H6, S1–S2 | DEFERRED | The authored Silksong shell is `REJECTED_PROTOTYPE`; Stage 2 source evidence and the Stage 3 audit/probe are preserved. Silksong composition work is parked until Hollow Knight becomes the executable direct-display reference and shared contracts are extracted from it | H5 and H6, then S1–S2 of `2026-09-01-hollow-knight-first-dual-souls.md` | First prove the unchanged Hollow Knight composition/behavior; then side-by-side Thor review proves the same navigation, modal, lifecycle, fallback, accessibility, localization, OLED, persistence, Mods, and skin behavior with Silksong content |
 | Launcher supplied-art redesign and per-game direct shortcuts | 4 | DEFERRED | The supplied SteamGridDB grids, heroes, logos, and individual icons are preserved with attribution. The Hollow Knight first-boot dependency is complete; redesign and Android pinned shortcuts remain scheduled in Task 11, and image generation is forbidden | Task 11 launcher implementation | Both cards use preserved assets and each shortcut launches only its exact ready profile through the shared eligibility path |
 | Goal 9: exclude proprietary inputs/artifacts | Every stage | COMPLETE | The post-parent-sync boundary scan finds zero forbidden game-data/APK/archive/private-key paths among 260 repository candidates and zero forbidden entries among 312 production-AAR entries | Ongoing discipline | Tracked-file and artifact scans remain clean at every gate |
@@ -78,11 +72,11 @@ than either game's compilation, first boot, or basic gameplay.
 | Architecture: duplicate skin IDs require safe resolution | 5 | NOT-STARTED | Skin registry has not begun | Tree hashes | Identical/different duplicate tests pass without flattening |
 | Architecture: one active skin per game | 5 | NOT-STARTED | Activation store has not begun | Profile storage | Independent selection persists for both profiles |
 | Architecture: death selects; stable respawn applies | 5 | BLOCKER | `SkinRotationStateMachine` passes 6 host tests and the lab game calls the same death/stable-respawn API; real Hollow Knight and Silksong lifecycle/apply adapters are absent | Tasks 12–14 lifecycle adapters | Ordered/shuffled/rollback state tests and both device checks pass |
-| Architecture: shared Unity Vulkan multi-display renderer | H1–H6 | NOT-STARTED | Silksong transport is proven; the minimum host seam and Hollow Knight consumer are not implemented | H1/H2 before H6 | Hollow Knight display 1, touch attribution, diagnostics, lifecycle, and fallback pass before shared extraction is accepted |
+| Architecture: shared Unity Vulkan multi-display renderer | H1–H6 | IN-PROGRESS | The minimum shared seam and opt-in Hollow Knight consumer are implemented. Host loss/reactivation/fallback/teardown paths pass; signed Thor display-1 and same-PID pause/resume pass. The fixed dual-panel composer did not emit a logical removal event even when DRM DSI-2 was forced disconnected and restored | H2–H5; physical detach/true single-display proof is one tracked H1 deferral | Complete Hollow Knight companion passes display 1, touch, lifecycle, fallback, Mods, and skins before H6 extraction |
 | Architecture: game adapters supply screens/state only | H6, S1 | NOT-STARTED | Hollow Knight adapter and later shared boundary are absent | Accepted H5 behavior | Shared runtime references no game-specific types and the H5 regression remains unchanged |
 | Architecture: Dual Souls composition port with semantic Silksong extensions | H2–H6, S1 | DEFERRED | The rejected `DsShell` path is dormant and Silksong source work is preserved. Hollow Knight H5/H6 precede shared composition contracts and Silksong resident adapters | H2–H6 then `DsPort*` successor work | No production `DsShell` path remains; live Hollow Knight first passes the full matrix; then both exact compiles and side-by-side captures satisfy the same composition and behavior matrix |
 | Architecture: promotional launcher art stays out of in-game themes | 3, 6 | IN-PROGRESS | Launcher resources remain isolated; the live Silksong surface used only runtime/procedural UI and no supplied promotional image | Resident ornament resolution, deterministic fallback audit, and Hollow Knight adapter remain | Resource audit finds promotional art only in launcher/shortcut resources and resident game art behind adapters |
-| Architecture: single-display fallback remains usable | 6 | NOT-STARTED | Fallback has not begun | Renderer abstraction | Host decision test and device fallback smoke pass |
+| Architecture: single-display fallback remains usable | H1/H5 | IN-PROGRESS | Shared presence/loss/reactivation and fallback decisions pass executable host tests. Thor's two internal panels remain registered by its composer after the lower DRM connector is forced disconnected, and existing x86-64 AVDs cannot execute the ARM64 Unity player | ARM64 single-display target or composer-level Thor removal event by H5 | Host decision tests remain green and a native device fallback smoke passes |
 | Branding: unchanged vertically split combined identity in Android launcher shapes | 7 | COMPLETE | `docs/verification/icon-2026-08-30.md` pins the supplied composition hash and reviews four masks; `docs/verification/product-identity-2026-08-30.md` proves package `io.github.darkaxt.dualsouls`, label `Dual Souls`, final artifact naming, and zero alpha/premultiplied differences across all 15 signed-APK PNGs in run `33305033556` | None for the Task 16 identity/icon slice | Source hash, circle/squircle/rounded/OEM preview, AAPT compile, manifest identity, signer, and rendered packaged comparisons pass |
 | Recovery: validation never writes to source | 2 | COMPLETE | Current-source scans and manifest generation use disjoint report/asset paths and retain the exact source tree hash | None | Before/after content and timestamp manifests agree |
 | Recovery: generated artifacts stage and verify before publish | 3 | COMPLETE | Production outputs are routed into an owned generation job; the manifest is written last, every payload is hashed, archive entries are reopened, the moved tree is revalidated, and only then is `current` atomically replaced | None for host implementation | Injected production-stage failures never update the current pointer |

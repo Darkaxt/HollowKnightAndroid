@@ -161,7 +161,7 @@ the same Hollow Knight-first order and the parked Silksong blockers remain.
 - Modify `tools/silksong-patches/src/dualscreen/DsTouch.cs`.
 - Modify `tools/hollow-knight-patches/HollowKnightPatches.csproj`.
 
-- [ ] **Step 1: Write failing shared-state tests**
+- [x] **Step 1: Write failing shared-state tests**
 
 Create tests for presence, readiness, pause, display loss, reactivation,
 single-display fallback, and ordered teardown. The pure contract begins as:
@@ -182,14 +182,14 @@ dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release
 
 Expected: RED because the transport state types do not yet exist.
 
-- [ ] **Step 2: Extract only proven technology**
+- [x] **Step 2: Extract only proven technology**
 
 Move display activation, presence/readiness state, camera/layer ownership,
 panel measurement, touch attribution, pause/resume, diagnostics, and fallback.
 Do not move `DsPortFrame`, `DsShell`, any page, game data, or game type into
 the shared project.
 
-- [ ] **Step 3: Verify both consumers compile**
+- [x] **Step 3: Verify both consumers compile**
 
 ```powershell
 dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release
@@ -210,10 +210,27 @@ display only an opt-in diagnostic card on display 1. Verify display loss,
 resume, and single-screen fallback; this proves transport only, not the HUD.
 Close the game after capture.
 
-- [ ] **Step 5: Reconcile and commit**
+**2026-09-01 device result:** The signed candidate updated the production
+package in place, rebuilt exact Hollow Knight `1.5.12620`, and rendered the
+opt-in diagnostic on display 1 while the game remained on display 0. The same
+PID survived pause/resume and the transport reactivated without a crash. The
+Thor's lower DRM connector can be forced `disconnected`, but its composer
+keeps logical display 4 registered and Unity emits no removal event. Therefore
+physical display-loss and true single-display startup remain one tracked
+deferral, not a pass. See
+`docs/verification/hollow-knight-direct-display.md`.
+
+- [x] **Step 5: Reconcile and commit**
 
 Record exact hashes/logs and commit `refactor: share direct display transport`.
 Any visual redesign or Silksong-only dependency in shared code is a blocker.
+
+**Stage reconciliation:** DSUI-00 and the H1 transport portion of DSUI-02 are
+satisfied. DSUI-10 has RED/GREEN tests, exact Hollow Knight and Silksong
+compiles, a signed artifact, update-preserving Thor evidence, and synchronized
+documentation. H1 has `blockers = 0` and `tracked_deferrals = 1`; the physical
+detach/single-display device row must reach zero by H5. This does not permit
+the diagnostic card to stand in for any H2 HUD or companion responsibility.
 
 ## Stage H2: Port the complete Hollow Knight Dual Souls companion
 
@@ -521,7 +538,7 @@ the installed app, and smoke-test both profiles. Close the running game.
 | Stage | Requirements | State | Blocking gate | Required evidence |
 | --- | --- | --- | --- | --- |
 | H0 | DSUI-00/08/10 | `COMPLETE` | None | Both specifications, both parent plans, matrix, traceability, README, and 5/5 ordering contracts agree; the existing 38-contract Silksong suite remains green after the status correction |
-| H1 | DSUI-00/02/10 | `PENDING` | Shared transport seam and Hollow Knight diagnostic panel | RED/GREEN tests, both exact compiles, Thor transport capture |
+| H1 | DSUI-00/02/10 | `IMPLEMENTED / DEVICE-PARTIAL` | No implementation blocker; one tracked physical detach/true single-display deferral must close by H5 | 49/49 shared tests, 78/78 Python tests, both exact compiles, signed run `33494317664`, update-preserving Thor transport and pause/resume captures |
 | H2 | DSUI-00/01/02/07/10 | `PENDING` | Complete existing Dual Souls companion on display 1 | Source matrix, exact compile, full UI/touch/lifecycle capture |
 | H3 | DSUI-00/05/09/10 | `PENDING` | Hollow Knight Mods behavior and persistence | Host isolation plus Thor effect/relaunch matrix |
 | H4 | DSUI-00/05/09/10 | `PENDING` | Scanner, application, rotation, rollback | Host pack matrix plus Thor death/respawn proof |
