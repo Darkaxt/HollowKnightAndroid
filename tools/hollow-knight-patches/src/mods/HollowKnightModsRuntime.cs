@@ -10,6 +10,7 @@ namespace DualSouls.Mods.HollowKnight
         const int VisibleRows = 5;
 
         static bool _creating;
+        HollowKnightLifebloodFlashPolicy _lifebloodFlashPolicy;
 
         public static HollowKnightModsRuntime Current { get; private set; }
         public HollowKnightModsSession Session { get; private set; }
@@ -50,13 +51,32 @@ namespace DualSouls.Mods.HollowKnight
                 new HollowKnightGameTweakApi(),
                 new PlayerPrefsTweakStore(),
                 VisibleRows);
+            _lifebloodFlashPolicy = new HollowKnightLifebloodFlashPolicy();
             Current = this;
             DontDestroyOnLoad(gameObject);
         }
 
         void Update()
         {
-            if (Session != null) Session.Tick();
+            HollowKnightModsSession session = Session;
+            if (session != null) session.Tick();
+
+            HollowKnightLifebloodFlashPolicy policy = _lifebloodFlashPolicy;
+            if (policy == null) return;
+
+            bool sessionReady = session != null && session.IsReady;
+            bool masterEnabled = sessionReady && session.Controller.MasterEnabled;
+            string controllerValue = masterEnabled
+                ? session.Controller.Value("lifeblood_flash")
+                : null;
+            HollowKnightFlashMode? desiredMode = HollowKnightFlashModeResolver.Resolve(
+                sessionReady,
+                masterEnabled,
+                controllerValue,
+                global::HkStageHooks.LegacyFlashMode);
+            float softAlpha = global::HkStageHooks.LegacyFlashAlpha ??
+                              HollowKnightLifebloodFlashPolicy.DefaultSoftAlpha;
+            policy.Tick(desiredMode, softAlpha);
         }
 
         void OnDestroy()
@@ -64,9 +84,18 @@ namespace DualSouls.Mods.HollowKnight
             if (!ReferenceEquals(Current, this)) return;
 
             HollowKnightModsSession session = Session;
+            HollowKnightLifebloodFlashPolicy policy = _lifebloodFlashPolicy;
             Session = null;
+            _lifebloodFlashPolicy = null;
             Current = null;
-            if (session != null) session.Dispose();
+            try
+            {
+                if (session != null) session.Dispose();
+            }
+            finally
+            {
+                if (policy != null) policy.Dispose();
+            }
         }
     }
 }

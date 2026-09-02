@@ -11,6 +11,30 @@ namespace DualSouls.Mods.HollowKnight
         Off,
     }
 
+    internal static class HollowKnightFlashModeResolver
+    {
+        internal static HollowKnightFlashMode? Resolve(
+            bool sessionReady,
+            bool masterEnabled,
+            string controllerValue,
+            HollowKnightFlashMode? legacyMode)
+        {
+            if (!sessionReady || !masterEnabled) return legacyMode;
+
+            switch (controllerValue)
+            {
+                case "soft":
+                    return HollowKnightFlashMode.Soft;
+                case "vanilla":
+                    return HollowKnightFlashMode.Vanilla;
+                case "off":
+                    return HollowKnightFlashMode.Off;
+                default:
+                    return HollowKnightFlashMode.Vanilla;
+            }
+        }
+    }
+
     /// <summary>Typed boundary for the two fork-owned, presentation-only Hollow Knight capabilities.</summary>
     public interface IHollowKnightTweakApi
     {

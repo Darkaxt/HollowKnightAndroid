@@ -65,7 +65,7 @@ public partial class HKDualScreen
 
     void RestoreReferenceRouting()
     {
-        RestoreLifebloodFlashBaselines();
+        HkStageHooks.ClearLegacyFlashMode();
         var failures = new List<Exception>();
         TryDirectStep(ReleaseLowerHudFixtureInputLockOrThrow, failures);
         TryDirectStep(() =>

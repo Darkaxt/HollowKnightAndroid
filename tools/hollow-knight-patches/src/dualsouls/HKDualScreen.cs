@@ -19,8 +19,9 @@ using UnityEngine;
 // placement — a field lives in the file that owns its lifecycle):
 //   HKDualScreen.cs                  [M]  MAIN GAME: MonoBehaviour lifecycle, Boot, the per-frame Tick() ORCHESTRATOR,
 //                                         config load/hot-reload, aux/input bridge pushes, inventory-button toggle,
-//                                         L3+R3 combo, HK HUD re-layer, tutorial/flash/heal/lore routing to the
-//                                         bottom, backdrop capture, hero halo, bottom title logo, attribution.
+//                                         L3+R3 combo, HK HUD re-layer, tutorial/heal/lore routing to the
+//                                         bottom, legacy flash-config publication, backdrop capture, hero halo,
+//                                         bottom title logo, attribution.
 //   HKDualScreen.Bottom.Layering.cs  [B1] BOTTOM SCREEN 1: RT + the 4 bottom cameras, private layers, native blit
 //                                         (libhkgpu), dual-screen toggle, the companion SHOW/HIDE gate, RT dump.
 //   HKDualScreen.Bottom.Frame.cs     [B2] BOTTOM SCREEN 2: area/context-box management — frame chrome, tab row,
@@ -51,19 +52,7 @@ public partial class HKDualScreen : MonoBehaviour
     Camera bgCaptureCam; HollowKnightPatches.HkBackdropDimmer bgDimmer;
     bool bgSetup; int bgCullMask; bool bgShow;
 
-    Transform tk2dCamT;                                         // cached tk2dCamera (holds "Screen Flash(Clone)")
-
-    struct FlashBaseline
-    {
-        public bool GameEnabled;
-        public Color GameColor;
-        public bool PolicyActive;
-        public bool LastPolicyEnabled;
-        public Color LastPolicyColor;
-    }
-    readonly Dictionary<SpriteRenderer, FlashBaseline> flashBaselines = new Dictionary<SpriteRenderer, FlashBaseline>();
-    readonly List<SpriteRenderer> flashDead = new List<SpriteRenderer>();
-
+    Transform dreamLoreCameraT;                                  // cached tk2dCamera for focus-tablet lore
     Transform dreamLoreT;                                       // cached tk2dCamera/Audio/Dream Dialogue (focus-tablet lore)
 
     Transform dlgBoxT; PlayMakerFSM dlgBoxFsm; bool loreDialogueOpen;   // B4/B5: DialogueManager/DialogueBox ("Box Open" FSM) -> route to bottom + hide companion while reading a lore tablet
@@ -149,105 +138,15 @@ public partial class HKDualScreen : MonoBehaviour
         for (int i = 0; i < t.childCount; i++) ScanNode(t.GetChild(i), layer);
     }
 
-    static void ReconcileLifebloodFlashState(SpriteRenderer renderer, ref FlashBaseline baseline)
+    // Publish the live H2 config while this reference/view exists. The process runtime owns all
+    // renderer discovery, mutation, and restoration so display loss cannot disable an active Mod.
+    void PublishLegacyLifebloodFlashMode()
     {
-        bool liveEnabled = renderer.enabled;
-        Color liveColor = renderer.color;
-        if (!baseline.PolicyActive)
-        {
-            baseline.GameEnabled = liveEnabled;
-            baseline.GameColor = liveColor;
-        }
-        else
-        {
-            if (liveEnabled != baseline.LastPolicyEnabled)
-                baseline.GameEnabled = liveEnabled;
-            if (liveColor != baseline.LastPolicyColor)
-                baseline.GameColor = liveColor;
-        }
-    }
-
-    // ---- lifeblood flash: reversible "Screen Flash(Clone)" policy -------------------------------
-    // The fullscreen lifeblood flash is "Screen Flash(Clone)", a layer-0 SpriteRenderer spawned as a
-    // direct child of tk2dCamera (DontDestroyOnLoad). Track live game updates separately from our last
-    // output so softening follows Hollow Knight's fade instead of repeatedly restoring a stale color.
-    void SoftenLifebloodFlash()
-    {
-        HollowKnightFlashMode mode = HkStageHooks.FlashOverride ?? (cfg.killBlueFlash == 1 ? HollowKnightFlashMode.Soft : HollowKnightFlashMode.Vanilla);
-
-        flashDead.Clear();
-        foreach (var renderer in flashBaselines.Keys)
-            if (renderer == null) flashDead.Add(renderer);
-        for (int i = 0; i < flashDead.Count; i++)
-            flashBaselines.Remove(flashDead[i]);
-        flashDead.Clear();
-
-        if (tk2dCamT == null)
-        {
-            var c = GameObject.Find("_GameCameras/CameraParent/tk2dCamera");
-            if (c != null) tk2dCamT = c.transform;
-        }
-        if (tk2dCamT == null) return;
-        for (int i = 0; i < tk2dCamT.childCount; i++)
-        {
-            var ch = tk2dCamT.GetChild(i);
-            if (!ch.name.StartsWith("Screen Flash")) continue;
-            var sr = ch.GetComponent<SpriteRenderer>();
-            if (sr == null) continue;
-
-            FlashBaseline baseline;
-            if (!flashBaselines.TryGetValue(sr, out baseline))
-            {
-                baseline = new FlashBaseline();
-                flashBaselines.Add(sr, baseline);
-            }
-            ReconcileLifebloodFlashState(sr, ref baseline);
-
-            switch (mode)
-            {
-                case HollowKnightFlashMode.Soft:
-                    Color softened = baseline.GameColor;
-                    if (cfg.flashAlpha <= 0f) softened.a = 0f;
-                    else if (softened.a > cfg.flashAlpha) softened.a = cfg.flashAlpha;
-                    sr.enabled = baseline.GameEnabled;
-                    sr.color = softened;
-                    baseline.LastPolicyEnabled = sr.enabled;
-                    baseline.LastPolicyColor = sr.color;
-                    baseline.PolicyActive = true;
-                    break;
-                case HollowKnightFlashMode.Off:
-                    sr.enabled = false;
-                    baseline.LastPolicyEnabled = sr.enabled;
-                    baseline.LastPolicyColor = sr.color;
-                    baseline.PolicyActive = true;
-                    break;
-                case HollowKnightFlashMode.Vanilla:
-                default:
-                    if (baseline.PolicyActive)
-                    {
-                        sr.enabled = baseline.GameEnabled;
-                        sr.color = baseline.GameColor;
-                        baseline.PolicyActive = false;
-                    }
-                    break;
-            }
-            flashBaselines[sr] = baseline;
-        }
-    }
-
-    void RestoreLifebloodFlashBaselines()
-    {
-        foreach (var kv in flashBaselines)
-        {
-            var renderer = kv.Key;
-            var baseline = kv.Value;
-            if (renderer == null) continue;
-            ReconcileLifebloodFlashState(renderer, ref baseline);
-            renderer.enabled = baseline.GameEnabled;
-            renderer.color = baseline.GameColor;
-        }
-        flashBaselines.Clear();
-        flashDead.Clear();
+        HkStageHooks.SetLegacyFlashMode(
+            cfg.killBlueFlash == 1
+                ? HollowKnightFlashMode.Soft
+                : HollowKnightFlashMode.Vanilla,
+            cfg.flashAlpha);
     }
 
     // ---- focus-heal splash: route "HP Up Particles(Clone)" to the bottom -----------------------
@@ -312,13 +211,13 @@ public partial class HKDualScreen : MonoBehaviour
     void RouteDreamLore()
     {
         if (cfg.routeHudFx != 1) return;
-        if (tk2dCamT == null)
+        if (dreamLoreCameraT == null)
         {
             var c = GameObject.Find("_GameCameras/CameraParent/tk2dCamera");
-            if (c != null) tk2dCamT = c.transform;
+            if (c != null) dreamLoreCameraT = c.transform;
         }
-        if (tk2dCamT == null) return;
-        if (dreamLoreT == null) dreamLoreT = tk2dCamT.Find("Audio/Dream Dialogue");   // finds it even while inactive
+        if (dreamLoreCameraT == null) return;
+        if (dreamLoreT == null) dreamLoreT = dreamLoreCameraT.Find("Audio/Dream Dialogue");   // finds it even while inactive
         if (dreamLoreT != null && dreamLoreT.gameObject.layer != tutLayer)
             RouteToLayer(dreamLoreT, tutLayer);
     }
@@ -657,13 +556,13 @@ public partial class HKDualScreen : MonoBehaviour
             var src = gc.hudCamera;
             // fix(1.0.2): with dual-screen OFF, hand everything back to the top screen instead of leaving it
             // stranded on a private layer no enabled camera renders. The non-routing hooks still run — the
-            // lifeblood-flash softener and the dreamgate tilemap repair are main-screen fixes, not bottom ones.
+            // legacy flash-config publisher and dreamgate tilemap repair are main-screen concerns.
             bool dsOff = cfg.dualScreen == 0;
             RelayerHud(gc, overlay || dsOff);   // M : HK's HUD subtree -> bottom (hudLayer) or back to the top
             if (dsOff)
             {
                 if (routedLayers.Count > 0) { RestoreRoutedLayers(); RestoreNameCard(); Dbg("HKDS dual-screen OFF -> routed objects returned to the main screen"); }
-                SoftenLifebloodFlash();
+                PublishLegacyLifebloodFlashMode();
                 FixWipedTilemap();
             }
             else MainGameHooks(gc);   // M : tutorial/flash/heal/lore routing (RouteLoreDialogue sets loreDialogueOpen)
@@ -806,9 +705,9 @@ public partial class HKDualScreen : MonoBehaviour
 
     bool popupBlack;   // this frame: a popup draws on the bottom AND compPopupBlack wants the HUD/backdrop blanked behind it
 
-    // [M] Per-frame main-game hooks, in this order: tutorial scan, lifeblood-flash soften, heal-particle /
-    // dream-lore / lore-dialogue routing to the bottom (RouteLoreDialogue sets loreDialogueOpen). The backdrop
-    // capture runs from Tick AFTER these, so its popup gate sees this frame's routing result.
+    // [M] Per-frame main-game hooks, in this order: tutorial scan, legacy lifeblood-mode publication,
+    // then heal-particle / dream-lore / lore-dialogue routing to the bottom (RouteLoreDialogue sets
+    // loreDialogueOpen). The backdrop capture runs from Tick AFTER these, so its popup gate sees this frame's result.
     // The speaker-name card is not just re-layered, it is repositioned too, and our stand-in label lives on
     // the dialogue box — so it needs handing back explicitly, not just via the layer map.
     void RestoreNameCard()
@@ -833,7 +732,7 @@ public partial class HKDualScreen : MonoBehaviour
     void MainGameHooks(GameCameras gc)
     {
         if ((scanTick++ % 30) == 0) ScanTutorials(tutLayer);
-        SoftenLifebloodFlash();
+        PublishLegacyLifebloodFlashMode();
         RouteHealParticles();
         RouteDreamLore();
         RouteLoreDialogue();   // B4/B5: stone-tablet / NPC dialogue box -> bottom + set loreDialogueOpen

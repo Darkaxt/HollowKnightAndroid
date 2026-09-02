@@ -1373,7 +1373,6 @@ public partial class HKDualScreen
 
     void TeardownCompanion()
     {
-        RestoreLifebloodFlashBaselines();
         ReleaseLowerHudFixtureInputLock();
         if (mapClone != null) { Destroy(mapClone); mapClone = null; mapGm = null; mapContentVisible = false; mapAreaBValid = false; mapAreaBFor = null; mapFitIsArea = false; }
         if (invCloneCache != null) { Destroy(invCloneCache); invCloneCache = null; }

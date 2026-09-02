@@ -451,7 +451,10 @@ process-owned persistence without borrowing the companion-view lifecycle.
 - [x] **Step 2: Implement the bounded Hollow Knight Mods host slice**
 
 The fork now has a Hollow Knight capability catalog, controller, process
-runtime, and existing-layout modal. Only the reversible companion-backdrop
+runtime, and existing-layout modal. The process runtime also owns the sole
+lifeblood renderer policy; `HKDualScreen` only publishes its live H2 config as
+a nullable fallback and display teardown clears that reference without
+restoring the process policy. Only the reversible companion-backdrop
 `dimmed`/`black` and lifeblood-flash `soft`/`vanilla`/`off` presentation
 capabilities are available. Every gameplay, progression, world, economy, and
 state capability `HKMOD-001` through `HKMOD-018` remains visible but disabled
@@ -461,20 +464,22 @@ prohibited.
 
 - [x] **Step 3: Run the bounded host gate**
 
-The implementation checkpoint is through `3cc321b`; that SHA is the final H3
-implementation commit, not this later documentation commit, which advances
-branch HEAD. Fresh evidence at that boundary is:
+The original implementation checkpoint ran through `3cc321b`. The final H3
+integration correction is the process-owned lifeblood-policy checkpoint: its
+mode resolver keeps master `soft`/`vanilla`/`off` authoritative without a live
+display reference, while runtime disposal alone restores tracked renderers.
+Fresh host evidence at the corrected boundary is:
 
 - focused Mods tests: 75 passed, 0 failed, 0 skipped;
-- complete shared suite: 120 passed, 0 failed, 0 skipped;
-- Hollow Knight reference/source contracts: 45 passed;
+- complete shared suite: 129 passed, 0 failed, 0 skipped;
+- Hollow Knight reference/source contracts: 47 passed;
 - exact Hollow Knight `1.5.12620` compile: 0 errors, 1 pre-existing `CS0649`
-  warning, 2 entry points, and a 266,240-byte DLL;
+  warning, 2 entry points, and a 267,776-byte DLL;
 - exact Silksong compile: 53 sources and 10 entry points;
 - production scan for `DllImport`, `ReadProcessMemory`, `WriteProcessMemory`,
   `HKTW_`, `HKTweaks`, `HKModsMenu`, and `Bottom.Tweaks`: no matches; and
-- Git diff/status clean, with the branch synchronized to the fork before this
-  documentation reconciliation.
+- final Git diff/status clean and branch synchronized to the fork at checkpoint
+  publication.
 
 No Android, device, emulator, ADB, signing, live, or UI acceptance testing
 occurred. H3 therefore triggers no signed build and passes no physical result.

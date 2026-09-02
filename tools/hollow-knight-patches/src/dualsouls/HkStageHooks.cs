@@ -10,6 +10,8 @@ static class HkStageHooks
     static float nextJoyPoll;
     static bool? _backdropBlackOverride;
     static HollowKnightFlashMode? _flashOverride;
+    static HollowKnightFlashMode? _legacyFlashMode;
+    static float? _legacyFlashAlpha;
 
     internal static bool TweaksAvailable =>
         HollowKnightModsRuntime.Current != null &&
@@ -18,6 +20,8 @@ static class HkStageHooks
         TweaksAvailable && HollowKnightModsRuntime.Current.Session.Menu.IsOpen;
     internal static bool BlackBackground => _backdropBlackOverride == true;
     internal static HollowKnightFlashMode? FlashOverride => _flashOverride;
+    internal static HollowKnightFlashMode? LegacyFlashMode => _legacyFlashMode;
+    internal static float? LegacyFlashAlpha => _legacyFlashAlpha;
     internal static int SkinStamp => 0;
 
     internal static void SetBackdropOverride(bool black)
@@ -30,8 +34,6 @@ static class HkStageHooks
         switch (mode)
         {
             case HollowKnightFlashMode.Soft:
-                _flashOverride = null;
-                return;
             case HollowKnightFlashMode.Vanilla:
             case HollowKnightFlashMode.Off:
                 _flashOverride = mode;
@@ -40,6 +42,25 @@ static class HkStageHooks
                 throw new ArgumentOutOfRangeException(
                     nameof(mode), mode, "Unsupported Hollow Knight flash mode.");
         }
+    }
+
+    internal static void SetLegacyFlashMode(
+        HollowKnightFlashMode mode,
+        float softAlpha)
+    {
+        if (mode != HollowKnightFlashMode.Soft &&
+            mode != HollowKnightFlashMode.Vanilla)
+            throw new ArgumentOutOfRangeException(
+                nameof(mode), mode, "Unsupported legacy Hollow Knight flash mode.");
+
+        _legacyFlashMode = mode;
+        _legacyFlashAlpha = softAlpha;
+    }
+
+    internal static void ClearLegacyFlashMode()
+    {
+        _legacyFlashMode = null;
+        _legacyFlashAlpha = null;
     }
 
     internal static void ClearPresentationOverrides()

@@ -203,6 +203,95 @@ public sealed class HollowKnightTweakAdapterTests
     }
 
     [Fact]
+    public void MasterDefaultSoftOverridesLegacyVanilla()
+    {
+        HollowKnightFlashMode? resolved = HollowKnightFlashModeResolver.Resolve(
+            true,
+            true,
+            "soft",
+            HollowKnightFlashMode.Vanilla);
+
+        Assert.Equal(HollowKnightFlashMode.Soft, resolved);
+    }
+
+    [Theory]
+    [InlineData("soft", HollowKnightFlashMode.Soft)]
+    [InlineData("vanilla", HollowKnightFlashMode.Vanilla)]
+    [InlineData("off", HollowKnightFlashMode.Off)]
+    public void ReadyEnabledMasterMapsEveryControllerValue(
+        string value,
+        HollowKnightFlashMode expected)
+    {
+        HollowKnightFlashMode? resolved = HollowKnightFlashModeResolver.Resolve(
+            true,
+            true,
+            value,
+            HollowKnightFlashMode.Vanilla);
+
+        Assert.Equal(expected, resolved);
+    }
+
+    [Fact]
+    public void MasterOffUsesLiveLegacyMode()
+    {
+        HollowKnightFlashMode? resolved = HollowKnightFlashModeResolver.Resolve(
+            true,
+            false,
+            "off",
+            HollowKnightFlashMode.Soft);
+
+        Assert.Equal(HollowKnightFlashMode.Soft, resolved);
+    }
+
+    [Fact]
+    public void SessionNotReadyUsesLiveLegacyMode()
+    {
+        HollowKnightFlashMode? resolved = HollowKnightFlashModeResolver.Resolve(
+            false,
+            true,
+            "off",
+            HollowKnightFlashMode.Vanilla);
+
+        Assert.Equal(HollowKnightFlashMode.Vanilla, resolved);
+    }
+
+    [Fact]
+    public void NoMasterAndNoLiveReferenceReturnsNull()
+    {
+        HollowKnightFlashMode? resolved = HollowKnightFlashModeResolver.Resolve(
+            true,
+            false,
+            "soft",
+            null);
+
+        Assert.Null(resolved);
+    }
+
+    [Fact]
+    public void MasterEnabledOffRemainsDesiredWithoutLegacyReference()
+    {
+        HollowKnightFlashMode? resolved = HollowKnightFlashModeResolver.Resolve(
+            true,
+            true,
+            "off",
+            null);
+
+        Assert.Equal(HollowKnightFlashMode.Off, resolved);
+    }
+
+    [Fact]
+    public void InvalidMasterValueFailsClosedToVanilla()
+    {
+        HollowKnightFlashMode? resolved = HollowKnightFlashModeResolver.Resolve(
+            true,
+            true,
+            "unexpected",
+            HollowKnightFlashMode.Soft);
+
+        Assert.Equal(HollowKnightFlashMode.Vanilla, resolved);
+    }
+
+    [Fact]
     public void CaptureApplyAndRestorePreserveApiCallOrder()
     {
         var api = new RecordingApi();
