@@ -58,6 +58,10 @@ reference diffs, and exact `1.5.12620` compilation; do not create a signed APK
 for individual visual or lifecycle corrections. After the complete stage is
 present and host-green, run one signed integration matrix, record every defect,
 fix that defect set as one batch, and repeat only the affected acceptance rows.
+Host-complete H2/H3 checkpoints do not create signed micro-candidates: their
+remaining physical observations are batched into the complete Hollow Knight
+candidate. Work remains confined to this fork; do not contact or interact with
+`igawa6/dualsouls` upstream.
 
 Specification reconciliation still occurs after every H stage. The stage is
 the review boundary: a one-line placement correction is not a separate stage
@@ -327,16 +331,18 @@ Resident tab labels must remain visible after the source inventory closes;
 glyphs and fleurs must fit their measured cells. Record the entire lower-HUD
 defect set before changing source, and close the game after capture.
 
-- [ ] **Step 6: Fix the captured H2 defect set as one batch**
+- [x] **Step 6: Fix the captured H2 defect set as one host batch**
 
 Convert every observed defect into a focused regression contract, implement
-the complete correction batch, rerun host verification and exact compilation,
-then repeat only the affected lower-HUD signed rows through the controlled
-title/menu fixture plus process pause/resume and teardown smoke. Do not select a
-save, start a game, skip an intro, enter a room, or issue gameplay input during
-the recheck.
-A missing module or visual/behavioral difference is a blocker, not a Silksong
-deferral.
+the complete correction batch, and rerun host verification and exact
+compilation. H2 source/host implementation is complete at `00627e3`; the
+remaining physical label, teardown, and topology observations are not passed.
+They are batched into the complete Hollow Knight candidate rather than a signed
+H2 micro-candidate. That later authorized gate must use the controlled
+title/menu fixture plus process pause/resume and teardown smoke, and must not
+select a save, start a game, skip an intro, enter a room, or issue gameplay input.
+A missing module or visual/behavioral difference found there remains a blocker,
+not a Silksong deferral.
 
 Progress checkpoint: signed dry-run `33520627292` installed commit `0f9f398`
 in place and rebuilt exact generation
@@ -404,50 +410,81 @@ only exact `TMProOld`/`TMPro` graphics, disables the stale driver before
 activation, and neutralizes every main/submesh property block after mesh
 generation. It passes 32 focused contracts, 122 Android tests, 58 shared tests,
 38 bundle-surgery tests, 112 Python tests, and the exact 226,816-byte Hollow
-Knight compile. Step 6 remains `DEVICE-BLOCKED` for one locked clip-safe
-label/teardown recheck. No later pass may use gameplay as a validation host.
+Knight compile. This was the last device result; it did not prove the clip-safe
+correction.
 
-- [ ] **Step 7: Reconcile and commit**
+Host checkpoint `00627e3` completes the H2 source/host implementation. No later
+Android, device, emulator, ADB, signing, or live validation occurred during the
+H2/H3 host work, so the locked label/teardown recheck and the tracked H1 physical
+topology observation remain unpassed. Both are batched into the complete Hollow
+Knight candidate under the no-micro-candidate cadence.
 
-Update the verification document, traceability, matrix, and README. Commit
-`feat: run Dual Souls through direct display` only after source tests, exact
-compile, and the device matrix are green.
+- [x] **Step 7: Reconcile the source/host checkpoint**
 
-## Stage H3: Port Hollow Knight Mods and tweaks intact
+Record H2 source/host completion separately from physical acceptance. The
+reconciliation commit follows `00627e3` and does not turn either remaining
+physical observation green.
+
+## Stage H3: Establish the Hollow Knight Mods host slice and tracked deferrals
 
 **Requirements:** DSUI-00, DSUI-05, DSUI-09, DSUI-10.
 
 **Files:**
 
-- Add `HKTweaks.cs`, `HKModsMenu.cs`, `HKDualScreen.Bottom.Tweaks.cs`, and
-  their audited source-only dependencies.
-- Create `tools/hollow-knight-patches/src/mods/HollowKnightTweakAdapter.cs`.
-- Modify `tools/hollow-knight-patches/entrypoints.json`.
-- Extend `tools/shared-patches-tests/TweakControllerTests.cs`.
-- Extend `tools/ci/tests/test_hollow_knight_reference_port.py`.
+- Add `HollowKnightTweakAdapter.cs`, `HollowKnightGameTweakApi.cs`,
+  `HollowKnightModsSession.cs`, and `HollowKnightModsRuntime.cs` under
+  `tools/hollow-knight-patches/src/mods/`.
+- Add `HollowKnightModsPresenter.cs` within the existing H2 companion layout and
+  connect it through the bounded H2 stage hooks/direct-display lifecycle.
+- Extend the shared Mods contracts, controller, menu model, persistence store,
+  presenter helpers, and their focused tests.
+- Extend `tools/ci/tests/test_hollow_knight_reference_port.py` and the profile
+  pipeline contracts.
 
-- [ ] **Step 1: Write failing persistence/isolation tests**
+- [x] **Step 1: Prove persistence and isolation on the host**
 
-Require `dualsouls.mods.hollow-knight.*` and
-`dualsouls.mods.silksong.*` to remain disjoint, every master to default off,
-and each switch to survive leaving and relaunching its own game.
+The shared contracts keep `dualsouls.mods.hollow-knight.*` and
+`dualsouls.mods.silksong.*` disjoint, keep each master default-off, and cover
+process-owned persistence without borrowing the companion-view lifecycle.
 
-- [ ] **Step 2: Port existing Hollow Knight behavior**
+- [x] **Step 2: Implement the bounded Hollow Knight Mods host slice**
 
-Retain the Dual Souls Mods screen, categories, descriptions, legal-action
-guards, reset behavior, state-slot confirmations, and live revert behavior.
-Use typed Hollow Knight APIs; native memory-address tables are prohibited.
+The fork now has a Hollow Knight capability catalog, controller, process
+runtime, and existing-layout modal. Only the reversible companion-backdrop
+`dimmed`/`black` and lifeblood-flash `soft`/`vanilla`/`off` presentation
+capabilities are available. Every gameplay, progression, world, economy, and
+state capability `HKMOD-001` through `HKMOD-018` remains visible but disabled
+and tracked for Final managed-rewrite remediation. This is not full Mods parity.
+Typed Hollow Knight APIs remain mandatory; native memory-address tables are
+prohibited.
 
-- [ ] **Step 3: Verify host, compile, and device effects**
+- [x] **Step 3: Run the bounded host gate**
 
-Test every exposed benign tweak in a reversible scenario, master off/on,
-individual persistence, process exit/relaunch, and isolation from Silksong.
-Close the game after capture.
+The implementation checkpoint is through `3cc321b`; that SHA is the final H3
+implementation commit, not this later documentation commit, which advances
+branch HEAD. Fresh evidence at that boundary is:
 
-- [ ] **Step 4: Reconcile and commit**
+- focused Mods tests: 75 passed, 0 failed, 0 skipped;
+- complete shared suite: 120 passed, 0 failed, 0 skipped;
+- Hollow Knight reference/source contracts: 45 passed;
+- exact Hollow Knight `1.5.12620` compile: 0 errors, 1 pre-existing `CS0649`
+  warning, 2 entry points, and a 266,240-byte DLL;
+- exact Silksong compile: 53 sources and 10 entry points;
+- production scan for `DllImport`, `ReadProcessMemory`, `WriteProcessMemory`,
+  `HKTW_`, `HKTweaks`, `HKModsMenu`, and `Bottom.Tweaks`: no matches; and
+- Git diff/status clean, with the branch synchronized to the fork before this
+  documentation reconciliation.
 
-Commit `feat: port Hollow Knight Mods to direct display` only with zero stage
-blockers.
+No Android, device, emulator, ADB, signing, live, or UI acceptance testing
+occurred. H3 therefore triggers no signed build and passes no physical result.
+
+- [x] **Step 4: Reconcile the host checkpoint**
+
+H3 is `HOST-COMPLETE / TRACKED-DEFERRALS` after the bounded host gate, not
+device-accepted and not gameplay-tweak parity. H4 follows on the same branch in
+the unchanged product sequence. Once the complete H3/H4 Hollow Knight slice is
+ready, it receives one future device gate only when that gate is explicitly
+authorized; no H3 or H4 micro-candidate is built or signed.
 
 ## Stage H4: Port multi-pack skins and death rotation
 
@@ -666,8 +703,8 @@ the installed app, and smoke-test both profiles. Close the running game.
 | --- | --- | --- | --- | --- |
 | H0 | DSUI-00/08/10 | `COMPLETE` | None | Both specifications, both parent plans, matrix, traceability, README, and 5/5 ordering contracts agree; the existing 38-contract Silksong suite remains green after the status correction |
 | H1 | DSUI-00/02/10 | `IMPLEMENTED / DEVICE-PARTIAL` | No implementation blocker; one tracked physical detach/true single-display deferral must close by H5 | 49/49 shared tests, 78/78 Python tests, both exact compiles, signed run `33494317664`, update-preserving Thor transport and pause/resume captures |
-| H2 | DSUI-00/01/02/07/10 | `HOST-GREEN / DEVICE-BLOCKED` | Signed lower-HUD evidence proves routed live HUD, clean primary HUD, blurred/dimmed backdrop, real lower-controller page switching, selection/details/prompt, bounded ornaments, pause title presentation, persistent opening-credit routing, and live Inventory under the direct transport. Run `33544518172` proves clean conversion/publication and the locked menu fixture, but all detached TMP labels remain absent. Exact analysis identifies the inherited `TextMeshProClipRect` controller/property block as the remaining visual cause; the clip-safe correction is device-unproved | Earlier room-hosted evidence is historical and is not an allowed future validation method. Current evidence uses only the input-locked `MAIN_MENU` fixture, controlled injection, and clean teardown. The correction passes 32 focused contracts, 122 Android tests, 58 shared tests, 38 bundle-surgery tests, 112 Python tests, and a 226,816-byte exact patch. Base-game `Platform:SetSceneLoadState` singleton messages are not an H2 blocker; one locked clip-safe label/teardown recheck remains |
-| H3 | DSUI-00/05/09/10 | `PENDING` | Hollow Knight Mods behavior and persistence | Host isolation plus Thor effect/relaunch matrix |
+| H2 | DSUI-00/01/02/07/10 | `SOURCE/HOST-COMPLETE / PHYSICAL-BATCHED` | Source/host implementation is complete at `00627e3`. The locked clip-safe label/teardown recheck and H1 topology observation remain unpassed and are batched into the complete Hollow Knight candidate, not a signed micro-candidate | Historical signed evidence remains recorded above. The final H2 correction passes 32 focused contracts, 122 Android tests, 58 shared tests, 38 bundle-surgery tests, 112 Python tests, and an exact 226,816-byte patch; no later Android/device/emulator/ADB/signing/live validation occurred |
+| H3 | DSUI-00/05/09/10 | `HOST-COMPLETE / TRACKED-DEFERRALS` | No H3 host blocker through implementation checkpoint `3cc321b`; `HKMOD-001`–`HKMOD-018` remain visible, disabled tracked deferrals for Final managed-rewrite remediation. This is not full Mods parity or device acceptance | 75/75 focused Mods tests, 120/120 complete shared tests, 45/45 Hollow Knight reference/source contracts; exact Hollow Knight compile with 0 errors, 1 pre-existing `CS0649` warning, 2 entry points, 266,240-byte DLL; exact Silksong compile with 53 sources and 10 entry points; prohibited production scan clean. H3 creates no signed build; H4 follows on the same branch, then the complete H3/H4 slice receives one future explicitly authorized device gate |
 | H4 | DSUI-00/05/09/10 | `PENDING` | Scanner, application, rotation, rollback | Host pack matrix plus controlled Thor death/respawn-state injection proof; no gameplay testing |
 | H5 | DSUI-00–10 | `PENDING` | Hollow Knight blockers and deferrals must both reach zero | Clean host and complete Thor reference matrix |
 | H6 | DSUI-02/09/10 | `PENDING` | Shared extraction must preserve accepted H5 behavior | Shared boundary tests plus unchanged H5 regression |

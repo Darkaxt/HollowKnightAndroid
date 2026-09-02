@@ -2,6 +2,28 @@
 
 This ledger is authoritative for the gameplay, progression, world, economy, and state capabilities visible in the initial Hollow Knight Mods catalog. Every row remains visible but unavailable until its named acceptance condition is proven.
 
+The paired [managed API audit](hollow-knight-mod-managed-api-audit.md) preserves the exact Hollow Knight `1.5.12620` `Assembly-CSharp.dll` hash, size, inspection-tool version, bounded type inventory, observed signatures, semantic findings, and promotion decisions. That assembly/API provenance remains the source audit for this ledger; host scaffolding does not supersede it.
+
+## H3 host checkpoint
+
+H3 is **HOST-COMPLETE / TRACKED-DEFERRALS** at the bounded host gate. The implementation boundary is through `3cc321b`; that SHA is the final H3 implementation commit, not the later documentation commit that advances branch HEAD.
+
+Fresh host evidence at that boundary:
+
+- Focused Mods tests: 75 passed, 0 failed, 0 skipped.
+- Complete shared suite: 120 passed, 0 failed, 0 skipped.
+- Hollow Knight reference/source contracts: 45 passed.
+- Exact Hollow Knight `1.5.12620` compile: 0 errors, 1 pre-existing `CS0649` warning, 2 entry points, 266,240-byte DLL.
+- Exact Silksong compile: 53 sources, 10 entry points.
+- Production scan for `DllImport`, `ReadProcessMemory`, `WriteProcessMemory`, `HKTW_`, `HKTweaks`, `HKModsMenu`, and `Bottom.Tweaks`: no matches.
+- Git diff/status was clean and the branch synchronized with the fork before documentation reconciliation.
+
+The host-complete scope is the Hollow Knight capability catalog, controller, process runtime, and existing-layout modal. The reversible **Companion backdrop** (`dimmed`/`black`) and **Lifeblood flash** (`soft`/`vanilla`/`off`) capabilities are available presentation catalog rows outside `HKMOD-001` through `HKMOD-018`. They do not promote any row below.
+
+Every `HKMOD-001` through `HKMOD-018` row remains **DEFERRED**, visible but disabled, with target **Final managed-rewrite remediation** and its existing acceptance condition unchanged. **HOST-COMPLETE / TRACKED-DEFERRALS** therefore does not mean full Mods parity or completed gameplay Mods effects, and `Pending host evidence` is not replaced merely because the scaffolding is green.
+
+No Android, device, emulator, ADB, signing, live, or UI acceptance testing occurred, and H3 triggers no signed build. H4 follows on the same branch. The complete H3/H4 Hollow Knight slice receives one future device gate only when explicitly authorized; no micro-candidate is built or signed.
+
 | ID | Capability | State | Missing seam/proof | Target | Acceptance condition | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | HKMOD-001 | Damage received | DEFERRED | Stock damage-mode symbols exist, but PreventDeath semantics and scene-safe baseline ownership are unproved | Final managed-rewrite remediation | Exact compile; fake mapping; death/respawn/scene/save rollback; integrated candidate | Pending host evidence |
