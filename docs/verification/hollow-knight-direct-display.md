@@ -132,7 +132,21 @@ and restore behavior remain the presentation oracle. H3 tweaks/mods and H4
 skins are represented by an explicit inert stage boundary in H2 rather than
 silently approximated or imported ahead of their gates.
 
-## H2 active device findings
+## H2 current reconciliation
+
+H2 is **SOURCE/HOST-COMPLETE / PHYSICAL-BATCHED** at `00627e3`. The clip-safe
+label/teardown, controlled-injection lifecycle, and H1 physical detach/true
+single-display observations remain unpassed. They are batched into the complete
+Hollow Knight candidate; there is no separate H2 physical rerun, signed build,
+or micro-candidate.
+
+No Android, device, emulator, ADB, signing, or live validation occurred after
+signed run `33544518172` during the H2/H3 host implementation. The chronology
+below preserves what was known at each historical checkpoint. Where it says a
+physical recheck remained open, that statement describes that checkpoint only;
+it is not an instruction to run an immediate candidate.
+
+## H2 historical device findings
 
 The first signed H2 candidate moved Hollow Knight's live masks/Soul HUD to the
 lower panel and left the primary gameplay view clean on exact version
@@ -159,10 +173,10 @@ pane clones build without the earlier `iTween`/null-reference exception.
 The tab-label blocker narrowed further: all three retained TMP behaviors are
 enabled, but their renderer bounds are `0x0`. Runtime evidence shows mesh
 generation happened while the staged clone was still inactive, before TMP's
-first `Awake`. A new RED/GREEN ordering contract now requires first activation
-before final text assignment and `ForceMeshUpdate`. That follow-up is host
-green but remains a device blocker until another signed candidate shows
-non-zero bounds and visible Inventory/Map/Charms labels.
+first `Awake`. A new RED/GREEN ordering contract then required first activation
+before final text assignment and `ForceMeshUpdate`. At that checkpoint, the
+follow-up was host-green and the physical recheck remained open for non-zero
+bounds and visible Inventory/Map/Charms labels.
 
 Signed dry-run `33510846778` built follow-up commit `a846a82`. Its downloaded
 APK has SHA-256
@@ -184,13 +198,13 @@ bounds are now centered inside the lower panel and both fleurs are reduced,
 centered, and bounded to one tab cell; the previously oversized lower sprite
 is fixed. The dark blurred backdrop and safe pane-clone behavior remain green.
 
-H2 still does not pass because the three resident tab labels produce no pixels
-despite their valid non-zero bounds. The pinned source already documents the
-same TMP lifecycle behavior for other resident labels: an empty TMP can disable
-its mesh renderer and reflection text assignment does not reliably re-enable
-it. The current RED/GREEN correction therefore re-enables every tab renderer
-after final `ForceMeshUpdate` and reasserts the co-located glyph renderer before
-each bounds/layout pass.
+At that checkpoint, the H2 physical recheck remained open because the three
+resident tab labels produced no pixels despite their valid non-zero bounds. The
+pinned source already documented the same TMP lifecycle behavior for other
+resident labels: an empty TMP can disable its mesh renderer and reflection text
+assignment does not reliably re-enable it. The next RED/GREEN correction
+therefore re-enabled every tab renderer after final `ForceMeshUpdate` and
+reasserted the co-located glyph renderer before each bounds/layout pass.
 
 Signed dry-run `33515971125` built commit `c2eb819`. Its downloaded APK has
 SHA-256
@@ -216,11 +230,11 @@ matrix.
 | Inventory, Charms, and Map switching | PASS | The display-associated `fts_ts_3` event path selected all three bottom pages; high-level ADB display injection is not counted |
 | Selection, details, and action prompt | PASS | Selecting Old Nail rendered selection corners, its name/description, and the native X glyph |
 | Tab glyph/fleur bounds | PASS | All ornaments remain centered and bounded to their tab cells |
-| Resident Inventory/Map/Charms text | FAIL | Menu-only run `33536682728` proved the pinned `2.7` chrome scale but the glyphs remained absent on Map and Inventory. A known-good native label remained visible inside the tab band, ruling out camera/layer, Map-mask, and spatial-stencil clipping. Post-frame label finalization is host-green and awaits one lower-HUD-only visual recheck |
+| Resident Inventory/Map/Charms text | FAIL | Menu-only run `33536682728` proved the pinned `2.7` chrome scale but the glyphs remained absent on Map and Inventory. A known-good native label remained visible inside the tab band, ruling out camera/layer, Map-mask, and spatial-stencil clipping. At that checkpoint, the post-frame label finalization was host-green and the physical recheck remained open; this row is now batched and remains unpassed |
 | Quiet patch-owned pre-manager startup | PASS | Every patch-owned pre-fixture/lifecycle path now uses `resolvedGameCameras`. The two remaining messages in run `33532750369` have complete stacks in Hollow Knight's own `Platform:SetSceneLoadState`, so they are a base-game startup baseline rather than an H2 defect |
 | Pause lower surface | PASS | Pausing presents the Hollow Knight title card on display 1 |
-| Tutorial/dialogue/item/fade state routing | PENDING | One earlier attack-tutorial observation exposed a persistent-HUD scan gap; the batched correction is host-green. Recheck uses host contracts or controlled injected lower-HUD state only, never gameplay |
-| Background/resume and restoration retry | PENDING | Host contracts cover retry ownership; affected signed lower-HUD lifecycle rows remain |
+| Tutorial/dialogue/item/fade state routing | PENDING | One earlier attack-tutorial observation exposed a persistent-HUD scan gap; the batched correction is host-green. At that checkpoint, the physical recheck remained open. The observation remains unpassed and is now batched for host contracts or controlled injected lower-HUD state only, never gameplay |
+| Background/resume and restoration retry | PENDING | Host contracts cover retry ownership; the unpassed physical lifecycle observations are batched into the complete Hollow Knight candidate |
 | Physical display loss / true single-display start | TRACKED DEFERRAL | Unchanged H1 hardware/composer limitation; must close by H5 |
 | Teardown and host-setting restoration | PASS | Package PID absent after force-stop; temporary layout file removed; `stay_on_while_plugged_in` restored to `0` |
 
@@ -241,7 +255,7 @@ King's Pass room hosted the lower HUD with no movement, navigation, combat,
 collection, progression, save assertion, or gameplay result. The persistent
 opening credit routed to the lower screen while the primary remained clean,
 and display-associated lower touch opened Inventory. Resident labels still
-produced no pixels, so H2 remains blocked.
+produced no pixels. At that checkpoint, the physical recheck remained open.
 
 The second source correction preserved every component dependency and disabled
 every non-TMP `MonoBehaviour` instead of destroying all but `TextContainer`.
@@ -309,11 +323,11 @@ constructed and sorted all native TMP siblings. The correction now keeps tab
 clones blank during construction and finalizes/normalizes them once from
 `PositionFrame`, matching that proven path.
 
-The follow-up passes 30 focused companion contracts, all 58 shared tests, all
+The follow-up passed 30 focused companion contracts, all 58 shared tests, all
 109 Python tests, both exact patch compiles, and the exact 226,816-byte
-`1.5.12620` patch. H2 remains blocked only until one lower-HUD-only menu fixture
-shows the finalized labels and clean teardown. Every later device pass follows
-the same no-gameplay rule.
+`1.5.12620` patch. At that checkpoint, the physical recheck remained open for
+the finalized labels and clean teardown. It is now one of the unpassed
+observations batched into the complete Hollow Knight candidate.
 
 Signed dry-run `33540377737` then built commit `b96655b`; its 72,886,447-byte
 APK has SHA-256
@@ -331,8 +345,8 @@ commits the marker only after successful conversion and required-output checks.
 Partial C++ plus metadata, and a `.part` marker, are explicitly rejected. The
 regressions cover the prior-success/interrupted-rewrite sequence and pass within
 the full 122-test Android suite, alongside 110 Python contracts, 58 shared-patch
-tests, and 38 bundle-surgery tests. H2 remains device-blocked for exactly one
-clean, locked lower-HUD label/teardown pass.
+tests, and 38 bundle-surgery tests. At that checkpoint, the physical recheck
+remained open for a clean, input-locked lower-HUD label/teardown observation.
 
 Signed dry-run `33544518172` built converter-safeguard commit `c0e3ff3`. Its
 72,886,447-byte APK has SHA-256
@@ -371,6 +385,9 @@ property block without mutating the shared font material. Tabs, area/status,
 battery, no-map, dialogue-name, and control-prompt clones use this shared path.
 The correction passes 32 focused companion contracts, all 112 Python tests,
 all 58 shared tests, all 38 bundle-surgery tests, all 122 Android tests, and the
-exact Hollow Knight compile (226,816 bytes). H2 remains `DEVICE-BLOCKED` until this clip-safe path
-produces the locked lower-HUD labels and clean teardown. Every recheck remains
-fixture- or injection-only; gameplay is not a permitted validation host.
+exact Hollow Knight compile (226,816 bytes). Source/host implementation then
+completed at `00627e3`. At the `33544518172` checkpoint, the physical recheck
+remained open; that label/teardown observation is still unpassed and is now
+batched into the complete Hollow Knight candidate rather than a separate H2
+micro-candidate. Any future observation remains fixture- or injection-only;
+gameplay is not a permitted validation host.

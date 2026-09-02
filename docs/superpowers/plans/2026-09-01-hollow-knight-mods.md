@@ -12,6 +12,8 @@
 
 **Execution boundary:** Work only in `Darkaxt/HollowKnightAndroid`. Do not read from, contact, or modify `igawa6/dualsouls`; do not copy additional upstream modules. Do not run ADB, Android-device, emulator, signing, workflow-dispatch, or release commands. H3 and H4 will share one later explicitly authorized device candidate.
 
+**Execution status:** Tasks 1–8 host work is complete through implementation checkpoint `3cc321b`, with the H3 status reconciliation committed at `b0def8a`. This is host completion only: physical UI/effect acceptance remains unpassed and batched with H4, and every `HKMOD-001` through `HKMOD-018` capability remains deferred to Final managed-rewrite remediation.
+
 ---
 
 ## File structure and ownership
@@ -70,7 +72,7 @@
 - Modify: `tools/shared-patches/src/Mods/TweakController.cs`
 - Modify: `tools/shared-patches-tests/TweakControllerTests.cs`
 
-- [ ] **Step 1: Write failing descriptor invariant tests**
+- [x] **Step 1: Write failing descriptor invariant tests**
 
 Add these tests to `TweakControllerTests.cs`:
 
@@ -98,7 +100,7 @@ public void DeferredDescriptorHasImmutableOffStorageDefault()
 }
 ```
 
-- [ ] **Step 2: Write failing controller enforcement tests**
+- [x] **Step 2: Write failing controller enforcement tests**
 
 ```csharp
 [Fact]
@@ -126,7 +128,7 @@ public void DeferredRowCannotCycleApplyOrEnableFromStaleStorage()
 
 Define `DeferredRecordingAdapter` beside the existing test adapter with one `TweakDescriptor.Deferred(...)` row and an `Applied` list.
 
-- [ ] **Step 3: Run RED tests**
+- [x] **Step 3: Run RED tests**
 
 Run:
 
@@ -136,7 +138,7 @@ dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --f
 
 Expected: compilation fails because `Deferred`, `IsAvailable`, `UnavailableReason`, and `TrackingId` do not exist.
 
-- [ ] **Step 4: Implement descriptor availability**
+- [x] **Step 4: Implement descriptor availability**
 
 Extend `TweakDescriptor` with a private canonical constructor, preserve the existing constructor as available, and add this factory:
 
@@ -165,7 +167,7 @@ public string UnavailableReason { get; }
 
 The existing public constructor delegates with `isAvailable: true`, empty tracking ID, and empty reason.
 
-- [ ] **Step 5: Enforce availability in `TweakController`**
+- [x] **Step 5: Enforce availability in `TweakController`**
 
 In `Cycle`, reject deferred rows before the master check:
 
@@ -184,7 +186,7 @@ if (!descriptor.IsAvailable) continue;
 
 Initialization continues validating a deferred row against its sole `off` value so stale `on` values are corrected and flushed.
 
-- [ ] **Step 6: Run GREEN shared tests**
+- [x] **Step 6: Run GREEN shared tests**
 
 Run:
 
@@ -194,7 +196,7 @@ dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --f
 
 Expected: all `TweakControllerTests` pass with zero failures/skips.
 
-- [ ] **Step 7: Commit and push the contract checkpoint**
+- [x] **Step 7: Commit and push the contract checkpoint**
 
 ```powershell
 git add tools/shared-patches/src/Mods/TweakContracts.cs `
@@ -213,7 +215,7 @@ git push
 - Modify: `tools/silksong-patches/src/dualscreen/DsModsScreen.cs`
 - Delete after verification: `tools/silksong-patches/src/mods/UnityTweakStore.cs`
 
-- [ ] **Step 1: Write failing menu-model tests**
+- [x] **Step 1: Write failing menu-model tests**
 
 Create `TweakMenuModelTests.cs` covering stable groups, row selection, viewport movement, disabled rejection, master/reset forwarding, errors, and close state:
 
@@ -252,7 +254,7 @@ public void ChangingGroupsResetsRowAndPreservesOpenState()
 
 The fixture uses the existing memory store and a recording adapter with at least two groups and one deferred row.
 
-- [ ] **Step 2: Run the RED menu-model tests**
+- [x] **Step 2: Run the RED menu-model tests**
 
 ```powershell
 dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --filter "FullyQualifiedName~TweakMenuModelTests"
@@ -260,7 +262,7 @@ dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --f
 
 Expected: compilation fails because `TweakMenuModel` does not exist.
 
-- [ ] **Step 3: Implement `TweakMenuModel`**
+- [x] **Step 3: Implement `TweakMenuModel`**
 
 Create a pure C# type with this public contract:
 
@@ -290,7 +292,7 @@ public sealed class TweakMenuModel
 
 Use first-seen descriptor group order, wrap group/row movement, keep the selected row inside `[WindowStart, WindowStart + VisibleRows)`, and set `Message` from each action result. Do not call an adapter directly.
 
-- [ ] **Step 4: Run GREEN model tests**
+- [x] **Step 4: Run GREEN model tests**
 
 ```powershell
 dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --filter "FullyQualifiedName~TweakMenuModelTests"
@@ -298,7 +300,7 @@ dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --f
 
 Expected: all menu-model tests pass.
 
-- [ ] **Step 5: Create the shared Unity store**
+- [x] **Step 5: Create the shared Unity store**
 
 Create `PlayerPrefsTweakStore.cs`:
 
@@ -324,7 +326,7 @@ namespace DualSouls.Mods
 
 Change the Silksong consumer to construct `new PlayerPrefsTweakStore()`.
 
-- [ ] **Step 6: Run both exact compiles before deleting the old store**
+- [x] **Step 6: Run both exact compiles before deleting the old store**
 
 ```powershell
 pwsh -NoProfile -File tools/silksong-patches/check.ps1 `
@@ -337,11 +339,11 @@ pwsh -NoProfile -File tools/hollow-knight-patches/check.ps1 `
 
 Expected: both compile with zero errors.
 
-- [ ] **Step 7: Delete the superseded store and rerun Silksong compile**
+- [x] **Step 7: Delete the superseded store and rerun Silksong compile**
 
 Delete `tools/silksong-patches/src/mods/UnityTweakStore.cs`, then rerun the Silksong command above. Expected: zero errors and no reference to `UnityTweakStore` remains.
 
-- [ ] **Step 8: Commit and push the shared-menu checkpoint**
+- [x] **Step 8: Commit and push the shared-menu checkpoint**
 
 ```powershell
 git add tools/shared-patches/src/Mods `
@@ -361,7 +363,7 @@ git push
 - Create: `docs/verification/hollow-knight-mod-managed-api-audit.md`
 - Create: `docs/verification/hollow-knight-mod-capabilities.md`
 
-- [ ] **Step 1: Audit the exact managed API without staging decompiled game code**
+- [x] **Step 1: Audit the exact managed API without staging decompiled game code**
 
 Record the exact `Assembly-CSharp.dll` SHA-256, then use the installed `ilspycmd` only against the user's local `1.5.12620` depot:
 
@@ -382,7 +384,7 @@ Create `hollow-knight-mod-managed-api-audit.md` containing only assembly provena
 
 Delete `D:\Temp\hk-h3-api-audit` after the audit document is complete.
 
-- [ ] **Step 2: Write the RED adapter catalog tests**
+- [x] **Step 2: Write the RED adapter catalog tests**
 
 Add `HollowKnightTweakAdapter.cs` to the test project explicitly:
 
@@ -434,7 +436,7 @@ public void AvailablePresentationRowsMapAndRestoreExactly()
 
 Also test unknown IDs/values, API exceptions, deferred direct calls, and `Tick` not invoking deferred maintenance.
 
-- [ ] **Step 3: Run RED adapter tests**
+- [x] **Step 3: Run RED adapter tests**
 
 ```powershell
 dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --filter "FullyQualifiedName~HollowKnightTweakAdapterTests"
@@ -442,7 +444,7 @@ dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --f
 
 Expected: compilation fails because the adapter and API interface do not exist.
 
-- [ ] **Step 4: Implement the fork-owned adapter**
+- [x] **Step 4: Implement the fork-owned adapter**
 
 Define:
 
@@ -474,7 +476,7 @@ new TweakDescriptor(
 
 Add the remaining IDs in the exact tested order using `TweakDescriptor.Deferred`, with tracking IDs `HKMOD-001` through `HKMOD-018` matching the design specification. `Apply` validates descriptor availability and values before dispatch. Applying an available default restores that capability through `SetCompanionBackdropBlack(false)` or `SetLifebloodFlash(Soft)`.
 
-- [ ] **Step 5: Run GREEN adapter tests**
+- [x] **Step 5: Run GREEN adapter tests**
 
 ```powershell
 dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --filter "FullyQualifiedName~HollowKnightTweakAdapterTests"
@@ -482,7 +484,7 @@ dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --f
 
 Expected: all adapter tests pass.
 
-- [ ] **Step 6: Create the authoritative capability ledger**
+- [x] **Step 6: Create the authoritative capability ledger**
 
 Create `docs/verification/hollow-knight-mod-capabilities.md` with this complete initial ledger; replace `Pending host evidence` only when the corresponding promotion gate actually passes:
 
@@ -511,7 +513,7 @@ Create `docs/verification/hollow-knight-mod-capabilities.md` with this complete 
 
 Use `DEFERRED`, never an empty target. Every row remains visible in the runtime catalog.
 
-- [ ] **Step 7: Commit and push the catalog checkpoint**
+- [x] **Step 7: Commit and push the catalog checkpoint**
 
 ```powershell
 git add tools/hollow-knight-patches/src/mods/HollowKnightTweakAdapter.cs `
@@ -534,7 +536,7 @@ git push
 - Modify: `tools/hollow-knight-patches/src/dualsouls/HkDirectDisplayAdapter.cs`
 - Modify: `tools/hollow-knight-patches/src/dualsouls/HkStageHooks.cs`
 
-- [ ] **Step 1: Write RED pure-session tests**
+- [x] **Step 1: Write RED pure-session tests**
 
 Add `HollowKnightModsSession.cs` to the test project. Create tests for readiness delay, one-time initialization, persisted master application, display-independent ticks, presenter attach/detach neutrality, and disposal restoration:
 
@@ -565,7 +567,7 @@ public void SessionWaitsForApiReadinessAndDisplayDetachDoesNotRestore()
 }
 ```
 
-- [ ] **Step 2: Run RED session tests**
+- [x] **Step 2: Run RED session tests**
 
 ```powershell
 dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --filter "FullyQualifiedName~HollowKnightModsSessionTests"
@@ -573,7 +575,7 @@ dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --f
 
 Expected: compilation fails because `HollowKnightModsSession` does not exist.
 
-- [ ] **Step 3: Implement the pure session**
+- [x] **Step 3: Implement the pure session**
 
 The session owns adapter, controller, and menu model:
 
@@ -593,7 +595,7 @@ public sealed class HollowKnightModsSession : IDisposable
 
 `Tick` waits for `api.IsReady`, initializes once, records initialization failure, and thereafter calls `Controller.Tick()` regardless of presenter attachment. `Dispose` calls adapter baseline restoration without changing persisted master or selections.
 
-- [ ] **Step 4: Run GREEN session tests**
+- [x] **Step 4: Run GREEN session tests**
 
 ```powershell
 dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --filter "FullyQualifiedName~HollowKnightModsSessionTests"
@@ -601,7 +603,7 @@ dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --f
 
 Expected: all session tests pass.
 
-- [ ] **Step 5: Implement production API and runtime**
+- [x] **Step 5: Implement production API and runtime**
 
 `HollowKnightGameTweakApi` reads/writes only fork-owned `HkStageHooks` presentation overrides:
 
@@ -619,7 +621,7 @@ public void RestoreBaseline()
 
 `HollowKnightModsRuntime` is a `DontDestroyOnLoad` MonoBehaviour with `EnsureStarted`, a static `Current`, one session using `PlayerPrefsTweakStore`, `Update => Session.Tick()`, and ordered disposal.
 
-- [ ] **Step 6: Start Mods before the display gate**
+- [x] **Step 6: Start Mods before the display gate**
 
 Change `HkDirectDisplayAdapter.Bootstrap` so the first statement is:
 
@@ -629,7 +631,7 @@ HollowKnightModsRuntime.EnsureStarted();
 
 Keep the existing `IsProductionEnabled` check only around direct-display adapter creation. This guarantees persisted gameplay capabilities later remain process-owned even when display transport is disabled or absent.
 
-- [ ] **Step 7: Make `HkStageHooks` a delegation boundary**
+- [x] **Step 7: Make `HkStageHooks` a delegation boundary**
 
 Remove the inert H2 partial `HKDualScreen` boundary from `HkStageHooks.cs`. Replace constant availability with runtime-backed properties and add explicit presentation override methods:
 
@@ -653,7 +655,7 @@ internal static void ClearPresentationOverrides()
 
 Preserve the existing joystick-slot logic unchanged.
 
-- [ ] **Step 8: Run session tests and exact Hollow Knight compile**
+- [x] **Step 8: Run session tests and exact Hollow Knight compile**
 
 ```powershell
 dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --filter "FullyQualifiedName~HollowKnightModsSessionTests|FullyQualifiedName~HollowKnightTweakAdapterTests"
@@ -664,7 +666,7 @@ pwsh -NoProfile -File tools/hollow-knight-patches/check.ps1 `
 
 Expected: all focused tests pass and exact compile has zero errors.
 
-- [ ] **Step 9: Commit and push the runtime checkpoint**
+- [x] **Step 9: Commit and push the runtime checkpoint**
 
 ```powershell
 git add tools/hollow-knight-patches/src/mods `
@@ -682,7 +684,7 @@ git push
 - Modify: `tools/hollow-knight-patches/src/dualsouls/HKDualScreen.cs`
 - Extend: `tools/ci/tests/test_hollow_knight_reference_port.py`
 
-- [ ] **Step 1: Write RED source/lifecycle contracts**
+- [x] **Step 1: Write RED source/lifecycle contracts**
 
 Add focused Python tests requiring:
 
@@ -694,7 +696,7 @@ Add focused Python tests requiring:
 
 Use method-body extraction rather than whole-file token matching so unrelated comments cannot satisfy the contract.
 
-- [ ] **Step 2: Run RED source contracts**
+- [x] **Step 2: Run RED source contracts**
 
 ```powershell
 python -m unittest tools.ci.tests.test_hollow_knight_reference_port
@@ -702,7 +704,7 @@ python -m unittest tools.ci.tests.test_hollow_knight_reference_port
 
 Expected: new lifeblood baseline/restoration assertions fail.
 
-- [ ] **Step 3: Replace one-way flash softening with a reversible policy**
+- [x] **Step 3: Replace one-way flash softening with a reversible policy**
 
 In `HKDualScreen.cs`, add:
 
@@ -731,7 +733,7 @@ Apply:
 
 Prune destroyed keys. Add `RestoreLifebloodFlashBaselines()` and call it during companion/reference teardown before clearing the dictionary.
 
-- [ ] **Step 4: Run GREEN contracts and exact compile**
+- [x] **Step 4: Run GREEN contracts and exact compile**
 
 ```powershell
 python -m unittest tools.ci.tests.test_hollow_knight_reference_port
@@ -742,7 +744,7 @@ pwsh -NoProfile -File tools/hollow-knight-patches/check.ps1 `
 
 Expected: all focused contracts pass and compile has zero errors.
 
-- [ ] **Step 5: Commit and push the reversible-effects checkpoint**
+- [x] **Step 5: Commit and push the reversible-effects checkpoint**
 
 ```powershell
 git add tools/hollow-knight-patches/src/dualsouls/HKDualScreen.cs `
@@ -758,7 +760,7 @@ git push
 - Modify: `tools/ci/tests/test_hollow_knight_reference_port.py`
 - Existing callers retained: `HKDualScreen.Bottom.Frame.cs`, `HKDualScreen.Bottom.Hud.cs`, `HKDualScreen.Bottom.Select.cs`
 
-- [ ] **Step 1: Write RED presenter ownership contracts**
+- [x] **Step 1: Write RED presenter ownership contracts**
 
 Extend the Python suite to require:
 
@@ -770,7 +772,7 @@ Extend the Python suite to require:
 - gear/modal teardown clears objects and tells the session the presenter detached;
 - no copied class names `HKTweaks`, `HKModsMenu`, or `HKDualScreen.Bottom.Tweaks` appear.
 
-- [ ] **Step 2: Run RED presenter contracts**
+- [x] **Step 2: Run RED presenter contracts**
 
 ```powershell
 python -m unittest tools.ci.tests.test_hollow_knight_reference_port
@@ -778,13 +780,13 @@ python -m unittest tools.ci.tests.test_hollow_knight_reference_port
 
 Expected: presenter file/method assertions fail.
 
-- [ ] **Step 3: Implement gear construction and placement**
+- [x] **Step 3: Implement gear construction and placement**
 
 In the new partial class, move the H2 boundary fields from `HkStageHooks.cs`. Build one procedural gear `SpriteRenderer` under `frameRoot`, set it to `ATTR_LAYER`, sorting order above frame chrome, and position it from the existing `hudGearAnchor`, `hudGearH`, `hudFpsB`, camera geometry, scale, aspect, and tab Y values. `PositionGear` hides the gear unless the runtime session is ready.
 
 `GearTapN` converts normalized lower-display coordinates to the measured gear renderer bounds and returns true only for a clean contained tap.
 
-- [ ] **Step 4: Implement modal/model interaction**
+- [x] **Step 4: Implement modal/model interaction**
 
 `ToggleTweaksPane` opens/closes `HollowKnightModsRuntime.Current.Session.Menu`. `CloseTweaksPane` closes it and clears `tweaksOpen` without changing `tab.tap` or `cfg.compTab`.
 
@@ -800,15 +802,15 @@ In the new partial class, move the H2 boundary fields from `HkStageHooks.cs`. Bu
 
 Use reflection helpers already present in `HKDualScreen.Util.cs` to set cloned native TMP text and force mesh updates. Disable every non-TMP `MonoBehaviour` on detached text clones using the accepted H2 clip-safe sanitation path.
 
-- [ ] **Step 5: Implement modal touch boundaries**
+- [x] **Step 5: Implement modal touch boundaries**
 
 Keep `PollTouch` as the only lower-touch collector. `GearTapN` consumes the gear tap first. While open, the presenter maps clean taps to master, group previous/next, visible rows, reset, and close. A second tap on the selected available row cycles it; a deferred row selects and explains but cannot cycle. Existing tab taps call `CloseTweaksPane` and then continue normal tab selection.
 
-- [ ] **Step 6: Implement deterministic teardown**
+- [x] **Step 6: Implement deterministic teardown**
 
 Destroy `tweaksRoot` and gear objects through the existing companion teardown. Clear row references, close the menu model, call `Session.SetPresenterAttached(false)`, and leave the process runtime/controller active. Reattachment rebuilds view objects from the existing model state.
 
-- [ ] **Step 7: Run presenter contracts and exact compile**
+- [x] **Step 7: Run presenter contracts and exact compile**
 
 ```powershell
 python -m unittest tools.ci.tests.test_hollow_knight_reference_port
@@ -819,7 +821,7 @@ pwsh -NoProfile -File tools/hollow-knight-patches/check.ps1 `
 
 Expected: contracts pass, two entry points remain, and compile has zero errors.
 
-- [ ] **Step 8: Commit and push the complete H3 presentation batch**
+- [x] **Step 8: Commit and push the complete H3 presentation batch**
 
 ```powershell
 git add tools/hollow-knight-patches/src/dualsouls/HollowKnightModsPresenter.cs `
@@ -834,7 +836,7 @@ git push
 **Files:**
 - Test only; no source changes unless a gate exposes a concrete defect.
 
-- [ ] **Step 1: Run focused .NET Mods tests**
+- [x] **Step 1: Run focused .NET Mods tests**
 
 ```powershell
 dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release `
@@ -843,7 +845,7 @@ dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release `
 
 Expected: zero failures/skips.
 
-- [ ] **Step 2: Run the complete shared suite once**
+- [x] **Step 2: Run the complete shared suite once**
 
 ```powershell
 dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release
@@ -851,7 +853,7 @@ dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release
 
 Expected: zero failures/skips.
 
-- [ ] **Step 3: Run focused Hollow Knight source contracts**
+- [x] **Step 3: Run focused Hollow Knight source contracts**
 
 ```powershell
 python -m unittest tools.ci.tests.test_hollow_knight_reference_port
@@ -859,7 +861,7 @@ python -m unittest tools.ci.tests.test_hollow_knight_reference_port
 
 Expected: zero failures/skips.
 
-- [ ] **Step 4: Run both exact compiles once**
+- [x] **Step 4: Run both exact compiles once**
 
 ```powershell
 pwsh -NoProfile -File tools/hollow-knight-patches/check.ps1 `
@@ -872,7 +874,7 @@ pwsh -NoProfile -File tools/silksong-patches/check.ps1 `
 
 Expected: zero errors and unchanged entrypoint counts except for no new entrypoint—the existing Hollow Knight bootstrap owns Mods startup.
 
-- [ ] **Step 5: Run prohibited-content scan**
+- [x] **Step 5: Run prohibited-content scan**
 
 ```powershell
 rg -n "DllImport|ReadProcessMemory|WriteProcessMemory|HKTW_|class HKTweaks|class HKModsMenu|Bottom\.Tweaks" `
@@ -881,7 +883,7 @@ rg -n "DllImport|ReadProcessMemory|WriteProcessMemory|HKTW_|class HKTweaks|class
 
 Expected: no production match introduced by H3. Existing explanatory contract strings outside production are allowed.
 
-- [ ] **Step 6: Verify repository state**
+- [x] **Step 6: Verify repository state**
 
 ```powershell
 git diff --check
@@ -898,23 +900,24 @@ Expected: no unstaged/untracked implementation files and all H3 checkpoints pres
 - Modify: `README.md`
 - Modify: `docs/verification/hollow-knight-mod-capabilities.md`
 
-- [ ] **Step 1: Record the actual host result**
+- [x] **Step 1: Record the actual host result**
 
 Update the parent plan to state:
 
 ```text
 H2 source/host implementation is complete at 00627e3; its remaining physical observations are batched into the complete Hollow Knight candidate rather than a micro-candidate.
-H3 is HOST-COMPLETE / TRACKED-DEFERRALS when this plan's host gate passes.
-H3 does not trigger a signed build. H4 follows on the same branch and the complete H3/H4 slice receives one future device gate.
+H3 is HOST-COMPLETE / TRACKED-DEFERRALS through implementation checkpoint 3cc321b.
+The H3 documentation reconciliation is b0def8a; it advances HEAD without changing the implementation boundary.
+H3 did not trigger a signed build. H4 follows on the same branch and the complete H3/H4 slice receives one future explicitly authorized device gate.
 ```
 
 Do not mark any `HKMOD-*` row complete without its promotion evidence. Do not change device-only rows to passed.
 
-- [ ] **Step 2: Update README conservatively**
+- [x] **Step 2: Update README conservatively**
 
-State that the fork now has a host-verified Hollow Knight Mods catalog/controller/modal with two reversible presentation capabilities and visible tracked deferrals. Do not claim device acceptance, gameplay-tweak parity, release readiness, or completed Mods effects.
+State that the fork now has a host-verified Hollow Knight Mods catalog/controller/process runtime/existing-layout modal with two reversible presentation capabilities and visible tracked deferrals. Do not claim device acceptance, gameplay-tweak parity, release readiness, or completed Mods effects.
 
-- [ ] **Step 3: Re-run the focused documentation/source contracts**
+- [x] **Step 3: Re-run the focused documentation/source contracts**
 
 ```powershell
 python -m unittest tools.ci.tests.test_hollow_knight_reference_port `
@@ -923,7 +926,7 @@ python -m unittest tools.ci.tests.test_hollow_knight_reference_port `
 
 Expected: zero failures.
 
-- [ ] **Step 4: Commit and push H3 reconciliation**
+- [x] **Step 4: Commit and push H3 reconciliation**
 
 ```powershell
 git add README.md `
@@ -933,6 +936,6 @@ git commit -m "docs: record Hollow Knight Mods host gate"
 git push
 ```
 
-- [ ] **Step 5: Stop before live testing and continue to H4 host work**
+- [x] **Step 5: Stop before live testing and continue to H4 host work**
 
 Do not build/sign/install or use ADB. H3's host checkpoint advances directly into H4 skin-library and death/respawn-rotation implementation under the user's standing go-ahead. The explicit user gate is required only when the complete H3/H4 candidate is ready for live Android testing.

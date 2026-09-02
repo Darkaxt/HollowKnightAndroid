@@ -368,9 +368,10 @@ Hollow Knight patch. Signed dry-run `33528905347` installed commit `0dd27b7`,
 preserved the package identity and app UID, and rebuilt exact generation
 `gen-77e25023-d93d-412d-ae4f-e614b2b02bd8`. The attempted pass was stopped
 before acceptance when its setup path reached new-game/intro state; no save file
-was created and no result from that path is counted. Step 6 remains open until a
-title/menu-bound, controlled lower-HUD fixture proves the labels and startup log
-behavior without entering gameplay. Signed dry-run `33532750369` then installed
+was created and no result from that path is counted. At that checkpoint, the
+physical recheck remained open for a title/menu-bound controlled lower-HUD
+fixture to observe labels and startup logs without entering gameplay. Signed
+dry-run `33532750369` then installed
 commit `55dceea`, preserved package identity/UID/first-install time, and rebuilt
 exact generation `gen-b38920f7-580d-47bb-96d6-f5abcecdb2e5`. Its default-off
 `MAIN_MENU` fixture locked native menu input, invoked only the production
@@ -390,8 +391,8 @@ the tab band, ruling out camera/layer, Map-mask, and spatial-stencil causes.
 The working native lifecycle instead finalizes text after all frame siblings
 exist; the tab clones now follow that path from `PositionFrame`. It passes 30
 focused contracts, 58 shared tests, 109 Python tests, both exact compiles, and
-produces a 226,816-byte Hollow Knight patch. Step 6 remains open for one
-lower-HUD-only label/teardown recheck.
+produces a 226,816-byte Hollow Knight patch. At that checkpoint, the physical
+recheck remained open for the lower-HUD label/teardown observation.
 
 Signed dry-run `33544518172` then installed converter-safeguard commit
 `c0e3ff3` in place, rejected the interrupted markerless tree, completed a clean
@@ -415,9 +416,9 @@ correction.
 
 Host checkpoint `00627e3` completes the H2 source/host implementation. No later
 Android, device, emulator, ADB, signing, or live validation occurred during the
-H2/H3 host work, so the locked label/teardown recheck and the tracked H1 physical
-topology observation remain unpassed. Both are batched into the complete Hollow
-Knight candidate under the no-micro-candidate cadence.
+H2/H3 host work, so the label/teardown and tracked H1 physical-topology
+observations remain unpassed. Both are batched into the complete Hollow Knight
+candidate under the no-micro-candidate cadence.
 
 - [x] **Step 7: Reconcile the source/host checkpoint**
 
