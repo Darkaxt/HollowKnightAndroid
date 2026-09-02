@@ -38,6 +38,50 @@ namespace DualSouls.Mods
         }
     }
 
+    public static class TweakPresenterGeometryPaintStamp
+    {
+        const long Offset = 1469598103934665603L;
+        const long Prime = 1099511628211L;
+
+        public static long Compute(
+            float left,
+            float right,
+            float bottom,
+            float top,
+            float scale,
+            float viewportX,
+            float viewportY,
+            float viewportWidth,
+            float viewportHeight,
+            float cameraX,
+            float cameraY,
+            float cameraZ,
+            float orthographicSize,
+            float aspect)
+        {
+            long stamp = Offset;
+            stamp = Hash(stamp, left);
+            stamp = Hash(stamp, right);
+            stamp = Hash(stamp, bottom);
+            stamp = Hash(stamp, top);
+            stamp = Hash(stamp, scale);
+            stamp = Hash(stamp, viewportX);
+            stamp = Hash(stamp, viewportY);
+            stamp = Hash(stamp, viewportWidth);
+            stamp = Hash(stamp, viewportHeight);
+            stamp = Hash(stamp, cameraX);
+            stamp = Hash(stamp, cameraY);
+            stamp = Hash(stamp, cameraZ);
+            stamp = Hash(stamp, orthographicSize);
+            return Hash(stamp, aspect);
+        }
+
+        static long Hash(long hash, float value)
+        {
+            return unchecked((hash ^ (uint)value.GetHashCode()) * Prime);
+        }
+    }
+
     public sealed class TweakPresenterHitMap
     {
         static readonly IReadOnlyList<TweakPresenterRect> EmptyRows =

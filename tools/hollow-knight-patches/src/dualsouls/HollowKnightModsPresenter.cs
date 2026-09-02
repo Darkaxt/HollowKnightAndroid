@@ -575,22 +575,16 @@ public partial class HKDualScreen
 
     long ComputeModsGeometryPaintStamp()
     {
-        if (attrCam == null || frameRoot == null) return 0L;
+        float left, right, bottom, top, scale;
+        if (!TryGetModsGeometry(out left, out right, out bottom, out top, out scale))
+            return 0L;
         Rect viewport = attrCam.rect;
         Vector3 position = attrCam.transform.position;
-        long stamp = 1469598103934665603L;
-        stamp = HashModsPaint(stamp, viewport.x.GetHashCode());
-        stamp = HashModsPaint(stamp, viewport.y.GetHashCode());
-        stamp = HashModsPaint(stamp, viewport.width.GetHashCode());
-        stamp = HashModsPaint(stamp, viewport.height.GetHashCode());
-        stamp = HashModsPaint(stamp, position.x.GetHashCode());
-        stamp = HashModsPaint(stamp, position.y.GetHashCode());
-        stamp = HashModsPaint(stamp, position.z.GetHashCode());
-        stamp = HashModsPaint(stamp, attrCam.orthographicSize.GetHashCode());
-        stamp = HashModsPaint(stamp, attrCam.aspect.GetHashCode());
-        stamp = HashModsPaint(stamp, frameInnerTopFrac.GetHashCode());
-        stamp = HashModsPaint(stamp, frameInnerBotFrac.GetHashCode());
-        return stamp;
+        return TweakPresenterGeometryPaintStamp.Compute(
+            left, right, bottom, top, scale,
+            viewport.x, viewport.y, viewport.width, viewport.height,
+            position.x, position.y, position.z,
+            attrCam.orthographicSize, attrCam.aspect);
     }
 
     void RepaintModsModal(

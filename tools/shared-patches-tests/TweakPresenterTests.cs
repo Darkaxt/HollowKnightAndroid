@@ -185,6 +185,36 @@ public sealed class TweakPresenterTests
         Assert.False(paint.ShouldPaint(11, 21));
     }
 
+    [Fact]
+    public void ResolvedFallbackBoundsInvalidatePaintOnlyWhenGeometryChanges()
+    {
+        var paint = new TweakPresenterPaintInvalidation();
+        const long modelStamp = 17;
+        long initial = GeometryStamp(bottom: -3f, top: 4f);
+
+        paint.Acknowledge(modelStamp, initial);
+        long unchanged = GeometryStamp(bottom: -3f, top: 4f);
+        Assert.Equal(initial, unchanged);
+        Assert.False(paint.ShouldPaint(modelStamp, unchanged));
+
+        long changedTop = GeometryStamp(bottom: -3f, top: 4.25f);
+        Assert.NotEqual(initial, changedTop);
+        Assert.True(paint.ShouldPaint(modelStamp, changedTop));
+
+        paint.Acknowledge(modelStamp, changedTop);
+        long changedBottom = GeometryStamp(bottom: -2.75f, top: 4.25f);
+        Assert.NotEqual(changedTop, changedBottom);
+        Assert.True(paint.ShouldPaint(modelStamp, changedBottom));
+    }
+
+    static long GeometryStamp(float bottom, float top)
+    {
+        return TweakPresenterGeometryPaintStamp.Compute(
+            -5f, 5f, bottom, top, 4f,
+            0f, 0.5f, 1f, 0.5f,
+            0f, 0.5f, -10f, 4f, 1.6f);
+    }
+
     static TweakPresenterAction Resolve(
         TweakPresenterHitMap hits,
         TweakMenuModel menu,

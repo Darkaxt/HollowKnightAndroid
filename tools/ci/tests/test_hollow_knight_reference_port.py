@@ -415,6 +415,10 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             presenter,
             r"long\s+ComputeModsGeometryPaintStamp\s*\([^)]*\)",
         )
+        resolved_geometry = method_body(
+            presenter,
+            r"bool\s+TryGetModsGeometry\s*\([^)]*\)",
+        )
         rebind = method_body(
             presenter,
             r"void\s+RebindModsPresenter\s*\([^)]*\)",
@@ -477,12 +481,24 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         ):
             self.assertIn(state, model_stamp)
         self.assertNotIn("new ", model_stamp)
+        for fallback_geometry in (
+            "float.IsNaN(frameInnerTopFrac)", "cfg.compSepTopY",
+            "float.IsNaN(frameInnerBotFrac)", "cfg.compTabY + 0.4f",
+        ):
+            self.assertIn(fallback_geometry, resolved_geometry)
         for geometry in (
+            "TryGetModsGeometry(",
+            "TweakPresenterGeometryPaintStamp.Compute(",
             "attrCam.rect", "attrCam.transform.position",
             "attrCam.orthographicSize", "attrCam.aspect",
-            "frameInnerTopFrac", "frameInnerBotFrac",
+            "left", "right", "bottom", "top", "scale",
         ):
             self.assertIn(geometry, geometry_stamp)
+        for duplicated_layout_input in (
+            "frameInnerTopFrac", "frameInnerBotFrac",
+            "cfg.compSepTopY", "cfg.compTabY", "float.IsNaN",
+        ):
+            self.assertNotIn(duplicated_layout_input, geometry_stamp)
         self.assertNotIn("new ", geometry_stamp)
         self.assertIn("modsLifecycle.Rebind(", rebind)
         self.assertIn("modsPaint.Invalidate()", close)
