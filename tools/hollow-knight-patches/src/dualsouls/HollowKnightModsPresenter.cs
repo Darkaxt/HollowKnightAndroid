@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using DualSouls.Mods;
 using DualSouls.Mods.HollowKnight;
@@ -9,11 +11,60 @@ using UnityEngine;
 // The shared session/model remain the only behavior and persistence authority.
 public partial class HKDualScreen
 {
+    sealed class ModsLabel
+    {
+        internal ModsLabel(
+            GameObject gameObject,
+            Component text,
+            PropertyInfo textProperty,
+            PropertyInfo colorProperty,
+            MethodInfo forceMeshUpdate,
+            Renderer renderer)
+        {
+            GameObject = gameObject;
+            Text = text;
+            TextProperty = textProperty;
+            ColorProperty = colorProperty;
+            ForceMeshUpdate = forceMeshUpdate;
+            Renderer = renderer;
+        }
+
+        internal readonly GameObject GameObject;
+        internal readonly Component Text;
+        internal readonly PropertyInfo TextProperty;
+        internal readonly PropertyInfo ColorProperty;
+        internal readonly MethodInfo ForceMeshUpdate;
+        internal readonly Renderer Renderer;
+        internal string LastText;
+        internal Color LastColor;
+        internal bool HasLastColor;
+    }
+
+    sealed class ModsPresenterState
+    {
+        internal readonly TweakPresenterInteraction Interaction =
+            new TweakPresenterInteraction();
+        internal readonly TweakPresenterPaintInvalidation Paint =
+            new TweakPresenterPaintInvalidation();
+        internal readonly TweakPresenterLifecycle Lifecycle;
+
+        internal ModsPresenterState()
+        {
+            Lifecycle = new TweakPresenterLifecycle(Paint);
+        }
+    }
+
+    readonly ModsPresenterState modsPresenter = new ModsPresenterState();
+    TweakPresenterInteraction modsInteraction => modsPresenter.Interaction;
+    TweakPresenterPaintInvalidation modsPaint => modsPresenter.Paint;
+    TweakPresenterLifecycle modsLifecycle => modsPresenter.Lifecycle;
+
     bool tweaksOpen;
     GameObject tweaksRoot;
     readonly List<GameObject> tweakRows = new List<GameObject>();
-    readonly List<Component> tweakRowTexts = new List<Component>();
-    readonly List<Rect> tweakRowHits = new List<Rect>();
+    readonly List<ModsLabel> tweakRowTexts = new List<ModsLabel>();
+    readonly List<TweakPresenterRect> tweakRowHits =
+        new List<TweakPresenterRect>();
 
     Transform gearT;
     SpriteRenderer gearSR;
@@ -25,24 +76,23 @@ public partial class HKDualScreen
 
     HollowKnightModsSession modsSession;
     TweakMenuModel modsMenu;
-    bool modsPresenterAttached;
     bool modsClosePending;
     int modsSortingOrder;
     int modsBuiltVisibleRows = -1;
-    int lastModsCleanTapSequence = int.MinValue;
 
-    Component modsTitleText;
-    Component modsMasterText;
-    Component modsGroupText;
-    Component modsDetailText;
-    Component modsStatusText;
-    Component modsResetText;
-    Component modsCloseText;
-    Rect modsMasterHit;
-    Rect modsPreviousGroupHit;
-    Rect modsNextGroupHit;
-    Rect modsResetHit;
-    Rect modsCloseHit;
+    ModsLabel modsTitleText;
+    ModsLabel modsMasterText;
+    ModsLabel modsGroupText;
+    ModsLabel modsDetailText;
+    ModsLabel modsStatusText;
+    ModsLabel modsResetText;
+    ModsLabel modsCloseText;
+    TweakPresenterRect modsMasterHit;
+    TweakPresenterRect modsPreviousGroupHit;
+    TweakPresenterRect modsNextGroupHit;
+    TweakPresenterRect modsResetHit;
+    TweakPresenterRect modsCloseHit;
+    TweakPresenterHitMap modsHitMap;
 
     bool TryResolveModsPresenter(
         out HollowKnightModsSession session,
@@ -62,24 +112,32 @@ public partial class HKDualScreen
         HollowKnightModsSession session,
         TweakMenuModel menu)
     {
-        if (ReferenceEquals(modsSession, session) && ReferenceEquals(modsMenu, menu))
-            return;
+        TweakPresenterRebindDecision decision = modsLifecycle.Rebind(
+            session, menu, menu != null && menu.IsOpen);
+        if (!decision.Changed) return;
 
-        try { if (modsMenu != null) modsMenu.Close(); }
+        try
+        {
+            if (decision.ClosePreviousMenu && modsMenu != null)
+                modsMenu.Close();
+        }
         catch (Exception e) { WarnOnce("mods old menu close", e); }
         try
         {
-            if (modsPresenterAttached && modsSession != null)
+            if (decision.DetachPreviousPresenter && modsSession != null)
                 modsSession.SetPresenterAttached(false);
         }
         catch (Exception e) { WarnOnce("mods old presenter detach", e); }
+        if (decision.RestoreCoveredContent)
+            RestoreModsCoveredContentCore();
 
         DestroyModsModalView();
         modsSession = session;
         modsMenu = menu;
-        modsPresenterAttached = false;
         modsClosePending = false;
-        tweaksOpen = menu != null && menu.IsOpen;
+        if (transport != null)
+            modsInteraction.ResetCleanTap(transport.CleanTapSequence);
+        tweaksOpen = modsLifecycle.IsOpen;
     }
 
     void BuildModsGear()
@@ -153,7 +211,9 @@ public partial class HKDualScreen
         }
 
         RebindModsPresenter(session, menu);
-        tweaksOpen = menu.IsOpen;
+        modsLifecycle.SynchronizeOpen(menu.IsOpen);
+        tweaksOpen = modsLifecycle.IsOpen;
+        if (!tweaksOpen) RestoreModsCoveredContent();
         BuildModsGear();
         if (gearT == null || gearSR == null || gearSR.sprite == null) return;
 
@@ -227,9 +287,10 @@ public partial class HKDualScreen
 
         menu.Open();
         modsClosePending = false;
-        tweaksOpen = menu.IsOpen;
+        modsLifecycle.SynchronizeOpen(menu.IsOpen);
+        tweaksOpen = modsLifecycle.IsOpen;
         if (transport != null)
-            lastModsCleanTapSequence = transport.CleanTapSequence;
+            modsInteraction.ResetCleanTap(transport.CleanTapSequence);
     }
 
     void CloseTweaksPane()
@@ -245,12 +306,16 @@ public partial class HKDualScreen
         }
         catch (Exception e) { WarnOnce("mods menu close", e); }
         modsClosePending = false;
-        tweaksOpen = false;
+        modsLifecycle.SynchronizeOpen(false);
+        modsPaint.Invalidate();
+        RestoreModsCoveredContent();
+        tweaksOpen = modsLifecycle.IsOpen;
         if (tweaksRoot != null) tweaksRoot.SetActive(false);
     }
 
     void StowModsCoveredContent()
     {
+        if (!modsLifecycle.RequestCoveredContentStow()) return;
         if (slideOutClone != null) StowSlideClone();
         if (mapClone != null && mapClone.activeSelf)
         {
@@ -263,6 +328,34 @@ public partial class HKDualScreen
             charmCloneCache.SetActive(false);
     }
 
+    void RestoreModsCoveredContent()
+    {
+        if (!modsLifecycle.RequestCoveredContentRestore()) return;
+        RestoreModsCoveredContentCore();
+    }
+
+    void RestoreModsCoveredContentCore()
+    {
+        if (tab.cur == COMP_MAP)
+        {
+            if (mapClone != null && !mapClone.activeSelf) mapClone.SetActive(true);
+            return;
+        }
+        if (tab.cur == COMP_INV)
+        {
+            paneClone = invCloneCache;
+            if (invCloneCache != null && !invCloneCache.activeSelf)
+                invCloneCache.SetActive(true);
+            return;
+        }
+        if (tab.cur == COMP_CHARM)
+        {
+            paneClone = charmCloneCache;
+            if (charmCloneCache != null && !charmCloneCache.activeSelf)
+                charmCloneCache.SetActive(true);
+        }
+    }
+
     Component FindModsTextDonor()
     {
         for (int i = 0; i < frameTabs.Count; i++)
@@ -273,7 +366,7 @@ public partial class HKDualScreen
         return null;
     }
 
-    Component BuildModsLabel(Component donor, string name, out GameObject labelObject)
+    ModsLabel BuildModsLabel(Component donor, string name, out GameObject labelObject)
     {
         labelObject = null;
         if (donor == null || tweaksRoot == null) return null;
@@ -301,9 +394,21 @@ public partial class HKDualScreen
             renderer.sortingLayerName = "Inventory";
             renderer.sortingOrder = modsSortingOrder + 10;
         }
+        if (text == null)
+            throw new InvalidOperationException("A native Mods text clone is unavailable.");
+        PropertyInfo textProperty = text.GetType().GetProperty("text");
+        PropertyInfo colorProperty = text.GetType().GetProperty("color");
+        MethodInfo forceMeshUpdate = text.GetType().GetMethod(
+            "ForceMeshUpdate", Type.EmptyTypes);
+        Renderer textRenderer = text.GetComponent<Renderer>();
+        if (textProperty == null || colorProperty == null ||
+            forceMeshUpdate == null || textRenderer == null)
+            throw new InvalidOperationException("The native Mods text donor is incomplete.");
+
         clone.SetActive(true);
         labelObject = clone;
-        return text;
+        return new ModsLabel(
+            clone, text, textProperty, colorProperty, forceMeshUpdate, textRenderer);
     }
 
     void BuildModsModal(TweakMenuModel menu)
@@ -325,10 +430,10 @@ public partial class HKDualScreen
         modsGroupText = BuildModsLabel(donor, "Mods Group", out label);
         for (int i = 0; i < menu.VisibleRows; i++)
         {
-            Component rowText = BuildModsLabel(donor, "Mods Row " + i, out label);
+            ModsLabel rowText = BuildModsLabel(donor, "Mods Row " + i, out label);
             tweakRows.Add(label);
             tweakRowTexts.Add(rowText);
-            tweakRowHits.Add(default(Rect));
+            tweakRowHits.Add(default(TweakPresenterRect));
         }
         modsDetailText = BuildModsLabel(donor, "Mods Detail", out label);
         modsStatusText = BuildModsLabel(donor, "Mods Status", out label);
@@ -339,44 +444,46 @@ public partial class HKDualScreen
         SetLayerRecursive(tweaksRoot.transform, ATTR_LAYER);
         tweaksRoot.SetActive(true);
         modsBuiltVisibleRows = menu.VisibleRows;
+        modsLifecycle.MarkViewBuilt();
         if (modsSession != null)
         {
             modsSession.SetPresenterAttached(true);
-            modsPresenterAttached = true;
+            modsLifecycle.MarkPresenterAttached();
         }
     }
 
-    void SetModsText(Component text, string value, Color color)
+    void SetModsText(ModsLabel label, string value, Color color)
     {
-        if (text == null)
+        if (label == null)
             throw new InvalidOperationException("A native Mods text clone is unavailable.");
-        var textProperty = TmpProp(text, "text");
-        var colorProperty = TmpProp(text, "color");
-        var forceMesh = text.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes);
-        if (textProperty == null || colorProperty == null || forceMesh == null)
-            throw new InvalidOperationException("The native Mods text donor is incomplete.");
-        textProperty.SetValue(text, value ?? "", null);
-        forceMesh.Invoke(text, null);
-        NeutralizeDetachedTmpClip(text.gameObject);
-        colorProperty.SetValue(text, color, null);
-        var renderer = text.GetComponent<Renderer>();
-        if (renderer == null)
-            throw new InvalidOperationException("The native Mods text renderer is unavailable.");
-        renderer.enabled = true;
-        renderer.sortingLayerName = "Inventory";
-        renderer.sortingOrder = modsSortingOrder + 10;
+        string wanted = value ?? "";
+        if (!string.Equals(label.LastText, wanted, StringComparison.Ordinal))
+        {
+            label.TextProperty.SetValue(label.Text, wanted, null);
+            label.ForceMeshUpdate.Invoke(label.Text, null);
+            NeutralizeDetachedTmpClip(label.GameObject);
+            label.LastText = wanted;
+        }
+        if (!label.HasLastColor || label.LastColor != color)
+        {
+            label.ColorProperty.SetValue(label.Text, color, null);
+            label.LastColor = color;
+            label.HasLastColor = true;
+        }
+        label.Renderer.enabled = true;
+        label.Renderer.sortingLayerName = "Inventory";
+        label.Renderer.sortingOrder = modsSortingOrder + 10;
     }
 
     void PlaceModsText(
-        Component text,
+        ModsLabel label,
         Vector3 center,
         float targetHeight,
         float maximumWidth)
     {
-        if (text == null) return;
-        var renderer = text.GetComponent<Renderer>();
-        if (renderer == null) return;
-        Transform transform = text.transform;
+        if (label == null || label.Renderer == null) return;
+        Renderer renderer = label.Renderer;
+        Transform transform = label.Text.transform;
         transform.localScale = Vector3.one;
         Bounds bounds = renderer.bounds;
         if (bounds.size.x < 0.0001f || bounds.size.y < 0.0001f) return;
@@ -416,14 +523,85 @@ public partial class HKDualScreen
         return right > left && top > bottom;
     }
 
+    static long HashModsPaint(long hash, int value)
+    {
+        return unchecked((hash ^ (uint)value) * 1099511628211L);
+    }
+
+    static long HashModsPaintString(long hash, string value)
+    {
+        if (value == null) return HashModsPaint(hash, 0);
+        hash = HashModsPaint(hash, value.Length);
+        for (int i = 0; i < value.Length; i++)
+            hash = HashModsPaint(hash, value[i]);
+        return hash;
+    }
+
+    long ComputeModsModelPaintStamp(
+        HollowKnightModsSession session,
+        TweakMenuModel menu)
+    {
+        if (session == null || menu == null) return 0L;
+        long stamp = 1469598103934665603L;
+        stamp = HashModsPaint(stamp, RuntimeHelpers.GetHashCode(session));
+        stamp = HashModsPaint(stamp, RuntimeHelpers.GetHashCode(menu));
+        stamp = HashModsPaint(stamp, menu.IsOpen ? 1 : 0);
+        stamp = HashModsPaint(stamp, menu.SelectedGroupIndex);
+        stamp = HashModsPaint(stamp, menu.SelectedRowIndex);
+        stamp = HashModsPaint(stamp, menu.WindowStart);
+        stamp = HashModsPaint(stamp, menu.VisibleRows);
+        stamp = HashModsPaintString(stamp, menu.Message);
+        stamp = HashModsPaint(stamp, menu.MessageIsError ? 1 : 0);
+        stamp = HashModsPaint(stamp, session.Controller.MasterEnabled ? 1 : 0);
+        stamp = HashModsPaint(stamp, menu.Groups.Count);
+        if (menu.Groups.Count > 0)
+            stamp = HashModsPaintString(
+                stamp, menu.Groups[menu.SelectedGroupIndex]);
+
+        IReadOnlyList<TweakDescriptor> rows = menu.CurrentRows;
+        int first = menu.WindowStart;
+        int end = Math.Min(rows.Count, first + menu.VisibleRows);
+        stamp = HashModsPaint(stamp, rows.Count);
+        for (int i = first; i < end; i++)
+        {
+            TweakDescriptor descriptor = rows[i];
+            stamp = HashModsPaintString(stamp, descriptor.Id);
+            stamp = HashModsPaint(stamp, descriptor.IsAvailable ? 1 : 0);
+            stamp = HashModsPaintString(
+                stamp, session.Controller.Value(descriptor.Id));
+        }
+        return stamp;
+    }
+
+    long ComputeModsGeometryPaintStamp()
+    {
+        if (attrCam == null || frameRoot == null) return 0L;
+        Rect viewport = attrCam.rect;
+        Vector3 position = attrCam.transform.position;
+        long stamp = 1469598103934665603L;
+        stamp = HashModsPaint(stamp, viewport.x.GetHashCode());
+        stamp = HashModsPaint(stamp, viewport.y.GetHashCode());
+        stamp = HashModsPaint(stamp, viewport.width.GetHashCode());
+        stamp = HashModsPaint(stamp, viewport.height.GetHashCode());
+        stamp = HashModsPaint(stamp, position.x.GetHashCode());
+        stamp = HashModsPaint(stamp, position.y.GetHashCode());
+        stamp = HashModsPaint(stamp, position.z.GetHashCode());
+        stamp = HashModsPaint(stamp, attrCam.orthographicSize.GetHashCode());
+        stamp = HashModsPaint(stamp, attrCam.aspect.GetHashCode());
+        stamp = HashModsPaint(stamp, frameInnerTopFrac.GetHashCode());
+        stamp = HashModsPaint(stamp, frameInnerBotFrac.GetHashCode());
+        return stamp;
+    }
+
     void RepaintModsModal(
         HollowKnightModsSession session,
         TweakMenuModel menu)
     {
-        if (session == null || menu == null || tweaksRoot == null) return;
+        if (session == null || menu == null || tweaksRoot == null)
+            throw new InvalidOperationException("The Mods presentation owner is unavailable.");
         float left, right, bottom, top, scale;
         if (!TryGetModsGeometry(out left, out right, out bottom, out top, out scale))
-            return;
+            throw new InvalidOperationException("The Mods context geometry is unavailable.");
 
         float width = right - left;
         float height = top - bottom;
@@ -445,8 +623,9 @@ public partial class HKDualScreen
             : new Color(0.82f, 0.82f, 0.82f, 1f));
         float masterY = top - height * 0.14f;
         PlaceModsText(modsMasterText, new Vector3(centerX, masterY, z), lineHeight, width * 0.78f);
-        modsMasterHit = new Rect(left + width * 0.18f, masterY - height * 0.04f,
-                                 width * 0.64f, height * 0.08f);
+        modsMasterHit = new TweakPresenterRect(
+            left + width * 0.18f, masterY - height * 0.04f,
+            width * 0.64f, height * 0.08f);
 
         string groupName = menu.Groups.Count == 0
             ? "NO GROUPS"
@@ -458,10 +637,11 @@ public partial class HKDualScreen
         float groupY = top - height * 0.225f;
         SetModsText(modsGroupText, group, new Color(0.82f, 0.88f, 1f, 1f));
         PlaceModsText(modsGroupText, new Vector3(centerX, groupY, z), lineHeight, width * 0.84f);
-        modsPreviousGroupHit = new Rect(left, groupY - height * 0.045f,
-                                        width * 0.28f, height * 0.09f);
-        modsNextGroupHit = new Rect(right - width * 0.28f, groupY - height * 0.045f,
-                                    width * 0.28f, height * 0.09f);
+        modsPreviousGroupHit = new TweakPresenterRect(
+            left, groupY - height * 0.045f, width * 0.28f, height * 0.09f);
+        modsNextGroupHit = new TweakPresenterRect(
+            right - width * 0.28f, groupY - height * 0.045f,
+            width * 0.28f, height * 0.09f);
 
         IReadOnlyList<TweakDescriptor> rows = menu.CurrentRows;
         int first = menu.WindowStart;
@@ -476,7 +656,7 @@ public partial class HKDualScreen
                 rowObject.SetActive(show);
             if (!show)
             {
-                tweakRowHits[i] = default(Rect);
+                tweakRowHits[i] = default(TweakPresenterRect);
                 continue;
             }
 
@@ -503,8 +683,8 @@ public partial class HKDualScreen
             SetModsText(tweakRowTexts[i], row, color);
             PlaceModsText(tweakRowTexts[i], new Vector3(centerX, rowY, z),
                           lineHeight * 0.88f, width * 0.9f);
-            tweakRowHits[i] = new Rect(left, rowY - rowStep * 0.48f,
-                                       width, rowStep * 0.96f);
+            tweakRowHits[i] = new TweakPresenterRect(
+                left, rowY - rowStep * 0.48f, width, rowStep * 0.96f);
         }
 
         TweakDescriptor selectedRow = menu.Selected;
@@ -547,8 +727,17 @@ public partial class HKDualScreen
         PlaceModsText(modsCloseText,
                       new Vector3(right - width * 0.27f, actionY, z),
                       lineHeight, width * 0.38f);
-        modsResetHit = new Rect(left, bottom, width * 0.5f, height * 0.09f);
-        modsCloseHit = new Rect(centerX, bottom, width * 0.5f, height * 0.09f);
+        modsResetHit = new TweakPresenterRect(
+            left, bottom, width * 0.5f, height * 0.09f);
+        modsCloseHit = new TweakPresenterRect(
+            centerX, bottom, width * 0.5f, height * 0.09f);
+        modsHitMap = new TweakPresenterHitMap(
+            modsCloseHit,
+            modsMasterHit,
+            modsPreviousGroupHit,
+            modsNextGroupHit,
+            modsResetHit,
+            tweakRowHits);
     }
 
     static string FriendlyModsValue(string value)
@@ -597,56 +786,53 @@ public partial class HKDualScreen
     bool TryModsTouchWorld(float x, float y, out Vector2 world)
     {
         world = Vector2.zero;
-        if (attrCam == null || x < 0f || x > 1f || y < 0f || y > 1f)
-            return false;
+        if (attrCam == null) return false;
         Rect viewport = attrCam.rect;
-        Vector2 panel = new Vector2(x, 1f - y);
-        if (!viewport.Contains(panel)) return false;
-        float vx = (panel.x - viewport.x) / Mathf.Max(0.0001f, viewport.width);
-        float vy = (panel.y - viewport.y) / Mathf.Max(0.0001f, viewport.height);
-        Vector3 point = attrCam.ViewportToWorldPoint(new Vector3(vx, vy, 10f));
+        var presenterViewport = new TweakPresenterRect(
+            viewport.x, viewport.y, viewport.width, viewport.height);
+        TweakPresenterPoint local;
+        if (!TweakPresenterInteraction.TryMapNormalizedTopLeft(
+                x, y, presenterViewport, out local))
+            return false;
+        Vector3 point = attrCam.ViewportToWorldPoint(
+            new Vector3(local.X, local.Y, 10f));
         world = new Vector2(point.x, point.y);
         return true;
     }
 
     void HandleModsCleanTap(TweakMenuModel menu, Vector2 world)
     {
-        if (menu == null) return;
-        if (modsCloseHit.Contains(world))
+        if (menu == null || modsHitMap == null) return;
+        TweakPresenterAction action = TweakPresenterInteraction.ResolveAction(
+            new TweakPresenterPoint(world.x, world.y), modsHitMap, menu);
+        switch (action.Kind)
         {
-            // Keep Menu.IsOpen authoritative through the raw-tap poll later in
-            // this frame. The next presenter tick closes it before repainting,
-            // so the close tap cannot fall through into the covered pane.
-            modsClosePending = true;
-            return;
-        }
-        if (modsMasterHit.Contains(world))
-        {
-            menu.ToggleMaster();
-            return;
-        }
-        if (modsPreviousGroupHit.Contains(world))
-        {
-            menu.MoveGroup(-1);
-            return;
-        }
-        if (modsNextGroupHit.Contains(world))
-        {
-            menu.MoveGroup(1);
-            return;
-        }
-        for (int i = 0; i < tweakRowHits.Count; i++)
-        {
-            if (!tweakRowHits[i].Contains(world)) continue;
-            int rowIndex = menu.WindowStart + i;
-            if (rowIndex < 0 || rowIndex >= menu.CurrentRows.Count) return;
-            if (rowIndex != menu.SelectedRowIndex)
-                menu.MoveRow(rowIndex - menu.SelectedRowIndex);
-            else if (menu.CurrentRows[rowIndex].IsAvailable)
+            case TweakPresenterActionKind.Close:
+                // Keep Menu.IsOpen authoritative through the raw-tap poll later
+                // this frame, then close at the start of the next presenter tick.
+                modsClosePending = true;
+                return;
+            case TweakPresenterActionKind.ToggleMaster:
+                menu.ToggleMaster();
+                return;
+            case TweakPresenterActionKind.PreviousGroup:
+                menu.MoveGroup(-1);
+                return;
+            case TweakPresenterActionKind.NextGroup:
+                menu.MoveGroup(1);
+                return;
+            case TweakPresenterActionKind.SelectRow:
+                menu.MoveRow(action.RowIndex - menu.SelectedRowIndex);
+                return;
+            case TweakPresenterActionKind.CycleSelected:
                 menu.CycleSelected();
-            return;
+                return;
+            case TweakPresenterActionKind.Reset:
+                menu.Reset();
+                return;
+            default:
+                return;
         }
-        if (modsResetHit.Contains(world)) menu.Reset();
     }
 
     void TweaksPaneTick(Camera source)
@@ -663,7 +849,8 @@ public partial class HKDualScreen
             }
 
             RebindModsPresenter(session, menu);
-            tweaksOpen = menu.IsOpen;
+            modsLifecycle.SynchronizeOpen(menu.IsOpen);
+            tweaksOpen = modsLifecycle.IsOpen;
             if (modsClosePending)
             {
                 CloseTweaksPane();
@@ -671,6 +858,7 @@ public partial class HKDualScreen
             }
             if (!tweaksOpen)
             {
+                RestoreModsCoveredContent();
                 if (tweaksRoot != null) tweaksRoot.SetActive(false);
                 return;
             }
@@ -696,21 +884,30 @@ public partial class HKDualScreen
                 return;
             }
             if (!tweaksRoot.activeSelf) tweaksRoot.SetActive(true);
-            RepaintModsModal(session, menu);
 
+            long geometryStamp = ComputeModsGeometryPaintStamp();
             int sequence = transport.CleanTapSequence;
-            if (sequence == lastModsCleanTapSequence) return;
-            lastModsCleanTapSequence = sequence;
-            Vector2 world;
-            if (!TryModsTouchWorld(
-                    transport.CleanTapX,
-                    transport.CleanTapY,
-                    out world))
-                return;
-            HandleModsCleanTap(menu, world);
-            tweaksOpen = menu.IsOpen;
-            if (tweaksOpen) RepaintModsModal(session, menu);
-            else if (tweaksRoot != null) tweaksRoot.SetActive(false);
+            if (modsPaint.HasCurrentGeometry(geometryStamp) &&
+                modsInteraction.TryAcceptCleanTap(sequence))
+            {
+                Vector2 world;
+                if (TryModsTouchWorld(
+                        transport.CleanTapX,
+                        transport.CleanTapY,
+                        out world))
+                    HandleModsCleanTap(menu, world);
+                modsLifecycle.SynchronizeOpen(menu.IsOpen);
+                tweaksOpen = modsLifecycle.IsOpen;
+            }
+
+            long modelStamp = ComputeModsModelPaintStamp(session, menu);
+            if (modsPaint.ShouldPaint(modelStamp, geometryStamp))
+            {
+                RepaintModsModal(session, menu);
+                modsPaint.Acknowledge(modelStamp, geometryStamp);
+            }
+            if (!tweaksOpen && tweaksRoot != null)
+                tweaksRoot.SetActive(false);
         }
         catch (Exception e)
         {
@@ -734,11 +931,13 @@ public partial class HKDualScreen
         modsResetText = null;
         modsCloseText = null;
         modsBuiltVisibleRows = -1;
-        modsMasterHit = default(Rect);
-        modsPreviousGroupHit = default(Rect);
-        modsNextGroupHit = default(Rect);
-        modsResetHit = default(Rect);
-        modsCloseHit = default(Rect);
+        modsMasterHit = default(TweakPresenterRect);
+        modsPreviousGroupHit = default(TweakPresenterRect);
+        modsNextGroupHit = default(TweakPresenterRect);
+        modsResetHit = default(TweakPresenterRect);
+        modsCloseHit = default(TweakPresenterRect);
+        modsHitMap = null;
+        modsPaint.Invalidate();
     }
 
     void ClearModsFrameReferences()
@@ -751,6 +950,7 @@ public partial class HKDualScreen
         hudGearH = 0f;
         hudGearAnchor = Vector3.zero;
         hudFpsB = default(Bounds);
+        modsPaint.Invalidate();
     }
 
     void TeardownModsPresenter()
@@ -772,14 +972,14 @@ public partial class HKDualScreen
                 currentMenu.Close();
         }
         catch (Exception e) { WarnOnce("mods current menu close", e); }
-        try { if (modsSession != null) modsSession.SetPresenterAttached(false); }
-        catch (Exception e) { WarnOnce("mods attached session detach", e); }
+        bool detachAttachedPresenter = modsLifecycle.PresenterAttached;
+        modsLifecycle.Detach();
         try
         {
-            if (currentSession != null && !ReferenceEquals(currentSession, modsSession))
-                currentSession.SetPresenterAttached(false);
+            if (detachAttachedPresenter && modsSession != null)
+                modsSession.SetPresenterAttached(false);
         }
-        catch (Exception e) { WarnOnce("mods current session detach", e); }
+        catch (Exception e) { WarnOnce("mods attached session detach", e); }
 
         tweaksOpen = false;
         if (tweaksRoot != null) { Destroy(tweaksRoot); tweaksRoot = null; }
@@ -794,11 +994,13 @@ public partial class HKDualScreen
         modsResetText = null;
         modsCloseText = null;
         modsBuiltVisibleRows = -1;
-        modsMasterHit = default(Rect);
-        modsPreviousGroupHit = default(Rect);
-        modsNextGroupHit = default(Rect);
-        modsResetHit = default(Rect);
-        modsCloseHit = default(Rect);
+        modsMasterHit = default(TweakPresenterRect);
+        modsPreviousGroupHit = default(TweakPresenterRect);
+        modsNextGroupHit = default(TweakPresenterRect);
+        modsResetHit = default(TweakPresenterRect);
+        modsCloseHit = default(TweakPresenterRect);
+        modsHitMap = null;
+        modsPaint.Invalidate();
         Sprite gearSprite = gearSR != null ? gearSR.sprite : null;
         if (gearT != null) Destroy(gearT.gameObject);
         if (gearSprite != null)
@@ -819,10 +1021,9 @@ public partial class HKDualScreen
         hudGearH = 0f;
         hudGearAnchor = Vector3.zero;
         hudFpsB = default(Bounds);
-        modsPresenterAttached = false;
         modsClosePending = false;
         modsSession = null;
         modsMenu = null;
-        lastModsCleanTapSequence = int.MinValue;
+        modsInteraction.ResetCleanTap(int.MinValue);
     }
 }

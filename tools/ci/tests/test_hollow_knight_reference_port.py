@@ -393,6 +393,101 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             r"if\s*\(hitTab\s*>=\s*0\)\s*\{\s*CloseTweaksPane\(\);\s*tab\.tap\s*=\s*hitTab",
         )
 
+    def test_h3_mods_presenter_bounds_idle_paint_and_uses_shared_behavior_helpers(self):
+        presenter = strip_csharp_comments(read(MODS_PRESENTER))
+        build_label = method_body(
+            presenter,
+            r"ModsLabel\s+BuildModsLabel\s*\([^)]*\)",
+        )
+        set_text = method_body(
+            presenter,
+            r"void\s+SetModsText\s*\([^)]*\)",
+        )
+        tick = method_body(
+            presenter,
+            r"void\s+TweaksPaneTick\s*\([^)]*\)",
+        )
+        model_stamp = method_body(
+            presenter,
+            r"long\s+ComputeModsModelPaintStamp\s*\([^)]*\)",
+        )
+        geometry_stamp = method_body(
+            presenter,
+            r"long\s+ComputeModsGeometryPaintStamp\s*\([^)]*\)",
+        )
+        rebind = method_body(
+            presenter,
+            r"void\s+RebindModsPresenter\s*\([^)]*\)",
+        )
+        close = method_body(
+            presenter,
+            r"void\s+CloseTweaksPane\s*\(\s*\)",
+        )
+        stow = method_body(
+            presenter,
+            r"void\s+StowModsCoveredContent\s*\(\s*\)",
+        )
+
+        for cached in (
+            'GetProperty("text")', 'GetProperty("color")',
+            "GetComponent<Renderer>()", "new ModsLabel(",
+        ):
+            self.assertIn(cached, build_label)
+        self.assertRegex(
+            build_label,
+            r'GetMethod\s*\(\s*"ForceMeshUpdate"',
+        )
+        for forbidden in ("GetProperty(", "GetMethod(", "TmpProp("):
+            self.assertNotIn(forbidden, set_text)
+        self.assertIn("label.LastText", set_text)
+        self.assertIn("label.LastColor", set_text)
+        self.assertEqual(1, set_text.count("NeutralizeDetachedTmpClip("))
+        self.assertLess(
+            set_text.index("label.LastText"),
+            set_text.index("NeutralizeDetachedTmpClip("),
+        )
+
+        for helper in (
+            "TweakPresenterInteraction", "TweakPresenterLifecycle",
+            "TweakPresenterPaintInvalidation", "TryMapNormalizedTopLeft",
+            "ResolveAction(", "TryAcceptCleanTap(", "ShouldPaint(",
+            "Acknowledge(", "HasCurrentGeometry(",
+        ):
+            self.assertIn(helper, presenter)
+        self.assertEqual(1, tick.count("RepaintModsModal("))
+        self.assertNotIn("new ", tick)
+        self.assertNotIn("StringBuilder", tick)
+        self.assertLess(
+            tick.index("TryAcceptCleanTap("),
+            tick.index("ShouldPaint("),
+        )
+        self.assertLess(
+            tick.index("ShouldPaint("),
+            tick.index("RepaintModsModal("),
+        )
+        self.assertIn("ComputeModsModelPaintStamp", tick)
+        self.assertIn("ComputeModsGeometryPaintStamp", tick)
+
+        for state in (
+            "SelectedGroupIndex", "SelectedRowIndex", "WindowStart",
+            "VisibleRows", "Message", "MessageIsError", "IsOpen",
+            "MasterEnabled", "descriptor.Id", "descriptor.IsAvailable",
+            "Controller.Value", "RuntimeHelpers.GetHashCode(session)",
+            "RuntimeHelpers.GetHashCode(menu)",
+        ):
+            self.assertIn(state, model_stamp)
+        self.assertNotIn("new ", model_stamp)
+        for geometry in (
+            "attrCam.rect", "attrCam.transform.position",
+            "attrCam.orthographicSize", "attrCam.aspect",
+            "frameInnerTopFrac", "frameInnerBotFrac",
+        ):
+            self.assertIn(geometry, geometry_stamp)
+        self.assertNotIn("new ", geometry_stamp)
+        self.assertIn("modsLifecycle.Rebind(", rebind)
+        self.assertIn("modsPaint.Invalidate()", close)
+        self.assertIn("RequestCoveredContentStow()", stow)
+
     def test_h3_mods_presenter_has_no_copied_h3_or_native_bridge_surface(self):
         compiled = "\n".join(
             strip_csharp_comments(read(path)) for path in SOURCE_ROOT.rglob("*.cs")
