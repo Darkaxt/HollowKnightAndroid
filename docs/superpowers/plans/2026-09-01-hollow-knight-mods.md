@@ -12,7 +12,7 @@
 
 **Execution boundary:** Work only in `Darkaxt/HollowKnightAndroid`. Do not read from, contact, or modify `igawa6/dualsouls`; do not copy additional upstream modules. Do not run ADB, Android-device, emulator, signing, workflow-dispatch, or release commands. H3 and H4 will share one later explicitly authorized device candidate.
 
-**Execution status:** Tasks 1–8 host work is complete through implementation checkpoint `3cc321b`, with the H3 status reconciliation committed at `b0def8a`. This is host completion only: physical UI/effect acceptance remains unpassed and batched with H4, and every `HKMOD-001` through `HKMOD-018` capability remains deferred to Final managed-rewrite remediation.
+**Execution status:** Tasks 1–8 host work is complete through process-owned lifeblood-policy checkpoint `ba32812`. This is host completion only: physical UI/effect acceptance remains unpassed and batched with H4, and every `HKMOD-001` through `HKMOD-018` capability remains deferred to Final managed-rewrite remediation.
 
 ---
 
@@ -32,11 +32,12 @@
 - Create `tools/hollow-knight-patches/src/mods/HollowKnightTweakAdapter.cs`: fork-owned full catalog and typed mapping.
 - Create `tools/hollow-knight-patches/src/mods/HollowKnightModsSession.cs`: pure readiness/controller/menu lifetime.
 - Create `tools/hollow-knight-patches/src/mods/HollowKnightGameTweakApi.cs`: stock managed presentation seam.
-- Create `tools/hollow-knight-patches/src/mods/HollowKnightModsRuntime.cs`: process-resident Unity owner.
+- Create `tools/hollow-knight-patches/src/mods/HollowKnightModsRuntime.cs`: process-resident Unity owner for the session and lifeblood renderer policy.
+- Create `tools/hollow-knight-patches/src/mods/HollowKnightLifebloodFlashPolicy.cs`: process-owned reversible renderer tracker/enforcer.
 - Create `tools/hollow-knight-patches/src/dualsouls/HollowKnightModsPresenter.cs`: gear and context-box rendering only.
-- Modify `tools/hollow-knight-patches/src/dualsouls/HkStageHooks.cs`: delegate to runtime/presenter and expose presentation overrides.
+- Modify `tools/hollow-knight-patches/src/dualsouls/HkStageHooks.cs`: delegate to runtime/presenter and keep Mods and nullable legacy H2 flash signals separate.
 - Modify `tools/hollow-knight-patches/src/dualsouls/HkDirectDisplayAdapter.cs`: start Mods runtime before the display-enabled gate.
-- Modify `tools/hollow-knight-patches/src/dualsouls/HKDualScreen.cs`: reversible lifeblood-flash policy.
+- Modify `tools/hollow-knight-patches/src/dualsouls/HKDualScreen.cs`: publish live H2 flash config only; no renderer-policy ownership.
 - Modify `tools/shared-patches-tests/SharedPatches.Tests.csproj`: compile pure Hollow Knight adapter/session sources.
 - Create `tools/shared-patches-tests/HollowKnightTweakAdapterTests.cs`.
 - Create `tools/shared-patches-tests/HollowKnightModsSessionTests.cs`.

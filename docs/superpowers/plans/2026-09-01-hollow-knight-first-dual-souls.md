@@ -465,9 +465,10 @@ prohibited.
 - [x] **Step 3: Run the bounded host gate**
 
 The original implementation checkpoint ran through `3cc321b`. The final H3
-integration correction is the process-owned lifeblood-policy checkpoint: its
-mode resolver keeps master `soft`/`vanilla`/`off` authoritative without a live
-display reference, while runtime disposal alone restores tracked renderers.
+integration correction is `ba32812`, the process-owned lifeblood-policy
+checkpoint. Its mode resolver keeps master `soft`/`vanilla`/`off`
+authoritative without a live display reference, while runtime disposal alone
+restores tracked renderers.
 Fresh host evidence at the corrected boundary is:
 
 - focused Mods tests: 75 passed, 0 failed, 0 skipped;
@@ -710,7 +711,7 @@ the installed app, and smoke-test both profiles. Close the running game.
 | H0 | DSUI-00/08/10 | `COMPLETE` | None | Both specifications, both parent plans, matrix, traceability, README, and 5/5 ordering contracts agree; the existing 38-contract Silksong suite remains green after the status correction |
 | H1 | DSUI-00/02/10 | `IMPLEMENTED / DEVICE-PARTIAL` | No implementation blocker; one tracked physical detach/true single-display deferral must close by H5 | 49/49 shared tests, 78/78 Python tests, both exact compiles, signed run `33494317664`, update-preserving Thor transport and pause/resume captures |
 | H2 | DSUI-00/01/02/07/10 | `SOURCE/HOST-COMPLETE / PHYSICAL-BATCHED` | Source/host implementation is complete at `00627e3`. The locked clip-safe label/teardown recheck and H1 topology observation remain unpassed and are batched into the complete Hollow Knight candidate, not a signed micro-candidate | Historical signed evidence remains recorded above. The final H2 correction passes 32 focused contracts, 122 Android tests, 58 shared tests, 38 bundle-surgery tests, 112 Python tests, and an exact 226,816-byte patch; no later Android/device/emulator/ADB/signing/live validation occurred |
-| H3 | DSUI-00/05/09/10 | `HOST-COMPLETE / TRACKED-DEFERRALS` | No H3 host blocker through implementation checkpoint `3cc321b`; `HKMOD-001`–`HKMOD-018` remain visible, disabled tracked deferrals for Final managed-rewrite remediation. This is not full Mods parity or device acceptance | 75/75 focused Mods tests, 120/120 complete shared tests, 45/45 Hollow Knight reference/source contracts; exact Hollow Knight compile with 0 errors, 1 pre-existing `CS0649` warning, 2 entry points, 266,240-byte DLL; exact Silksong compile with 53 sources and 10 entry points; prohibited production scan clean. H3 creates no signed build; H4 follows on the same branch, then the complete H3/H4 slice receives one future explicitly authorized device gate |
+| H3 | DSUI-00/05/09/10 | `HOST-COMPLETE / TRACKED-DEFERRALS` | No H3 host blocker through process-owned lifeblood-policy checkpoint `ba32812`; `HKMOD-001`–`HKMOD-018` remain visible, disabled tracked deferrals for Final managed-rewrite remediation. This is not full Mods parity or device acceptance | 75/75 focused Mods tests, 129/129 complete shared tests, 47/47 Hollow Knight reference/source contracts, and 53/53 combined source/docs contracts; exact Hollow Knight compile with 0 errors, 1 pre-existing `CS0649` warning, 2 entry points, 267,776-byte DLL; exact Silksong compile with 53 sources and 10 entry points; prohibited production scan clean. Resolver and ownership contracts cover display loss and true single-display startup for master `soft`/`vanilla`/`off`. H3 creates no signed build; H4 follows on the same branch, then the complete H3/H4 slice receives one future explicitly authorized device gate |
 | H4 | DSUI-00/05/09/10 | `PENDING` | Scanner, application, rotation, rollback | Host pack matrix plus controlled Thor death/respawn-state injection proof; no gameplay testing |
 | H5 | DSUI-00–10 | `PENDING` | Hollow Knight blockers and deferrals must both reach zero | Clean host and complete Thor reference matrix |
 | H6 | DSUI-02/09/10 | `PENDING` | Shared extraction must preserve accepted H5 behavior | Shared boundary tests plus unchanged H5 regression |

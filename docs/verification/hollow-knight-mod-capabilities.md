@@ -6,7 +6,7 @@ The paired [managed API audit](hollow-knight-mod-managed-api-audit.md) preserves
 
 ## H3 host checkpoint
 
-H3 remains **HOST-COMPLETE / TRACKED-DEFERRALS** at the bounded host gate. The original implementation boundary ran through `3cc321b`; the final integration correction is the process-owned lifeblood-policy checkpoint. Its pure resolver keeps master `soft`/`vanilla`/`off` authoritative without a live display reference, and only process-runtime disposal restores tracked renderers.
+H3 remains **HOST-COMPLETE / TRACKED-DEFERRALS** at the bounded host gate. The original implementation boundary ran through `3cc321b`; the final integration correction, `ba32812`, is the process-owned lifeblood-policy checkpoint. Its pure resolver keeps master `soft`/`vanilla`/`off` authoritative without a live display reference, and only process-runtime disposal restores tracked renderers.
 
 Fresh host evidence at that boundary:
 
