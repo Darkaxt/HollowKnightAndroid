@@ -468,10 +468,12 @@ The earlier process-owned policy checkpoint is `ba32812`; the current H3
 authority/state-core checkpoint is `fix: unify Hollow Knight flash authority`.
 Its immutable decision keeps master `soft`/`vanilla`/`off` and the process Soft
 alpha independent of live display config. Only the process-owned policy may
-restore tracked renderer state: on ownership release/master-off, transition to
-Vanilla as needed, camera replacement, or runtime disposal. Direct-display
-teardown clears only legacy publisher state; presenter teardown never touches
-the process policy.
+restore tracked renderer state: on no-owner release (including master-off only
+when no legacy owner remains), transition to Vanilla as needed, camera
+replacement, or runtime disposal. Master-off with a live legacy publisher
+transfers authority to the legacy policy and continues enforcement.
+Direct-display teardown clears only legacy publisher state; presenter teardown
+never touches the process policy.
 Fresh host evidence at the corrected boundary is:
 
 - focused Mods/state-core tests: 89 passed, 0 failed, 0 skipped;
