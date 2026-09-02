@@ -203,15 +203,25 @@ public sealed class HollowKnightTweakAdapterTests
     }
 
     [Fact]
-    public void MasterDefaultSoftOverridesLegacyVanilla()
+    public void MasterDefaultSoftIgnoresLegacyAlphaAcrossDisplayLoss()
     {
-        HollowKnightFlashMode? resolved = HollowKnightFlashModeResolver.Resolve(
+        HollowKnightFlashDecision withDisplay = HollowKnightFlashDecisionResolver.Resolve(
             true,
             true,
             "soft",
-            HollowKnightFlashMode.Vanilla);
+            HollowKnightFlashMode.Soft,
+            0.17f);
+        HollowKnightFlashDecision afterDisplayLoss = HollowKnightFlashDecisionResolver.Resolve(
+            true,
+            true,
+            "soft",
+            null,
+            null);
 
-        Assert.Equal(HollowKnightFlashMode.Soft, resolved);
+        AssertMasterDecision(withDisplay, HollowKnightFlashMode.Soft);
+        AssertMasterDecision(afterDisplayLoss, HollowKnightFlashMode.Soft);
+        Assert.Equal(HollowKnightFlashDecision.DefaultSoftAlpha, withDisplay.SoftAlpha);
+        Assert.Equal(withDisplay.SoftAlpha, afterDisplayLoss.SoftAlpha);
     }
 
     [Theory]
@@ -222,73 +232,103 @@ public sealed class HollowKnightTweakAdapterTests
         string value,
         HollowKnightFlashMode expected)
     {
-        HollowKnightFlashMode? resolved = HollowKnightFlashModeResolver.Resolve(
+        HollowKnightFlashDecision resolved = HollowKnightFlashDecisionResolver.Resolve(
             true,
             true,
             value,
-            HollowKnightFlashMode.Vanilla);
+            HollowKnightFlashMode.Soft,
+            0.17f);
 
-        Assert.Equal(expected, resolved);
+        AssertMasterDecision(resolved, expected);
+        Assert.Equal(HollowKnightFlashDecision.DefaultSoftAlpha, resolved.SoftAlpha);
     }
 
     [Fact]
-    public void MasterOffUsesLiveLegacyMode()
+    public void MasterOffUsesLiveLegacyModeAndAlpha()
     {
-        HollowKnightFlashMode? resolved = HollowKnightFlashModeResolver.Resolve(
+        HollowKnightFlashDecision resolved = HollowKnightFlashDecisionResolver.Resolve(
             true,
             false,
             "off",
-            HollowKnightFlashMode.Soft);
+            HollowKnightFlashMode.Soft,
+            0.17f);
 
-        Assert.Equal(HollowKnightFlashMode.Soft, resolved);
+        Assert.True(resolved.HasOwner);
+        Assert.Equal(HollowKnightFlashAuthority.Legacy, resolved.Authority);
+        Assert.Equal(HollowKnightFlashMode.Soft, resolved.Mode);
+        Assert.Equal(0.17f, resolved.SoftAlpha);
     }
 
     [Fact]
     public void SessionNotReadyUsesLiveLegacyMode()
     {
-        HollowKnightFlashMode? resolved = HollowKnightFlashModeResolver.Resolve(
+        HollowKnightFlashDecision resolved = HollowKnightFlashDecisionResolver.Resolve(
             false,
             true,
             "off",
-            HollowKnightFlashMode.Vanilla);
+            HollowKnightFlashMode.Vanilla,
+            0.17f);
 
-        Assert.Equal(HollowKnightFlashMode.Vanilla, resolved);
+        Assert.True(resolved.HasOwner);
+        Assert.Equal(HollowKnightFlashAuthority.Legacy, resolved.Authority);
+        Assert.Equal(HollowKnightFlashMode.Vanilla, resolved.Mode);
     }
 
     [Fact]
-    public void NoMasterAndNoLiveReferenceReturnsNull()
+    public void NoMasterAndNoLiveReferenceReleasesOwnership()
     {
-        HollowKnightFlashMode? resolved = HollowKnightFlashModeResolver.Resolve(
+        HollowKnightFlashDecision resolved = HollowKnightFlashDecisionResolver.Resolve(
             true,
             false,
             "soft",
-            null);
+            null,
+            0.17f);
 
-        Assert.Null(resolved);
+        Assert.False(resolved.HasOwner);
+        Assert.Equal(HollowKnightFlashAuthority.None, resolved.Authority);
     }
 
     [Fact]
-    public void MasterEnabledOffRemainsDesiredWithoutLegacyReference()
+    public void MasterEnabledOffRemainsOwnedWithoutLegacyReference()
     {
-        HollowKnightFlashMode? resolved = HollowKnightFlashModeResolver.Resolve(
+        HollowKnightFlashDecision resolved = HollowKnightFlashDecisionResolver.Resolve(
             true,
             true,
             "off",
+            null,
             null);
 
-        Assert.Equal(HollowKnightFlashMode.Off, resolved);
+        AssertMasterDecision(resolved, HollowKnightFlashMode.Off);
     }
 
     [Fact]
     public void InvalidMasterValueFailsClosedToVanilla()
     {
-        HollowKnightFlashMode? resolved = HollowKnightFlashModeResolver.Resolve(
+        HollowKnightFlashDecision resolved = HollowKnightFlashDecisionResolver.Resolve(
             true,
             true,
             "unexpected",
-            HollowKnightFlashMode.Soft);
+            HollowKnightFlashMode.Soft,
+            0.17f);
 
-        Assert.Equal(HollowKnightFlashMode.Vanilla, resolved);
+        AssertMasterDecision(resolved, HollowKnightFlashMode.Vanilla);
+    }
+
+    [Theory]
+    [InlineData(-1f, 0f)]
+    [InlineData(2f, 1f)]
+    [InlineData(float.NaN, HollowKnightFlashDecision.DefaultSoftAlpha)]
+    [InlineData(float.PositiveInfinity, HollowKnightFlashDecision.DefaultSoftAlpha)]
+    public void LegacySoftAlphaIsClampedSafely(float alpha, float expected)
+    {
+        HollowKnightFlashDecision resolved = HollowKnightFlashDecisionResolver.Resolve(
+            false,
+            false,
+            null,
+            HollowKnightFlashMode.Soft,
+            alpha);
+
+        Assert.Equal(expected, resolved.SoftAlpha);
     }
 
     [Fact]
@@ -380,6 +420,15 @@ public sealed class HollowKnightTweakAdapterTests
     public void ConstructorRejectsNullApi()
     {
         Assert.Throws<ArgumentNullException>(() => new HollowKnightTweakAdapter(null!));
+    }
+
+    private static void AssertMasterDecision(
+        HollowKnightFlashDecision decision,
+        HollowKnightFlashMode expectedMode)
+    {
+        Assert.True(decision.HasOwner);
+        Assert.Equal(HollowKnightFlashAuthority.Master, decision.Authority);
+        Assert.Equal(expectedMode, decision.Mode);
     }
 
     private static void AssertDescriptor(

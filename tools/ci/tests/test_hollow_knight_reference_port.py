@@ -13,6 +13,7 @@ ADAPTER = REFERENCE_ROOT / "HkDirectDisplayAdapter.cs"
 MODS_PRESENTER = REFERENCE_ROOT / "HollowKnightModsPresenter.cs"
 MODS_RUNTIME = MODS_ROOT / "HollowKnightModsRuntime.cs"
 FLASH_POLICY = MODS_ROOT / "HollowKnightLifebloodFlashPolicy.cs"
+FLASH_CORE = MODS_ROOT / "HollowKnightFlashPolicyCore.cs"
 STAGE_HOOKS = REFERENCE_ROOT / "HkStageHooks.cs"
 ENTRYPOINTS = PATCH_ROOT / "entrypoints.json"
 PROJECT = PATCH_ROOT / "HollowKnightPatches.csproj"
@@ -679,174 +680,78 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             r"\?\s*0f\s*:\s*cfg\.dim\s*;",
         )
 
-    def test_lifeblood_flash_tracker_samples_live_state_without_self_contamination(self):
-        self.assertTrue(FLASH_POLICY.is_file(), "missing process-owned flash policy")
+    def test_lifeblood_flash_policy_delegates_transitions_to_host_tested_core(self):
+        self.assertTrue(FLASH_CORE.is_file(), "missing Unity-free flash policy core")
+        core = strip_csharp_comments(read(FLASH_CORE))
         policy = strip_csharp_comments(read(FLASH_POLICY))
+        project = read(REPO_ROOT / "tools/shared-patches-tests/SharedPatches.Tests.csproj")
+
+        self.assertNotIn("UnityEngine", core)
+        self.assertNotIn("#if UNITY_ANDROID", core)
+        for required in (
+            "readonly struct HollowKnightFlashRgba",
+            "readonly struct HollowKnightFlashSample",
+            "readonly struct HollowKnightFlashDecision",
+            "readonly struct HollowKnightFlashTransition",
+            "sealed class HollowKnightFlashStateTracker",
+        ):
+            self.assertIn(required, core)
+        self.assertIn("HollowKnightFlashPolicyCore.cs", project)
+
         tick = method_body(
             policy,
-            r"void\s+Tick\s*\(\s*HollowKnightFlashMode\?\s+desiredMode\s*,\s*float\s+softAlpha\s*\)",
+            r"void\s+Tick\s*\(\s*HollowKnightFlashDecision\s+decision\s*\)",
         )
-        reconcile = method_body(
-            policy,
-            r"(?:static\s+)?void\s+ReconcileLifebloodFlashState\s*\([^)]*\)",
-        )
-        self.assertTrue(tick, "missing process flash Tick")
-        self.assertTrue(reconcile, "missing shared flash-state reconciliation")
+        self.assertTrue(tick, "missing process flash decision Tick")
         self.assertRegex(
             policy,
-            r"struct\s+FlashBaseline\s*\{[^}]*bool\s+GameEnabled\s*;[^}]*"
-            r"Color\s+GameColor\s*;[^}]*bool\s+PolicyActive\s*;[^}]*"
-            r"bool\s+LastPolicyEnabled\s*;[^}]*Color\s+LastPolicyColor\s*;[^}]*\}",
+            r"Dictionary<SpriteRenderer,\s*HollowKnightFlashStateTracker>",
         )
-        self.assertRegex(
-            policy,
-            r"readonly\s+Dictionary<SpriteRenderer,\s*FlashBaseline>\s+"
-            r"_baselines\s*=\s*new\s+Dictionary<SpriteRenderer,\s*FlashBaseline>\s*\(\s*\)",
-        )
-        self.assertIn('GameObject.Find("_GameCameras/CameraParent/tk2dCamera")', tick)
-        self.assertIn('child.name.StartsWith("Screen Flash")', tick)
-        self.assertIn("child.GetComponent<SpriteRenderer>()", tick)
+        self.assertIn("Sample(renderer)", tick)
+        self.assertIn("tracker.Apply(live, decision)", tick)
+        self.assertIn("ApplyTransition(renderer, transition)", tick)
+        self.assertNotIn("FlashBaseline", policy)
+        self.assertNotIn("ReconcileLifebloodFlashState", policy)
+        self.assertNotRegex(policy, r"switch\s*\(\s*decision\.Mode\s*\)")
 
-        lookup = tick.index("_baselines.TryGetValue(renderer, out baseline)")
-        reconcile_call = tick.index(
-            "ReconcileLifebloodFlashState(renderer, ref baseline)", lookup
-        )
-        policy_dispatch = tick.index("switch (desiredMode.Value)", reconcile_call)
-        renderer_writes = [
-            match.start()
-            for match in re.finditer(r"renderer\.(?:enabled|color)\s*=", tick)
-        ]
-        self.assertTrue(renderer_writes)
-        self.assertLess(lookup, reconcile_call)
-        self.assertLess(reconcile_call, policy_dispatch)
-        self.assertLess(policy_dispatch, min(renderer_writes))
-        self.assertEqual(1, tick.count("ReconcileLifebloodFlashState("))
-        self.assertIn("_baselines[renderer] = baseline", tick[policy_dispatch:])
-
-        normalized_reconcile = " ".join(reconcile.split())
-        self.assertRegex(
-            normalized_reconcile,
-            r"bool\s+liveEnabled\s*=\s*renderer\.enabled\s*;\s*"
-            r"Color\s+liveColor\s*=\s*renderer\.color\s*;",
-        )
-        self.assertRegex(
-            normalized_reconcile,
-            r"if\s*\(\s*!baseline\.PolicyActive\s*\)\s*\{\s*"
-            r"baseline\.GameEnabled\s*=\s*liveEnabled\s*;\s*"
-            r"baseline\.GameColor\s*=\s*liveColor\s*;\s*\}",
-        )
-        self.assertRegex(
-            normalized_reconcile,
-            r"else\s*\{\s*"
-            r"if\s*\(\s*liveEnabled\s*!=\s*baseline\.LastPolicyEnabled\s*\)\s*"
-            r"baseline\.GameEnabled\s*=\s*liveEnabled\s*;\s*"
-            r"if\s*\(\s*liveColor\s*!=\s*baseline\.LastPolicyColor\s*\)\s*"
-            r"baseline\.GameColor\s*=\s*liveColor\s*;\s*\}",
-        )
-
-    def test_lifeblood_flash_modes_preserve_animation_and_restore_only_on_exit(self):
-        self.assertTrue(FLASH_POLICY.is_file(), "missing process-owned flash policy")
+    def test_lifeblood_flash_release_and_writes_stay_in_process_policy(self):
         policy = strip_csharp_comments(read(FLASH_POLICY))
-        tick = method_body(
+        release = method_body(policy, r"void\s+ReleaseTrackedRenderers\s*\(\s*\)")
+        apply_transition = method_body(
             policy,
-            r"void\s+Tick\s*\(\s*HollowKnightFlashMode\?\s+desiredMode\s*,\s*float\s+softAlpha\s*\)",
+            r"void\s+ApplyTransition\s*\([^)]*\)",
         )
-        self.assertTrue(tick, "missing process flash Tick")
-        for mode in ("Soft", "Vanilla", "Off"):
-            self.assertIn(f"case HollowKnightFlashMode.{mode}:", tick)
+        self.assertTrue(release, "missing tracked-renderer release")
+        self.assertTrue(apply_transition, "missing Unity transition writer")
+        self.assertIn("tracker.Release(live)", release)
+        self.assertIn("ApplyTransition(renderer, transition)", release)
+        self.assertIn("transition.WriteEnabled", apply_transition)
+        self.assertIn("transition.WriteColor", apply_transition)
+        self.assertIn("renderer.enabled = transition.Sample.Enabled", apply_transition)
+        self.assertIn("renderer.color = ToUnityColor(transition.Sample.Color)", apply_transition)
 
-        soft_start = tick.index("case HollowKnightFlashMode.Soft:")
-        off_start = tick.index("case HollowKnightFlashMode.Off:")
-        vanilla_start = tick.index("case HollowKnightFlashMode.Vanilla:")
-        default_start = tick.index("default:", vanilla_start)
-        self.assertLess(soft_start, off_start)
-        self.assertLess(off_start, vanilla_start)
-        self.assertLess(vanilla_start, default_start)
-        writeback = tick.index("_baselines[renderer] = baseline", default_start)
-        pre_dispatch = tick[
-            tick.index("_baselines.TryGetValue(renderer, out baseline)") : soft_start
-        ]
-
-        soft_policy = tick[soft_start:off_start]
-        self.assertIn("Color softened = baseline.GameColor", soft_policy)
-        self.assertIn("Color livePolicyColor = renderer.color", pre_dispatch)
-        self.assertRegex(
-            " ".join(soft_policy.split()),
-            r"if\s*\(\s*baseline\.PolicyActive\s*&&\s*"
-            r"livePolicyColor\.a\s*<\s*softened\.a\s*\)\s*"
-            r"softened\.a\s*=\s*livePolicyColor\.a\s*;",
-        )
-        self.assertIn("renderer.enabled = baseline.GameEnabled", soft_policy)
-        self.assertIn("softAlpha <= 0f", soft_policy)
-        self.assertIn("softened.a = 0f", soft_policy)
-        self.assertIn("softened.a > softAlpha", soft_policy)
-        self.assertIn("softened.a = softAlpha", soft_policy)
-        self.assertIn("renderer.color = softened", soft_policy)
-        self.assertIn("baseline.LastPolicyEnabled = renderer.enabled", soft_policy)
-        self.assertIn("baseline.LastPolicyColor = renderer.color", soft_policy)
-        self.assertIn("baseline.PolicyActive = true", soft_policy)
-
-        off_policy = tick[off_start:vanilla_start]
-        self.assertIn("renderer.enabled = false", off_policy)
-        self.assertNotIn("renderer.color =", off_policy)
-        self.assertIn("baseline.LastPolicyEnabled = renderer.enabled", off_policy)
-        self.assertIn("baseline.LastPolicyColor = renderer.color", off_policy)
-        self.assertIn("baseline.PolicyActive = true", off_policy)
-
-        vanilla_policy = tick[vanilla_start:writeback]
-        self.assertRegex(
-            " ".join(vanilla_policy.split()),
-            r"case\s+HollowKnightFlashMode\.Vanilla\s*:\s*default\s*:\s*"
-            r"if\s*\(\s*baseline\.PolicyActive\s*\)\s*\{\s*"
-            r"renderer\.enabled\s*=\s*baseline\.GameEnabled\s*;\s*"
-            r"renderer\.color\s*=\s*baseline\.GameColor\s*;\s*"
-            r"baseline\.PolicyActive\s*=\s*false\s*;\s*\}\s*break\s*;",
-        )
-        self.assertNotRegex(pre_dispatch, r"renderer\.(?:enabled|color)\s*=")
-
-    def test_lifeblood_flash_prunes_destroyed_keys_and_restores_survivors(self):
-        self.assertTrue(FLASH_POLICY.is_file(), "missing process-owned flash policy")
+    def test_lifeblood_flash_bindings_prune_rebind_release_and_dispose(self):
         policy = strip_csharp_comments(read(FLASH_POLICY))
-        tick = method_body(
+        prune = method_body(policy, r"void\s+PruneDestroyedRenderers\s*\(\s*\)")
+        rebind = method_body(
             policy,
-            r"void\s+Tick\s*\(\s*HollowKnightFlashMode\?\s+desiredMode\s*,\s*float\s+softAlpha\s*\)",
+            r"void\s+RebindCamera\s*\(\s*Transform\s+camera\s*\)",
         )
-        restore = method_body(policy, r"void\s+Restore\s*\(\s*\)")
+        release = method_body(policy, r"void\s+Release\s*\(\s*\)")
         dispose = method_body(policy, r"void\s+Dispose\s*\(\s*\)")
-        self.assertTrue(tick, "missing process flash Tick")
-        self.assertTrue(restore, "missing process flash Restore")
+        self.assertTrue(prune, "missing destroyed-renderer pruning")
+        self.assertTrue(rebind, "missing camera rebinding")
+        self.assertTrue(release, "missing process ownership release")
         self.assertTrue(dispose, "missing process flash Dispose")
-
-        prune_clear = tick.index("_dead.Clear()")
-        enumerate_keys = tick.index("foreach (var renderer in _baselines.Keys)")
-        collect_dead = tick.index("_dead.Add(renderer)", enumerate_keys)
-        remove_dead = tick.index("_baselines.Remove(_dead[i])", collect_dead)
-        self.assertLess(prune_clear, enumerate_keys)
-        self.assertLess(enumerate_keys, collect_dead)
-        self.assertLess(collect_dead, remove_dead)
-        self.assertIn("if (renderer == null)", tick[enumerate_keys:remove_dead])
-
-        loop = restore.index("foreach (var pair in _baselines)")
-        renderer = restore.index("var renderer = pair.Key", loop)
-        baseline = restore.index("var baseline = pair.Value", renderer)
-        surviving = restore.index("if (renderer == null) continue", baseline)
-        reconcile = restore.index(
-            "ReconcileLifebloodFlashState(renderer, ref baseline)", surviving
-        )
-        enabled = restore.index("renderer.enabled = baseline.GameEnabled", reconcile)
-        color = restore.index("renderer.color = baseline.GameColor", enabled)
-        clear_baselines = restore.index("_baselines.Clear()", color)
-        clear_scratch = restore.index("_dead.Clear()", clear_baselines)
-        self.assertLess(loop, renderer)
-        self.assertLess(renderer, baseline)
-        self.assertLess(baseline, surviving)
-        self.assertLess(surviving, reconcile)
-        self.assertLess(reconcile, enabled)
-        self.assertLess(enabled, color)
-        self.assertLess(color, clear_baselines)
-        self.assertLess(clear_baselines, clear_scratch)
+        self.assertIn("if (renderer == null)", prune)
+        self.assertIn("_trackers.Remove(_dead[i])", prune)
+        self.assertIn("if (ReferenceEquals(camera, _tk2dCamera)) return", rebind)
+        self.assertIn("ReleaseTrackedRenderers()", rebind)
+        self.assertIn("_tk2dCamera = camera", rebind)
+        self.assertIn("ReleaseTrackedRenderers()", release)
+        self.assertIn("_tk2dCamera = null", release)
         self.assertIn("if (_disposed) return", dispose)
-        self.assertIn("Restore()", dispose)
+        self.assertIn("Release()", dispose)
 
     def test_lifeblood_flash_policy_is_process_owned_and_runtime_disposed(self):
         self.assertTrue(FLASH_POLICY.is_file(), "missing process-owned flash policy")
@@ -864,12 +769,15 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
 
         update = method_body(runtime, r"void\s+Update\s*\(\s*\)")
         session_tick = update.index("session.Tick()")
-        resolve = update.index("HollowKnightFlashModeResolver.Resolve(", session_tick)
-        policy_tick = update.index("policy.Tick(", resolve)
+        self.assertIn("HollowKnightFlashDecisionResolver.Resolve(", update)
+        resolve = update.index("HollowKnightFlashDecisionResolver.Resolve(", session_tick)
+        self.assertIn("policy.Tick(decision)", update)
+        policy_tick = update.index("policy.Tick(decision)", resolve)
         self.assertLess(session_tick, resolve)
         self.assertLess(resolve, policy_tick)
         self.assertIn('session.Controller.Value("lifeblood_flash")', update)
         self.assertIn("global::HkStageHooks.LegacyFlashMode", update)
+        self.assertIn("global::HkStageHooks.LegacyFlashAlpha", update)
 
         destroy = method_body(runtime, r"void\s+OnDestroy\s*\(\s*\)")
         session_dispose = destroy.index("session.Dispose()")

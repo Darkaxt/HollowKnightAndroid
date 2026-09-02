@@ -69,14 +69,13 @@ namespace DualSouls.Mods.HollowKnight
             string controllerValue = masterEnabled
                 ? session.Controller.Value("lifeblood_flash")
                 : null;
-            HollowKnightFlashMode? desiredMode = HollowKnightFlashModeResolver.Resolve(
+            HollowKnightFlashDecision decision = HollowKnightFlashDecisionResolver.Resolve(
                 sessionReady,
                 masterEnabled,
                 controllerValue,
-                global::HkStageHooks.LegacyFlashMode);
-            float softAlpha = global::HkStageHooks.LegacyFlashAlpha ??
-                              HollowKnightLifebloodFlashPolicy.DefaultSoftAlpha;
-            policy.Tick(desiredMode, softAlpha);
+                global::HkStageHooks.LegacyFlashMode,
+                global::HkStageHooks.LegacyFlashAlpha);
+            policy.Tick(decision);
         }
 
         void OnDestroy()

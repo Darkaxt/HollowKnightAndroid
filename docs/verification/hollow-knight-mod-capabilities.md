@@ -6,19 +6,19 @@ The paired [managed API audit](hollow-knight-mod-managed-api-audit.md) preserves
 
 ## H3 host checkpoint
 
-H3 remains **HOST-COMPLETE / TRACKED-DEFERRALS** at the bounded host gate. The original implementation boundary ran through `3cc321b`; the final integration correction, `ba32812`, is the process-owned lifeblood-policy checkpoint. Its pure resolver keeps master `soft`/`vanilla`/`off` authoritative without a live display reference, and only process-runtime disposal restores tracked renderers.
+H3 remains **HOST-COMPLETE / TRACKED-DEFERRALS** at the bounded host gate. The earlier process-owned policy boundary was `ba32812`; the current authority/state-core checkpoint is `fix: unify Hollow Knight flash authority`. Its immutable decision keeps master `soft`/`vanilla`/`off` and the process Soft alpha independent of live display config. Executable host tests now own the per-renderer transition and final reconciliation behavior.
 
 Fresh host evidence at that boundary:
 
-- Focused Mods tests: 75 passed, 0 failed, 0 skipped.
-- Complete shared suite: 129 passed, 0 failed, 0 skipped.
-- Hollow Knight reference/source contracts: 47 passed.
-- Exact Hollow Knight `1.5.12620` compile: 0 errors, 1 pre-existing `CS0649` warning, 2 entry points, 267,776-byte DLL.
+- Focused Mods/state-core tests: 89 passed, 0 failed, 0 skipped.
+- Complete shared suite: 143 passed, 0 failed, 0 skipped.
+- Hollow Knight reference/source contracts: 47 passed; combined source/docs contracts: 53 passed.
+- Exact Hollow Knight `1.5.12620` compile: 0 errors, 1 pre-existing `CS0649` warning, 2 entry points, 271,360-byte DLL.
 - Exact Silksong compile: 53 sources, 10 entry points.
 - Production scan for `DllImport`, `ReadProcessMemory`, `WriteProcessMemory`, `HKTW_`, `HKTweaks`, `HKModsMenu`, and `Bottom.Tweaks`: no matches.
 - Final Git diff/status clean and branch synchronized with the fork at checkpoint publication.
 
-The host-complete scope is the Hollow Knight capability catalog, controller, process runtime, and existing-layout modal. The reversible **Companion backdrop** (`dimmed`/`black`) and **Lifeblood flash** (`soft`/`vanilla`/`off`) capabilities are available presentation catalog rows outside `HKMOD-001` through `HKMOD-018`. Lifeblood renderer discovery, enforcement, and restoration are process-runtime-owned; `HKDualScreen` only publishes and clears its nullable live H2 fallback. Display or presenter teardown cannot restore/dispose the process policy. These capabilities do not promote any row below.
+The host-complete scope is the Hollow Knight capability catalog, controller, process runtime, and existing-layout modal. The reversible **Companion backdrop** (`dimmed`/`black`) and **Lifeblood flash** (`soft`/`vanilla`/`off`) capabilities are available presentation catalog rows outside `HKMOD-001` through `HKMOD-018`. Lifeblood renderer discovery, enforcement, and restoration are process-policy-owned. That policy restores tracked state on ownership release/master-off, transition to Vanilla as needed, camera replacement, or runtime disposal. `HKDualScreen` only publishes and clears its nullable live H2 fallback; direct-display or presenter teardown cannot restore/dispose the process policy. These capabilities do not promote any row below.
 
 Every `HKMOD-001` through `HKMOD-018` row remains **DEFERRED**, visible but disabled, with target **Final managed-rewrite remediation** and its existing acceptance condition unchanged. **HOST-COMPLETE / TRACKED-DEFERRALS** therefore does not mean full Mods parity or completed gameplay Mods effects, and `Pending host evidence` is not replaced merely because the scaffolding is green.
 

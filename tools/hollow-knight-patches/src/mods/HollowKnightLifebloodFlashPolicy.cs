@@ -7,44 +7,27 @@ namespace DualSouls.Mods.HollowKnight
 {
     internal sealed class HollowKnightLifebloodFlashPolicy : IDisposable
     {
-        internal const float DefaultSoftAlpha = 0.35f;
+        const string CameraPath = "_GameCameras/CameraParent/tk2dCamera";
+        const int CameraProbeInterval = 30;
 
-        struct FlashBaseline
-        {
-            public bool GameEnabled;
-            public Color GameColor;
-            public bool PolicyActive;
-            public bool LastPolicyEnabled;
-            public Color LastPolicyColor;
-        }
-
-        readonly Dictionary<SpriteRenderer, FlashBaseline> _baselines =
-            new Dictionary<SpriteRenderer, FlashBaseline>();
+        readonly Dictionary<SpriteRenderer, HollowKnightFlashStateTracker> _trackers =
+            new Dictionary<SpriteRenderer, HollowKnightFlashStateTracker>();
         readonly List<SpriteRenderer> _dead = new List<SpriteRenderer>();
         Transform _tk2dCamera;
+        int _cameraProbeCountdown;
         bool _disposed;
 
-        internal void Tick(HollowKnightFlashMode? desiredMode, float softAlpha)
+        internal void Tick(HollowKnightFlashDecision decision)
         {
             if (_disposed) return;
-            if (!desiredMode.HasValue)
+            if (!decision.HasOwner)
             {
-                Restore();
+                Release();
                 return;
             }
 
-            _dead.Clear();
-            foreach (var renderer in _baselines.Keys)
-                if (renderer == null) _dead.Add(renderer);
-            for (int i = 0; i < _dead.Count; i++)
-                _baselines.Remove(_dead[i]);
-            _dead.Clear();
-
-            if (_tk2dCamera == null)
-            {
-                var camera = GameObject.Find("_GameCameras/CameraParent/tk2dCamera");
-                if (camera != null) _tk2dCamera = camera.transform;
-            }
+            PruneDestroyedRenderers();
+            ResolveCameraBinding();
             if (_tk2dCamera == null) return;
 
             for (int i = 0; i < _tk2dCamera.childCount; i++)
@@ -54,90 +37,95 @@ namespace DualSouls.Mods.HollowKnight
                 var renderer = child.GetComponent<SpriteRenderer>();
                 if (renderer == null) continue;
 
-                FlashBaseline baseline;
-                if (!_baselines.TryGetValue(renderer, out baseline))
+                HollowKnightFlashSample live = Sample(renderer);
+                HollowKnightFlashStateTracker tracker;
+                if (!_trackers.TryGetValue(renderer, out tracker))
                 {
-                    baseline = new FlashBaseline();
-                    _baselines.Add(renderer, baseline);
+                    tracker = new HollowKnightFlashStateTracker(live);
+                    _trackers.Add(renderer, tracker);
                 }
-                Color livePolicyColor = renderer.color;
-                ReconcileLifebloodFlashState(renderer, ref baseline);
-
-                switch (desiredMode.Value)
-                {
-                    case HollowKnightFlashMode.Soft:
-                        Color softened = baseline.GameColor;
-                        if (baseline.PolicyActive && livePolicyColor.a < softened.a)
-                            softened.a = livePolicyColor.a;
-                        if (softAlpha <= 0f) softened.a = 0f;
-                        else if (softened.a > softAlpha) softened.a = softAlpha;
-                        renderer.enabled = baseline.GameEnabled;
-                        renderer.color = softened;
-                        baseline.LastPolicyEnabled = renderer.enabled;
-                        baseline.LastPolicyColor = renderer.color;
-                        baseline.PolicyActive = true;
-                        break;
-                    case HollowKnightFlashMode.Off:
-                        renderer.enabled = false;
-                        baseline.LastPolicyEnabled = renderer.enabled;
-                        baseline.LastPolicyColor = renderer.color;
-                        baseline.PolicyActive = true;
-                        break;
-                    case HollowKnightFlashMode.Vanilla:
-                    default:
-                        if (baseline.PolicyActive)
-                        {
-                            renderer.enabled = baseline.GameEnabled;
-                            renderer.color = baseline.GameColor;
-                            baseline.PolicyActive = false;
-                        }
-                        break;
-                }
-                _baselines[renderer] = baseline;
+                HollowKnightFlashTransition transition = tracker.Apply(live, decision);
+                ApplyTransition(renderer, transition);
             }
         }
 
-        static void ReconcileLifebloodFlashState(
-            SpriteRenderer renderer,
-            ref FlashBaseline baseline)
+        void ResolveCameraBinding()
         {
-            bool liveEnabled = renderer.enabled;
-            Color liveColor = renderer.color;
-            if (!baseline.PolicyActive)
-            {
-                baseline.GameEnabled = liveEnabled;
-                baseline.GameColor = liveColor;
-            }
-            else
-            {
-                if (liveEnabled != baseline.LastPolicyEnabled)
-                    baseline.GameEnabled = liveEnabled;
-                if (liveColor != baseline.LastPolicyColor)
-                    baseline.GameColor = liveColor;
-            }
+            if (_tk2dCamera != null && --_cameraProbeCountdown > 0) return;
+
+            _cameraProbeCountdown = CameraProbeInterval;
+            var cameraObject = GameObject.Find(CameraPath);
+            Transform camera = cameraObject != null ? cameraObject.transform : null;
+            if (camera != null || _tk2dCamera == null) RebindCamera(camera);
         }
 
-        internal void Restore()
+        void RebindCamera(Transform camera)
+        {
+            if (ReferenceEquals(camera, _tk2dCamera)) return;
+            ReleaseTrackedRenderers();
+            _tk2dCamera = camera;
+        }
+
+        void PruneDestroyedRenderers()
+        {
+            _dead.Clear();
+            foreach (var renderer in _trackers.Keys)
+                if (renderer == null) _dead.Add(renderer);
+            for (int i = 0; i < _dead.Count; i++)
+                _trackers.Remove(_dead[i]);
+            _dead.Clear();
+        }
+
+        internal void Release()
         {
             if (_disposed) return;
-            foreach (var pair in _baselines)
+            ReleaseTrackedRenderers();
+            _tk2dCamera = null;
+            _cameraProbeCountdown = 0;
+        }
+
+        void ReleaseTrackedRenderers()
+        {
+            foreach (var pair in _trackers)
             {
                 var renderer = pair.Key;
-                var baseline = pair.Value;
+                var tracker = pair.Value;
                 if (renderer == null) continue;
-                ReconcileLifebloodFlashState(renderer, ref baseline);
-                renderer.enabled = baseline.GameEnabled;
-                renderer.color = baseline.GameColor;
+                HollowKnightFlashSample live = Sample(renderer);
+                HollowKnightFlashTransition transition = tracker.Release(live);
+                ApplyTransition(renderer, transition);
             }
-            _baselines.Clear();
+            _trackers.Clear();
             _dead.Clear();
-            _tk2dCamera = null;
+        }
+
+        static HollowKnightFlashSample Sample(SpriteRenderer renderer)
+        {
+            Color color = renderer.color;
+            return new HollowKnightFlashSample(
+                renderer.enabled,
+                new HollowKnightFlashRgba(color.r, color.g, color.b, color.a));
+        }
+
+        static void ApplyTransition(
+            SpriteRenderer renderer,
+            HollowKnightFlashTransition transition)
+        {
+            if (transition.WriteEnabled)
+                renderer.enabled = transition.Sample.Enabled;
+            if (transition.WriteColor)
+                renderer.color = ToUnityColor(transition.Sample.Color);
+        }
+
+        static Color ToUnityColor(HollowKnightFlashRgba color)
+        {
+            return new Color(color.R, color.G, color.B, color.A);
         }
 
         public void Dispose()
         {
             if (_disposed) return;
-            Restore();
+            Release();
             _disposed = true;
         }
     }
