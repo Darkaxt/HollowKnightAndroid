@@ -39,7 +39,12 @@ import kotlinx.coroutines.flow.flowOn
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.IOException
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption.ATOMIC_MOVE
+import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.security.MessageDigest
+import java.util.Properties
 import java.util.zip.ZipInputStream
 
 object PackageCompiler {
@@ -108,7 +113,129 @@ object PackageCompiler {
     /** Where the compiled overrides go, for Il2cppConverter to prefer. */
     fun outputDir(root: File): File = File(root, "packages")
 
-    fun isPresent(root: File): Boolean = File(outputDir(root), ASSEMBLY).length() > 0
+    const val ASSEMBLY_MANIFEST = "dualsouls-package-assemblies-v1.properties"
+
+    private fun requiredAssemblyNames(profile: GameProfile): List<String> = buildList {
+        add(ASSEMBLY)
+        add(patchAssemblyName(profile))
+        addAll(SHIMS.map { "${it.first}.dll" })
+        if (requiresSaveIo(profile)) add(IO)
+    }.sorted()
+
+    /** Seals the exact profile-qualified package outputs consumed by conversion. */
+    fun publishAssemblyManifest(
+        profile: GameProfile,
+        unity: File,
+        depot: File,
+        root: File,
+    ): File {
+        require(GameProfiles.find(profile.id) == profile) {
+            "Package manifests require an exact registered profile: ${profile.id}"
+        }
+        val packages = outputDir(root)
+        val selectedPatch = patchAssemblyName(profile)
+        val oppositePatch = setOf("HollowKnightPatches.dll", "SilksongPatches.dll") - selectedPatch
+        val unexpected = oppositePatch.firstOrNull { File(packages, it).exists() }
+        if (unexpected != null) throw IOException("opposite-profile package assembly is present: $unexpected")
+
+        val bcl = File(unity, "editor/Editor/Data/MonoBleedingEdge/lib/mono/unityaot-linux/mscorlib.dll")
+        val core = File(unity, "android/Variations/il2cpp/Managed/UnityEngine.CoreModule.dll")
+        val game = PlayerImage.depotData(depot)?.let { File(it, "Managed/Assembly-CSharp.dll") }
+            ?: throw IOException("the selected depot has no managed game assembly")
+        for (authority in listOf(bcl, core, game)) {
+            if (!authority.isFile || authority.length() <= 0) {
+                throw IOException("package manifest authority is missing: $authority")
+            }
+        }
+
+        val required = requiredAssemblyNames(profile).associateWith { name ->
+            File(packages, name).also { assembly ->
+                if (!assembly.isFile || assembly.length() <= 0) {
+                    throw IOException("required package assembly is missing: $name")
+                }
+            }
+        }
+        val values = Properties().apply {
+            setProperty("schema", "1")
+            setProperty("profile", profile.id)
+            setProperty("unityVersion", profile.unityVersion)
+            setProperty("roslynVersion", ROSLYN_VERSION)
+            setProperty("steamDepotId", profile.steamDepotId.toString())
+            setProperty("gameVersion", profile.currentGameVersion)
+            setProperty("unityMscorlibSha256", digestFile(bcl))
+            setProperty("androidCoreModuleSha256", digestFile(core))
+            setProperty("depotAssemblySha256", digestFile(game))
+            for ((name, assembly) in required) setProperty("assembly.$name", digestFile(assembly))
+        }
+        packages.mkdirs()
+        val manifest = File(packages, ASSEMBLY_MANIFEST)
+        val part = File(packages, "$ASSEMBLY_MANIFEST.part")
+        if (part.exists() && !part.delete()) throw IOException("could not clear interrupted package manifest")
+        part.writer(Charsets.UTF_8).use { values.store(it, null) }
+        try {
+            Files.move(part.toPath(), manifest.toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(part.toPath(), manifest.toPath(), REPLACE_EXISTING)
+        }
+        if (!manifest.isFile || part.exists()) throw IOException("could not publish package assembly manifest")
+        return manifest
+    }
+
+    private fun digestFile(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(1 shl 16)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                if (count > 0) digest.update(buffer, 0, count)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    fun isPresent(profile: GameProfile, unity: File, depot: File, root: File): Boolean = runCatching {
+        if (GameProfiles.find(profile.id) != profile) return@runCatching false
+        val packages = outputDir(root)
+        val manifest = File(packages, ASSEMBLY_MANIFEST)
+        if (!manifest.isFile || manifest.length() > 64 * 1024) return@runCatching false
+        val values = Properties().apply { manifest.reader(Charsets.UTF_8).use(::load) }
+        if (values.getProperty("schema") != "1" ||
+            values.getProperty("profile") != profile.id ||
+            values.getProperty("unityVersion") != profile.unityVersion ||
+            values.getProperty("roslynVersion") != ROSLYN_VERSION ||
+            values.getProperty("steamDepotId") != profile.steamDepotId.toString() ||
+            values.getProperty("gameVersion") != profile.currentGameVersion
+        ) {
+            return@runCatching false
+        }
+        val bcl = File(unity, "editor/Editor/Data/MonoBleedingEdge/lib/mono/unityaot-linux/mscorlib.dll")
+        val core = File(unity, "android/Variations/il2cpp/Managed/UnityEngine.CoreModule.dll")
+        val game = PlayerImage.depotData(depot)?.let { File(it, "Managed/Assembly-CSharp.dll") }
+            ?: return@runCatching false
+        val authorities = mapOf(
+            "unityMscorlibSha256" to bcl,
+            "androidCoreModuleSha256" to core,
+            "depotAssemblySha256" to game,
+        )
+        if (authorities.any { (key, file) ->
+                !file.isFile || values.getProperty(key) != digestFile(file)
+            }
+        ) {
+            return@runCatching false
+        }
+        val oppositePatch = when (profile.id) {
+            "hollow-knight" -> "SilksongPatches.dll"
+            "silksong" -> "HollowKnightPatches.dll"
+            else -> return@runCatching false
+        }
+        if (File(packages, oppositePatch).exists()) return@runCatching false
+        requiredAssemblyNames(profile).all { name ->
+            val assembly = File(packages, name)
+            assembly.isFile && assembly.length() > 0 &&
+                values.getProperty("assembly.$name") == digestFile(assembly)
+        }
+    }.getOrDefault(false)
 
     // ── the patches ────────────────────────────────────────────────────────
 

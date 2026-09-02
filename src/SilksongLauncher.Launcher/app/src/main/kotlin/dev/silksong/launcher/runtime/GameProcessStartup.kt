@@ -24,6 +24,7 @@ data class GameProcessStartupSnapshot(
     val dataArchive: String,
     val unityRoot: String,
     val playerDexJar: String,
+    val modStateDir: String,
 )
 
 object ProcessRole {
@@ -113,6 +114,7 @@ object GameProcessStartup {
             dataArchive = File(packageDir, "data.apk").canonicalPath,
             unityRoot = unityRoot.path,
             playerDexJar = playerDex.canonicalPath,
+            modStateDir = paths.modStateRoot.canonicalPath,
         )
     }
 
@@ -124,6 +126,9 @@ object GameProcessStartup {
             "Game intent profile $profileId does not match process startup profile ${startup.profileId}"
         }
     }
+
+    @JvmStatic
+    fun requireModStatePath(): String = requireSnapshot().modStateDir
 
     @JvmStatic
     fun requireSnapshot(): GameProcessStartupSnapshot =

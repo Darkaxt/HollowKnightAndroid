@@ -41,6 +41,7 @@ class ProfileBuildPaths(
     val depotStaging: File = external("depot-staging")
     val downloadDepot: File = external("depot")
     val contentPointer: File = external("content-path.txt")
+    val modStateRoot: File = external("mods")
 
     private fun internal(name: String): File =
         contained(internalRoot.resolve(name), internalRoot).toFile()

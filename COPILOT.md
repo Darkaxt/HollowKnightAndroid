@@ -140,15 +140,32 @@ BepInEx 5 plugins are woven into the game at build time, not loaded at runtime
 - `tools/bepinex-shim/src/` — our `BepInEx.dll` and `0Harmony.dll`, compiled on
   the device like the patches. `Harmony.PatchAll` is a no-op; logging, config
   and `AccessTools` are real.
-- `Mods.kt` — the folder (`<external files>/mods`), the enable/disable list,
-  and a content stamp so an unchanged folder skips the rebuild. The stamp
-  covers what is IN the folder, not what is switched on: every plugin is woven
-  and each of its calls is wrapped in a gate field (`<ModGate>.Enabled`) that
-  the chainloader opens at startup. So adding or replacing a file is a
-  rebuild; a toggle is a line in `mods/disabled-assemblies.txt`.
+- `Mods.kt` — shared DLL discovery (`<external files>/mods`), exact-profile
+  config/disabled/gate state (`<external files>/profiles/<id>/mods`), candidate
+  conversion records, and immutable generation metadata. Published status and
+  gates come only from `GenerationPublisher.current()`. The content stamp covers
+  what is IN the shared folder, not what is switched on: every plugin is woven
+  and each call is wrapped in `<ModGate>.Enabled`. Adding or replacing a DLL is
+  a rebuild; a profile toggle becomes a gate immediately before its next launch.
 
 Transpilers, runtime-computed targets and `Reflection.Emit` cannot work. The
 weaver says so per plugin before the native compile starts.
+
+So does a shape that does not match. A published plugin was compiled against
+the real BepInEx, so the shims have to agree with it down to the signature: a
+field where BepInEx has a property, or `object` where it has a type, is a
+member the plugin cannot resolve, and il2cpp is what discovers that. To ask in
+five seconds instead:
+
+```sh
+make mod-check PLUGIN=path/to/Plugin.dll DEPOT=path/to/the/profile/Managed
+```
+
+It compiles both shims against the selected profile's depot, stages them beside
+that game's assemblies and runs the real weaver over the plugin, printing the
+report the launcher would show. Omit `DEPOT` to use the script's Silksong depot
+discovery. It found five such mismatches when Configuration Manager was first
+tried.
 
 ### Check before you build
 

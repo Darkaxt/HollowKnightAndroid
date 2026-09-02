@@ -17,6 +17,8 @@ import org.junit.runner.RunWith
 import org.json.JSONObject
 import org.robolectric.RobolectricTestRunner
 import java.io.File
+import java.security.MessageDigest
+import java.util.Properties
 import java.util.zip.ZipFile
 
 @RunWith(RobolectricTestRunner::class)
@@ -44,6 +46,56 @@ class HollowKnightBuildPlanTest {
     }
 
     @Test
+    fun `production package manifest binds profile toolchain depot and assembly digests`() {
+        val root = temp.newFolder("package-manifest-root")
+        val unity = temp.newFolder("package-manifest-unity")
+        val bcl = File(unity, "editor/Editor/Data/MonoBleedingEdge/lib/mono/unityaot-linux/mscorlib.dll")
+            .apply { requireNotNull(parentFile).mkdirs(); writeText("bcl") }
+        val core = File(unity, "android/Variations/il2cpp/Managed/UnityEngine.CoreModule.dll")
+            .apply { requireNotNull(parentFile).mkdirs(); writeText("core") }
+        val depot = temp.newFolder("package-manifest-depot")
+        val data = File(depot, "hollow_knight_Data").apply { mkdirs() }
+        File(data, "globalgamemanagers").writeText("player")
+        val game = File(data, "Managed/Assembly-CSharp.dll")
+            .apply { requireNotNull(parentFile).mkdirs(); writeText("game") }
+        for (name in listOf(
+            "Unity.InputSystem.dll",
+            "HollowKnightPatches.dll",
+            "0Harmony.dll",
+            "BepInEx.dll",
+        )) {
+            File(PackageCompiler.outputDir(root), name).apply {
+                requireNotNull(parentFile).mkdirs()
+                writeText(name)
+            }
+        }
+
+        val manifest = PackageCompiler.publishAssemblyManifest(hollowKnight, unity, depot, root)
+        val values = Properties().apply { manifest.reader().use(::load) }
+
+        assertEquals("1", values.getProperty("schema"))
+        assertEquals(hollowKnight.id, values.getProperty("profile"))
+        assertEquals(hollowKnight.unityVersion, values.getProperty("unityVersion"))
+        assertEquals("4.12.0", values.getProperty("roslynVersion"))
+        assertEquals(hollowKnight.steamDepotId.toString(), values.getProperty("steamDepotId"))
+        assertEquals(hollowKnight.currentGameVersion, values.getProperty("gameVersion"))
+        assertEquals(sha256(bcl), values.getProperty("unityMscorlibSha256"))
+        assertEquals(sha256(core), values.getProperty("androidCoreModuleSha256"))
+        assertEquals(sha256(game), values.getProperty("depotAssemblySha256"))
+        assertEquals(
+            sha256(File(PackageCompiler.outputDir(root), "HollowKnightPatches.dll")),
+            values.getProperty("assembly.HollowKnightPatches.dll"),
+        )
+        assertFalse(values.containsKey("assembly.SilksongPatches.dll"))
+        assertFalse(File(manifest.parentFile, "${manifest.name}.part").exists())
+        assertTrue(PackageCompiler.isPresent(hollowKnight, unity, depot, root))
+
+        File(PackageCompiler.outputDir(root), "Unity.InputSystem.dll").writeText("stale")
+        assertFalse(PackageCompiler.isPresent(hollowKnight, unity, depot, root))
+        assertFalse(PackageCompiler.isPresent(silksong, unity, depot, root))
+    }
+
+    @Test
     fun `classic conversion reads its source without requiring in-place writes`() {
         assertFalse(DepotLocation.requiresWritableContent(hollowKnight))
         assertTrue(DepotLocation.requiresWritableContent(silksong))
@@ -63,6 +115,19 @@ class HollowKnightBuildPlanTest {
 
         Il2cppConverter.markComplete(root)
         assertTrue(Il2cppConverter.isPresent(root))
+        assertTrue(Il2cppConverter.isComplete(root))
+
+        val unexpected = File(Il2cppConverter.cppDir(root), "unexpected.cpp").apply {
+            writeText("// tree changed after completion")
+        }
+        assertFalse(Il2cppConverter.isPresent(root))
+        assertTrue(unexpected.delete())
+        assertTrue(Il2cppConverter.isPresent(root))
+
+        Il2cppConverter.metadata(root).writeBytes(byteArrayOf(1, 2))
+        assertFalse(Il2cppConverter.isComplete(root))
+        Il2cppConverter.metadata(root).writeBytes(byteArrayOf(1))
+        assertTrue(Il2cppConverter.isComplete(root))
 
         Il2cppConverter.invalidateCompletion(root)
         File(Il2cppConverter.cppDir(root), "partial.cpp").writeText("// overwritten partial tree")
@@ -230,4 +295,8 @@ class HollowKnightBuildPlanTest {
             assertFalse(path, PlayerImage.isFirstSceneResource(path))
         }
     }
+
+    private fun sha256(file: File): String =
+        MessageDigest.getInstance("SHA-256").digest(file.readBytes())
+            .joinToString("") { "%02x".format(it) }
 }

@@ -16,13 +16,51 @@ namespace BepInEx
     {
         public string GUID { get; protected set; }
         public string Name { get; protected set; }
-        public string Version { get; protected set; }
+
+        /// <summary>
+        /// A System.Version, as in BepInEx, though it is written as a string
+        /// in the attribute. A plugin that prints its own version -- or lists
+        /// everyone else's, as a settings UI does -- reads it as this type,
+        /// and a string here is a member such a plugin cannot resolve.
+        /// </summary>
+        public Version Version { get; protected set; }
 
         public BepInPlugin(string GUID, string Name, string Version)
         {
             this.GUID = GUID;
             this.Name = Name;
-            this.Version = Version;
+            this.Version = ParseVersion(Version);
+        }
+
+        /// <summary>
+        /// Never throws, and keeps the shape it was given: "2.0.4" is a
+        /// three-part version, not 2.0.4.0. Mod versions in the wild are
+        /// "1.0", "2.0.4", "1.2.3.4.5" and "v1.0-beta", and a plugin that
+        /// cannot be described is worse than one described as 0.0.
+        /// </summary>
+        static Version ParseVersion(string text)
+        {
+            var parts = (text ?? "").Trim().TrimStart('v', 'V').Split('.');
+            var numbers = new int[4];
+            var used = 0;
+            foreach (var part in parts)
+            {
+                if (used == 4) break;
+                var digits = 0;
+                while (digits < part.Length && part[digits] >= '0' && part[digits] <= '9') digits++;
+                if (digits == 0) break;
+                int value;
+                if (!int.TryParse(part.Substring(0, digits), out value)) break;
+                numbers[used++] = value;
+                // "1.0-beta" ends the version at the part that stopped being
+                // a number, rather than throwing the whole thing away.
+                if (digits != part.Length) break;
+            }
+            if (used == 0) return new Version(0, 0);
+            if (used == 1) return new Version(numbers[0], 0);
+            if (used == 2) return new Version(numbers[0], numbers[1]);
+            if (used == 3) return new Version(numbers[0], numbers[1], numbers[2]);
+            return new Version(numbers[0], numbers[1], numbers[2], numbers[3]);
         }
     }
 
@@ -93,7 +131,13 @@ namespace BepInEx
     {
         public BepInPlugin Metadata { get; internal set; }
         public string Location { get; internal set; }
-        public object Instance { get; internal set; }
+
+        /// <summary>
+        /// The running plugin. Typed, not object: a plugin compiled against
+        /// BepInEx calls this expecting a BaseUnityPlugin back, and a
+        /// signature that does not match is a member it cannot resolve.
+        /// </summary>
+        public BaseUnityPlugin Instance { get; internal set; }
         public Version TargettedBepInExVersion { get; internal set; }
 
         internal PluginInfo(BepInPlugin metadata, string location)

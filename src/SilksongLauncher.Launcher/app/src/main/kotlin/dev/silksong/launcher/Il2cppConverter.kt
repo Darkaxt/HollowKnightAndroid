@@ -102,10 +102,64 @@ object Il2cppConverter {
      */
     private const val DEFAULT_SOURCES = 1148
 
-    fun isPresent(root: File): Boolean =
+    /**
+     * Proof that a conversion ran all the way to the end.
+     *
+     * [isPresent] used to ask only whether global-metadata.dat and some .cpp
+     * existed, and a conversion killed near the end satisfies both -- the
+     * metadata lands before the last of eleven hundred sources do. So an
+     * interrupted run was inherited by the next build as finished work: the
+     * conversion was skipped, the compile took whatever partial tree was on
+     * disk, and the link accepted it because it allows undefined symbols. The
+     * result was a libil2cpp.so nine megabytes short of the real one, twelve
+     * minutes later, which the engine reported at launch as
+     *
+     *   dlopen failed: library "libil2cpp.so" not found
+     *
+     * -- naming neither the file it did find nor anything that happened here.
+     *
+     * That is not a rare shape. The conversion is three and a half minutes of
+     * a memory-hungry .NET process, and a device that reclaims the app during
+     * it drops the user back on a launcher with a Play button, because the
+     * build screen has already finished itself and only the launcher is
+     * restored. The recovery that worked was "Reset build", which is a thing
+     * somebody has to know to do.
+     *
+     * Written last and deleted first, so it never outlives the output it
+     * describes. Same reasoning as SetupActivity's .built marker and
+     * NativeBuild's .stamp, one layer down.
+     */
+    private fun signatureMarker(root: File) = File(root, "cpp.done")
+
+    /**
+     * What a finished conversion looks like, as a string.
+     *
+     * The source count and the metadata's size rather than a bare "yes":
+     * those also notice a tree that has been pruned, or a metadata file
+     * replaced, since the run that wrote this.
+     */
+    private fun completionSignature(root: File): String =
+        "${cppDir(root).list()?.size ?: 0}:${metadata(root).length()}"
+
+    private fun hasCompletionSignature(root: File): Boolean =
+        runCatching { signatureMarker(root).readText().trim() }.getOrNull() ==
+            completionSignature(root)
+
+    /**
+     * Whether the conversion on disk is one that finished and is still intact.
+     *
+     * A build made before both markers existed does not carry them and converts
+     * again, once. That costs about four minutes -- the compile that follows is
+     * incremental and re-generated C++ is byte-identical, so almost nothing is
+     * rebuilt -- and it is the direction to be wrong in.
+     */
+    fun isComplete(root: File): Boolean =
         runCatching { completionMarker(root).readText().trim() }.getOrNull() == COMPLETE &&
+            hasCompletionSignature(root) &&
             metadata(root).length() > 0 &&
             cppDir(root).listFiles()?.any { it.name.endsWith(".cpp") } == true
+
+    fun isPresent(root: File): Boolean = isComplete(root)
 
     /**
      * Whether the conversion is older than what it was made from.
@@ -133,6 +187,7 @@ object Il2cppConverter {
         mods: File? = null,
         assets: android.content.res.AssetManager? = null,
     ): Boolean {
+        if (mods != null && !Mods.candidateMetadataPresent(root)) return true
         if (mods != null && Mods.isStale(mods, root, assets)) return true
         val ours = buildList {
             add(PackageCompiler.patchAssembly(profile, root))
@@ -228,13 +283,20 @@ object Il2cppConverter {
         // on is decided at startup by the gate each weave is wrapped in, so a
         // toggle costs nothing and only adding or removing a file is a
         // rebuild. See Mods.gates.
-        if (mods != null && assets != null) {
-            val plugins = Mods.all(mods)
+        val modInput = if (mods != null && assets != null) {
+            Mods.snapshotForBuild(mods, root)
+        } else {
+            null
+        }
+        if (modInput != null && assets != null) {
+            val plugins = Mods.all(modInput)
             if (plugins.isNotEmpty()) {
                 send(Progress("Weaving mods", -1f, "${plugins.size} plugin(s)"))
-                Mods.weave(context, root, mods, asmDir(root), assets) { line ->
-                    trySend(Progress("Weaving mods", -1f, line.take(80)))
-                }
+            }
+            Mods.weave(context, root, modInput, asmDir(root), assets) { line ->
+                trySend(Progress("Weaving mods", -1f, line.take(80)))
+            }
+            if (plugins.isNotEmpty()) {
                 assemblies = asmDir(root).listFiles().orEmpty()
                     .filter { it.name.endsWith(".dll") }.sortedBy { it.name }
                 LauncherLog.log("il2cpp input after weaving: ${assemblies.size} assemblies")
@@ -271,6 +333,12 @@ object Il2cppConverter {
             // Any previous attempt is cleared: il2cpp is not asked to reconcile
             // a half-written tree, and a stale .cpp left behind by an
             // interrupted run would be compiled into the result.
+            //
+            // The marker goes first, and on its own line, so that a run killed
+            // anywhere below here leaves output that says outright it is
+            // unfinished rather than output the next build mistakes for work
+            // it does not have to do.
+            invalidateCompletion(root)
             cppDir(root).deleteRecursively()
             dataDir(root).deleteRecursively()
             cppDir(root).mkdirs()
@@ -367,9 +435,9 @@ object Il2cppConverter {
         LauncherLog.log(
             "il2cpp: ${seconds}s, $cpp cpp + $c c, metadata ${metadata(root).length()} bytes",
         )
-        // Only now: the stamp says "this build contains that mod set", and it
-        // would be a lie if the conversion had failed anywhere above.
-        if (mods != null) Mods.markCurrent(mods, root, assets)
+        // This belongs only to the reusable candidate cache. Publication copies
+        // it into a sealed generation after native/content verification succeeds.
+        if (modInput != null && assets != null) Mods.recordCandidate(modInput, root, assets)
         markComplete(root)
         send(Progress("Converted", 1f, "$cpp C++ files in ${seconds}s"))
     }.flowOn(Dispatchers.IO)
@@ -377,7 +445,7 @@ object Il2cppConverter {
     internal fun invalidateCompletion(root: File) {
         val marker = completionMarker(root)
         val part = File(root, "${marker.name}.part")
-        for (file in listOf(marker, part)) {
+        for (file in listOf(marker, part, signatureMarker(root))) {
             if (file.exists() && !file.delete()) {
                 throw IOException("could not invalidate the previous il2cpp conversion marker: $file")
             }
@@ -385,6 +453,10 @@ object Il2cppConverter {
     }
 
     internal fun markComplete(root: File) {
+        // The signature notices later damage to the output. The atomic marker
+        // is written last and is the commit point, so neither an interrupted
+        // signature write nor a failed rename can bless a partial conversion.
+        signatureMarker(root).writeText(completionSignature(root))
         val marker = completionMarker(root)
         val part = File(root, "${marker.name}.part")
         part.writeText(COMPLETE)

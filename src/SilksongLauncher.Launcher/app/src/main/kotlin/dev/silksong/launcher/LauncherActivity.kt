@@ -25,6 +25,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import dev.silksong.launcher.build.GenerationPublisher
 import dev.silksong.launcher.profiles.GameProfiles
 import dev.silksong.launcher.profiles.GameProfile
 import dev.silksong.launcher.profiles.LegacySilksongAdopter
@@ -80,6 +81,7 @@ class LauncherActivity : Activity() {
     private lateinit var btnPush: Button
     private lateinit var spinPull: ProgressBar
     private lateinit var spinPush: ProgressBar
+    private lateinit var btnMods: Button
     private lateinit var btnSettings: Button
     private lateinit var btnLogs: Button
     private lateinit var btnLaunch: Button
@@ -143,6 +145,7 @@ class LauncherActivity : Activity() {
         btnPush = findViewById(R.id.btn_push)
         spinPull = findViewById(R.id.spin_pull)
         spinPush = findViewById(R.id.spin_push)
+        btnMods = findViewById(R.id.btn_mods)
         btnSettings = findViewById(R.id.btn_settings)
         btnLogs = findViewById(R.id.btn_logs)
         btnLaunch = findViewById(R.id.btn_launch)
@@ -172,6 +175,9 @@ class LauncherActivity : Activity() {
         btnLogin.setOnClickListener { onLoginClicked() }
         btnPull.setOnClickListener { onPullClicked() }
         btnPush.setOnClickListener { onPushClicked() }
+        btnMods.setOnClickListener {
+            startActivity(Intent(this, ModsActivity::class.java))
+        }
         btnSettings.setOnClickListener { onSettingsClicked() }
         btnLogs.setOnClickListener {
             startActivity(Intent(this, LogActivity::class.java))
@@ -723,12 +729,19 @@ class LauncherActivity : Activity() {
      * happened.
      */
     private fun modsNeedBuilding(): Boolean = try {
-        val out = buildPaths.buildRoot
-        Il2cppConverter.isPresent(out) && Mods.isStale(Mods.dir(this), out, assets)
+        val mods = Mods.dir(this)
+        val published = GenerationPublisher(buildPaths.profilePaths).current()
+        if (published == null) {
+            false
+        } else {
+            val metadata = runCatching { Mods.publishedMetadataRoot(published) }.getOrNull()
+            metadata?.let { Mods.isStale(mods, it, assets) } ?: true
+        }
     } catch (t: Throwable) {
-        // A folder that cannot be read is not a reason to refuse to play.
-        LauncherLog.log("Could not check the mods folder: $t")
-        false
+        // Unknown published mod status needs a rebuild. Gate preparation
+        // revalidates the metadata and aborts launch if it is still unusable.
+        LauncherLog.log("Could not check the current generation's mod status: $t")
+        true
     }
 
     /**
@@ -820,6 +833,15 @@ class LauncherActivity : Activity() {
             // game promotes a stranded save temp over the real save without
             // saying so, and clearing them is only possible from out here.
             SaveDir.prepare(this)
+            val mods = Mods.dir(this)
+            Mods.ensure(mods, buildPaths.modStateRoot)
+            // Last mutable launch input, resolved and verified from the current
+            // generation pointer inside this call. Failure aborts launch rather
+            // than carrying stale gates into another profile or generation.
+            Mods.writeCurrentGates(
+                buildPaths.modStateRoot,
+                GenerationPublisher(buildPaths.profilePaths),
+            )
             returningFromGame = true
             startActivity(intent)
         } catch (t: Throwable) {

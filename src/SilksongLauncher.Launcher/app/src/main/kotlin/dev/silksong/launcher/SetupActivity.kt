@@ -950,7 +950,7 @@ class SetupActivity : Activity() {
                     null
                 }
                 val mods = Mods.dir(this@SetupActivity)
-                withContext(Dispatchers.IO) { Mods.ensure(mods) }
+                withContext(Dispatchers.IO) { Mods.ensure(mods, buildPaths.modStateRoot) }
                 val request = ProfileBuildRequest(
                     jobId = "job-${UUID.randomUUID()}",
                     generationId = "gen-${UUID.randomUUID()}",
@@ -1025,7 +1025,7 @@ class SetupActivity : Activity() {
                         }
 
                         BuildStage.CompilePatches -> {
-                            if (!PackageCompiler.isPresent(out)) {
+                            if (!PackageCompiler.isPresent(profile, unity, depot, out)) {
                                 PackageCompiler.compile(unity, depot, this@SetupActivity, out)
                                     .collect { setBusy(true, it.step, it.fraction, it.detail) }
                             }
@@ -1053,6 +1053,9 @@ class SetupActivity : Activity() {
                                 out,
                                 assets,
                             ).collect { setBusy(true, it.step, it.fraction, it.detail) }
+                            withContext(Dispatchers.IO) {
+                                PackageCompiler.publishAssemblyManifest(profile, unity, depot, out)
+                            }
                         }
 
                         BuildStage.ConvertIl2Cpp -> {
@@ -1129,6 +1132,7 @@ class SetupActivity : Activity() {
                                     "$library was not produced"
                                 }
                             }
+                            Mods.stageForGeneration(out, workspace.root)
                         }
 
                         BuildStage.Publish -> Unit

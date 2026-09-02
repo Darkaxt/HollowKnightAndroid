@@ -23,46 +23,57 @@
 
 package dev.silksong.launcher
 
+import dev.silksong.launcher.build.GenerationPublisher
+import dev.silksong.launcher.build.InstalledGeneration
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption.ATOMIC_MOVE
+import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 
 object Mods {
 
     /**
-     * Where a user puts plugin DLLs.
-     *
-     * The app's own external files directory, so it is reachable over USB and
-     * from any file manager without a permission, and -- because the game runs
-     * inside this same package -- it is the same path the game's own
-     * BepInEx.Paths finds at runtime for configs.
+     * Shared plugin source library. Both registered profiles discover and import
+     * DLLs here; no profile-owned mutable state belongs in this directory.
      */
     fun dir(context: android.content.Context): File =
         File(context.getExternalFilesDir(null), "mods")
 
-    fun configDir(mods: File): File = File(mods, "config")
+    fun configDir(state: File): File = File(state, "config")
 
-    private fun disabledFile(mods: File): File = File(mods, "disabled.txt")
+    private fun disabledFile(state: File): File = File(state, "disabled.txt")
 
-    /** Written on first use, so the folder explains itself when it is empty. */
-    fun ensure(mods: File) {
-        if (!mods.isDirectory) mods.mkdirs()
-        configDir(mods).mkdirs()
+    private val disabledStateLocks = ConcurrentHashMap<String, Any>()
+
+    private fun disabledStateLock(state: File): Any =
+        disabledStateLocks.computeIfAbsent(state.canonicalPath) { Any() }
+
+    /** Creates shared storage and migrates legacy mutable state before first use. */
+    fun ensure(mods: File, state: File) {
+        if (!mods.isDirectory && !mods.mkdirs()) error("could not create the shared mod library")
+        if (!state.isDirectory && !state.mkdirs()) error("could not create profile mod state")
+        ModImport.reconcileTransactions(mods)
+        ModStateMigration.migrate(mods, state)
+        if (!configDir(state).isDirectory && !configDir(state).mkdirs()) {
+            error("could not create profile mod config")
+        }
         val readme = File(mods, "README.txt")
         if (!readme.isFile) {
             readme.writeText(
                 """
                 Put BepInEx 5 plugin DLLs in this folder.
 
-                They are compiled into the game when you build, not loaded when
-                you launch -- so adding or removing one means rebuilding from
-                the launcher. Turning one off is free: every plugin here is
-                built in, and the switch in the launcher's Mods screen decides
-                at startup which of them run.
+                They are compiled into the selected game when you build, not
+                loaded when you launch. Both game profiles discover DLLs here,
+                while each profile keeps its own switches and config files.
 
-                Config files are in config/ and are read at startup, so those
-                you can change freely.
+                Adding or removing a plugin means rebuilding that profile.
+                Turning one off or changing config applies on its next launch.
 
                 Transpilers, runtime-computed patch targets and Reflection.Emit
                 cannot work here. The launcher tells you which plugins used
@@ -78,15 +89,26 @@ object Mods {
      * Every plugin DLL, disabled ones included.
      *
      * Searched recursively, because a mod is often distributed as a folder
-     * with the plugin and its own libraries inside. config/ is skipped: a .cfg
-     * is not an assembly, but nothing stops somebody dropping one in there.
+     * with the plugin and its own libraries inside. Legacy config/ and the
+     * import transaction's hidden incoming/backup trees are skipped.
      */
     fun all(mods: File): List<File> {
-        if (!mods.isDirectory) return emptyList()
-        val config = configDir(mods).absolutePath + File.separator
-        return mods.walkTopDown()
-            .filter { it.isFile && it.extension.equals("dll", ignoreCase = true) }
-            .filterNot { it.absolutePath.startsWith(config) }
+        if (!mods.isDirectory) {
+            if (!ModImport.transactionRoot(mods).exists()) return emptyList()
+            if (!mods.mkdirs() && !mods.isDirectory) {
+                throw IOException("could not recreate the mod library for transaction recovery")
+            }
+        }
+        ModImport.reconcileTransactions(mods)
+        return ModImport.boundedFiles(mods, excludedTopLevel = setOf("config"))
+            .asSequence()
+            .filter { it.extension.equals("dll", ignoreCase = true) }
+            .filterNot {
+                val owner = relativePath(mods, it).substringBefore(File.separatorChar)
+                owner.equals("config", ignoreCase = true) ||
+                    (owner.startsWith(".") &&
+                        (owner.endsWith(".incoming") || owner.endsWith(".backup")))
+            }
             .sortedBy { it.absolutePath }
             .toList()
     }
@@ -101,30 +123,57 @@ object Mods {
      * touch a file somebody downloaded, and a mod that is off today is usually
      * on again next week.
      */
-    fun disabled(mods: File): Set<String> {
-        val f = disabledFile(mods)
+    fun disabled(state: File): Set<String> {
+        val f = disabledFile(state)
         if (!f.isFile) return emptySet()
         return f.readLines().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
     }
 
-    /**
-     * Turns one plugin on or off.
-     *
-     * [root] so that the gate list can be rewritten in the same breath: the
-     * two files have to agree, and the only reason there are two is that the
-     * launcher thinks in file names and the game can only think in assembly
-     * names.
-     */
-    fun setEnabled(mods: File, root: File, relative: String, enabled: Boolean) {
-        val current = disabled(mods).toMutableSet()
-        if (enabled) current.remove(relative) else current.add(relative)
-        val f = disabledFile(mods)
-        if (current.isEmpty()) f.delete() else f.writeText(current.sorted().joinToString("\n") + "\n")
-        writeGates(mods, root)
+    /** Turns one plugin on or off in this exact profile's mutable state. */
+    fun setEnabled(state: File, relative: String, enabled: Boolean) {
+        val profileState = state.canonicalFile
+        synchronized(disabledStateLock(profileState)) {
+            if (!profileState.isDirectory && !profileState.mkdirs()) {
+                throw IOException("could not create profile mod state")
+            }
+            if (!profileState.isDirectory || Files.isSymbolicLink(profileState.toPath())) {
+                throw IOException("profile mod state is not a regular directory")
+            }
+            val current = disabled(profileState).toMutableSet()
+            if (enabled) current.remove(relative) else current.add(relative)
+            val expected = if (current.isEmpty()) {
+                ByteArray(0)
+            } else {
+                (current.sorted().joinToString("\n") + "\n").toByteArray(Charsets.UTF_8)
+            }
+            val target = disabledFile(profileState)
+            val staged = File(profileState, ".disabled.txt.part")
+            if (staged.exists() && !staged.delete()) {
+                throw IOException("could not clear interrupted profile mod-state publication")
+            }
+            try {
+                FileOutputStream(staged).use { output ->
+                    output.write(expected)
+                    output.fd.sync()
+                }
+                Files.move(staged.toPath(), target.toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
+                if (!target.isFile || Files.isSymbolicLink(target.toPath()) ||
+                    !target.readBytes().contentEquals(expected) || staged.exists()
+                ) {
+                    throw IOException("profile disabled state could not be verified after publication")
+                }
+            } catch (failure: Throwable) {
+                throw IOException("could not atomically publish profile disabled state", failure)
+            } finally {
+                if (staged.exists() && !staged.delete()) {
+                    LauncherLog.log("mods: could not clean interrupted disabled-state staging at $staged")
+                }
+            }
+        }
     }
 
-    fun enabled(mods: File): List<File> {
-        val off = disabled(mods)
+    fun enabled(mods: File, state: File): List<File> {
+        val off = disabled(state)
         return all(mods).filterNot { relativePath(mods, it) in off }
     }
 
@@ -133,33 +182,51 @@ object Mods {
     /**
      * What the game reads at startup to decide which woven mods to run.
      *
-     * By assembly name, because that is the only name the game has: the
-     * chainloader is reflecting over loaded assemblies and has never seen the
-     * mods folder. [disabledFile] stays the source of truth -- it is keyed by
-     * the path the user recognises -- and this is derived from it through the
-     * weaver's report, which is the one place both names appear together.
-     *
-     * Absent means nothing is off. That is deliberate: it is also what a build
-     * from before this file existed looks like, and every plugin in such a
-     * build was compiled in wanting to run.
+     * The disabled paths and derived assembly gates are both owned by one
+     * profile. [publisher] resolves and verifies that profile's current
+     * generation immediately before this file is written; candidate reports
+     * are never accepted here.
      */
-    fun gatesFile(mods: File): File = File(mods, "disabled-assemblies.txt")
+    fun gatesFile(state: File): File = File(state, "disabled-assemblies.txt")
 
-    fun writeGates(mods: File, root: File) {
-        val off = disabled(mods)
-        val byFile = lastReport(root).associateBy { it.file }
-        val names = all(mods)
-            .filter { relativePath(mods, it) in off }
-            .mapNotNull { byFile[it.name]?.assembly?.takeIf(String::isNotEmpty) }
+    fun writeCurrentGates(state: File, publisher: GenerationPublisher) {
+        val generation = publisher.current()
+            ?: error("cannot write mod gates without a published current generation")
+        val publishedMetadata = publishedMetadataRoot(generation)
+        val byFile = lastReport(publishedMetadata).associateBy { it.file }
+        val names = disabled(state)
+            .map { File(it).name }
+            .mapNotNull { byFile[it]?.assembly?.takeIf(String::isNotEmpty) }
             .distinct()
             .sorted()
-        val f = gatesFile(mods)
+        val f = gatesFile(state)
         try {
-            if (names.isEmpty()) f.delete() else f.writeText(names.joinToString("\n") + "\n")
+            f.parentFile?.mkdirs()
+            if (names.isEmpty()) {
+                check(!f.exists() || f.delete()) { "could not clear stale profile mod gates" }
+            } else {
+                f.writeText(names.joinToString("\n") + "\n")
+            }
             LauncherLog.log("mods: ${names.size} assembly/assemblies switched off")
         } catch (t: Throwable) {
             LauncherLog.log("mods: could not write the gate list: $t")
+            throw IOException("could not write the profile mod gate list", t)
         }
+    }
+
+    private const val CANDIDATE_INPUT_DIR = "mod-input"
+
+    /** Freezes plugin inputs so conversion metadata describes exactly what was woven. */
+    fun snapshotForBuild(mods: File, candidateRoot: File): File {
+        val snapshot = File(candidateRoot, CANDIDATE_INPUT_DIR)
+        snapshot.deleteRecursively()
+        check(snapshot.mkdirs()) { "could not create candidate mod input snapshot" }
+        for (dll in all(mods)) {
+            val target = File(snapshot, relativePath(mods, dll))
+            target.parentFile?.mkdirs()
+            dll.copyTo(target, overwrite = false)
+        }
+        return snapshot
     }
 
     // ── staleness ──────────────────────────────────────────────────────────
@@ -189,6 +256,19 @@ object Mods {
             sha.updateAssets(assets, WEAVER_ASSET_DIR)
         }
         return sha.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    internal fun recordedStamp(root: File): String {
+        val file = stampFile(root)
+        if (!file.isFile) throw IOException("published mod stamp is missing")
+        return file.readText().trim()
+    }
+
+    internal fun appendStampAssets(
+        digest: MessageDigest,
+        assets: android.content.res.AssetManager,
+    ) {
+        digest.updateAssets(assets, WEAVER_ASSET_DIR)
     }
 
     private fun MessageDigest.updateAssets(assets: android.content.res.AssetManager, dir: String) {
@@ -223,12 +303,119 @@ object Mods {
         return previous != stamp(mods, assets)
     }
 
-    fun markCurrent(mods: File, root: File, assets: android.content.res.AssetManager? = null) {
-        stampFile(root).writeText(stamp(mods, assets))
+    fun candidateMetadataPresent(root: File): Boolean =
+        stampFile(root).isFile && builtFile(root).isFile && reportFile(root).isFile
+
+    /** Records cache metadata for converted candidate output; it is not current. */
+    fun recordCandidate(
+        mods: File,
+        candidateRoot: File,
+        assets: android.content.res.AssetManager? = null,
+    ) {
+        check(reportFile(candidateRoot).isFile) { "candidate mod report is missing" }
+        writeBuilt(mods, candidateRoot)
+        stampFile(candidateRoot).writeText(stamp(mods, assets))
+    }
+
+    private const val GENERATION_METADATA_DIR = "mods"
+    private val METADATA_FILES = listOf("mods.stamp", "mods.built", "mods.report.json")
+
+    fun generationMetadataRoot(generationRoot: File): File =
+        File(generationRoot, GENERATION_METADATA_DIR)
+
+    /** Accepts mod status only when all metadata is part of a published manifest. */
+    fun publishedMetadataRoot(generation: InstalledGeneration): File {
+        val root = generationMetadataRoot(generation.root)
+        for (name in METADATA_FILES) {
+            val relative = "$GENERATION_METADATA_DIR/$name"
+            val expected = generation.files[relative]
+                ?: error("published generation ${generation.id} has no $relative")
+            val file = File(root, name)
+            check(file.isFile && digest(file) == expected) {
+                "published generation ${generation.id} has invalid $relative"
+            }
+        }
+        return root
+    }
+
+    /** Copies exact candidate mod inputs/report into the generation before sealing. */
+    fun stageForGeneration(candidateRoot: File, generationRoot: File) {
+        val target = generationMetadataRoot(generationRoot)
+        check(!target.exists() || target.listFiles().orEmpty().isEmpty()) {
+            "generation mod metadata already exists"
+        }
+        target.mkdirs()
+        for (source in listOf(
+            stampFile(candidateRoot),
+            builtFile(candidateRoot),
+            reportFile(candidateRoot),
+        )) {
+            check(source.isFile) { "candidate mod metadata is missing: ${source.name}" }
+            source.copyTo(File(target, source.name), overwrite = false)
+        }
     }
 
     fun clearStamp(root: File) {
         stampFile(root).delete()
+        builtFile(root).delete()
+        reportFile(root).delete()
+    }
+
+    // ── what is in the build, per mod ──────────────────────────────────────
+
+    /**
+     * Every plugin the current build was made from, by content.
+     *
+     * The stamp above answers "is anything different" for the whole folder,
+     * which is the question a rebuild prompt needs. This answers "is THIS file
+     * in the game you are about to play", which is the question somebody
+     * looking at a list of six mods has -- and the two are not the same
+     * question: a folder is stale the moment one mod is replaced, and the
+     * other five are still built.
+     *
+     * By content, not by name, so that a mod updated in place is correctly no
+     * longer the one that was compiled in.
+     */
+    private fun builtFile(root: File): File = File(root, "mods.built")
+
+    private fun writeBuilt(mods: File, root: File) {
+        val lines = all(mods).map { "${digest(it)}  ${relativePath(mods, it)}" }
+        builtFile(root).writeText(
+            if (lines.isEmpty()) "" else lines.joinToString("\n") + "\n",
+        )
+    }
+
+    /** Digests of the plugins in the build, by the path the user sees. */
+    fun built(root: File): Map<String, String> =
+        runCatching { builtStrict(root) }.getOrDefault(emptyMap())
+
+    internal fun builtStrict(root: File): Map<String, String> {
+        val file = builtFile(root)
+        if (!file.isFile) return emptyMap()
+        return file.readLines().mapNotNull { line ->
+            val parts = line.trim().split("  ", limit = 2)
+            if (parts.size == 2 && parts[0].isNotEmpty()) parts[1] to parts[0] else null
+        }.toMap()
+    }
+
+    /**
+     * Whether this exact file is in the build.
+     *
+     * Null means "cannot tell": a build made before this was recorded has no
+     * list, and answering "no" for every mod in it would be a screen full of
+     * red about a game that is working. The caller falls back to the stamp,
+     * which is what that build was judged by.
+     */
+    fun isBuilt(mods: File, root: File, dll: File): Boolean? {
+        val known = built(root)
+        if (known.isEmpty()) return null
+        return known[relativePath(mods, dll)] == digest(dll)
+    }
+
+    private fun digest(file: File): String {
+        val sha = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { sha.updateFrom(it) }
+        return sha.digest().joinToString("") { "%02x".format(it) }
     }
 
     // ── the weaver ─────────────────────────────────────────────────────────
@@ -255,15 +442,17 @@ object Mods {
     }
 
     /** The last report, for the launcher to show without rebuilding. */
-    fun lastReport(root: File): List<Plugin> {
-        val f = reportFile(root)
-        if (!f.isFile) return emptyList()
-        return try {
-            parse(f.readText())
-        } catch (t: Throwable) {
-            LauncherLog.log("mods: could not read the last report: $t")
-            emptyList()
-        }
+    fun lastReport(root: File): List<Plugin> = try {
+        lastReportStrict(root)
+    } catch (failure: Throwable) {
+        LauncherLog.log("mods: could not read the last report: $failure")
+        emptyList()
+    }
+
+    internal fun lastReportStrict(root: File): List<Plugin> {
+        val file = reportFile(root)
+        if (!file.isFile) return emptyList()
+        return parse(file.readText())
     }
 
     private fun parse(text: String): List<Plugin> {
@@ -320,8 +509,7 @@ object Mods {
     ): List<Plugin> {
         val plugins = all(mods)
         if (plugins.isEmpty()) {
-            reportFile(root).delete()
-            writeGates(mods, root)
+            reportFile(root).writeText("{\"plugins\":[]}")
             return emptyList()
         }
 
@@ -352,9 +540,6 @@ object Mods {
                     if (p.issues.isEmpty()) "" else " -- ${p.issues.joinToString("; ")}",
             )
         }
-        // Now that the report exists, file names can be turned into assembly
-        // names, which is the only form the game can act on.
-        writeGates(mods, root)
         return report
     }
 

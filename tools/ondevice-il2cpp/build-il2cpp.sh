@@ -492,9 +492,33 @@ echo "  link objects: $link_object_count"
 # for Android, so it has to be asked. Nothing is lost on a 4 KB device -- the
 # alignment is padding between segments, which such a kernel maps happily, and
 # every other .so in the APK is already built this way.
+# Only the compile flags are covered by the signature above ($TGT, $DEF, $INC,
+# $CXXFLAGS), so changing anything on this line rebuilds nothing: obj/ survives
+# and the relink takes about eight seconds. That is deliberate and worth
+# knowing when testing a link flag -- it is a cheap experiment, not a
+# twenty-minute one.
+#
+# --no-undefined is what turns a short link into a failure here rather than a
+# crash twenty minutes later on someone else's device. -shared allows undefined
+# symbols by default, so a generated tree that is missing translation units --
+# a conversion killed part-way, a phase that compiled nothing -- still links,
+# into an engine that is a few megabytes short and dies in the dynamic linker
+# at launch. The engine reports that as
+#
+#   dlopen failed: library "libil2cpp.so" not found
+#
+# which names neither the file it did find nor the symbol it could not
+# resolve, because it is the error from the fallback lookup by soname and not
+# from the load that actually failed. Two separate incidents have now been
+# spent working back from that sentence.
+#
+# It is compatible with --allow-shlib-undefined below: that one is about
+# unresolved references inside the shared libraries being linked AGAINST, this
+# one is about symbols nothing on the link line defines at all.
 "$USR/bin/clang++" $TGT -shared -fPIC -fuse-ld=lld -nostdlib++ \
     -Wl,-soname,libil2cpp.so \
     -Wl,-z,max-page-size=16384 \
+    -Wl,--no-undefined \
     -o "$ROOT/libil2cpp.so" "@$LINK_OBJECTS" "$BASELIB" \
     -lc++_static -lc++abi -llog -lm -ldl -lc \
     -Wl,--allow-shlib-undefined >>err.log 2>&1

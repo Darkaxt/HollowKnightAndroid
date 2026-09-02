@@ -141,6 +141,7 @@ class GameProcessStartupTest {
             GameProcessStartup.requireProfile("silksong")
         }
         assertEquals("hollow-knight", GameProcessStartup.requireSnapshot().profileId)
+        assertEquals(paths.modStateRoot.canonicalPath, GameProcessStartup.requireModStatePath())
     }
 
     private fun paths(profileId: String): ProfileBuildPaths {

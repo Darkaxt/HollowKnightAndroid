@@ -19,6 +19,18 @@ class ProfilePathsTest {
     }
 
     @Test
+    fun profile_mod_state_paths_are_isolated_under_each_external_root() {
+        val filesDir = File("build/test-profile-paths/files")
+        val externalDir = File("build/test-profile-paths/external")
+        val hk = ProfileBuildPaths(filesDir, externalDir, GameProfiles.require("hollow-knight"))
+        val ss = ProfileBuildPaths(filesDir, externalDir, GameProfiles.require("silksong"))
+
+        assertNotEquals(hk.modStateRoot.canonicalPath, ss.modStateRoot.canonicalPath)
+        assertTrue(hk.modStateRoot.toPath().startsWith(hk.externalRoot.toPath()))
+        assertTrue(ss.modStateRoot.toPath().startsWith(ss.externalRoot.toPath()))
+    }
+
+    @Test
     fun unregistered_or_unsafe_profile_ids_are_rejected() {
         val filesDir = File("build/test-profile-paths")
         val base = GameProfiles.require("silksong")

@@ -70,6 +70,17 @@ object NativeBuild {
             if (!Il2cppConverter.cppDir(root).isDirectory) {
                 throw IOException("nothing to compile: run the conversion first")
             }
+            // And not merely that it exists. A conversion killed part-way
+            // leaves a directory full of perfectly good sources that are not
+            // all of them, and this step has no way to infer what is missing.
+            // The completion markers reject that tree before the expensive
+            // compile; --no-undefined at link time remains the final guard.
+            if (!Il2cppConverter.isComplete(root)) {
+                throw IOException(
+                    "the conversion did not finish, so there is no complete set of sources to " +
+                        "compile. It has to run again before this can.",
+                )
+            }
 
             send(Progress("Preparing the build", -1f, "locating the sources"))
             val (script, pieces) = stage(unity, toolchain, root, assets)

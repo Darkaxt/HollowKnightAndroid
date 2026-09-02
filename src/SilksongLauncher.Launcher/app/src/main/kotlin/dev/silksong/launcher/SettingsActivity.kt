@@ -104,10 +104,6 @@ class SettingsActivity : Activity() {
         btnClearBuild.isEnabled = BuildReset.hasBuild(buildPaths)
         btnClearBuild.alpha = if (btnClearBuild.isEnabled) 1f else 0.4f
 
-        findViewById<Button>(R.id.btn_settings_mods).setOnClickListener {
-            startActivity(Intent(this, ModsActivity::class.java))
-        }
-
         // The same screen the porting flow offers, because the person who
         // needs a log is as likely to have reached this screen as that one.
         findViewById<Button>(R.id.btn_settings_logs).setOnClickListener {

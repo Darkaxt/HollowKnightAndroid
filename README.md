@@ -142,23 +142,56 @@ complete, legitimately acquired Linux installation.
 
 ## Mods
 
-The newly merged parent implementation supports a useful subset of BepInEx 5
+The merged build-time implementation supports a useful subset of BepInEx 5
 plugins by weaving Harmony prefixes and postfixes into managed assemblies
 **before** IL2CPP conversion. There is no runtime JIT, so adding, removing, or
-replacing a DLL requires rebuilding the selected game profile. Configuration
-and enable/disable gates are read at launch.
+replacing a DLL requires rebuilding the selected game profile. Enable/disable
+gates and configuration files are read at launch, so those changes require only
+a relaunch.
 
-Development builds use the shared folder:
+Open **Mods** for the currently selected game in the launcher, then choose
+**Install a mod from a folder**. The whole selected folder is copied, preserving
+a plugin's supporting libraries and packaged data. Both profiles discover DLLs
+from the shared mod library:
 
 ```text
 Android/data/io.github.darkaxt.dualsouls/files/mods
 ```
+
+Mutable state is isolated by exact profile. Configuration, disabled-plugin
+choices, and launch gates live under:
+
+```text
+Android/data/io.github.darkaxt.dualsouls/files/profiles/<profile-id>/mods
+```
+
+The Mods screen reports each plugin as **built** or **not built** only from the
+selected profile's immutable current generation. That generation contains the
+exact plugin digests and weave report captured by its conversion; a failed
+candidate cannot replace the published status or launch gates. A rebuild reruns
+the required whole-program IL2CPP conversion, while the native compile hashes
+generated sources and rebuilds only what changed. Launching with a changed mod
+folder offers either that rebuild or the existing generation.
 
 Transpilers, runtime-computed patch targets, `Reflection.Emit`, and runtime DLL
 discovery cannot work in this architecture. The weaver reports unsupported
 patches before native compilation. Until the remaining Task 14 contracts are
 implemented, do not treat a plugin working in one game as evidence that it is
 compatible with the other.
+
+### Configuration Manager
+
+The BepInEx shim surface supports mods that expose settings through
+[BepInEx's Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager/releases).
+Install its BepInEx 5 folder like any other mod; it is not bundled with the app.
+On Android its window opens once per **L3+R3** chord instead of requiring F1,
+remains pinned to a handheld-readable size, and restores the game's GUI skin
+when closed. The binding and `Settings scale` live in
+`profiles/<profile-id>/mods/config/BepInEx.cfg`, are read at startup, and can be
+changed without rebuilding.
+
+BepInEx and user mods are not shipped by this repository. The user's own device
+compiles selected plugin files into that user's game generation.
 
 ## Building and verification
 

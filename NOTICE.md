@@ -12,13 +12,19 @@ Stated first because it is the point of the whole design:
   classes it references are dexed on the device and injected into the app's
   class loader at process start. `apkanalyzer dex packages --defined-only`
   reports **zero** classes defined in the `com.unity3d` package.
-* **No extracted game code, game data, art or audio.** Silksong is © Team
-  Cherry. The project branding icon is documented separately in
-  `docs/icon-source/ATTRIBUTION.md`; no art is extracted from either game or
-  either game depot. Game content is downloaded from the user's own Steam
-  depot, on their own device, with their own account.
+* **No extracted game code, game data, art or audio.** Hollow Knight and
+  Hollow Knight: Silksong are © Team Cherry. The project branding icon is
+  documented separately in `docs/icon-source/ATTRIBUTION.md`; no art is
+  extracted from either game or either game depot. Game content comes only
+  from the user's own legitimately acquired files, supplied or downloaded on
+  their own device with their own account.
 * **No Unity binaries.** `libunity.so`, `libmain.so` and `libil2cpp.so` are
   fetched or built on the device.
+* **No mods, and no BepInEx.** The `BepInEx` and `0Harmony` assemblies a plugin
+  references are this project's own shims (`tools/bepinex-shim`, MIT), not
+  BepInEx's — the real ones assume a runtime loader that does not exist here.
+  Plugins are files the user downloaded and put in the mods folder, and it is
+  the user's own device that compiles them into their own build of the game.
 
 ## Redistributed in the APK
 

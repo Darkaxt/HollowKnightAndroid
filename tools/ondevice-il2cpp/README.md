@@ -49,6 +49,54 @@ Steam depot, so a distributable APK need contain no part of the game.
 | Loading it (`dlopen` + `dlsym`) on device | **works** |
 | Swapping it into the APK and booting the game | **works** — reaches the game's own managed code |
 | UnityLinker stripping on device | *not yet tested* |
+| Incremental IL → C++ conversion | **does not work** — see below |
+
+## Why the conversion is not incremental
+
+It is the largest fixed cost in a rebuild and it should be avoidable, so this
+was measured rather than assumed. It is not avoidable with the converter we
+have.
+
+A mod-only rebuild changes **28 of the 1160** generated files: the native build
+hashes each one and recompiles only those, finishing in about a minute, while
+the conversion that produced them takes three and a half regardless. So the
+conversion is ~75% of a rebuild and 97.6% of its output is byte-identical to
+the output it replaced.
+
+il2cpp does have the machinery, and its options are reachable: `Unity.Options`
+derives every flag from a field name by lowercasing it and inserting a hyphen
+before each capital (`OptionsParser.NormalizeName`), which is why this port
+already passes the odd-looking `--static-lib-il2-cpp` for `StaticLibIl2Cpp`.
+The full surface is the public fields of the `[ContainsOptions]` types in
+`Unity.IL2CPP.Api.dll`. Measured on an AYN Thor, whole game:
+
+| | Conversion | Native compile |
+| --- | --- | --- |
+| as shipped | **201 s** | **72 s** (28 of 1160 rebuilt) |
+| `--code-conversion-cache` | **dies after 15 s** | — |
+| `--cachedirectory=<dir>` alone | accepted, changes nothing | — |
+| `--conversion-mode=PartialPerAssemblyInProcess` | 288 s | 532 s |
+| `--jobs=8` | 200 s | — |
+
+`--code-conversion-cache` is the one that would matter and it takes the process
+down with it: fifteen seconds in, 1.9 GB allocated, no exit code, and nothing
+written to stdout or stderr. That is a native death rather than a managed
+error -- il2cpp's own exit codes are 0 to 4 and -1, and what the launcher
+reports is its own "the run never started" value. It behaves the same with the
+cache directory on internal storage, so it is not the filesystem refusing the
+links a build cache is made of. The likely reason is that the cache belongs to
+the Bee-driven `--convert-in-graph` path, which expects a build backend that
+cannot run here.
+
+`PartialPerAssemblyInProcess` works and is worse twice over: the conversion is
+43% slower, and it emits different C++ (960 files rather than 958) so the
+object cache misses and the native build goes from 72 s to 532 s.
+
+`--jobs` is already saturated; the converter uses the cores it is given.
+
+So the conversion stays whole-program. What makes rebuilds bearable is
+downstream: `build-il2cpp.sh` hashes every generated file and skips the
+unchanged ones.
 
 ## Running .NET on Android
 

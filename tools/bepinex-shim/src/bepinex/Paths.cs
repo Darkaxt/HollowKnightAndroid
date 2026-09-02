@@ -1,14 +1,6 @@
-// Where the mods live, from inside the game.
-//
-// The launcher owns this folder: it is where a user drops a plugin and where
-// the weaver reads them from. The game process needs the same answer, and gets
-// it by looking rather than by being told -- the two run at different times
-// and a path baked into the build at conversion time would be stale the moment
-// Android moved the app's storage.
-//
-// Both candidates are the same directory by different names, and which one is
-// spelled correctly depends on how Unity resolved persistentDataPath for this
-// player. Trying both costs one File.Exists.
+// Plugin DLLs are imported from one shared library, but every mutable runtime
+// path belongs to the exact profile captured in GameProcessStartup. The game
+// process never re-reads the launcher's selected-profile preference.
 
 using System;
 using System.IO;
@@ -18,16 +10,20 @@ namespace BepInEx
     public static class Paths
     {
         static string _root;
+        static string _stateRoot;
 
-        /// <summary>Where plugin DLLs came from. Read at runtime for configs and data.</summary>
+        /// <summary>The shared library from which plugin DLLs were compiled.</summary>
         public static string PluginPath { get { return Root; } }
 
-        /// <summary>Config files, as .cfg, in the layout BepInEx uses on a PC.</summary>
-        public static string ConfigPath { get { return Path.Combine(Root, "config"); } }
+        /// <summary>Mutable state for the immutable launched profile.</summary>
+        public static string ModStatePath { get { return StateRoot; } }
 
-        public static string BepInExRootPath { get { return Root; } }
+        /// <summary>Config files, isolated in the launched profile.</summary>
+        public static string ConfigPath { get { return Path.Combine(StateRoot, "config"); } }
+
+        public static string BepInExRootPath { get { return StateRoot; } }
         public static string BepInExAssemblyDirectory { get { return Root; } }
-        public static string CachePath { get { return Path.Combine(Root, "cache"); } }
+        public static string CachePath { get { return Path.Combine(StateRoot, "cache"); } }
         public static string PatcherPluginPath { get { return Path.Combine(Root, "patchers"); } }
 
         /// <summary>Where the game's own data is. Read-only here.</summary>
@@ -65,6 +61,32 @@ namespace BepInEx
 
                 _root = "";
                 return _root;
+            }
+        }
+
+        static string StateRoot
+        {
+            get
+            {
+                if (_stateRoot != null) return _stateRoot;
+                try
+                {
+                    using (var startup = new UnityEngine.AndroidJavaClass(
+                        "dev.silksong.launcher.runtime.GameProcessStartup"))
+                    {
+                        var path = startup.CallStatic<string>("requireModStatePath");
+                        if (string.IsNullOrEmpty(path))
+                            throw new InvalidOperationException("launched profile mod state path is empty");
+                        Directory.CreateDirectory(path);
+                        _stateRoot = path;
+                        return _stateRoot;
+                    }
+                }
+                catch (Exception e)
+                {
+                    throw new InvalidOperationException(
+                        "could not resolve immutable launched-profile mod state", e);
+                }
             }
         }
 

@@ -19,8 +19,15 @@ namespace BepInEx.Bootstrap
 {
     public static class Chainloader
     {
-        /// <summary>Everything that started, by GUID.</summary>
-        public static Dictionary<string, PluginInfo> PluginInfos = new Dictionary<string, PluginInfo>();
+        /// <summary>
+        /// Everything that started, by GUID.
+        ///
+        /// A property rather than a field, because that is what it is in
+        /// BepInEx: a plugin that reads it -- and a settings UI must -- was
+        /// compiled to call the getter.
+        /// </summary>
+        public static Dictionary<string, PluginInfo> PluginInfos { get; private set; } =
+            new Dictionary<string, PluginInfo>();
 
         /// <summary>The object plugins live on. Survives scene loads.</summary>
         public static UnityEngine.GameObject ManagerObject { get; private set; }
@@ -70,6 +77,10 @@ namespace BepInEx.Bootstrap
                 // them have been added, so one plugin can find another's
                 // component in its own Awake.
                 ManagerObject.SetActive(true);
+
+                // After Awake, because a plugin decides in its own Awake
+                // whether it draws settings at all.
+                ModMenu.Install(ManagerObject);
             }
             catch (Exception e)
             {
@@ -80,16 +91,15 @@ namespace BepInEx.Bootstrap
         /// <summary>
         /// Assemblies the launcher has switched off, by assembly name.
         ///
-        /// The list is the launcher's, written whenever a switch is flipped.
-        /// Absent means nothing is off, which is the right answer for a build
-        /// nobody has touched the switches on.
+        /// The list is profile-owned and derived by the launcher immediately
+        /// before launch from the immutable current generation's weave report.
         /// </summary>
         static HashSet<string> Disabled()
         {
             var off = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             try
             {
-                var path = System.IO.Path.Combine(Paths.PluginPath, "disabled-assemblies.txt");
+                var path = System.IO.Path.Combine(Paths.ModStatePath, "disabled-assemblies.txt");
                 if (!System.IO.File.Exists(path)) return off;
                 foreach (var line in System.IO.File.ReadAllLines(path))
                 {

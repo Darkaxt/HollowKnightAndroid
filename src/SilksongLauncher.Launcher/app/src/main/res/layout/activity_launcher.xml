@@ -277,18 +277,44 @@
                     </FrameLayout>
                 </LinearLayout>
 
-                <Button
-                    android:id="@+id/btn_settings"
+                <!-- Mods beside Settings rather than inside it: a mod is
+                     installed by dropping a file in a folder, so the screen
+                     that says whether that worked is the one somebody comes
+                     back to. -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/action_settings"
-                    android:textSize="16sp"
-                    android:textColor="@color/text_on_control"
-                    android:backgroundTint="@color/surface_control"
-                    android:foreground="@drawable/focus_on_light"
-                    android:paddingTop="10dp"
-                    android:paddingBottom="10dp"
-                    android:minHeight="0dp" />
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btn_mods"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="10dp"
+                        android:text="@string/action_mods"
+                        android:textSize="16sp"
+                        android:textColor="@color/text_on_control"
+                        android:backgroundTint="@color/surface_control"
+                        android:foreground="@drawable/focus_on_light"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp"
+                        android:minHeight="0dp" />
+
+                    <Button
+                        android:id="@+id/btn_settings"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/action_settings"
+                        android:textSize="16sp"
+                        android:textColor="@color/text_on_control"
+                        android:backgroundTint="@color/surface_control"
+                        android:foreground="@drawable/focus_on_light"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp"
+                        android:minHeight="0dp" />
+                </LinearLayout>
 
                 <!-- Quiet, because it is for the rare day something has gone
                      wrong and somebody has asked for the log. -->

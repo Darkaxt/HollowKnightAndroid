@@ -37,7 +37,7 @@ FILES   := /sdcard/Android/data/$(PKG)/files
 PROFILE_FILES := $(FILES)/profiles/$(PROFILE)
 
 .PHONY: help dev dev-fast device-wipe install logcat game-logcat build-log \
-        game-reset check test surgery weaver player devices clean \
+        game-reset check test mod-check surgery weaver player devices clean \
         docker-image docker-apk docker-up docker-dev docker-down docker-shell
 
 help: ## Show this help
@@ -159,6 +159,18 @@ test: weaver ## Run host-side launcher and converter tests
 		:app:testDebugUnitTest
 	dotnet test tools/bundle-surgery-tests/BundleSurgery.Tests.csproj -c Release
 	dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release
+
+# The same question, asked about somebody else's mod.
+#
+# A plugin DLL references BepInEx and 0Harmony by name, and here those are our
+# shims. This compiles them against your depot and runs the real weaver over
+# the plugin, so "will this mod work" is answered in seconds rather than by a
+# twenty-minute build on the phone that fails at the end.
+mod-check: ## Check a plugin against the shims (PLUGIN=a.dll[,b.dll])
+	@test -n "$(PLUGIN)" || { echo "usage: make mod-check PROFILE=silksong PLUGIN=path/to/Plugin.dll DEPOT=path/to/Managed PACKAGES=path/to/profile/packages"; exit 2; }
+	@pwsh -NoProfile -File tools/bepinex-shim/check.ps1 -Profile "$(PROFILE)" -Plugin $(PLUGIN) \
+		$(if $(DEPOT),-Depot "$(DEPOT)") $(if $(PLAYER),-Player "$(PLAYER)") \
+		$(if $(UNITY_ROOT),-UnityRoot "$(UNITY_ROOT)") $(if $(PACKAGES),-PackageAssemblies "$(PACKAGES)")
 
 clean: ## Remove build outputs
 	rm -rf "$(BUILD_ROOT)" "$(APK_DIR)" src/SilksongLauncher.Launcher/app/build tools/bundle-surgery/bin tools/bundle-surgery/obj tools/mod-weaver/bin tools/mod-weaver/obj

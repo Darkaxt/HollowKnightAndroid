@@ -103,6 +103,26 @@ class LauncherProfileSelectionTest {
     }
 
     @Test
+    fun `mods and settings remain separate routes under the selected profile`() {
+        SelectedGameStore(context).set(GameProfiles.require("hollow-knight"))
+        val launcher = Robolectric.buildActivity(LauncherActivity::class.java).setup().get()
+
+        launcher.findViewById<Button>(R.id.btn_mods).performClick()
+        val modsIntent = shadowOf(launcher).nextStartedActivity
+        assertEquals(ModsActivity::class.java.name, modsIntent.component?.className)
+
+        launcher.findViewById<Button>(R.id.btn_settings).performClick()
+        assertEquals(
+            SettingsActivity::class.java.name,
+            shadowOf(launcher).nextStartedActivity.component?.className,
+        )
+
+        val mods = Robolectric.buildActivity(ModsActivity::class.java, modsIntent).setup().get()
+        assertTrue(collectText(mods.findViewById(android.R.id.content)).contains("Mods — Hollow Knight"))
+        assertEquals("hollow-knight", SelectedGameStore(context).get().id)
+    }
+
+    @Test
     fun `production runtime does not show fake evidence banner`() {
         val activity = Robolectric.buildActivity(LauncherActivity::class.java).setup().get()
 
