@@ -62,6 +62,9 @@ android {
     // monohost in lib/arm64-v8a/, and the class library rides in assets --
     // build.sh copies both out of the AAR into the APK it assembles.
     sourceSets {
+        getByName("main") {
+            assets.srcDir(rootProject.file("../../docs/superpowers/specs/data"))
+        }
         getByName("release") {
             jniLibs.srcDir(layout.buildDirectory.dir("mono/jniLibs"))
             assets.srcDir(layout.buildDirectory.dir("mono/assets"))
