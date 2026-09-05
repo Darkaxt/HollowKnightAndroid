@@ -20,7 +20,7 @@
 - `GenerationPublisher`, `ModImport`, Gson, and `java.util.zip.ZipFile` are examples of repository style only. They are not extended or called as H4 ZIP, canonical JSON, or durability authority.
 - `<profiles>/<id>/generations`, build `staging`, and build `current` stay independent of `<profiles>/hollow-knight/skins`.
 - After Batch 5 creates the corpus test, ordinary runs skip it only when `HOLLOW_KNIGHT_SKIN_CORPUS` is absent; pre-close reconciliation supplies an explicit root and forbids a skip.
-- After each batch, remove only the listed Gradle/.NET/temp outputs. Never remove source, signing material, the read-only corpus, or retained evidence.
+- After each batch, remove only the listed Gradle/.NET/temp outputs through the transactional-cleanup helper's reviewed manifest/ticket workflow, preserving evidence first. The historical `rm -rf` examples below are superseded and must not be executed. Never remove source, signing material, the read-only corpus, or retained evidence.
 
 ## File map and ownership
 
@@ -278,6 +278,8 @@ git push fork HEAD:feature/h4-skins-host
 Expected: diff check is silent, status contains only Batch 1 paths relative to the separately pushed plan baseline before staging, commit succeeds once, and push updates `fork/feature/h4-skins-host`.
 
 ### Task 2: Registry, activation, session seams, isolation/quota, and launcher library
+
+**2026-09-05 checkpoint qualification:** Batch 2 is conditionally host-verified, not complete functional Task 2. Registry/import/session/quota-admission seams and the host-injected launcher UI passed the bounded integrated gate documented in `docs/verification/hollow-knight-h4-batch2-host.md`: 588 passed, 2 assumption skips, 10 descriptor-builder methods excluded for the localized Windows stall. This qualified gate supersedes the unfiltered full-suite expectation below for this checkpoint only. Retention/pin-graph and GC work remains open as `H4-STORAGE-RETENTION-001` / `H4-STORAGE-GC-002` in `docs/verification/hollow-knight-skins-deferrals.md`. Production import/mutation/mode bindings remain unavailable and default observation remains UNKNOWN; production acquisition/launch wiring is absent. The broader retention/GC and functional UI acceptance items below remain unchecked. Unity-free Task 3 work may proceed without lifting these production prerequisites.
 **Files — Create:**
 - `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/skins/registry/SkinActivation.kt`
 - `src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/skins/registry/SkinRegistryDocument.kt`
@@ -479,7 +481,7 @@ Expected: exit 0 and zero failures.
 rm -rf src/SilksongLauncher.Launcher/.gradle src/SilksongLauncher.Launcher/app/build
 git diff --check
 git status --short
-git add -- src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/skins/registry src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/skins/session src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/skins/quota src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/skins/ui src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/profiles/ProfilePaths.kt src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/SettingsActivity.kt src/SilksongLauncher.Launcher/app/src/main/res/layout/activity_skins.xml src/SilksongLauncher.Launcher/app/src/main/res/layout/activity_settings.xml src/SilksongLauncher.Launcher/app/src/main/res/values/strings.xml src/SilksongLauncher.Launcher/app/src/main/AndroidManifest.xml src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/ProfilePathsTest.kt src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/skins
+git add -- docs/superpowers/plans/2026-09-03-hollow-knight-skins.md docs/verification/hollow-knight-h4-batch2-host.md docs/verification/hollow-knight-skins-deferrals.md src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/skins/importing src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/skins/storage src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/skins/registry src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/skins/session src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/skins/quota src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/skins/ui src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/profiles/ProfilePaths.kt src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/SettingsActivity.kt src/SilksongLauncher.Launcher/app/src/main/res/layout/activity_skins.xml src/SilksongLauncher.Launcher/app/src/main/res/layout/activity_settings.xml src/SilksongLauncher.Launcher/app/src/main/res/values/strings.xml src/SilksongLauncher.Launcher/app/src/main/AndroidManifest.xml src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/ProfilePathsTest.kt src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/skins
 git commit -m 'feat: add Hollow Knight skin registry and launcher library' -m 'Co-Authored-By: Claude <noreply@anthropic.com>'
 git push fork HEAD:feature/h4-skins-host
 ```

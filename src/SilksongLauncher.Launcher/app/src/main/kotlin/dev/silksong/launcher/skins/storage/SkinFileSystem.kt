@@ -18,6 +18,18 @@ interface SkinFileSystem {
     fun deleteContained(path: File, owner: File)
 }
 
+internal interface SkinFileSystemBoundedListing {
+    /** Returns at most [maximumEntries], failing as soon as one additional child is observed. */
+    fun listBounded(path: File, maximumEntries: Int): List<File>
+}
+
+internal fun SkinFileSystem.listBounded(path: File, maximumEntries: Int): List<File> {
+    require(maximumEntries >= 0)
+    val bounded = this as? SkinFileSystemBoundedListing
+        ?: throw IllegalStateException("Bounded skin filesystem listing capability is unavailable")
+    return bounded.listBounded(path, maximumEntries)
+}
+
 internal interface SkinFileSystemSecurity {
     fun exists(file: File): Boolean
     fun isDirectory(file: File): Boolean

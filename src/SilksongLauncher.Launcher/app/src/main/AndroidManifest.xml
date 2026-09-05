@@ -99,6 +99,12 @@
             android:process=":launcher"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
         <activity
+            android:name="dev.silksong.launcher.skins.ui.SkinsActivity"
+            android:exported="false"
+            android:label="@string/skins_title"
+            android:process=":launcher"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+        <activity
             android:name="dev.silksong.launcher.ModsActivity"
             android:exported="false"
             android:process=":launcher"

@@ -118,7 +118,7 @@ private object PlatformSkinMountIdentityProvider : SkinMountIdentityProvider {
 class AndroidSkinFileSystem private constructor(
     private val mountIdentityProvider: SkinMountIdentityProvider,
     @Suppress("UNUSED_PARAMETER") marker: Boolean,
-) : SkinFileSystem, SkinFileSystemSecurity {
+) : SkinFileSystem, SkinFileSystemSecurity, SkinFileSystemBoundedListing {
     constructor() : this(PlatformSkinMountIdentityProvider, true)
     internal constructor(mountIdentityProvider: SkinMountIdentityProvider) : this(mountIdentityProvider, true)
     override fun exists(file: File): Boolean = Files.exists(file.toPath(), NOFOLLOW_LINKS)
@@ -281,6 +281,19 @@ class AndroidSkinFileSystem private constructor(
 
     override fun list(path: File): List<File> = Files.newDirectoryStream(path.toPath()).use { stream ->
         stream.map(Path::toFile).toList()
+    }
+
+    override fun listBounded(path: File, maximumEntries: Int): List<File> {
+        require(maximumEntries >= 0)
+        return Files.newDirectoryStream(path.toPath()).use { stream ->
+            val result = ArrayList<File>(maximumEntries)
+            val iterator = stream.iterator()
+            while (iterator.hasNext()) {
+                require(result.size < maximumEntries) { "Bounded directory listing exceeds $maximumEntries entries" }
+                result += iterator.next().toFile()
+            }
+            result
+        }
     }
 
     override fun identity(path: File): SkinNodeIdentity {

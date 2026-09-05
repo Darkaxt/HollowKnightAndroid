@@ -1,6 +1,7 @@
 package dev.silksong.launcher.profiles
 
 import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -14,8 +15,20 @@ class ProfilePathsTest {
         val ss = ProfilePaths(filesDir, GameProfiles.require("silksong"))
 
         assertNotEquals(hk.generations.canonicalPath, ss.generations.canonicalPath)
+        assertNotEquals(hk.skinsRoot.canonicalPath, ss.skinsRoot.canonicalPath)
         assertTrue(hk.staging.toPath().startsWith(hk.root.toPath()))
         assertTrue(ss.logs.toPath().startsWith(ss.root.toPath()))
+    }
+
+    @Test
+    fun skins_root_is_a_distinct_contained_profile_child() {
+        val paths = ProfilePaths(File("build/test-profile-paths/files"), GameProfiles.require("hollow-knight"))
+
+        assertEquals(File(paths.root, "skins").canonicalPath, paths.skinsRoot.canonicalPath)
+        assertTrue(paths.skinsRoot.toPath().startsWith(paths.root.toPath()))
+        assertNotEquals(paths.generations.canonicalPath, paths.skinsRoot.canonicalPath)
+        assertNotEquals(paths.staging.canonicalPath, paths.skinsRoot.canonicalPath)
+        assertNotEquals(paths.currentPointer.canonicalPath, paths.skinsRoot.canonicalPath)
     }
 
     @Test

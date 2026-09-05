@@ -19,6 +19,7 @@ class ProfilePaths(
     val root: File = contained(profilesRoot.resolve(profile.id), profilesRoot).toFile()
     val generations: File = child("generations")
     val staging: File = child("staging")
+    val skinsRoot: File = child("skins")
     val logs: File = child("logs")
     val currentPointer: File = child("current")
     val sourcePointer: File = child("source.pointer")

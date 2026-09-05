@@ -79,9 +79,52 @@ class SkinObjectBuilderTest {
     }
 
     @Test
+    fun sameLengthCorruptionRejectsBeforeAnyBuildMutation() {
+        val candidate = prepared()
+        val payload = candidate.payloads.single().file
+        val bytes = payload.readBytes()
+        bytes[bytes.lastIndex] = (bytes.last().toInt() xor 1).toByte()
+        payload.writeBytes(bytes)
+        var mutations = 0
+        val observed = object : SkinFileSystem by fs, SkinFileSystemSecurity by fs,
+            dev.silksong.launcher.skins.storage.SkinFileSystemBoundedListing by fs {
+            override fun createDirectory(path: File) { mutations++; fs.createDirectory(path) }
+        }
+        val builder = SkinObjectBuilder(observed)
+        assertTrue(builder.verifyPrepared(candidate) is SkinResult.Error)
+        assertTrue(builder.build(candidate, "local-corrupt") is SkinResult.Error)
+        assertEquals(0, mutations)
+    }
+
+    @Test
+    fun candidateTraversalNeverUsesUnboundedListing() {
+        val candidate = prepared()
+        val boundedOnly = object : SkinFileSystem by fs, SkinFileSystemSecurity by fs,
+            dev.silksong.launcher.skins.storage.SkinFileSystemBoundedListing by fs {
+            override fun list(path: File): List<File> = error("Unbounded candidate listing")
+        }
+        assertTrue(SkinObjectBuilder(boundedOnly).verifyPrepared(candidate) is SkinResult.Ok)
+    }
+
+    @Test
+    fun standalonePrebuildVerifierRevalidatesIdentityWithoutBuilding() {
+        val candidate = prepared()
+        val builder = SkinObjectBuilder(fs)
+
+        assertTrue(builder.verifyPrepared(candidate) is SkinResult.Ok)
+        assertNoObjectStaging(candidate)
+
+        val changed = candidate.copy(candidateKey = "f".repeat(64))
+        assertEquals(SkinImportCode.DOCUMENT_INVALID, (builder.verifyPrepared(changed) as SkinResult.Error).code)
+        assertTrue(builder.build(changed, "local-rechecked") is SkinResult.Error)
+        assertNoObjectStaging(changed)
+    }
+
+    @Test
     fun `surfaces authoritative ephemeral cleanup failures`() {
         val prepared = prepared()
-        val failing = object : SkinFileSystem by fs, SkinFileSystemSecurity by fs {
+        val failing = object : SkinFileSystem by fs, SkinFileSystemSecurity by fs,
+            dev.silksong.launcher.skins.storage.SkinFileSystemBoundedListing by fs {
             override fun writeNew(path: File, bytes: ByteArray) {
                 if (path.name == "object.json") throw IllegalStateException("object write failed")
                 fs.writeNew(path, bytes)

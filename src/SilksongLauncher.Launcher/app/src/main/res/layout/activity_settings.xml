@@ -123,6 +123,21 @@
         android:layout_marginBottom="24dp"
         android:layout_marginStart="4dp" />
 
+    <Button
+        android:id="@+id/btn_settings_mods"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
+        android:text="@string/action_mods" />
+
+    <Button
+        android:id="@+id/btn_settings_skins"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
+        android:visibility="gone"
+        android:text="@string/action_skins" />
+
     <!-- ───── Clear the build ─────
          Last, and visually separated, because it is the only control here
          that destroys anything. -->

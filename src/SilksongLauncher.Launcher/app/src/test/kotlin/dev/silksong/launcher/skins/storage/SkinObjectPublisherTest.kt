@@ -42,6 +42,47 @@ class SkinObjectPublisherTest {
     @After fun tearDown() { root.deleteRecursively() }
 
     @Test
+    fun failedBCleanupPreservesOlderAOwnershipAndRoots() {
+        val first = (publisher().publish(built("local-old-a")) as SkinResult.Ok).value
+        val oldRecord = paths.publicationCleanup.listFiles().orEmpty().single()
+        val oldPlan = File(oldRecord, "plan").readBytes()
+        val second = (publisher().publish(built("local-failed-b")) as SkinResult.Ok).value
+        assertTrue(publisher().discardUnreferenced(second, emptySet()) is SkinResult.Ok)
+        assertTrue(first.objectRoot.exists())
+        assertTrue(paths.importReceiptRoot(first.importReceiptSha256).exists())
+        assertTrue(oldRecord.exists())
+        assertTrue(oldPlan.contentEquals(File(oldRecord, "plan").readBytes()))
+        assertFalse(second.objectRoot.exists())
+    }
+
+    @Test
+    fun cleanupEvidenceNeverUsesUnboundedListing() {
+        val boundedOnly = object : SkinFileSystem by realFs, SkinFileSystemSecurity by realFs,
+            SkinFileSystemBoundedListing by realFs {
+            override fun list(path: File): List<File> {
+                if (path.toPath().startsWith(paths.publicationCleanup.toPath())) error("Unbounded cleanup listing")
+                return realFs.list(path)
+            }
+        }
+        val result = publisher(boundedOnly).publish(built("local-bounded"))
+        assertTrue("$result", result is SkinResult.Ok)
+        val published = (result as SkinResult.Ok).value
+        assertTrue(publisher(boundedOnly).discardUnreferenced(published, emptySet()) is SkinResult.Ok)
+        assertTrue(publisher(boundedOnly).recoverOwnedPublications(emptySet()) is SkinResult.Ok)
+    }
+
+    @Test
+    fun corruptLaterRecordPreservesPendingEvidenceAndEarlierRoots() {
+        val first = (publisher().publish(built("local-valid")) as SkinResult.Ok).value
+        val pending = File(paths.publicationCleanup, "pending-test").apply { mkdirs() }
+        val corrupt = File(paths.publicationCleanup, "publication-zzzz").apply { mkdirs() }
+        File(corrupt, "plan").writeText("corrupt")
+        assertTrue(publisher().recoverOwnedPublications(emptySet()) is SkinResult.Error)
+        assertTrue(pending.exists())
+        assertTrue(first.objectRoot.exists())
+    }
+
+    @Test
     fun publishesReceiptThenObjectOnlyForAcceptedBuild() {
         val fs = FaultingSkinFileSystem()
         val built = built("local-accepted")
@@ -159,7 +200,7 @@ class SkinObjectPublisherTest {
     @Test
     fun `filesystem inspection failure is returned and still removes ephemeral root`() {
         val built = built("local-inspection")
-        val fs = object : SkinFileSystem by realFs, SkinFileSystemSecurity by realFs {
+        val fs = object : SkinFileSystem by realFs, SkinFileSystemSecurity by realFs, SkinFileSystemBoundedListing by realFs {
             override fun requireContained(path: File, owner: File, allowMissingLeaf: Boolean) {
                 if (path.absoluteFile.normalize() == built.ephemeralRoot.absoluteFile.normalize()) {
                     throw IllegalStateException("identity unavailable")
@@ -186,7 +227,7 @@ class SkinObjectPublisherTest {
             var objectPublicationFailed = false
             var cleanupFailureInjected = false
             val objectRoot = paths.objectRoot(built.treeSha256).absoluteFile.normalize()
-            val fs = object : SkinFileSystem by realFs, SkinFileSystemSecurity by realFs {
+            val fs = object : SkinFileSystem by realFs, SkinFileSystemSecurity by realFs, SkinFileSystemBoundedListing by realFs {
                 override fun atomicMove(source: File, target: File) {
                     if (target.absoluteFile.normalize() == objectRoot && !objectPublicationFailed) {
                         objectPublicationFailed = true
@@ -233,7 +274,7 @@ class SkinObjectPublisherTest {
         val objectRoot = paths.objectRoot(built.treeSha256).absoluteFile.normalize()
         var objectPublicationFailed = false
         var cleanupParentSyncAttempts = 0
-        val fs = object : SkinFileSystem by realFs, SkinFileSystemSecurity by realFs {
+        val fs = object : SkinFileSystem by realFs, SkinFileSystemSecurity by realFs, SkinFileSystemBoundedListing by realFs {
             override fun atomicMove(source: File, target: File) {
                 if (target.absoluteFile.normalize() == objectRoot && !objectPublicationFailed) {
                     objectPublicationFailed = true
@@ -275,7 +316,7 @@ class SkinObjectPublisherTest {
             paths = SkinPaths(root)
             paths.quarantine.mkdirs()
             val built = built("local-incomplete-$crashPoint")
-            val fs = object : SkinFileSystem by realFs, SkinFileSystemSecurity by realFs {
+            val fs = object : SkinFileSystem by realFs, SkinFileSystemSecurity by realFs, SkinFileSystemBoundedListing by realFs {
                 override fun createDirectory(path: File) {
                     realFs.createDirectory(path)
                     if (
@@ -317,7 +358,7 @@ class SkinObjectPublisherTest {
         val built = built("local-pre-shard-crash")
         val receiptRoot = paths.importReceiptRoot(built.importReceiptSha256)
         val objectRoot = paths.objectRoot(built.treeSha256)
-        val fs = object : SkinFileSystem by realFs, SkinFileSystemSecurity by realFs {
+        val fs = object : SkinFileSystem by realFs, SkinFileSystemSecurity by realFs, SkinFileSystemBoundedListing by realFs {
             override fun atomicMove(source: File, target: File) {
                 realFs.atomicMove(source, target)
                 if (
@@ -349,7 +390,7 @@ class SkinObjectPublisherTest {
         val published = (publisher().publish(built("local-record-barrier")) as SkinResult.Ok).value
         var recordDeleted = false
         var cleanupBarrierAttempts = 0
-        val fs = object : SkinFileSystem by realFs, SkinFileSystemSecurity by realFs {
+        val fs = object : SkinFileSystem by realFs, SkinFileSystemSecurity by realFs, SkinFileSystemBoundedListing by realFs {
             override fun deleteContained(path: File, owner: File) {
                 realFs.deleteContained(path, owner)
                 if (

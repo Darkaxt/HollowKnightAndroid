@@ -22,6 +22,7 @@ import dev.silksong.launcher.skins.storage.isDirectory
 import dev.silksong.launcher.skins.storage.isRegularFile
 import dev.silksong.launcher.skins.storage.isSymbolicLink
 import dev.silksong.launcher.skins.storage.openOutput
+import dev.silksong.launcher.skins.storage.listBounded
 import dev.silksong.launcher.skins.storage.requireContained
 import dev.silksong.launcher.skins.storage.sameFile
 import java.io.File
@@ -41,53 +42,21 @@ class SkinObjectBuilder(
 
     private var configuredLimits: SkinLimits = limits
 
+    internal fun verifyPrepared(prepared: PreparedSkinCandidate): SkinResult<Unit> = try {
+        verifyPreparedOrThrow(prepared)
+        SkinResult.Ok(Unit)
+    } catch (error: BuildFailure) {
+        SkinResult.Error(error.code, error.message ?: error.code.name)
+    } catch (error: Exception) {
+        SkinResult.Error(SkinImportCode.DOCUMENT_INVALID, "Prepared candidate verification failed: ${error.message}")
+    }
+
     fun build(prepared: PreparedSkinCandidate, id: String): SkinResult<BuiltSkin> {
         var ephemeralRoot: File? = null
         var stagingOwner: File? = null
         return try {
-            val activeLimits = configuredLimits
-            catalog.revalidate()
             if (!ID.matches(id) || id.length > 64) invalid("Explicit skin ID is invalid")
-            if (prepared.payloads.isEmpty() || prepared.mappings.isEmpty()) invalid("Prepared candidate has no payload")
-            if (prepared.payloads.size > activeLimits.mappings || prepared.mappings.size > activeLimits.mappings) {
-                invalid("Prepared candidate exceeds mapping or payload bounds")
-            }
-            if (prepared.mappings.keys.any { it !in catalog.pathSet }) invalid("Prepared mapping target is outside the pinned catalog")
-            val receipt = when (val parsed = CanonicalJson.tryParseImportReceipt(prepared.importReceiptBytes, catalog)) {
-                is SkinResult.Error -> invalid(parsed.detail)
-                is SkinResult.Ok -> parsed.value
-            }
-            if (SkinIdentity.sha256(prepared.importReceiptBytes) != prepared.importReceiptSha256) {
-                invalid("Prepared import receipt identity is inconsistent")
-            }
-            if (receipt.candidateKey != prepared.candidateKey ||
-                receipt.layoutCode != prepared.layoutCode ||
-                receipt.candidateRawPathHex != prepared.rawPrefix.toHex() ||
-                SkinIdentity.candidateKey(receipt.archiveSha256, prepared.rawPrefix, prepared.layoutCode) != prepared.candidateKey
-            ) {
-                invalid("Prepared candidate framing differs from its receipt")
-            }
-            stagingOwner = stagingOwner(prepared.stagingRoot)
-            fs.requireContained(prepared.stagingRoot, stagingOwner)
-
-            val payloadNames = linkedSetOf<String>()
-            var payloadBytes = 0L
-            prepared.payloads.forEach { payload ->
-                requirePayload(payload, prepared.stagingRoot, stagingOwner)
-                val expectedName = SkinIdentity.base32DigestHex(payload.sha256)
-                if (payload.relativePath != "assets/$expectedName" || !payloadNames.add(expectedName)) {
-                    invalid("Prepared payload identity or path is inconsistent")
-                }
-                if (payload.length > activeLimits.textureBytes || payloadBytes > activeLimits.payloadBytes - payload.length) {
-                    invalid("Prepared payload bounds are exceeded")
-                }
-                payloadBytes += payload.length
-            }
-            if (prepared.mappings.values.toSet() != payloadNames) invalid("Prepared mappings and payloads do not have exact closure")
-            validateStaging(prepared, stagingOwner, activeLimits)
-            if (SkinIdentity.contentSha256(prepared.payloads) != prepared.contentSha256) {
-                invalid("Prepared content identity is inconsistent")
-            }
+            stagingOwner = verifyPreparedOrThrow(prepared)
 
             val owner = prepared.stagingRoot.parentFile ?: invalid("Prepared candidate has no staging parent")
             ephemeralRoot = File(owner, "object-${prepared.candidateKey.take(12)}-$id-${NEXT.incrementAndGet()}")
@@ -183,6 +152,55 @@ class SkinObjectBuilder(
         SkinResult.Error(SkinImportCode.DURABILITY_UNAVAILABLE, "Object discard failed: ${error.message}")
     }
 
+    private fun verifyPreparedOrThrow(prepared: PreparedSkinCandidate): File {
+        val activeLimits = configuredLimits
+        catalog.revalidate()
+        if (prepared.payloads.isEmpty() || prepared.mappings.isEmpty()) invalid("Prepared candidate has no payload")
+        if (prepared.payloads.size > activeLimits.mappings || prepared.mappings.size > activeLimits.mappings) {
+            invalid("Prepared candidate exceeds mapping or payload bounds")
+        }
+        if (prepared.mappings.keys.any { it !in catalog.pathSet }) {
+            invalid("Prepared mapping target is outside the pinned catalog")
+        }
+        val receipt = when (val parsed = CanonicalJson.tryParseImportReceipt(prepared.importReceiptBytes, catalog)) {
+            is SkinResult.Error -> invalid(parsed.detail)
+            is SkinResult.Ok -> parsed.value
+        }
+        if (SkinIdentity.sha256(prepared.importReceiptBytes) != prepared.importReceiptSha256) {
+            invalid("Prepared import receipt identity is inconsistent")
+        }
+        if (receipt.candidateKey != prepared.candidateKey ||
+            receipt.layoutCode != prepared.layoutCode ||
+            receipt.candidateRawPathHex != prepared.rawPrefix.toHex() ||
+            SkinIdentity.candidateKey(receipt.archiveSha256, prepared.rawPrefix, prepared.layoutCode) != prepared.candidateKey
+        ) {
+            invalid("Prepared candidate framing differs from its receipt")
+        }
+        val owner = stagingOwner(prepared.stagingRoot)
+        fs.requireContained(prepared.stagingRoot, owner)
+
+        val payloadNames = linkedSetOf<String>()
+        var payloadBytes = 0L
+        prepared.payloads.forEach { payload ->
+            val identity = requirePayload(payload, prepared.stagingRoot, owner)
+            val expectedName = SkinIdentity.base32DigestHex(payload.sha256)
+            if (payload.relativePath != "assets/$expectedName" || !payloadNames.add(expectedName)) {
+                invalid("Prepared payload identity or path is inconsistent")
+            }
+            if (payload.length > activeLimits.textureBytes || payloadBytes > activeLimits.payloadBytes - payload.length) {
+                invalid("Prepared payload bounds are exceeded")
+            }
+            if (hashStable(payload.file, identity) != payload.sha256) invalid("Prepared payload digest changed")
+            payloadBytes += payload.length
+        }
+        if (prepared.mappings.values.toSet() != payloadNames) invalid("Prepared mappings and payloads do not have exact closure")
+        validateStaging(prepared, owner, activeLimits)
+        if (SkinIdentity.contentSha256(prepared.payloads) != prepared.contentSha256) {
+            invalid("Prepared content identity is inconsistent")
+        }
+        return owner
+    }
+
     private fun validateStaging(prepared: PreparedSkinCandidate, owner: File, limits: SkinLimits) {
         val expectedFiles = prepared.payloads.map { it.relativePath }.toSet()
         val expectedDirectories = expectedFiles.flatMap { path ->
@@ -200,7 +218,7 @@ class SkinObjectBuilder(
             val directory = queue.removeFirst()
             fs.requireContained(directory, owner)
             if (!fs.isDirectory(directory) || fs.isSymbolicLink(directory)) invalid("Prepared staging directory is unsafe")
-            for (child in fs.list(directory)) {
+            for (child in fs.listBounded(directory, limits.observedNodes - nodes)) {
                 fs.requireContained(child, owner)
                 nodes++
                 if (nodes > limits.observedNodes) invalid("Prepared staging node bound is exceeded")

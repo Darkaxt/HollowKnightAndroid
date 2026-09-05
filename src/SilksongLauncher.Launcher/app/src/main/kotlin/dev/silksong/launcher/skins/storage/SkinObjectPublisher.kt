@@ -144,7 +144,9 @@ class SkinObjectPublisher(
         if (roots.map { it.absoluteFile.normalize() }.toSet().size != roots.size) {
             throw IllegalStateException("Newly-created publication roots contain aliases")
         }
+        require(referencedDigests.all(DIGEST::matches)) { "Referenced publication digest is invalid" }
         val retainedDigests = retainedDigests(readOwnershipRecords(), referencedDigests)
+        val deletions = mutableListOf<Pair<File, SkinNodeIdentity>>()
         for (root in roots) {
             val digest = root.name
             if (!DIGEST.matches(digest)) throw IllegalStateException("Published cleanup root has no digest identity")
@@ -160,13 +162,19 @@ class SkinObjectPublisher(
             val before = fs.identity(root)
             fs.requireContained(root, paths.profileRoot)
             if (fs.identity(root) != before) throw IllegalStateException("Published cleanup root identity changed")
+            deletions += root to before
+        }
+        // Validate the complete operation-local plan before deleting either immutable root.
+        for ((root, before) in deletions) {
+            fs.requireContained(root, paths.profileRoot)
+            require(fs.identity(root) == before) { "Published cleanup root identity changed" }
+        }
+        for ((root, _) in deletions) {
             fs.deleteContained(root, paths.profileRoot)
             root.parentFile?.let(fs::syncDirectory)
         }
-        when (val recovered = recoverOwnedPublications(referencedDigests)) {
-            is SkinResult.Ok -> SkinResult.Ok(Unit)
-            is SkinResult.Error -> recovered
-        }
+        // Ownership records are settled only by explicit process recovery, never a failed CAS.
+        SkinResult.Ok(Unit)
     } catch (error: Exception) {
         SkinResult.Error(SkinImportCode.DURABILITY_UNAVAILABLE, "Unreferenced publication cleanup failed: ${error.message}")
     }
@@ -176,8 +184,21 @@ class SkinObjectPublisher(
             if (referencedDigests.any { !DIGEST.matches(it) }) {
                 throw IllegalArgumentException("Referenced publication digest is invalid")
             }
-            val records = readOwnershipRecords()
+            val pending = mutableListOf<File>()
+            val records = readOwnershipRecords(pending)
             val retainedDigests = retainedDigests(records, referencedDigests)
+            for (record in records) {
+                for (planned in listOf(record.objectRoot, record.receipt)) {
+                    val destination = destination(planned)
+                    if (planned.digest !in retainedDigests && fs.exists(destination) &&
+                        fs.identity(destination) == planned.identity
+                    ) {
+                        verifyOwnedRoot(destination, planned.kind, planned.digest, record.id, record.candidateKey)
+                    }
+                }
+            }
+            for (staging in pending) fs.deleteContained(staging, paths.profileRoot)
+            if (pending.isNotEmpty()) fs.syncDirectory(paths.publicationCleanup)
             for (record in records) {
                 cleanupPlannedRoots(record, retainedDigests)
                 fs.requireContained(record.recordRoot, paths.profileRoot)
@@ -232,7 +253,7 @@ class SkinObjectPublisher(
         }
         require(!receiptIdentity.regularFile && !objectIdentity.regularFile) { "Publication staging root is not a directory" }
         ensureCleanupRoot()
-        if (fs.list(paths.publicationCleanup).size >= MAX_OWNERSHIP_RECORDS) {
+        if (fs.listBounded(paths.publicationCleanup, MAX_OWNERSHIP_RECORDS).size >= MAX_OWNERSHIP_RECORDS) {
             throw IllegalStateException("Publication cleanup record bound exceeded")
         }
         val nonce = "${System.nanoTime()}-${NEXT.incrementAndGet()}-${built.importReceiptSha256.take(12)}-${built.treeSha256.take(12)}"
@@ -389,10 +410,10 @@ class SkinObjectPublisher(
         RootKind.RECEIPT -> paths.importReceiptRoot(planned.digest)
     }.absoluteFile.normalize()
 
-    private fun readOwnershipRecords(): List<PublicationOwnership> {
+    private fun readOwnershipRecords(pendingRoots: MutableList<File>? = null): List<PublicationOwnership> {
         if (!fs.exists(paths.publicationCleanup)) return emptyList()
         fs.requireContained(paths.publicationCleanup, paths.profileRoot)
-        val roots = fs.list(paths.publicationCleanup).sortedBy { it.name }
+        val roots = fs.listBounded(paths.publicationCleanup, MAX_OWNERSHIP_RECORDS).sortedBy { it.name }
         if (roots.size > MAX_OWNERSHIP_RECORDS) {
             throw IllegalStateException("Publication cleanup record bound exceeded")
         }
@@ -405,9 +426,16 @@ class SkinObjectPublisher(
             requireImmediateCleanupChild(staging)
             val identity = fs.identity(staging)
             if (identity.regularFile) throw IllegalStateException("Pending publication record is not a directory")
-            fs.deleteContained(staging, paths.profileRoot)
+            val children = fs.listBounded(staging, 1)
+            for (child in children) {
+                fs.requireContained(child, paths.profileRoot)
+                val childIdentity = fs.identity(child)
+                require(child.name == PLAN_FILE && childIdentity.regularFile && childIdentity.size <= MAX_PLAN_BYTES) {
+                    "Pending publication record shape is invalid"
+                }
+            }
+            pendingRoots?.add(staging)
         }
-        if (pending.isNotEmpty()) fs.syncDirectory(paths.publicationCleanup)
         return records.map { record ->
             requireImmediateCleanupChild(record)
             readOwnershipRecord(record)
@@ -444,7 +472,7 @@ class SkinObjectPublisher(
         fs.requireContained(recordRoot, paths.profileRoot)
         val rootIdentity = fs.identity(recordRoot)
         if (rootIdentity.regularFile) throw IllegalStateException("Publication cleanup record is not a directory")
-        val children = fs.list(recordRoot)
+        val children = fs.listBounded(recordRoot, 1)
         if (children.size != 1 || children.single().name != PLAN_FILE) {
             throw IllegalStateException("Publication cleanup record shape is invalid")
         }
