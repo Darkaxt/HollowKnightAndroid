@@ -24,6 +24,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class LauncherActivity : Activity() {
 
@@ -52,6 +53,12 @@ class LauncherActivity : Activity() {
     private lateinit var btnSettings: Button
     private lateinit var btnLogs: Button
     private lateinit var btnLaunch: Button
+
+    /**
+     * One player-class repair per visit to this screen. See
+     * [repairPlayerClasses].
+     */
+    private var repairAttempted = false
     private lateinit var logScroll: ScrollView
     private lateinit var txtLog: TextView
 
@@ -575,6 +582,33 @@ class LauncherActivity : Activity() {
         }
         runCatching { DepotLocation.relink(this, depot) }
             .onFailure { LauncherLog.log("could not relink the content", it) }
+
+        // The game's process has to be able to load its own activity, and
+        // GameActivity's superclass comes from a dex this app builds on the
+        // device rather than from anything in the APK. When that dex is not
+        // loadable the process dies before onCreate -- before the game has
+        // started any of its own logging -- so the failure looks like the
+        // game "just not opening" and leaves nothing behind. Asked here,
+        // where it can still be fixed, rather than discovered over there,
+        // where it cannot. See UnityDex.repair and issue #24.
+        if (!UnityDex.playerClassesUsable(this)) {
+            repairPlayerClasses()
+            return
+        }
+        startGameActivity()
+    }
+
+    /**
+     * Starts the game, with the checks already made.
+     *
+     * Separate from [launchGame] on purpose, and the separation is load
+     * bearing: the repair below finishes by starting the game, and if it went
+     * back through the check it would find it still failing -- a process that
+     * grafted a bad jar at startup stays that way -- and repair again, and
+     * again. That is not hypothetical; it is what the first version of this
+     * did, several times a second, deleting and re-dexing the jar each time.
+     */
+    private fun startGameActivity() {
         try {
             LauncherLog.log("Launching $UNITY_ACTIVITY_CLASS")
             // No FLAG_ACTIVITY_NEW_TASK / CLEAR_TASK and no finish()
@@ -602,6 +636,69 @@ class LauncherActivity : Activity() {
             returningFromGame = false
             LauncherLog.log("Failed to launch game: ${t.message}")
         }
+    }
+
+    /**
+     * Rebuilds the player classes, then launches -- or says why it cannot.
+     *
+     * A second or two, off the main thread because it dexes, with the launch
+     * button held so it cannot be pressed into a second attempt on top of
+     * this one. Silent when it works: this is a repair the user did not ask
+     * for and does not need to know the details of, and the log has them.
+     */
+    private fun repairPlayerClasses() {
+        if (repairAttempted) {
+            // Once per visit to this screen. Dexing the same jar a third time
+            // will not help, and a repair allowed to retry itself is a loop
+            // waiting for a reason to happen.
+            playerClassesBroken("The player classes could not be made loadable.")
+            return
+        }
+        repairAttempted = true
+        LauncherLog.log("Launch held: the player classes are not loadable")
+        btnLaunch.isEnabled = false
+        uiScope.launch {
+            val problem = withContext(Dispatchers.IO) {
+                UnityDex.repair(this@LauncherActivity)
+            }
+            btnLaunch.isEnabled = true
+            if (problem == null) {
+                // Straight to the start, NOT back through launchGame: see
+                // startGameActivity for why re-checking here loops.
+                startGameActivity()
+            } else {
+                playerClassesBroken(problem)
+            }
+        }
+    }
+
+    /**
+     * The game cannot be started and rebuilding its classes did not help.
+     *
+     * A dialog rather than a log line for the same reason as
+     * [missingGameFiles]: from the outside this is the app declining to open
+     * the game with no explanation. Offering the reset is offering the thing
+     * that used to be the only known cure -- and saying what it costs, since
+     * the depot and the saves are not part of it.
+     */
+    private fun playerClassesBroken(problem: String) {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("The game cannot be started")
+            .setMessage(
+                "$problem\n\n" +
+                    "The engine's Java classes are built on this device, and the game " +
+                    "cannot open without them. Resetting the build will make them again. " +
+                    "The game's files and your saves are not affected.",
+            )
+            .setPositiveButton("Reset the build") { _, _ ->
+                startActivity(
+                    Intent(this, SetupActivity::class.java)
+                        .putExtra(SetupActivity.EXTRA_RESET, true),
+                )
+                finish()
+            }
+            .setNegativeButton("Not now", null)
+            .show()
     }
 
     /**

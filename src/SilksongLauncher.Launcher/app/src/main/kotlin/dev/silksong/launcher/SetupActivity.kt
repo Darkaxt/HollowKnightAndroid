@@ -71,6 +71,20 @@ class SetupActivity : Activity() {
          */
         const val EXTRA_REBUILD = "dev.silksong.launcher.extra.REBUILD"
 
+        /**
+         * "Reset the build", decided on the screen that sent us here.
+         *
+         * The same trap as [EXTRA_REBUILD] and a worse version of it. A build
+         * whose player classes cannot be loaded is broken in a way none of
+         * this screen's checks can see -- [UnityDex.isBuilt] asks whether a
+         * file is present, not whether it works -- so arriving without this
+         * means arriving at a screen that declares the game built and
+         * forwards straight back to the launcher. The button then reads
+         * "Reset the build" and demonstrably resets nothing, which is exactly
+         * how it was reported.
+         */
+        const val EXTRA_RESET = "dev.silksong.launcher.extra.RESET"
+
         // Where setup hands off to. The launcher is the app's home screen --
         // Steam login, cloud saves, and the button that starts the game; this
         // screen exists only to get the device to the point where that screen
@@ -158,6 +172,14 @@ class SetupActivity : Activity() {
             intent.removeExtra(EXTRA_REBUILD)
             LauncherLog.log("setup: rebuilding on request")
             startPort()
+        }
+        // Same contract as the rebuild above: agreed to on the previous
+        // screen, so it starts rather than asking a second time. It sets busy
+        // synchronously, which is what stops onResume forwarding past it.
+        if (savedInstanceState == null && intent?.getBooleanExtra(EXTRA_RESET, false) == true) {
+            intent.removeExtra(EXTRA_RESET)
+            LauncherLog.log("setup: resetting the build on request")
+            clearBuild()
         }
     }
 

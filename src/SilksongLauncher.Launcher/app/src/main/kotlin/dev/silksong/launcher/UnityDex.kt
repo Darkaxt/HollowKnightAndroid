@@ -33,6 +33,45 @@ object UnityDex {
     /** The entry point d8 exposes for programmatic use. */
     private const val D8_MAIN = "com.android.tools.r8.D8"
 
+    /**
+     * Where ART keeps the optimized form of the dex we graft on.
+     *
+     * Under cacheDir, so the system may delete it whenever it likes -- which
+     * is fine, it is rebuilt in milliseconds -- but also means it can be
+     * found stale or half-written, and a bad odex stops a perfectly good jar
+     * from loading. See [repair].
+     */
+    private const val OPT_DIR = "unity-dex-opt"
+
+    /**
+     * The class whose loading is the thing that actually has to work.
+     *
+     * Not a Unity type, deliberately. The failure being guarded against is
+     * the framework being unable to instantiate the game's activity, and
+     * that is a chain: GameActivity extends PlayerActivity, which implements
+     * com.unity3d.player.IUnityPlayerLifecycleEvents and holds a
+     * UnityPlayerForActivityOrService -- and a superclass and its interfaces
+     * must resolve before a class can be defined at all. So loading this one
+     * name exercises exactly what ActivityThread is about to do, rather than
+     * something chosen to stand in for it.
+     *
+     * (An earlier version probed com.unity3d.player.UnityPlayerActivity,
+     * which this APK does not use and the dexed jar does not contain --
+     * PlayerActivity replaces it. The check therefore failed on a perfectly
+     * good build, every time.)
+     */
+    private const val GAME_ACTIVITY_CLASS = "dev.silksong.shell.GameActivity"
+
+    /**
+     * A type that can only have come from the dexed jar.
+     *
+     * Used to ask whether the JAR is good, as opposed to whether this
+     * process can load it -- see the tail of [repair]. It must be a Unity
+     * type, because the app loader does not have one and so cannot answer
+     * the question by accident.
+     */
+    private const val UNITY_PLAYER_CLASS = "com.unity3d.player.UnityPlayerForActivityOrService"
+
     /** Where the dexed player classes live once built. */
     fun outputDir(context: Context): File = File(context.filesDir, "unity-dex")
 
@@ -171,22 +210,41 @@ object UnityDex {
      */
     fun inject(context: Context) {
         val jar = outputJar(context)
-        if (!jar.isFile) return
-        val appLoader = context.classLoader ?: return
+        if (!jar.isFile) {
+            // Silent until issue #24. This is the state in which the game
+            // cannot start AT ALL -- GameActivity's superclass lives in this
+            // jar, so without it the framework cannot even instantiate the
+            // activity -- and it used to be the one state that produced no
+            // log line anywhere. A launch that failed here looked exactly
+            // like a launch that worked.
+            LauncherLog.log("$TAG: the player classes are not built ($jar is missing)")
+            return
+        }
+        val appLoader = context.classLoader
+        if (appLoader == null) {
+            LauncherLog.log("$TAG: no class loader to add the player classes to")
+            return
+        }
         try {
-            val dexPathList = field(appLoader.javaClass, "pathList") ?: return
-            val pathList = dexPathList.get(appLoader) ?: return
-            val elementsField = field(pathList.javaClass, "dexElements") ?: return
+            val dexPathList = field(appLoader.javaClass, "pathList")
+                ?: return failed("BaseDexClassLoader has no pathList field")
+            val pathList = dexPathList.get(appLoader)
+                ?: return failed("the class loader's pathList is null")
+            val elementsField = field(pathList.javaClass, "dexElements")
+                ?: return failed("DexPathList has no dexElements field")
 
             val donor = DexClassLoader(
                 jar.absolutePath,
-                File(context.cacheDir, "unity-dex-opt").apply { mkdirs() }.absolutePath,
+                File(context.cacheDir, OPT_DIR).apply { mkdirs() }.absolutePath,
                 null,
                 appLoader,
             )
-            val donorList = field(donor.javaClass, "pathList")?.get(donor) ?: return
-            val donorElements = elementsField.get(donorList) as? Array<*> ?: return
-            val current = elementsField.get(pathList) as? Array<*> ?: return
+            val donorList = field(donor.javaClass, "pathList")?.get(donor)
+                ?: return failed("the donor loader has no pathList")
+            val donorElements = elementsField.get(donorList) as? Array<*>
+                ?: return failed("the donor loader produced no dex elements")
+            val current = elementsField.get(pathList) as? Array<*>
+                ?: return failed("the app loader's dexElements is not an array")
 
             val merged = java.lang.reflect.Array.newInstance(
                 current.javaClass.componentType!!, current.size + donorElements.size)
@@ -202,6 +260,140 @@ object UnityDex {
             LauncherLog.log("$TAG: could not add the player classes", t)
         }
     }
+
+    /**
+     * One reflection step did not find what it expected.
+     *
+     * Each of these was a bare `?: return` and so indistinguishable from
+     * success. They are all "this Android version moved a private field",
+     * which is worth knowing precisely: the step named here is the one to fix.
+     */
+    private fun failed(why: String) {
+        LauncherLog.log("$TAG: could not add the player classes: $why")
+    }
+
+    /**
+     * Whether the player classes actually resolve in THIS process.
+     *
+     * The question [inject] exists to make true, asked directly instead of
+     * inferred from whether a file is on disk. A jar that is present and
+     * current but does not load answers no here and yes to every other check
+     * in this object, and that gap is the whole of the bug below.
+     *
+     * initialize = false: this only has to link. Running the static
+     * initialiser of the engine's activity class inside the launcher process
+     * is neither wanted nor safe.
+     */
+    /**
+     * Whether the GAME's process will be able to load its own activity.
+     *
+     * Two questions, cheapest first, and the second one is the point.
+     *
+     * A process that grafted an unusable jar at startup can never resolve the
+     * class afterwards -- appending a good jar does not undo a resolution
+     * already attempted -- so asking only [resolvesHere] means the launcher
+     * answers "no" forever after one bad start, while the game, which gets a
+     * fresh process and a fresh graft, would have started perfectly well.
+     * That is not theoretical: it shipped for about ten minutes and turned
+     * every launch after a repair into a failure dialog.
+     *
+     * So a no from this process is not a no. What decides it is whether the
+     * jar on disk supplies the classes.
+     */
+    fun playerClassesUsable(context: Context): Boolean =
+        resolvesHere(context) || jarProvidesPlayerClasses(context)
+
+    /**
+     * Whether THIS process can load the game's activity.
+     *
+     * initialize = false: this only has to link. Running the static
+     * initialiser of the engine's activity class inside the launcher process
+     * is neither wanted nor safe.
+     */
+    private fun resolvesHere(context: Context): Boolean =
+        runCatching { Class.forName(GAME_ACTIVITY_CLASS, false, context.classLoader) }.isSuccess
+
+    /**
+     * Makes sure the game's process will be able to load its own activity.
+     *
+     * Called before the game is started, because the alternative is issue
+     * #24: the framework cannot instantiate GameActivity, so the process dies
+     * between Application.onCreate and Activity.onCreate -- and every
+     * recorder this app has is started INSIDE the onCreate that never ran.
+     * The failure is therefore both fatal and invisible, and the only remedy
+     * anyone found was a twenty-minute rebuild. The part of that rebuild
+     * which actually mattered is the second and a half spent in [build].
+     *
+     * Deliberately not conditional on [isBuilt]: "the jar is present and
+     * current" is exactly the state being repaired, so a check that believes
+     * it would look straight at the broken thing and decide there was nothing
+     * to do.
+     *
+     * Returns null when the game can be started, or a sentence saying why it
+     * cannot. Blocking, and slow enough to matter: never call it on the main
+     * thread.
+     */
+    fun repair(context: Context): String? {
+        if (playerClassesUsable(context)) return null
+        LauncherLog.log("$TAG: the player classes do not load; rebuilding them")
+
+        // The odex first, and unconditionally. It is derived from the jar
+        // rather than authored, it is in a directory the system may empty at
+        // any moment, and it is remade in milliseconds -- so it is both the
+        // cheapest thing to rule out and a real way for a good jar to stop
+        // loading.
+        runCatching { File(context.cacheDir, OPT_DIR).deleteRecursively() }
+
+        // Removing the output is what forces build() past its "already
+        // current" check.
+        runCatching { outputDir(context).deleteRecursively() }
+
+        runCatching { build(context, UnityFetcher.rootFor(context)) }.onFailure {
+            LauncherLog.log("$TAG: could not rebuild the player classes", it)
+            return "The player classes could not be rebuilt: ${it.message}"
+        }
+
+        // This process's loader still has nothing grafted onto it: inject ran
+        // at process start, when there was nothing to graft. Running it now
+        // is safe precisely because it did nothing then.
+        inject(context)
+
+        if (resolvesHere(context)) {
+            LauncherLog.log("$TAG: the player classes load again")
+            return null
+        }
+
+        // This process could not be mended, and that is not the same as the
+        // game being unable to start. A loader that grafted an unusable jar
+        // at process start keeps the failure -- appending a good one after
+        // the fact does not undo a resolution already attempted -- whereas
+        // the game gets a new process and a new graft. So the question that
+        // decides whether to launch is whether the JAR is good NOW, asked
+        // through a loader made for the purpose instead of this one.
+        if (jarProvidesPlayerClasses(context)) {
+            LauncherLog.log("$TAG: rebuilt; the game's process will load them fresh")
+            return null
+        }
+        return "The player classes were rebuilt but still do not load."
+    }
+
+    /**
+     * Whether the jar on disk supplies the Unity types.
+     *
+     * Independent of what this process's own loader has already made of it:
+     * a throwaway loader over that one file, asked for a type only that file
+     * can provide.
+     */
+    private fun jarProvidesPlayerClasses(context: Context): Boolean =
+        runCatching {
+            val probe = DexClassLoader(
+                outputJar(context).absolutePath,
+                File(context.cacheDir, "$OPT_DIR-probe").apply { mkdirs() }.absolutePath,
+                null,
+                UnityDex::class.java.classLoader,
+            )
+            Class.forName(UNITY_PLAYER_CLASS, false, probe)
+        }.isSuccess
 
     /** Walks up the hierarchy, since the field is declared on a base class. */
     private fun field(start: Class<*>, name: String): java.lang.reflect.Field? {

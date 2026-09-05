@@ -83,6 +83,12 @@ object LauncherLog {
      */
     private const val GAME_LOG_NAME = "game.log"
     private const val ERROR_LOG_NAME = "errors.log"
+
+    /**
+     * Must match BOOT_LOG in GameActivity.java. On INTERNAL storage, unlike
+     * the two above, which is the whole point of it -- see [gameLogs].
+     */
+    private const val GAME_BOOT_NAME = "game-boot.log"
     private const val MAX_FILE_BYTES = 256L * 1024L
     private const val MAX_FILE_LINES = 4000
     private val fileLock = Any()
@@ -90,6 +96,23 @@ object LauncherLog {
 
     /** Bytes appended by this process since [attach], for the trim below. */
     private var written = 0L
+
+    /**
+     * Lines logged before [attach] had a file to write them to.
+     *
+     * Not an edge case: [SilksongApp.attachBaseContext] runs before its own
+     * onCreate, and that is where [UnityDex.inject] reports whether the
+     * player classes made it into the class loader -- the one fact that says
+     * whether the game was ever going to start. Dropping those lines meant a
+     * launch that failed there and a launch that succeeded produced byte-for
+     * byte the same log. (Issue #24.)
+     *
+     * Capped, because a process that never attaches must not grow this
+     * without bound, and held under [fileLock] so that a line cannot be
+     * queued and lost while attach is draining.
+     */
+    private const val MAX_PENDING = 200
+    private val pending = ArrayList<String>()
 
     /** Where the log lives, once [attach] has been called. */
     fun file(context: Context): File = File(context.filesDir, LOG_NAME)
@@ -113,15 +136,24 @@ object LauncherLog {
      * is the full session and both of its generations follow, because the
      * context around a fault is worth having when it is still there.
      */
-    fun gameLogs(context: Context): List<File> =
+    fun gameLogs(context: Context): List<File> {
+        val out = ArrayList<File>(6)
+        // Internal storage, and first, because this is the file that says
+        // whether the game's activity was ever created. The three below are
+        // written to EXTERNAL storage from inside GameActivity.onCreate, so a
+        // launch that dies before that point -- or one whose process cannot
+        // see external storage at all -- leaves all three untouched and the
+        // report says only "it did not start". See GameActivity.boot().
+        out.add(File(context.filesDir, "$GAME_BOOT_NAME.prev"))
+        out.add(File(context.filesDir, GAME_BOOT_NAME))
         context.getExternalFilesDir(null)?.let {
-            listOf(
-                File(it, "$ERROR_LOG_NAME.prev"),
-                File(it, ERROR_LOG_NAME),
-                File(it, "$GAME_LOG_NAME.prev"),
-                File(it, GAME_LOG_NAME),
-            )
-        }.orEmpty()
+            out.add(File(it, "$ERROR_LOG_NAME.prev"))
+            out.add(File(it, ERROR_LOG_NAME))
+            out.add(File(it, "$GAME_LOG_NAME.prev"))
+            out.add(File(it, GAME_LOG_NAME))
+        }
+        return out
+    }
 
     /**
      * Starts writing to disk. Safe to call more than once and from any process.
@@ -150,6 +182,45 @@ object LauncherLog {
             // writes another 256 before anything trims it.
             written = opened.firstOrNull()?.length() ?: 0L
             sinks = opened
+
+            // Whatever was logged before there was anywhere to put it. Written
+            // after the header so the session it belongs to is the one it is
+            // filed under, and cleared either way: an unattachable process
+            // must not accumulate these forever.
+            if (opened.isNotEmpty()) {
+                for (line in pending) {
+                    try {
+                        appendLocked(opened, line)
+                    } catch (_: Throwable) {
+                    }
+                }
+            }
+            pending.clear()
+        }
+    }
+
+    /**
+     * Appends one line to every open sink and enforces the cap.
+     *
+     * Call under [fileLock]. Shared by [log] and by the pre-attach drain in
+     * [attach], so that a buffered line is trimmed and counted exactly like a
+     * live one.
+     */
+    private fun appendLocked(out: List<File>, stamped: String) {
+        val line = "$stamped\n"
+        for (f in out) f.appendText(line)
+
+        // Enforced on the way out and not only at attach(). A port
+        // runs for the better part of an hour and emits a
+        // compiler's worth of output, all of it in ONE process --
+        // so a cap applied only at startup is no cap at all, and
+        // the file the log screen has to render grows to whatever
+        // that build felt like saying. Which is how a log screen
+        // becomes a crash.
+        written += line.length
+        if (written > MAX_FILE_BYTES) {
+            for (f in out) trim(f)
+            written = out.firstOrNull()?.length() ?: 0L
         }
     }
 
@@ -223,21 +294,19 @@ object LauncherLog {
             // disk or a revoked directory is swallowed rather than thrown.
             try {
                 synchronized(fileLock) {
-                    val line = "$stamped\n"
-                    for (f in out) f.appendText(line)
-
-                    // Enforced on the way out and not only at attach(). A port
-                    // runs for the better part of an hour and emits a
-                    // compiler's worth of output, all of it in ONE process --
-                    // so a cap applied only at startup is no cap at all, and
-                    // the file the log screen has to render grows to whatever
-                    // that build felt like saying. Which is how a log screen
-                    // becomes a crash.
-                    written += line.length
-                    if (written > MAX_FILE_BYTES) {
-                        for (f in out) trim(f)
-                        written = out.firstOrNull()?.length() ?: 0L
-                    }
+                    appendLocked(sinks, stamped)
+                }
+            } catch (_: Throwable) {
+            }
+        } else {
+            // No file yet. Held rather than dropped -- see [pending] -- and
+            // re-checked under the lock, because attach() may have opened one
+            // between the read above and here.
+            try {
+                synchronized(fileLock) {
+                    val now = sinks
+                    if (now.isNotEmpty()) appendLocked(now, stamped)
+                    else if (pending.size < MAX_PENDING) pending.add(stamped)
                 }
             } catch (_: Throwable) {
             }
