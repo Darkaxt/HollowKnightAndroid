@@ -18,7 +18,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="../skin-goldens/v1/launch-descriptors.json" Link="skin-goldens/v1/launch-descriptors.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../skin-goldens/v1/lifecycle.json" Link="skin-goldens/v1/lifecycle.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../skin-goldens/v1/transactions.json" Link="skin-goldens/v1/transactions.json" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="..\shared-patches\src\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="../hollow-knight-patches/src/skins/core/**/*.cs" Link="HollowKnightSkins/Core/%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\silksong-patches\src\mods\SilksongTweakAdapter.cs" Link="Silksong\SilksongTweakAdapter.cs" Condition="Exists('..\silksong-patches\src\mods\SilksongTweakAdapter.cs')" />
     <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightTweakAdapter.cs" Link="HollowKnight\HollowKnightTweakAdapter.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightTweakAdapter.cs')" />
     <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightFlashPolicyCore.cs" Link="HollowKnight\HollowKnightFlashPolicyCore.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightFlashPolicyCore.cs')" />

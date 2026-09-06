@@ -1,0 +1,3017 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "caseId": "two-deaths-authority-and-single-delivery",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":null,\"currentSkin\":null,\"lastConfirmedEpoch\":\"0\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"0\"},\"events\":[{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"Rebind\",\"hero\":\"h\",\"skin\":\"s\"},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"2\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"2\"},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false}]}"
+      },
+      "inputSha256": "c788ce7f70bb2f6f99bf71e9f2e76cb7f0cabd604d651748505b80a8d89de7a8",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": null,
+            "currentSkin": null,
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "unbound",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": null,
+            "currentSkin": null,
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "unbound",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": null,
+            "currentSkin": null,
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "unbound",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "rebound",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 4,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "no-pending-epoch",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 5,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "armed",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 6,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "death-confirmed",
+          "confirmedEpoch": "1",
+          "stableToken": null
+        },
+        {
+          "step": 7,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 8,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 9,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "1",
+            "hero": "h",
+            "skin": "s"
+          }
+        },
+        {
+          "step": 10,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "no-pending-epoch",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 11,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": "s",
+            "armedOccurrence": "2",
+            "occurrenceHighWater": "2"
+          },
+          "diagnosis": "armed",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 12,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "2",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "2",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "2"
+          },
+          "diagnosis": "death-confirmed",
+          "confirmedEpoch": "2",
+          "stableToken": null
+        },
+        {
+          "step": 13,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "2",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "2",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "2"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 14,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "2",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "2",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "2"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 15,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "2",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "2"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "2",
+            "hero": "h",
+            "skin": "s"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "zero-and-unarmed",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"0\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"0\"},\"events\":[{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"0\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"0\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"}]}"
+      },
+      "inputSha256": "973b2a1df4a2b25d1da33de4837861eb1a4af80926a76d56f8520a064d1f8b86",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "invalid-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "invalid-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "unarmed-after-death",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "armed",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "correlation-and-pending",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":\"h\",\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"0\",\"armedSkin\":\"s\",\"armedOccurrence\":\"1\",\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"2\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"2\"},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"2\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"2\"}]}"
+      },
+      "inputSha256": "d0ca18114dec7077a9d3a009395c21b0efbdc3af6f21a81a3e7d7274145a78a6",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "consumed-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "candidate-already-armed",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "mismatched-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "no-pending-epoch",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 4,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "death-confirmed",
+          "confirmedEpoch": "1",
+          "stableToken": null
+        },
+        {
+          "step": 5,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "consumed-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 6,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "consumed-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 7,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "pending-epoch",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 8,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "unarmed-after-death",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "stale-death-pairs",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":\"h\",\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"0\",\"armedSkin\":\"s\",\"armedOccurrence\":\"1\",\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"BeforeDeath\",\"hero\":\"other\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"other\",\"occurrence\":\"1\"},{\"type\":\"AfterDeath\",\"hero\":\"other\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"other\",\"occurrence\":\"1\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"}]}"
+      },
+      "inputSha256": "7b2353079dcf74c0c585de60217727399e268dd2e367499f9ecab1129b8da7bc",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stale-binding",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stale-binding",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stale-binding",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stale-binding",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 4,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "death-confirmed",
+          "confirmedEpoch": "1",
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "same-rebind-arm-and-window",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":\"h\",\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"0\",\"armedSkin\":\"s\",\"armedOccurrence\":\"1\",\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"h\",\"skin\":\"s\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Rebind\",\"hero\":\"h\",\"skin\":\"s\"},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false}]}"
+      },
+      "inputSha256": "4384d04b1a96fbb17773bfc4660357e76371a7293fa8c88afba23ca98eed0335",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "same-binding",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "death-confirmed",
+          "confirmedEpoch": "1",
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 4,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "same-binding",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 5,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "1",
+            "hero": "h",
+            "skin": "s"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "rebind-hero-mid-arm",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":\"h\",\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"0\",\"armedSkin\":\"s\",\"armedOccurrence\":\"1\",\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"BeforeDeath\",\"hero\":\"new\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"AfterDeath\",\"hero\":\"new\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"BeforeDeath\",\"hero\":\"new\",\"skin\":\"s\",\"occurrence\":\"2\"},{\"type\":\"AfterDeath\",\"hero\":\"new\",\"skin\":\"s\",\"occurrence\":\"2\"}]}"
+      },
+      "inputSha256": "57ee02fe21adfba769a6c2fd95fd47d27d406df10fa79fc708315b4242398225",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "new",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "rebound",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "new",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "consumed-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "new",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "consumed-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "new",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stale-binding",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 4,
+          "state": {
+            "armedHero": "new",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "new",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "2",
+            "occurrenceHighWater": "2"
+          },
+          "diagnosis": "armed",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 5,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "new",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "2"
+          },
+          "diagnosis": "death-confirmed",
+          "confirmedEpoch": "1",
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "rebind-hero-mid-window",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"1\",\"stableCount\":2,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"BeforeDeath\",\"hero\":\"new\",\"skin\":\"s\",\"occurrence\":\"2\"},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"new\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"new\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"new\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false}]}"
+      },
+      "inputSha256": "b4d1887e3298643c0e2691283339153c5f3c2522f20c5df40029190067e6cca8",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "new",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "rebound",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "new",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "pending-epoch",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "new",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stale-observation",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "new",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 4,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "new",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 5,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "new",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "1",
+            "hero": "new",
+            "skin": "s"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "rebind-skin-mid-arm",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":\"h\",\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"0\",\"armedSkin\":\"s\",\"armedOccurrence\":\"1\",\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"h\",\"skin\":\"new\"},{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"new\",\"occurrence\":\"1\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"new\",\"occurrence\":\"1\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"new\",\"occurrence\":\"2\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"new\",\"occurrence\":\"2\"}]}"
+      },
+      "inputSha256": "4928782b99442304ff18be277b760701567ab4630a9930fd2a9a22ff5304860b",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "new",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "rebound",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "new",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "consumed-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "new",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "consumed-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "new",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stale-binding",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 4,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "new",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "new",
+            "armedOccurrence": "2",
+            "occurrenceHighWater": "2"
+          },
+          "diagnosis": "armed",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 5,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "new",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "2"
+          },
+          "diagnosis": "death-confirmed",
+          "confirmedEpoch": "1",
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "rebind-skin-mid-window",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"1\",\"stableCount\":2,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"h\",\"skin\":\"new\"},{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"new\",\"occurrence\":\"2\"},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"new\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"new\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"new\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false}]}"
+      },
+      "inputSha256": "a275cf533a5431cef4ed7dd480ffc944d1c093d6e0d838dd170d9797580ad9df",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "new",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "rebound",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "new",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "pending-epoch",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "new",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stale-observation",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "new",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 4,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "new",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 5,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "new",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "1",
+            "hero": "h",
+            "skin": "new"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "unstable-acceptingInputFalse",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"1\",\"stableCount\":2,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":false,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":2147483647,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false}]}"
+      },
+      "inputSha256": "39084206e89e3b8d702d0041a862dbecfed32821a07ed48aed4c7563d7f8e887",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "unstable-observation",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "1",
+            "hero": "h",
+            "skin": "s"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "unstable-fullDamageModeFalse",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"1\",\"stableCount\":2,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":false,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":2147483647,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false}]}"
+      },
+      "inputSha256": "9820b60dcb5af49a2e593298cb9df48c75fdaed45b81e85e374cf2fbe6f1df85",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "unstable-observation",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "1",
+            "hero": "h",
+            "skin": "s"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "unstable-health0",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"1\",\"stableCount\":2,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":0,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":2147483647,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false}]}"
+      },
+      "inputSha256": "059c0cd89910292cf117ab341753a9f21ccb7d727f1cdf216c9dd298fdb71b7c",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "unstable-observation",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "1",
+            "hero": "h",
+            "skin": "s"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "unstable-health-2147483648",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"1\",\"stableCount\":2,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":-2147483648,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":2147483647,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false}]}"
+      },
+      "inputSha256": "19ff0c360b557294595def1412815a226a461cd50e752132103763308c0bcb60",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "unstable-observation",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "1",
+            "hero": "h",
+            "skin": "s"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "unstable-canTakeDamageFalse",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"1\",\"stableCount\":2,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":false,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":2147483647,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false}]}"
+      },
+      "inputSha256": "13250dad5b8fbc2f0ea11f53fb64b01d4e48f2d771cb96f0bae239963103caa3",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "unstable-observation",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "1",
+            "hero": "h",
+            "skin": "s"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "unstable-playableFalse",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"1\",\"stableCount\":2,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":false,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":2147483647,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false}]}"
+      },
+      "inputSha256": "26ba0ff6926b6235b624822fa09e320f50df015bee13a8f69b301f6e61898af2",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "unstable-observation",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "1",
+            "hero": "h",
+            "skin": "s"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "unstable-pausedTrue",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"1\",\"stableCount\":2,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":true,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":2147483647,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false}]}"
+      },
+      "inputSha256": "51e1c8718cb3232cda6f21dc3ec8525386429911730bd06ac37d84cb48d454e8",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "unstable-observation",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "1",
+            "hero": "h",
+            "skin": "s"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "unstable-cutsceneTrue",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"1\",\"stableCount\":2,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":true,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":2147483647,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false}]}"
+      },
+      "inputSha256": "917006244f87e323b33bbea0ac57699cbb1e2fac0dc9efb7a5ccba101adf7f89",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "unstable-observation",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "1",
+            "hero": "h",
+            "skin": "s"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "unstable-sceneTransitionTrue",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"1\",\"stableCount\":2,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":true},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":2147483647,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false}]}"
+      },
+      "inputSha256": "ea5bde29a4c924278b6f2120a83b27e5d2d8cb7fbb82959109b6840833ed8060",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "unstable-observation",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "1",
+            "hero": "h",
+            "skin": "s"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "stale-interleaving-not-starvation",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"1\",\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Update\",\"hero\":\"old\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":true,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"old\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":0,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"old\",\"skin\":\"old\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false}]}"
+      },
+      "inputSha256": "b867e629300b026e226378845b0ccb5803a0d8aa0996b5c2ffeaf2b1935280ae",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stale-observation",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stale-observation",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 4,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stale-observation",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 5,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "1",
+            "hero": "h",
+            "skin": "s"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "max-occurrence-exhaustion",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"0\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"0\"},\"events\":[{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"0\"},{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "a97849dbd8c3a05755356e1771888c21c78a69a058937690e0b44228dfc2b36e",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "18446744073709551615",
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "armed",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "death-confirmed",
+          "confirmedEpoch": "1",
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 4,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "1",
+            "hero": "h",
+            "skin": "s"
+          }
+        },
+        {
+          "step": 5,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "invalid-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 6,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "consumed-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 7,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "consumed-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "max-epoch-delivery",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"18446744073709551614\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"18446744073709551614\"},\"events\":[{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"Update\",\"hero\":\"h\",\"skin\":\"s\",\"acceptingInput\":true,\"fullDamageMode\":true,\"health\":1,\"canTakeDamage\":true,\"playable\":true,\"paused\":false,\"cutscene\":false,\"sceneTransition\":false},{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"0\"},{\"type\":\"BeforeDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"1\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "8fd81deee642376b532d5f8af00e9c353f69a0a0f6be17a86231d1ea27e1571a",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "18446744073709551614",
+            "armedSkin": "s",
+            "armedOccurrence": "18446744073709551615",
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "armed",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "18446744073709551615",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "18446744073709551615",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "death-confirmed",
+          "confirmedEpoch": "18446744073709551615",
+          "stableToken": null
+        },
+        {
+          "step": 2,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "18446744073709551615",
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "18446744073709551615",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 3,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "18446744073709551615",
+            "stableCount": 2,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "18446744073709551615",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "stabilizing",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 4,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "18446744073709551615",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "stable-respawn",
+          "confirmedEpoch": null,
+          "stableToken": {
+            "deathEpoch": "18446744073709551615",
+            "hero": "h",
+            "skin": "s"
+          }
+        },
+        {
+          "step": 5,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "18446744073709551615",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "invalid-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 6,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "18446744073709551615",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "consumed-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 7,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "18446744073709551615",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "consumed-occurrence",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "invalid-binding-null",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":null,\"lastConfirmedEpoch\":\"0\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"0\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "73ce1abb3e941594f9e10bca319851fa7cc021cf6046a6add9ea0fba45b9f821",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": null,
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": null,
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "invalid-count-negative",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"1\",\"stableCount\":-1,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "5f95e1204d80d61a81c4a42dc493b4f1a0da34b3f17589511faee02b65507dc0",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": -1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": -1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "invalid-count-three",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"1\",\"stableCount\":3,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "fb5d0af6fe2b9b45593013cb36bf317631b7f58eb1973803d8db57da91d7dff5",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 3,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 3,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "invalid-window-without-pending",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":null,\"stableCount\":1,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"0\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"0\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "0b8f86ffbb752af47b55af0d5d3bf8df275c2f8087e010d94103f96de8d7ed66",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 1,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "invalid-pending-zero",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"0\",\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"0\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"0\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "d19f2ef08c8eae0178ce5bf8a6ebf3da62b27cad652cbb4e0beb65dbbd3c0481",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "0",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "0",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "invalid-pending-mismatch",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"2\",\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "186f9e2cb6cb4954e7c8ec7f832444365ba8f2f319c02298f4bc1a37f7dafbd2",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "2",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "2",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "invalid-confirmed-over-highwater",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":\"1\",\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"0\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "79ebb32668778d4e3574ce77c7d6752075304a881dce7d2221e13e7858f70e52",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "invalid-armed-missing-skin",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":\"h\",\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"0\",\"armedSkin\":null,\"armedOccurrence\":\"1\",\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "84765f31f2c7548f27a8e958eb01fade91f595e69c10b7338c4895a55f2985a1",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "invalid-armed-wrong-hero",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":\"old\",\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"0\",\"armedSkin\":\"s\",\"armedOccurrence\":\"1\",\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "6020bf9acec07813e4922a5b32e2752c7225560d220b6a7630176131762bac6b",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": "old",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": "old",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "invalid-armed-highwater-mismatch",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":\"h\",\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"0\",\"armedSkin\":\"s\",\"armedOccurrence\":\"2\",\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "8b36e11ce1960abedf3e1d34934ed755d8106b0480cf3d5ab74e721dab00fbcb",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "2",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": "s",
+            "armedOccurrence": "2",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "invalid-armed-not-newer",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":\"h\",\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":\"s\",\"armedOccurrence\":\"1\",\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "41622a79a47ef9cddee54545c9382f083607c9b7a4fdd16ee4811baacf0e53f3",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": "s",
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": "s",
+            "armedOccurrence": "1",
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "invalid-armed-and-pending",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":\"h\",\"pendingEpoch\":\"1\",\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"1\",\"armedSkin\":\"s\",\"armedOccurrence\":\"2\",\"occurrenceHighWater\":\"2\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "992b90cf1d06a81f83eadceb034cf3ec787e852ef0897ab83307610bd586c438",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": "s",
+            "armedOccurrence": "2",
+            "occurrenceHighWater": "2"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": "1",
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "1",
+            "armedSkin": "s",
+            "armedOccurrence": "2",
+            "occurrenceHighWater": "2"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "invalid-unbound-highwater",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":null,\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":null,\"currentSkin\":null,\"lastConfirmedEpoch\":\"0\",\"armedSkin\":null,\"armedOccurrence\":null,\"occurrenceHighWater\":\"1\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "38e6c6fe280961e33aa286b9ea81fd314d5047922db23c33940d74a30f25a2bb",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": null,
+            "currentSkin": null,
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": null,
+            "currentSkin": null,
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "1"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "invalid-forged-exhausted-arm",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Text": "{\"initialState\":{\"armedHero\":\"h\",\"pendingEpoch\":null,\"stableCount\":0,\"currentHero\":\"h\",\"currentSkin\":\"s\",\"lastConfirmedEpoch\":\"18446744073709551615\",\"armedSkin\":\"s\",\"armedOccurrence\":\"18446744073709551615\",\"occurrenceHighWater\":\"18446744073709551615\"},\"events\":[{\"type\":\"Rebind\",\"hero\":\"new\",\"skin\":\"s\"},{\"type\":\"AfterDeath\",\"hero\":\"h\",\"skin\":\"s\",\"occurrence\":\"18446744073709551615\"}]}"
+      },
+      "inputSha256": "4e989236da784a3c94d26cacc4f1d8e7d39ccd5a570c8067ac65661b87c5d77a",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "18446744073709551615",
+            "armedSkin": "s",
+            "armedOccurrence": "18446744073709551615",
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": "h",
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "h",
+            "currentSkin": "s",
+            "lastConfirmedEpoch": "18446744073709551615",
+            "armedSkin": "s",
+            "armedOccurrence": "18446744073709551615",
+            "occurrenceHighWater": "18446744073709551615"
+          },
+          "diagnosis": "invalid-state",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    },
+    {
+      "caseId": "empty-and-unicode-token-values",
+      "oracleContract": "lifecycle-core-v1",
+      "input": {
+        "utf8Hex": "7b22696e697469616c5374617465223a7b2261726d65644865726f223a6e756c6c2c2270656e64696e6745706f6368223a6e756c6c2c22737461626c65436f756e74223a302c2263757272656e744865726f223a6e756c6c2c2263757272656e74536b696e223a6e756c6c2c226c617374436f6e6669726d656445706f6368223a2230222c2261726d6564536b696e223a6e756c6c2c2261726d65644f6363757272656e6365223a6e756c6c2c226f6363757272656e6365486967685761746572223a2230227d2c226576656e7473223a5b7b2274797065223a22526562696e64222c226865726f223a22222c22736b696e223a22e79aaee882a4227d2c7b2274797065223a22526562696e64222c226865726f223a22222c22736b696e223a22e79aaee882a4227d5d7d"
+      },
+      "inputSha256": "3a63e7ffb81c541b00334d4c5d69aa8344a112f165487699035ad33e8a90281f",
+      "expected": [
+        {
+          "step": 0,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "",
+            "currentSkin": "皮肤",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "rebound",
+          "confirmedEpoch": null,
+          "stableToken": null
+        },
+        {
+          "step": 1,
+          "state": {
+            "armedHero": null,
+            "pendingEpoch": null,
+            "stableCount": 0,
+            "currentHero": "",
+            "currentSkin": "皮肤",
+            "lastConfirmedEpoch": "0",
+            "armedSkin": null,
+            "armedOccurrence": null,
+            "occurrenceHighWater": "0"
+          },
+          "diagnosis": "same-binding",
+          "confirmedEpoch": null,
+          "stableToken": null
+        }
+      ]
+    }
+  ]
+}
