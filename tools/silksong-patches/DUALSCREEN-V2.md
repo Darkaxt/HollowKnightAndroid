@@ -3,6 +3,12 @@
 A plan. Living document — it is edited as the thing gets built, and the
 decisions in it are meant to be argued with.
 
+**Current input and lifetime boundary:** Unity still renders directly to its
+second display. `tools/depot-to-apk/shell/SecondaryDisplay.java` captures that
+window's surface-local pointer events before Unity sees them, and hides the
+window when the game activity stops. The earlier Input System/uGUI fence below
+is historical: it did not cover cutscenes reading `Input.anyKeyDown`.
+
 ---
 
 ## 1. What used to exist, and why it was thrown away
@@ -471,9 +477,12 @@ localised strings and save data — **never** by capturing the game's menu.
   (`PackageCompiler.patchReferences`), so this is ordinary typed C#, not
   reflection.
 
-* **Authored at 1240×1080** with a `CanvasScaler` in `ScaleWithScreenSize` at
-  that reference and `matchWidthOrHeight = 0.5`, so a different second panel
-  still lays out sensibly.
+* **Authored at the Android render view's measured size**, usually 1240×1080.
+  `DsPanelScaler` keeps the geometric-mean scaling of `CanvasScaler` with
+  `matchWidthOrHeight = 0.5`, but reads actual view dimensions. Stock
+  `CanvasScaler` substitutes `Display.renderingWidth/Height` for a secondary
+  canvas, even when Android reports both as zero. Both camera and canvas target
+  display 1; a changed surface size rebuilds the layout while retaining the tab.
 * **Nothing lives under a scene root.** The whole rig hangs off one
   `DontDestroyOnLoad` object, so scene loads cannot take it, and nothing we
   create is ever a child of a game object.
@@ -485,16 +494,15 @@ localised strings and save data — **never** by capturing the game's menu.
   game object. That property is the whole design; if a screen ever needs to
   break it, that screen is wrong.
 * **Hit testing** is **arithmetic in our own layout space**, not
-  `RectTransformUtility`. That utility was the first attempt and it mapped a
-  corner tap to roughly the middle of the grid: the canvas is
-  `ScreenSpaceCamera` on a display Unity reports as `0x0` (see §3), so its
-  screen-point conversion has no dependable notion of the panel's size, and it
-  returns a plausible wrong answer rather than failing. Touches arrive in panel
-  pixels and the layout is authored in the same units, so the conversion is a
-  y-flip and a subtraction. The tell was that tapping the **tab strip** worked
-  from the start — `DsShell` compares a single `y` value.
-  No `EventSystem` and no `GraphicRaycaster` either: we own every rect on this
-  screen, and the game has its own event system we would rather not race with.
+  `RectTransformUtility`. Android supplies `MotionEvent.getX/getY` relative to
+  the same view that displays the pixels. Dividing by that view's width/height
+  gives viewport fractions; multiplying by the actual root canvas rect gives
+  layout coordinates from its top-left. `DsPresentation` then expresses these
+  in the y-up convention the gesture consumers already use.
+  This accounts for scaling and insets without guessing a native panel height,
+  using main-screen resolution, or projecting through Unity's sometimes-0×0
+  display metrics. Tabs, content, drag/pinch and the test-card crosshair all use
+  this one mapping. There is no `EventSystem` or `GraphicRaycaster`.
 
 * **Every screen is wrapped in a `try`/`catch`.** A screen that throws is
   disabled and replaced with an apology, and the shell keeps running. Nothing
@@ -723,70 +731,54 @@ squeezed into someone else's layout.
 
 ## 6. Decision 4 — input
 
-> **Rewritten after M0.** The Java gesture bridge below is obsolete: Unity
-> receives second-panel touches directly, and the Input System attributes them
-> to a display. What follows the rule is the plan; the rest is why.
+**The rule: the Android render surface owns its pointer events.**
 
-**The rule: `displayIndex` decides who gets a touch.**
+`SecondaryDisplay` finds Unity's secondary `SurfaceView` among this process's
+window roots, excluding the activity's own display. It installs a consuming
+touch listener before `DsPresentation` brings up the UI. Unity creates this
+window lazily on the first secondary render, so bringup waits the graphics
+settling period, renders a blank camera, then waits for input capture before
+building the canvas. Waiting for the window before creating a camera deadlocks.
+No secondary down,
+move, up or cancel is injected into Unity's native input, so none can become a
+legacy touch, a synthetic mouse click, or `Input.anyKeyDown`. Primary-screen
+touches are untouched. Pointer hover/scroll is also kept off the game; non-pointer
+motion still goes to the player's normal input handler.
 
-* `Touchscreen.current.touches[i].displayIndex == 1` → ours. Our screens read
-  the Input System directly, in panel pixels, which are our canvas pixels. No
-  letterbox inverse, no mirrored camera, no `Screen.width` in the arithmetic.
-* `displayIndex == 0` → the game's, untouched.
+Window discovery uses `WindowInspector` on Android 10+, with the older
+`WindowManagerGlobal` read-only root accessors on Android 8/9. It does not
+depend on a hard-coded Android display ID or Unity's obfuscated Java fields.
+Discovery keeps watching for a replaced or reattached surface. Failure is
+logged and leaves the second-screen UI dormant, not live with leaking input.
 
 **Nothing on the panel reads the gamepad.** L1/R1 were briefly wired to change
 tabs and that was wrong: they are the game's own bindings, and the second screen
 must never consume an input the player is using to play. The panel is driven by
 touch alone.
 
+### Why the uGUI fence was insufficient
 
-And because Option A removed the `Presentation` window that used to swallow
-panel touches, the game must be **actively fenced off** from ours — otherwise
-the bottom screen operates the top one, which is exactly what M0 observed.
-Three places need the filter:
+The previous `BaseInput` override protected uGUI's pointer processing, but
+`InputHandler.CutsceneInput` and `StagCutsceneInput` read `Input.anyKeyDown`
+directly. Other direct mouse readers and simultaneous touches could bypass it
+too. Input must be separated before those global states are created, rather
+than repaired one game consumer at a time. `InventoryTouchInput` consequently
+needs no display filter now: its legacy stream contains only the game's input.
 
-1. **The game's menus, via touches.** `HollowKnightInputModule : StandaloneInputModule`
-   (`InControl/HollowKnightInputModule.cs`) inherits `inputOverride`, a public
-   `BaseInput` property that is *the* supported way to replace where uGUI reads
-   pointers from. A `BaseInput` subclass that hides display-1 touches fences off
-   the menu system without modifying a line of game code.
-2. **The game's menus, via the synthesised mouse.** This is the one that is easy
-   to miss, and filtering touches alone does not fix it. `HollowKnightInputModule.Process()`
-   **never looks at touches at all** — it calls `ProcessMouseEvent()` and
-   nothing else. On Android with no mouse attached, Unity synthesises a mouse
-   from the primary touch, so a finger on the panel arrives at the game's menus
-   as a *mouse click*. The `BaseInput` subclass therefore also overrides
-   `mousePosition`, `GetMouseButton`, `GetMouseButtonDown` and
-   `GetMouseButtonUp`, suppressing them whenever every live touch belongs to the
-   panel. The position is *frozen* rather than zeroed — moving the pointer to
-   the origin is itself an event and would drop the game's current selection.
-3. **`InventoryTouchInput`** — our own main-screen touch support, which reads
-   `Input.touches` directly and needs the same filter.
+### Events across JNI
 
-All of this works on the *legacy* stream, which carries no display index, so the
-two streams have to be correlated. Both agree exactly: a panel touch logged
-`raw=(744,729)` in legacy and `pos=(744,729)` with `displayIndex=1` in the Input
-System, so a position match is reliable, with `fingerId + 1 == touchId` as the
-faster first check. `DsTouch.IsSecondScreen` tries the id first and falls back to
-position.
+`DsTouch` drains one ordered batch per Unity frame. The header is
+`[generation, viewWidth, viewHeight, ready]`; each event is
+`[fingerId, TouchPhase, x/viewWidth, y/viewHeight, uptimeMilliseconds]`.
+The double array preserves timestamp precision on devices with long uptimes.
+There are still no pixels, textures or readbacks crossing JNI.
 
-`DsTouch` **fails open**: if the Input System is ever unavailable, every touch
-is treated as the game's. The opposite default would silently eat all input.
-
-
-Gesture recognition moves to C#, since Android's detectors are no longer in the
-path. That is a real loss — `GestureDetector` already knows this device's touch
-slop, fling velocity and long-press timing — and it is the price of deleting the
-bridge. Tap, drag, fling and pinch off raw touches is a known quantity; V1's
-hand-tuned `TAP_MOVE_TOLERANCE = 28f` is the cautionary example of doing it
-badly.
-
-**Physical buttons were tried and removed.** L1/R1 briefly cycled tabs, reading
-the game's own `InventoryPaneInput.GetInventoryButtonPressed(HeroActions)`. It
-worked, and it was still wrong: those buttons are bound in gameplay, so the
-panel was quietly competing with the player for them. Consuming an input the
-player is using to play is not a trade the second screen may make, however
-convenient. Touch only.
+Down and up remain separate events even if both arrive between frames.
+`DsInput` recognizes taps, drags, flings and pinch from that stream. A cancelled
+or interrupted gesture never becomes a tap. Resizing, hiding or replacing the
+surface clears the queue and changes its generation; a held finger cannot
+resume as a new tap after that boundary. Overflow is logged and cancels the
+gesture rather than replaying a partial queue.
 
 ### What this replaces
 
@@ -797,10 +789,10 @@ JNI allocation per frame, to press a button we did not draw. An intermediate
 draft of this plan replaced that with a lock-free gesture ring in shared
 memory, then with a batched `getGestures()` JNI call.
 
-All three are gone. `InventoryTouchInput.SetExternalPointer`, the `getTouch`
-path, and `DualScreenBridge`/`DualScreenPresentation` are deleted outright.
-`InventoryTouchInput` itself stays — it is the main screen's touch support and
-has nothing to do with the second panel, beyond needing the fence.
+Those forwarding and framebuffer paths remain deleted. The current Java helper
+only captures the secondary surface's own events and visibility; it does not
+mirror or operate the game's inventory. `InventoryTouchInput` remains the
+main screen's touch support.
 
 
 ---
@@ -1206,17 +1198,18 @@ everything before it is read-only and therefore incapable of corrupting a save.
 Handled in M1, because retrofitting it after M8 is miserable:
 
 * **No second display** — do nothing, log once, cost nothing.
-* **Hot-plug.** Register a `DisplayManager.DisplayListener`. On
-  `onDisplayRemoved`, stop publishing and dismiss; on `onDisplayAdded`, re-pick
-  and re-show. Neither V1 nor the first draft of this plan did this: `show()`
-  was one-shot, so unplugging left Unity pushing frames into a dead surface and
-  replugging brought nothing back until a restart. On a handheld with a
-  detachable panel that is not an edge case.
-* **Pause / resume.** Dismiss on pause, re-show on resume — a live panel over
-  the launcher looks broken.
-* **Every teardown path drains readbacks first** (§3). Quit, pause, unplug and
-  scene-teardown all reach the same shutdown, and it calls
-  `AsyncGPUReadback.WaitAllRequests()` before it frees anything.
+* **Hot-plug.** `Display.onDisplaysUpdated` reacquires Unity's display, and the
+  Android helper rebinds its input listener to a replacement surface. The rig
+  is reused, not duplicated; a size change rebuilds its layout.
+* **Minimize / restore.** `PlayerActivity.onStop` hides the Android presentation
+  root, releasing its visible surface rather than leaving the last frame over
+  the launcher. `onStart` restores it. Focus loss is not a hide signal: touching
+  the other screen can change focus while the game is still visible.
+* **Pause / resume.** C# suspends the camera, canvas and gestures. Bringup is
+  serialized and honors the paused state, including during its asynchronous
+  startup. A recreated surface gets the same settling period as first launch
+  before rendering resumes. Quitting stops the window helper and destroys the
+  rig; there are no readbacks to drain in the current transport.
 
 
 
@@ -1235,8 +1228,8 @@ cleanly doing nothing.
 | --- | --- |
 | ~~Multi-display still flickers~~ | **Retired by M0.** 120.2 fps, p99 == max == refresh, zero missed vsyncs with the rig live. |
 | ~~In-flight readback / shared-memory ordering / `copyPixelsFromBuffer` cost / render-on-dirty rebuild ordering~~ | **All retired by M0** — they were properties of the transport that no longer exists. Kept in §3 for the fallback. |
-| **Panel touches operate the game** | Created by removing the `Presentation` that used to swallow them. Fenced with a `BaseInput` on `HollowKnightInputModule.inputOverride` that hides display-1 **touches and the touch-synthesised mouse**, plus the same filter in `InventoryTouchInput`. Verified working on device. |
-| ~~Legacy `fingerId` ↔ Input System `touchId` correlation is wrong~~ | **Retired.** The two streams report identical positions for the same touch (`744,729` in both), so `DsTouch` matches on id first and falls back to position. |
+| **Panel touches operate the game** | Captured at the Android surface before global Unity input is created. A uGUI-only fence did not cover raw `Input.anyKeyDown` in cutscenes. |
+| ~~Legacy `fingerId` ↔ Input System `touchId` correlation is wrong~~ | **Retired.** No streams are correlated now: the secondary surface supplies its own ordered pointer IDs and events. |
 | **A Unity or game API is simpler than it looks** | The recurring theme, and now four instances: `GetCollectedItems` is not a read; `Display.renderingWidth` is not a readiness signal; `ScreenPointToLocalPointInRectangle` returns a wrong answer rather than failing; `Image` samples an atlas sprite's padding unless told not to. **Where we control the maths, do the maths**, and confirm a signature with `check.ps1` before trusting it. |
 
 
@@ -1491,5 +1484,3 @@ Recorded because each was stated in an earlier draft as though it were settled:
     Padded (§3).
 11. **Hot-plug was missing entirely** — the one lifecycle event most likely on a
     handheld with a second panel (§7).
-
-

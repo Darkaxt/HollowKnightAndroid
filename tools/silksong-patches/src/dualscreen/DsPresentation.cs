@@ -2,7 +2,7 @@
 // canvas, and the discipline that keeps all three from touching the game.
 //
 // This replaces the whole of V1's transport. There is no RenderTexture, no
-// AsyncGPUReadback, no shared memory, no Java. Unity presents to the panel
+// AsyncGPUReadback or shared memory. Unity presents to the panel
 // directly, measured at no cost to the main screen: 120.2 fps with p99 and max
 // present intervals both equal to the 8.33 ms refresh and zero missed vsyncs
 // over 253 frames, with a camera and canvas live on display 1.
@@ -20,9 +20,9 @@
 //     for them left the panel black. systemWidth/Height do eventually populate,
 //     but only AFTER rendering starts, so they cannot be waited on either.
 //
-//   * The panel's size therefore has to be discovered rather than asked for:
-//     systemWidth/Height once they appear, else Android's own report, else a
-//     configured fallback.
+//   * Size and input come from the actual Android SurfaceView. Display metrics
+//     can include system bars that are outside that view, and guessed heights
+//     shift every hit target by the difference.
 //
 // Isolation from the game is enforced at both ends. Our camera renders exactly
 // one layer, and that layer is cleared from every other camera's mask -- on a
@@ -47,10 +47,6 @@ public class DsPresentation
     // rest; nothing of the game's is ever moved here.
     public const int LAYER = 6;
 
-    // The AYN Thor's panel, used only until the real size is known.
-    const int FALLBACK_W = 1240;
-    const int FALLBACK_H = 1080;
-
     public Camera Camera { get; private set; }
     public Canvas Canvas { get; private set; }
     /// <summary>Where screens build their UI. Fills the panel.</summary>
@@ -60,14 +56,17 @@ public class DsPresentation
     public int Height { get; private set; }
 
     /// <summary>
-    /// The panel's size, statically reachable for coordinate maths.
-    ///
-    /// Touches arrive in panel pixels with y up from the bottom-left, and our
-    /// layout is authored in the same units with y DOWN from the top-left, so
-    /// converting between them needs the height and nothing else.
+    /// The authored layout size. Pointer positions use these units, not raw
+    /// Android pixels or the main screen's render resolution.
     /// </summary>
     public static int PanelW { get; private set; }
     public static int PanelH { get; private set; }
+    static RectTransform _uiRoot;
+
+    public static Vector2 FromSurface(Vector2 normalized)
+    {
+        return DsTouch.MapToCanvas(normalized, _uiRoot.rect.size, PanelH);
+    }
 
     /// <summary>Panel touch point -> layout point (origin top-left, y down).</summary>
     public static Vector2 ToLayout(Vector2 panelPoint)
@@ -76,10 +75,8 @@ public class DsPresentation
     }
 
     /// <summary>
-    /// The camera the canvas renders through. uGUI hit-testing needs it: with a
-    /// ScreenSpaceCamera canvas, passing null to
-    /// RectTransformUtility.ScreenPointToLocalPointInRectangle silently returns
-    /// the wrong point, which is why taps did nothing at first.
+    /// The render camera. Input deliberately does not use screen-point
+    /// projection: Unity's secondary-display pixel dimensions can be zero.
     /// </summary>
     public static Camera UiCamera { get; private set; }
 
@@ -92,7 +89,7 @@ public class DsPresentation
     /// <summary>
     /// Bring up the display and build the rig. Yields until the panel is live.
     /// </summary>
-    public IEnumerator Bringup()
+    public IEnumerator Bringup(Func<bool> canRender)
     {
         var displays = Display.displays;
         if (displays.Length <= DISPLAY)
@@ -103,25 +100,54 @@ public class DsPresentation
             yield break;
         }
 
+        if (!DsTouch.Begin()) yield break;
         try { displays[DISPLAY].Activate(); }
         catch (Exception e)
         {
             Debug.LogError("[DualScreen] could not activate display " + DISPLAY + ": " + e);
+            DsTouch.Stop();
             yield break;
         }
 
-        // See the header: there is nothing to poll, so this is a timer. It is
-        // deliberately generous -- it happens once, at startup, while the game
-        // is still loading, and the failure it prevents is a native crash.
-        float settle = DsConfig.Int("settle_ms", 1500) / 1000f;
-        float until = Time.realtimeSinceStartup + settle;
-        while (Time.realtimeSinceStartup < until) yield return null;
+        // Unity creates the Android presentation lazily, on the first render.
+        // Warm up the display with a blank camera after the usual settling
+        // period; waiting for a SurfaceView before rendering deadlocks startup.
+        // The UI is built only after that surface's input has been captured.
+        float settle = Mathf.Max(0, DsConfig.Int("settle_ms", 1500)) / 1000f;
+        float elapsed = 0f, waited = 0f;
+        while (true)
+        {
+            if (!canRender())
+            {
+                Suspend();
+                elapsed = waited = 0f;
+            }
+            else if (elapsed < settle)
+            {
+                elapsed += Mathf.Min(Time.unscaledDeltaTime, 0.1f);
+            }
+            else
+            {
+                if (Camera == null) BuildCamera();
+                Camera.enabled = true;
+                if (DsTouch.Ready) break;
+                waited += Mathf.Min(Time.unscaledDeltaTime, 0.1f);
+                if (waited > 5f)
+                {
+                    Debug.LogError("[DualScreen] secondary surface/input did not become ready");
+                    Suspend();
+                    DsTouch.Stop();
+                    yield break;
+                }
+            }
+            yield return null;
+        }
 
         MeasurePanel();
 
-        if (Camera == null)
+        if (Canvas == null)
         {
-            Build();
+            BuildCanvas();
         }
         else
         {
@@ -134,33 +160,26 @@ public class DsPresentation
             SweepCameras(force: true);
         }
 
+        UnityEngine.Canvas.ForceUpdateCanvases();
         Ready = true;
 
         Debug.Log("[DualScreen] second screen up: " + Width + "x" + Height +
                   " (" + ((float)Width / Height).ToString("F2") + ":1)" +
-                  " canvas=" + Canvas.renderMode + " layer=" + LAYER);
+                  " canvas=" + Canvas.renderMode + " rect=" + Root.rect.size +
+                  " scale=" + Canvas.scaleFactor + " layer=" + LAYER);
     }
 
-    // renderingWidth/Height are always 0x0 here, so take systemWidth/Height when
-    // they are populated and fall back to what Android says the panel is.
     void MeasurePanel()
     {
-        var d = Display.displays[DISPLAY];
-        int w = d.systemWidth, h = d.systemHeight;
-        if (w <= 0 || h <= 0) { w = d.renderingWidth; h = d.renderingHeight; }
-        if (w <= 0 || h <= 0)
-        {
-            w = DsConfig.Int("panel_w", FALLBACK_W);
-            h = DsConfig.Int("panel_h", FALLBACK_H);
-            Debug.LogWarning("[DualScreen] panel size unknown, assuming " + w + "x" + h);
-        }
+        Vector2 size = DsTouch.SurfaceSize;
+        int w = (int)size.x, h = (int)size.y;
         Width = w;
         Height = h;
         PanelW = w;
         PanelH = h;
     }
 
-    void Build()
+    void BuildCamera()
     {
         var camGo = new GameObject("DsCamera");
         camGo.transform.SetParent(_parent, false);
@@ -177,11 +196,15 @@ public class DsPresentation
         Camera.allowMSAA = false;
         Camera.useOcclusionCulling = false;
         Camera.depth = -50f;
+    }
 
+    void BuildCanvas()
+    {
         var canvasGo = new GameObject("DsCanvas");
         canvasGo.transform.SetParent(_parent, false);
         canvasGo.layer = LAYER;
         Canvas = canvasGo.AddComponent<Canvas>();
+        Canvas.targetDisplay = DISPLAY;
 
         // ScreenSpaceCamera by default rather than Overlay, because the map
         // screen will need world-space content composited with the UI and only
@@ -204,7 +227,7 @@ public class DsPresentation
         // Authored at the panel's own size, so a different second screen scales
         // rather than clips. matchWidthOrHeight 0.5 splits the difference on a
         // panel with a different aspect.
-        var scaler = canvasGo.AddComponent<CanvasScaler>();
+        var scaler = canvasGo.AddComponent<DsPanelScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(Width, Height);
         scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
@@ -218,6 +241,7 @@ public class DsPresentation
         var rootGo = new GameObject("DsRoot");
         rootGo.layer = LAYER;
         Root = rootGo.AddComponent<RectTransform>();
+        _uiRoot = Root;
         Root.SetParent(canvasGo.transform, false);
         Root.anchorMin = Vector2.zero;
         Root.anchorMax = Vector2.one;
@@ -269,12 +293,33 @@ public class DsPresentation
         if (Canvas != null && Canvas.enabled != visible) Canvas.enabled = visible;
     }
 
+    public void Suspend()
+    {
+        SetVisible(false);
+        Ready = false;
+    }
+
     public void Destroy()
     {
         if (Canvas != null) UnityEngine.Object.Destroy(Canvas.gameObject);
         if (Camera != null) UnityEngine.Object.Destroy(Camera.gameObject);
         Canvas = null; Camera = null; Root = null;
+        _uiRoot = null;
+        UiCamera = null;
         Ready = false;
+    }
+}
+
+// Stock CanvasScaler replaces renderingDisplaySize with Display.renderingWidth/
+// Height for secondary canvases, even when those are both zero on Android.
+public class DsPanelScaler : CanvasScaler
+{
+    protected override void HandleScaleWithScreenSize()
+    {
+        Vector2 size = DsTouch.SurfaceSize;
+        if (size.x <= 0f || size.y <= 0f) return; // surface not attached yet
+        SetScaleFactor(Mathf.Sqrt(size.x / referenceResolution.x * size.y / referenceResolution.y));
+        SetReferencePixelsPerUnit(referencePixelsPerUnit);
     }
 }
 #endif

@@ -31,8 +31,8 @@ public class DualScreenV2 : MonoBehaviour
     DsInput _input;
     DsTestCard _card;
     bool _paused;
+    bool _bringingUp;
     int _displayCount;
-    float _nextFence;
     float _nextFontRetry;
     bool _fontReady;
 
@@ -56,7 +56,6 @@ public class DualScreenV2 : MonoBehaviour
     IEnumerator Start()
     {
         Instance = this;
-        DsTouch.Enabled = false;      // nothing is filtered until the panel is actually live
 
         // Watch for displays coming and going BEFORE trying to use one, and
         // keep watching whether or not there is one now.
@@ -79,45 +78,45 @@ public class DualScreenV2 : MonoBehaviour
     /// </summary>
     IEnumerator Bringup()
     {
-        if (_screen != null && _screen.Ready) yield break;
-
-        var screen = _screen ?? new DsPresentation(transform);
-        yield return screen.Bringup();
-
-        if (!screen.Ready)
+        if (_paused || _bringingUp || (_screen != null && _screen.Ready)) yield break;
+        _bringingUp = true;
+        try
         {
-            // No second display, or it would not activate. Do nothing at all
-            // rather than half of something -- and stay resident, because a
-            // panel may still turn up.
-            Debug.Log("[DualScreen] no second display; dormant");
-            yield break;
-        }
+            if (_screen == null) _screen = new DsPresentation(transform);
+            int oldWidth = _screen.Width, oldHeight = _screen.Height;
+            yield return _screen.Bringup(() => !_paused);
 
-        _screen = screen;
-
-        // The test card is the M1 rig: corner markers, a sweeping bar and a
-        // touch crosshair, which is how "the surface covers the panel" and
-        // "input is separated" were verified. Kept one flag away, because it is
-        // the fastest way to tell a rendering problem from a content problem.
-        if (_shell == null && _card == null)
-        {
-            if (DsConfig.Bool("testcard", false))
+            if (!_screen.Ready)
             {
-                _card = new DsTestCard(_screen.Root, _screen.Width, _screen.Height);
+                Debug.Log("[DualScreen] no usable second display; dormant");
+                yield break;
             }
-            else
+
+            bool resized = oldWidth != _screen.Width || oldHeight != _screen.Height;
+            if (_shell == null && _card == null)
             {
-                _input = new DsInput();
-                BuildShell();
+                if (DsConfig.Bool("testcard", false))
+                    _card = new DsTestCard(_screen.Root, _screen.Width, _screen.Height);
+                else
+                {
+                    _input = new DsInput();
+                    BuildShell();
+                }
             }
+            else if (resized)
+            {
+                if (_card != null)
+                {
+                    ClearRoot();
+                    _card = new DsTestCard(_screen.Root, _screen.Width, _screen.Height);
+                }
+                else RebuildShell();
+            }
+
+            SetActive(!_paused);
+            Debug.Log("[DualScreen] ready");
         }
-
-        // Only now does input need separating, and only now is it safe to take
-        // touches away from the game.
-        DsTouch.Enabled = true;
-        DsTouch.InstallFence(gameObject);
-
-        Debug.Log("[DualScreen] ready");
+        finally { _bringingUp = false; }
     }
 
     void BuildShell()
@@ -150,21 +149,18 @@ public class DualScreenV2 : MonoBehaviour
 
     void Update()
     {
-        if (_screen == null || !_screen.Ready) return;
+        if (_paused || _screen == null || !_screen.Ready) return;
+        if (!DsTouch.Ready)
+        {
+            SetActive(false);
+            StartCoroutine(Reacquire());
+            return;
+        }
 
         // The game creates cameras for cutscenes and bosses, and hard-assigns
         // culling masks in places, so our layer is swept off everything else
         // continuously rather than once. Rate-limited inside.
         _screen.SweepCameras();
-
-        // Event systems are rebuilt with scenes, so the fence has to keep being
-        // re-applied. InstallFence's fast path is a static read plus a
-        // comparison, but the rate limit keeps even that off the hot path.
-        if (Time.unscaledTime >= _nextFence)
-        {
-            _nextFence = Time.unscaledTime + 0.25f;
-            DsTouch.InstallFence(gameObject);
-        }
 
         float dt = Time.unscaledDeltaTime;
 
@@ -190,8 +186,7 @@ public class DualScreenV2 : MonoBehaviour
         if (_input != null)
         {
             _input.Poll();
-            var gestures = _input.Gestures;
-            for (int i = 0; i < gestures.Count; i++) _shell.OnGesture(gestures[i]);
+            DispatchGestures();
         }
 
         // Outside a save, the panel shows the game's title instead of the tabs.
@@ -223,11 +218,23 @@ public class DualScreenV2 : MonoBehaviour
     void RebuildShell()
     {
         string keep = _shell != null ? _shell.ActiveId : null;
-        var root = _screen.Root;
-        for (int i = root.childCount - 1; i >= 0; i--) Destroy(root.GetChild(i).gameObject);
-        _shell = new DsShell(root, _screen.Width, _screen.Height);
+        ClearRoot();
+        _shell = new DsShell(_screen.Root, _screen.Width, _screen.Height);
         RegisterScreens(_shell);
         _shell.Finish(keep ?? DsConfig.Str("screen", "map"));
+    }
+
+    void ClearRoot()
+    {
+        var root = _screen.Root;
+        for (int i = root.childCount - 1; i >= 0; i--) Destroy(root.GetChild(i).gameObject);
+    }
+
+    void DispatchGestures()
+    {
+        if (_input == null || _shell == null) return;
+        var gestures = _input.Gestures;
+        for (int i = 0; i < gestures.Count; i++) _shell.OnGesture(gestures[i]);
     }
 
     // The panel is driven by touch alone, deliberately. The shoulder buttons
@@ -242,7 +249,7 @@ public class DualScreenV2 : MonoBehaviour
     void OnDisplaysUpdated()
     {
         int now = Display.displays.Length;
-        if (now == _displayCount) return;
+        if (now == _displayCount && _screen != null && _screen.Ready) return;
         Debug.Log("[DualScreen] displays changed: " + _displayCount + " -> " + now);
         _displayCount = now;
 
@@ -265,15 +272,20 @@ public class DualScreenV2 : MonoBehaviour
         // Re-activating is the same asynchronous business as the first time, so
         // it gets the same settling period before anything is drawn.
         yield return Bringup();
-        if (_screen != null && _screen.Ready) SetActive(true);
     }
 
     void SetActive(bool on)
     {
-        if (_screen != null) _screen.SetVisible(on);
-        DsTouch.Enabled = on;
-        if (!on) DsTouch.RemoveFence();
-        else DsTouch.InstallFence(gameObject);
+        if (_screen != null)
+        {
+            if (on) _screen.SetVisible(true);
+            else _screen.Suspend();
+        }
+        if (!on && _input != null)
+        {
+            _input.Cancel();
+            DispatchGestures();
+        }
     }
 
     // A live panel over the launcher, or over whatever the user switched to,
@@ -281,8 +293,8 @@ public class DualScreenV2 : MonoBehaviour
     void OnApplicationPause(bool paused)
     {
         _paused = paused;
-        if (_screen == null || !_screen.Ready) return;
-        SetActive(!paused);
+        if (paused) SetActive(false);
+        else if (Instance == this) StartCoroutine(Reacquire());
     }
 
     void OnApplicationQuit() { Shutdown(); }
@@ -293,9 +305,7 @@ public class DualScreenV2 : MonoBehaviour
         if (Instance != this) return;
         Instance = null;
         try { Display.onDisplaysUpdated -= OnDisplaysUpdated; } catch { }
-        // Give the game its input back before anything else, so a teardown can
-        // never leave the player unable to press a menu.
-        DsTouch.RemoveFence();
+        DsTouch.Stop();
         if (_screen != null) { _screen.Destroy(); _screen = null; }
         _card = null;
     }

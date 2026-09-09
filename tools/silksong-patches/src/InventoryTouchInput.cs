@@ -22,7 +22,7 @@
 // PlayerData.instance.isInventoryOpen, so it never affects normal play.
 //
 // This is the MAIN screen's touch support and has nothing to do with the second
-// panel, beyond having to ignore its touches (see DsTouch).
+// panel. Its Android surface consumes its own touches before they reach Unity.
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System.Collections.Generic;
@@ -83,11 +83,6 @@ public class InventoryTouchInput : MonoBehaviour
         for (int i = 0; i < Input.touchCount; i++)
         {
             Touch t = Input.GetTouch(i);
-
-            // A touch on the second panel belongs to the second screen's own
-            // UI, not to the game's inventory. Without this the bottom screen
-            // drives the top one. No-op unless the second screen is live.
-            if (DsTouch.IsSecondScreen(t)) continue;
 
             if (t.phase == TouchPhase.Began)
             {

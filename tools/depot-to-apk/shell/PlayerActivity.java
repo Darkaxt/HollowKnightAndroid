@@ -39,6 +39,7 @@ public class PlayerActivity extends Activity implements IUnityPlayerLifecycleEve
 {
     // Name fixed by the engine's native code. Do not rename.
     protected UnityPlayerForActivityOrService mUnityPlayer;
+    private SecondaryDisplay secondaryDisplay;
 
     @Override protected void onCreate(Bundle savedInstanceState)
     {
@@ -47,6 +48,7 @@ public class PlayerActivity extends Activity implements IUnityPlayerLifecycleEve
         // native libraries and brings up the render surface. Everything that
         // has to be in place first -- the staged libraries, the data package --
         // is done by GameActivity before it calls up into here.
+        secondaryDisplay = new SecondaryDisplay(this);
         mUnityPlayer = new UnityPlayerForActivityOrService(this, this);
         setContentView(mUnityPlayer.getFrameLayout());
         mUnityPlayer.getFrameLayout().requestFocus();
@@ -56,6 +58,7 @@ public class PlayerActivity extends Activity implements IUnityPlayerLifecycleEve
     {
         // Before super: the player tears down the native side, and the
         // Activity is still fully alive for that.
+        if (secondaryDisplay != null) secondaryDisplay.onDestroy();
         if (mUnityPlayer != null) mUnityPlayer.destroy();
         super.onDestroy();
     }
@@ -63,13 +66,26 @@ public class PlayerActivity extends Activity implements IUnityPlayerLifecycleEve
     @Override protected void onStart()
     {
         super.onStart();
+        if (secondaryDisplay != null) secondaryDisplay.onStart();
         if (mUnityPlayer != null) mUnityPlayer.onStart();
     }
 
     @Override protected void onStop()
     {
+        if (secondaryDisplay != null) secondaryDisplay.onStop();
         super.onStop();
         if (mUnityPlayer != null) mUnityPlayer.onStop();
+    }
+
+    // Called by the dual-screen patch through JNI, from Unity's thread.
+    public void setSecondaryDisplayEnabled(boolean enabled)
+    {
+        secondaryDisplay.setEnabled(enabled);
+    }
+
+    public double[] pollSecondaryDisplayTouches()
+    {
+        return secondaryDisplay.poll();
     }
 
     @Override protected void onResume()

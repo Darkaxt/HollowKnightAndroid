@@ -421,12 +421,13 @@ EOF
     mkdir -p "$sh/src"
     cp -f "$SCRIPT_DIR/shell/GameActivity.java" "$sh/src/"
     cp -f "$SCRIPT_DIR/shell/PlayerActivity.java" "$sh/src/"
+    cp -f "$SCRIPT_DIR/shell/SecondaryDisplay.java" "$sh/src/"
 
     local unity_classes="$VARIATION/Classes/classes.jar"
     local cp="$unity_classes:$android_jar"
     # fixed: never changes between rebuilds. changed: rebuilt every time.
     local fixed=() changed=()
-    local srcs=("$sh/src/PlayerActivity.java" "$sh/src/GameActivity.java")
+    local srcs=("$sh/src/PlayerActivity.java" "$sh/src/GameActivity.java" "$sh/src/SecondaryDisplay.java")
     if (( have_launcher )); then
         cp="$cp:$sh/aar/classes.jar"
         changed+=("$sh/aar/classes.jar")

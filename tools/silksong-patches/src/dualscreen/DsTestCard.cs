@@ -40,7 +40,10 @@ public class DsTestCard
     RectTransform _cross;
     float _t;
 
-    readonly List<Touch> _mine = new List<Touch>();
+    readonly List<DsTouch.Point> _mine = new List<DsTouch.Point>();
+    long _generation = -1;
+    int _finger = -1;
+    Vector2 _lastTouch;
 
     public DsTestCard(RectTransform root, int width, int height)
     {
@@ -84,7 +87,7 @@ public class DsTestCard
 
         var cross = Rect("touch", new Color(1f, 0.3f, 0.15f));
         _cross = cross.rectTransform;
-        _cross.anchorMin = _cross.anchorMax = Vector2.zero;
+        _cross.anchorMin = _cross.anchorMax = new Vector2(0f, 1f);
         _cross.sizeDelta = new Vector2(96f, 96f);
         _cross.gameObject.SetActive(false);
     }
@@ -99,10 +102,27 @@ public class DsTestCard
         // Only this panel's touches. DsTouch is what keeps the two screens
         // apart in both directions.
         DsTouch.CollectSecondScreen(_mine);
+        if (_generation != DsTouch.Generation)
+        {
+            _generation = DsTouch.Generation;
+            _finger = -1;
+        }
+        for (int i = 0; i < _mine.Count; i++)
+        {
+            var point = _mine[i];
+            if (_finger < 0 && point.Phase == TouchPhase.Began) _finger = point.FingerId;
+            if (point.FingerId != _finger) continue;
+            _lastTouch = point.Position;
+            if (point.Phase == TouchPhase.Ended || point.Phase == TouchPhase.Canceled) _finger = -1;
+        }
         if (_cross != null)
         {
-            bool show = _mine.Count > 0;
-            if (show) _cross.anchoredPosition = _mine[0].position;
+            bool show = _finger >= 0;
+            if (show)
+            {
+                Vector2 p = DsPresentation.ToLayout(_lastTouch);
+                _cross.anchoredPosition = new Vector2(p.x, -p.y);
+            }
             if (_cross.gameObject.activeSelf != show) _cross.gameObject.SetActive(show);
         }
     }
