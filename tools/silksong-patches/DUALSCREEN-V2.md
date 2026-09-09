@@ -483,6 +483,9 @@ localised strings and save data — **never** by capturing the game's menu.
   `CanvasScaler` substitutes `Display.renderingWidth/Height` for a secondary
   canvas, even when Android reports both as zero. Both camera and canvas target
   display 1; a changed surface size rebuilds the layout while retaining the tab.
+* **Opaque black background** for OLED panels, shared by the shell, tab strip,
+  title card and map clear colour. Selected tabs and controls retain their
+  contrasting fills.
 * **Nothing lives under a scene root.** The whole rig hangs off one
   `DontDestroyOnLoad` object, so scene loads cannot take it, and nothing we
   create is ever a child of a game object.

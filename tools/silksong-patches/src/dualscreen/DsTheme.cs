@@ -23,10 +23,9 @@ using TmpFont = TMProOld.TMP_FontAsset;
 public static class DsTheme
 {
     // ── colour ──────────────────────────────────────────────────────────────
-    // Sampled to sit beside the game's inventory rather than compete with it:
-    // a near-black ground, bone-white text, and the pale gold the menus use to
-    // mark what is selected.
-    public static readonly Color Ground      = new Color(0.055f, 0.05f, 0.075f, 1f);
+    // A pure-black ground for OLED panels, bone-white text, and the pale gold
+    // the game's menus use to mark what is selected.
+    public static readonly Color Ground      = Color.black;
     public static readonly Color Panel       = new Color(0.10f, 0.09f, 0.13f, 1f);
     public static readonly Color PanelEdge   = new Color(0.32f, 0.29f, 0.36f, 1f);
     // Sections are divided, not enclosed. A rule is drawn in the gutter BETWEEN
