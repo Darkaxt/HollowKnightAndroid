@@ -39,6 +39,7 @@ class ModsActivity : Activity() {
 
     private lateinit var list: LinearLayout
     private lateinit var mods: File
+    private val buildSignature: String by lazy { BuildInstallation.signature(assets) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -138,8 +139,16 @@ class ModsActivity : Activity() {
         // is not always what the assembly inside is called.
         val reports = Mods.lastReport(root).associateBy { it.file }
         val stale = Mods.isStale(mods, root, assets)
+        val ready = try {
+            BuildInstallation.isReady(File(filesDir, "pkg"), buildSignature)
+        } catch (e: java.io.IOException) {
+            LauncherLog.log("Could not check the installed build", e)
+            false
+        }
 
-        if (stale) {
+        if (!ready) {
+            list.addView(note("The game build is incomplete or out of date. Rebuild to finish installing it."))
+        } else if (stale) {
             list.addView(
                 note(
                     "A mod has been added, replaced or removed since the last build. " +
@@ -153,7 +162,7 @@ class ModsActivity : Activity() {
             // Per mod, not per folder: one replaced plugin makes the folder
             // stale while the others are still in the game, and a list that
             // called all six unbuilt would be lying about five of them.
-            val built = Mods.isBuilt(mods, root, dll) ?: !stale
+            val built = ready && (Mods.isBuilt(mods, root, dll) ?: !stale)
             list.addView(row(relative, reports[dll.name], relative !in off, built))
         }
     }

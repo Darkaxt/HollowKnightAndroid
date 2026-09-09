@@ -25,6 +25,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class LauncherActivity : Activity() {
 
@@ -483,7 +484,10 @@ class LauncherActivity : Activity() {
 
     // ── Launch the game ────────────────────────────────────────────────
 
+    private val buildSignature: String by lazy { BuildInstallation.signature(assets) }
+
     private fun onLaunchClicked() {
+        if (!ensureBuildReady()) return
         // Before anything else, because it is the one thing here that changes
         // what the player is about to run rather than what it will read.
         if (modsNeedBuilding()) {
@@ -504,7 +508,7 @@ class LauncherActivity : Activity() {
      */
     private fun modsNeedBuilding(): Boolean = try {
         val out = Il2cppConverter.rootFor(this)
-        Il2cppConverter.isPresent(out) && Mods.isStale(Mods.dir(this), out, assets)
+        Mods.isStale(Mods.dir(this), out, assets)
     } catch (t: Throwable) {
         // A folder that cannot be read is not a reason to refuse to play.
         LauncherLog.log("Could not check the mods folder: $t")
@@ -609,6 +613,8 @@ class LauncherActivity : Activity() {
      * did, several times a second, deleting and re-dexing the jar each time.
      */
     private fun startGameActivity() {
+        // Also covers returns from asynchronous cloud sync and dex repair.
+        if (!ensureBuildReady()) return
         try {
             LauncherLog.log("Launching $UNITY_ACTIVITY_CLASS")
             // No FLAG_ACTIVITY_NEW_TASK / CLEAR_TASK and no finish()
@@ -636,6 +642,34 @@ class LauncherActivity : Activity() {
             returningFromGame = false
             LauncherLog.log("Failed to launch game: ${t.message}")
         }
+    }
+
+    private fun ensureBuildReady(): Boolean {
+        val ready = try {
+            BuildInstallation.isReady(File(filesDir, "pkg"), buildSignature)
+        } catch (e: java.io.IOException) {
+            LauncherLog.log("Could not check the installed build", e)
+            false
+        }
+        if (ready) return true
+        LauncherLog.log("Launch held: the game installation is incomplete or out of date")
+        android.app.AlertDialog.Builder(this)
+            .setTitle("The game needs rebuilding")
+            .setMessage(
+                "A previous build did not finish, or the installed game needs updating for this app.\n\n" +
+                    "Resume the build before playing. Completed conversion and compilation work " +
+                    "will be reused, and your game files and saves are kept.",
+            )
+            .setPositiveButton("Resume build") { _, _ ->
+                startActivity(
+                    Intent(this, SetupActivity::class.java)
+                        .putExtra(SetupActivity.EXTRA_REBUILD, true),
+                )
+                finish()
+            }
+            .setNegativeButton("Not now", null)
+            .show()
+        return false
     }
 
     /**

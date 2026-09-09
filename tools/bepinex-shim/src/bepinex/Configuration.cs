@@ -477,6 +477,8 @@ namespace BepInEx.Configuration
         }
 
         readonly object _lock = new object();
+        bool _reloading;
+        bool _saveRequested;
 
         static ConfigFile _core;
 
@@ -557,7 +559,7 @@ namespace BepInEx.Configuration
                     entry.SetSerializedValue(raw);
                 }
 
-                if (SaveOnConfigSet) Save();
+                if (SaveOnConfigSet && !_reloading) Save();
                 return entry;
             }
         }
@@ -695,7 +697,7 @@ namespace BepInEx.Configuration
             {
                 lock (_lock)
                 {
-                    _orphans.Clear();
+                    var values = new List<KeyValuePair<ConfigDefinition, string>>();
                     var section = "";
                     foreach (var rawLine in File.ReadAllLines(ConfigFilePath))
                     {
@@ -713,10 +715,34 @@ namespace BepInEx.Configuration
 
                         var definition = new ConfigDefinition(section, line.Substring(0, split).Trim());
                         var value = line.Substring(split + 1).Trim();
+                        values.Add(new KeyValuePair<ConfigDefinition, string>(definition, value));
+                    }
 
-                        ConfigEntryBase entry;
-                        if (_entries.TryGetValue(definition, out entry)) entry.SetSerializedValue(value);
-                        else _orphans[definition] = value;
+                    bool wasReloading = _reloading;
+                    bool completed = false;
+                    _reloading = true;
+                    try
+                    {
+                        _orphans.Clear();
+                        foreach (var pair in values)
+                            if (!_entries.ContainsKey(pair.Key)) _orphans[pair.Key] = pair.Value;
+
+                        foreach (var pair in values)
+                        {
+                            ConfigEntryBase entry;
+                            if (_entries.TryGetValue(pair.Key, out entry)) entry.SetSerializedValue(pair.Value);
+                        }
+                        completed = true;
+                    }
+                    finally
+                    {
+                        _reloading = wasReloading;
+                        if (!wasReloading)
+                        {
+                            bool save = completed && _saveRequested;
+                            _saveRequested = false;
+                            if (save) Save();
+                        }
                     }
                 }
 
@@ -735,6 +761,13 @@ namespace BepInEx.Configuration
             {
                 lock (_lock)
                 {
+                    // A setting-change callback can save or bind another entry.
+                    // Defer explicit saves until every loaded value has been applied.
+                    if (_reloading)
+                    {
+                        _saveRequested = true;
+                        return;
+                    }
                     var directory = Path.GetDirectoryName(ConfigFilePath);
                     if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
@@ -801,7 +834,7 @@ namespace BepInEx.Configuration
         {
             var handler = SettingChanged;
             if (handler != null) handler(sender, new SettingChangedEventArgs(changedEntry));
-            if (SaveOnConfigSet) Save();
+            if (SaveOnConfigSet && !_reloading) Save();
         }
     }
 }

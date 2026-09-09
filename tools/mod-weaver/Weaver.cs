@@ -12,6 +12,7 @@ internal sealed class Weaver
     readonly string _assemblies;
     readonly StagedResolver _resolver;
     readonly HashSet<AssemblyDefinition> _dirty = new();
+    readonly Weave _weave = new();
 
     /// Assemblies a plugin may ship a copy of, and which we supply ourselves.
     ///
@@ -87,8 +88,46 @@ internal sealed class Weaver
             plugins.Add((path, assembly, report));
         }
 
+        // Validate the complete input set before creating gates or touching any
+        // targets. A dependent can precede the broken DLL in the input order.
+        foreach (var (_, assembly, report) in plugins)
+        {
+            try
+            {
+                Validate(assembly, report);
+            }
+            catch (Exception e)
+            {
+                report.Fail($"validation threw {e.GetType().Name}: {e.Message}");
+            }
+        }
+
+        var rejected = plugins.Where(p => p.Report.Status == PluginStatus.Failed)
+            .Select(p => p.Assembly.Name.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach (var (_, assembly, report) in plugins)
+            {
+                if (report.Status == PluginStatus.Failed) continue;
+                var dependencies = assembly.MainModule.AssemblyReferences
+                    .Where(r => rejected.Contains(r.Name)).Select(r => r.Name).Distinct().ToList();
+                if (dependencies.Count == 0) continue;
+                report.Fail($"needs {string.Join(", ", dependencies)}, which was rejected from this build");
+                rejected.Add(assembly.Name.Name);
+                changed = true;
+            }
+        } while (changed);
+
+        // Rejected assemblies must not remain available to string-based target
+        // lookup either, or a valid plugin could weave calls into a missing DLL.
+        foreach (var (_, assembly, report) in plugins)
+            if (report.Status == PluginStatus.Failed) _resolver.Remove(assembly);
+
         foreach (var (path, assembly, report) in plugins)
         {
+            if (report.Status == PluginStatus.Failed) continue;
             try
             {
                 Process(assembly, report);
@@ -132,8 +171,9 @@ internal sealed class Weaver
         return report;
     }
 
-    void Process(AssemblyDefinition plugin, PluginReport report)
+    void Validate(AssemblyDefinition plugin, PluginReport report)
     {
+        Describe(plugin, report);
         foreach (var reference in plugin.MainModule.AssemblyReferences)
         {
             if (Supplied.Contains(reference.Name)) continue;
@@ -142,8 +182,11 @@ internal sealed class Weaver
             return;
         }
 
-        Describe(plugin, report);
-        if (!ReferencesResolve(plugin, report)) return;
+        ReferencesResolve(plugin, report);
+    }
+
+    void Process(AssemblyDefinition plugin, PluginReport report)
+    {
         NoteUnsupportedCalls(plugin, report);
 
         var gate = GateFor(plugin);
@@ -217,10 +260,9 @@ internal sealed class Weaver
     /// never starts, for one plugin using a Harmony class the shim does not
     /// have. Here it is one line in a report, before anything is built.
     ///
-    /// Types are fatal to the plugin, because a type that is not there cannot
-    /// be substituted. Members are only noted: Cecil cannot always resolve a
-    /// member of a generic type it can resolve perfectly well, and refusing a
-    /// working mod is worse than letting an unusual one through.
+    /// Missing types and definite missing members are fatal. Generic members
+    /// and array intrinsics remain best-effort: Cecil cannot always resolve
+    /// those even when the runtime can, so uncertainty is not a rejection.
     /// </summary>
     bool ReferencesResolve(AssemblyDefinition plugin, PluginReport report)
     {
@@ -244,13 +286,18 @@ internal sealed class Weaver
         {
             if (missing.Count >= 5) break;
             var declaring = reference.DeclaringType;
-            if (declaring is null || declaring.IsGenericInstance || declaring.IsArray) continue;
+            if (declaring is null || declaring.IsGenericInstance || declaring.IsArray ||
+                reference.ContainsGenericParameter ||
+                reference is MethodReference { IsGenericInstance: true }) continue;
             if (Resolves(() => reference.Resolve() is not null)) continue;
             missing.Add($"{declaring.FullName}.{reference.Name}");
         }
 
         if (missing.Count > 0)
-            report.Note($"calls {string.Join(", ", missing)}, which this build does not have");
+        {
+            report.Fail($"needs members {string.Join(", ", missing)}, which this build does not have");
+            return false;
+        }
 
         return true;
     }
@@ -393,7 +440,7 @@ internal sealed class Weaver
             {
                 var prefix = i < pre.Count ? pre[i] : null;
                 var postfix = i < post.Count ? post[i] : null;
-                if (!Weave.Apply(target, prefix, postfix, gate, report, a => _dirty.Add(a))) continue;
+                if (!_weave.Apply(target, prefix, postfix, gate, report, a => _dirty.Add(a))) continue;
                 report.Patched++;
             }
         }
@@ -474,6 +521,8 @@ internal sealed class StagedResolver : IAssemblyResolver
     public IEnumerable<AssemblyDefinition> Loaded => _cache.Values;
 
     public void Add(AssemblyDefinition assembly) => _cache[assembly.Name.Name] = assembly;
+
+    public void Remove(AssemblyDefinition assembly) => _cache.Remove(assembly.Name.Name);
 
     public AssemblyDefinition Resolve(AssemblyNameReference name) => Resolve(name, new ReaderParameters());
 

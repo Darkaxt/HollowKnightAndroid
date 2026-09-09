@@ -27,8 +27,9 @@ Shapes matter as much as names. A published plugin was compiled against the
 real BepInEx, so it calls `Chainloader.get_PluginInfos` and expects
 `PluginInfo.Instance` to be a `BaseUnityPlugin` and `BepInPlugin.Version` to be
 a `System.Version`. A field where BepInEx has a property, or `object` where it
-has a type, is a member the plugin cannot resolve — and nothing notices until
-il2cpp fails, seventeen minutes into a build.
+has a type, is a member the plugin cannot resolve. The weaver checks these
+references before conversion and excludes definite failures and their required
+dependents. Uncertain generic resolution remains best-effort.
 
 ## check.ps1
 
@@ -69,3 +70,19 @@ We do not ship it: it is LGPL-3.0, which is redistributable, but a build that
 compiles it into the game statically is a combined work with obligations
 attached, and there is no reason to take them on when the user's own device
 does that build from a file the user downloaded.
+
+## Configuration persistence
+
+Reload reads the complete file before applying values. Unbound entries remain
+available to plugins that bind settings lazily, including per-save-slot settings.
+Automatic saves are suspended during reload; explicit saves requested by a
+setting-change callback are deferred until the reload finishes successfully.
+Normal change notifications still run, and the plugin's autosave preference is
+preserved.
+
+The filesystem-backed configuration regressions need only the .NET 8 SDK.
+From the repository root in PowerShell:
+
+```powershell
+dotnet run --project .\tools\bepinex-shim\tests\ConfigTests.csproj
+```

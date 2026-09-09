@@ -93,10 +93,16 @@ the folder actually changed — and the compile is incremental, so it is a few
 minutes rather than the twenty the first build took. Drop a mod in and press
 Launch and the launcher offers to rebuild, or to play the build you have.
 
+If a rebuild is interrupted, resume it before playing. Completed work is
+reused, but the launcher will not run a partly installed game. Mod build
+indicators update only after installation succeeds.
+
 **What does not work**: transpilers, patch targets computed at runtime,
 `Reflection.Emit`, and loading a DLL discovered at runtime. There is no IL left
 by the time the game runs, so nothing can be patched then. The mods screen
 names every patch a plugin could not apply, before the build starts.
+Plugins with definite missing APIs or required dependencies are marked failed
+and left out, rather than breaking compilation for the other mods.
 
 ### The configuration menu
 

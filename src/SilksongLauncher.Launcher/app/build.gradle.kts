@@ -66,6 +66,8 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+
     // Apache Commons Compress: TarArchiveInputStream we wrap around
     // the decompressed LZ4 stream during bundle extraction.
     implementation("org.apache.commons:commons-compress:1.27.1")

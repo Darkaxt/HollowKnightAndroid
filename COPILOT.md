@@ -108,7 +108,7 @@ the button again after a patch edit skips the ones that cannot have changed:
 
 | Step | Stamp | Skipped when |
 | --- | --- | --- |
-| IL2CPP conversion | `build/asm/SilksongPatches.dll` | the compiled patch assembly is byte-identical |
+| IL2CPP conversion | `build/cpp.done`, staged assemblies, `build/mods.stamp` + `build/mods.converted` | conversion completed and its assemblies, mod inputs and weaver are unchanged |
 | Player image + `data.apk` | `build/image.stamp` | the conversion output, entry points and depot are unmoved |
 | Content retarget | `build/content.stamp` | the bundle tree is the one already retargeted |
 
@@ -117,6 +117,19 @@ redone rather than assumed — which matters most for the retarget, since it
 rewrites the content tree in place.
 
 Delete a stamp to force that step alone. `make game-reset` drops the lot.
+
+The installed game has a separate completion marker, `files/pkg/.built`.
+It is removed before a build or reset can change installed files and written
+atomically only after the engine, player image, content and installed mod
+records all finish. Setup and the launch button both require it: an interrupted rebuild
+must be resumed, not played with new native code and old metadata. Completed
+conversion and native compilation work remain cached. Older completion markers
+are not trusted and need one cached rebuild.
+
+The launcher has filesystem-backed JVM regressions for these checkpoints.
+Run `:app:testReleaseUnitTest --tests dev.silksong.launcher.BuildInstallationTest`
+with the player module's Gradle, the same one used by `dev.sh`; the Android
+Studio-generated wrapper is not supported.
 
 ## Editing the patches
 
@@ -147,14 +160,22 @@ BepInEx 5 plugins are woven into the game at build time, not loaded at runtime
   the chainloader opens at startup. So adding or replacing a file is a
   rebuild; a toggle is a line in `mods/disabled-assemblies.txt`.
 
+Conversion and installation are recorded separately. `mods.stamp` and
+`mods.converted` describe the completed conversion; `mods.installed.stamp`
+and `mods.built` are promoted from that snapshot only after installation
+succeeds. The snapshot includes only accepted DLLs in the built list, while its
+fingerprint covers every input, so a rejected plugin is reported as not built
+without prompting for the same unsuccessful mod on every launch.
+
 Transpilers, runtime-computed targets and `Reflection.Emit` cannot work. The
 weaver says so per plugin before the native compile starts.
 
 So does a shape that does not match. A published plugin was compiled against
 the real BepInEx, so the shims have to agree with it down to the signature: a
 field where BepInEx has a property, or `object` where it has a type, is a
-member the plugin cannot resolve, and il2cpp is what discovers that. To ask in
-five seconds instead:
+member the plugin cannot resolve. The weaver rejects definite missing members
+before IL2CPP, along with plugins that require the rejected assembly or plugin.
+Uncertain generic resolution remains best-effort. To check a plugin locally:
 
 ```sh
 make mod-check PLUGIN=path/to/Plugin.dll
@@ -164,6 +185,14 @@ It compiles both shims against your depot, stages them beside the game's
 assemblies and runs the real weaver over the plugin, printing the report the
 launcher would show. It found five such mismatches when Configuration Manager
 was first tried.
+
+Postfixes share a continuation per target, so a prefix that skips the original
+method cannot skip another mod's postfix. The synthetic-assembly regressions
+exercise the actual weaver without requiring game files:
+
+```powershell
+dotnet run --project .\tools\mod-weaver\tests\ModWeaver.RegressionTests.csproj --configuration Release
+```
 
 ### Check before you build
 

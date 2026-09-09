@@ -65,7 +65,7 @@ class SetupActivity : Activity() {
          * measure it has, already built -- and forwards straight back to the
          * launcher. From the Mods screen that is indistinguishable from the
          * button doing nothing at all, which is exactly what it was reported
-         * as. The mods folder is not part of [builtMarker] on purpose: it is
+         * as. The mods folder is not part of [buildSignature] on purpose: it is
          * not what the build was made by, it is what the build was made FROM,
          * and it is checked separately by [modsPending].
          */
@@ -130,12 +130,6 @@ class SetupActivity : Activity() {
     // <files>/pkg mirrors an installed package: lib/<abi> beside assets/.
     private val pkgDir: File get() = File(filesDir, "pkg")
     private val engineDir: File get() = File(pkgDir, "lib/$ABI")
-    // The player image and catalog, as one zip laid out like an APK. Only the
-    // zip counts: the engine opens "jar:file://<package path>!/assets" and
-    // reads the tree out of that archive itself, so loose files at the same
-    // paths are never read.
-    private val dataApk: File get() = File(pkgDir, "data.apk")
-
     // Where a download leaves things for us to install.
     private val stagingDir: File? get() = getExternalFilesDir(null)?.let { File(it, "staging") }
 
@@ -203,52 +197,7 @@ class SetupActivity : Activity() {
 
     // ── what state are we in ───────────────────────────────────────────────
 
-    /**
-     * Written as the last act of a successful run, and required before the
-     * build counts as done.
-     *
-     * The two big outputs are each written atomically, so neither can be
-     * truncated under its final name -- but they are written at different
-     * points, and the content retarget runs after both. Judging "built" by
-     * their presence therefore accepts a run that died in between: a fresh
-     * engine beside the previous run's data, or a data package whose content
-     * was never retargeted. Both look finished and fail later, somewhere with
-     * no connection to the cause.
-     *
-     * The file holds a signature of what produced it, so a new app -- new
-     * patches, new player-image logic -- invalidates the previous build
-     * instead of being told it has nothing to do. Same reasoning as
-     * Il2cppConverter.isStale, one layer up.
-     */
-    private val builtMarker: File get() = File(pkgDir, ".built")
-
-    /**
-     * What the current app would produce, as a string.
-     *
-     * The on-device assets and nothing else: the patch sources, the build
-     * script and the tools that run there are what end up in the built game.
-     * Signing with the APK's own timestamp would be simpler and wrong -- it
-     * changes on every install, so editing a settings screen would throw away
-     * a good build and charge the user twenty minutes to get an identical one
-     * back.
-     *
-     * Contents only, and normalised: see AssetDigest. A file staged with CRLF
-     * compiles to the same game as the same file staged with LF, so hashing
-     * the difference only ever produced a rebuild nobody needed.
-     */
-    private val buildSignature: String by lazy {
-        val md = java.security.MessageDigest.getInstance("SHA-256")
-        fun walk(path: String) {
-            val names = runCatching { assets.list(path) }.getOrNull().orEmpty().sorted()
-            if (names.isEmpty()) {
-                runCatching { AssetDigest.update(md, assets, path) }
-                return
-            }
-            for (n in names) walk("$path/$n")
-        }
-        walk("ondevice")
-        "1|" + md.digest().joinToString("") { "%02x".format(it) }.take(16)
-    }
+    private val buildSignature: String by lazy { BuildInstallation.signature(assets) }
 
     /**
      * The game is built and ready to play.
@@ -259,11 +208,14 @@ class SetupActivity : Activity() {
      * build is. Answering yes would send the user to a Play button that starts
      * a world with nothing in it.
      */
-    private fun isBuilt(): Boolean =
-        dataApk.isFile && File(engineDir, "libil2cpp.so").length() > 0 &&
+    private fun isBuilt(): Boolean = try {
+        BuildInstallation.isReady(pkgDir, buildSignature) &&
             UnityDex.isBuilt(this, UnityFetcher.rootFor(this)) &&
-            haveGameFiles() &&
-            runCatching { builtMarker.readText() }.getOrNull() == buildSignature
+            haveGameFiles()
+    } catch (e: java.io.IOException) {
+        LauncherLog.log("Could not check the installed build", e)
+        false
+    }
 
     /** The game's own files are on this device, however they got here. */
     private fun haveGameFiles(): Boolean =
@@ -290,7 +242,7 @@ class SetupActivity : Activity() {
      */
     private fun modsPending(): Boolean = try {
         val out = Il2cppConverter.rootFor(this)
-        Il2cppConverter.isPresent(out) && Mods.isStale(Mods.dir(this), out, assets)
+        Mods.isStale(Mods.dir(this), out, assets)
     } catch (t: Throwable) {
         // A folder that cannot be read is not a reason to withhold a build
         // that works.
@@ -719,6 +671,16 @@ class SetupActivity : Activity() {
             detail.text = "$dir\n\n$problem"
             return
         }
+        val moved = before != null && before.absolutePath != dir.absolutePath
+        if (moved) {
+            try {
+                BuildInstallation.invalidate(pkgDir)
+            } catch (e: java.io.IOException) {
+                LauncherLog.log("Could not prepare to change the game folder", e)
+                say("Could not change the game folder: ${e.message}")
+                return
+            }
+        }
         DepotLocation.remember(this, dir)
         DepotLocation.writeMarker(dir)
         // A different folder is a different content tree, and the built game
@@ -728,10 +690,9 @@ class SetupActivity : Activity() {
         // "never seen". Dropping it, and the marker that says the build
         // finished, sends the user back through a run that redoes the retarget
         // and skips everything else.
-        if (before != null && before.absolutePath != dir.absolutePath) {
+        if (moved) {
             LauncherLog.log("depot moved from $before; the content will be retargeted again")
             PlayerImage.invalidateContent(Il2cppConverter.rootFor(this))
-            builtMarker.delete()
         }
         message = null
         refresh()
@@ -798,6 +759,7 @@ class SetupActivity : Activity() {
                 name == "data.apk" -> File(pkgDir, "data.apk")
                 else -> continue
             }
+            BuildInstallation.invalidate(pkgDir)
             dst.parentFile?.mkdirs()
             val tmp = File(dst.parentFile, "${dst.name}.part")
             f.inputStream().use { i -> tmp.outputStream().use { o -> i.copyTo(o, 1 shl 20) } }
@@ -980,6 +942,7 @@ class SetupActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         scope.launch {
             try {
+                withContext(Dispatchers.IO) { BuildInstallation.invalidate(pkgDir) }
                 // ── Step 1: the game ──────────────────────────────────────
                 if (download != null && !DepotFetcher.isPresent(depot)) {
                     setStep(1, "Downloading game files from Steam")
@@ -1083,7 +1046,10 @@ class SetupActivity : Activity() {
 
                 // Last, and only on the way out of a run that got here: this
                 // is what makes the build count as finished.
-                withContext(Dispatchers.IO) { builtMarker.writeText(buildSignature) }
+                withContext(Dispatchers.IO) {
+                    Mods.markInstalled(out)
+                    BuildInstallation.complete(pkgDir, buildSignature)
+                }
 
                 readyToPort = false
                 pendingCreds = null

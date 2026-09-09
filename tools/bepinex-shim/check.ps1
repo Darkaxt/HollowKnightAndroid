@@ -3,8 +3,8 @@
 # A published BepInEx plugin references BepInEx.dll and 0Harmony.dll by name,
 # and here those are the port's own shims -- a vocabulary and a runtime, not a
 # loader. A plugin that calls something the shims do not have cannot be
-# converted, and on the device that is discovered by il2cpp, seventeen minutes
-# into a build that then fails.
+# converted. The weaver rejects definite mismatches before IL2CPP; this script
+# provides the same diagnostics without an on-device build.
 #
 # This answers the same question in about a minute, on a machine with a depot:
 # it compiles the shims the way the device compiles them, stages them beside
@@ -225,13 +225,8 @@ if ($r.Code -ne 0) { Write-Error "[shim] the weaver failed (exit $($r.Code))" }
 
 $failed = 0
 foreach ($p in (Get-Content $report -Raw | ConvertFrom-Json).plugins) {
-    # A missing member is as fatal as a missing type, whatever the weaver
-    # calls it. The weaver only NOTES one, because Cecil cannot always resolve
-    # a member of a generic type it resolves perfectly well and refusing a
-    # working mod would be worse -- but that judgement is about not blocking a
-    # build. This is a check whose entire job is to find that member, and
-    # reporting the first four gaps ConfigurationManager had as "Partial, OK"
-    # is how it would have missed all four.
+    # Failed includes definite missing members. Keep the diagnostic check for
+    # older cached weaver builds that reported the same failures as Partial.
     $unresolved = @($p.Issues | Where-Object { $_ -like '*which this build does not have*' })
     $fatal = $p.Status -eq 'Failed' -or $unresolved.Count -gt 0
 

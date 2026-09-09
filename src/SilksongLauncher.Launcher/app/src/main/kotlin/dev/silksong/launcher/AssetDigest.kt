@@ -1,7 +1,7 @@
 // AssetDigest — what a staged asset hashes to, and what that deliberately ignores.
 //
 // Two markers in this app decide whether work already done is still good by
-// hashing the on-device assets: SetupActivity.buildSignature, which owns "is
+// hashing the on-device assets: BuildInstallation.signature, which owns "is
 // the built game still the one this app would produce", and Mods.stamp, which
 // owns the same question for the weaver. Both are cheap to write and expensive
 // to get wrong -- a marker that says "different" when nothing is costs twenty

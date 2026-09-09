@@ -5,21 +5,19 @@ using Mono.Cecil.Rocks;
 namespace ModWeaver;
 
 /// <summary>
-/// The IL surgery: a prefix and a postfix folded into a method's own body.
+/// The IL surgery: prefixes and postfixes folded into a method's own body.
 ///
 /// Harmony does this at runtime by writing a new method and detouring the old
 /// one at its machine-code entry point. There is nothing to detour after
 /// IL2CPP, so the same shape is built statically instead. A patched method
 /// ends up as:
 ///
-///     [prefix arguments]
-///     call Prefix
-///     brfalse  --> postfix         (only when the prefix returns bool)
+///     [gated prefix calls]
+///     brfalse  --> postfixes       (when a prefix returns bool)
 ///     ... the original body, with every `ret` turned into
-///         `stloc __result; br postfix` ...
-///  postfix:
-///     [postfix arguments]
-///     call Postfix
+///         `stloc __result; br postfixes` ...
+///  postfixes:
+///     [gated postfix calls]
 ///     ldloc __result
 ///     ret
 ///
@@ -27,17 +25,23 @@ namespace ModWeaver;
 /// original, postfixes run either way -- expressed in the one place a build-time
 /// tool can reach.
 ///
-/// Two plugins patching the same method nest: the second weave wraps the first,
-/// because it rewrites the single `ret` the first one left behind. Harmony's
-/// priority attributes are not honoured; the order is the order the plugins are
-/// woven in.
+/// A target has one result local and one postfix path, even across plugins.
+/// Prefixes run in reverse weave order and postfixes in weave order, as with
+/// the original nested weaves, but skipping the original never bypasses an
+/// earlier plugin's postfix. A false prefix still skips remaining prefixes.
+/// Harmony's priority attributes are not honoured.
 ///
 /// Each plugin's calls are wrapped in a test of its gate field, so a mod that
 /// is switched off costs one predictable branch and does nothing else. See
 /// Weaver.GateFor.
 /// </summary>
-internal static class Weave
+internal sealed class Weave
 {
+    sealed record Composition(
+        VariableDefinition? Result, Instruction PostfixStart, Instruction ReturnStart);
+
+    readonly Dictionary<MethodDefinition, Composition> _targets = new();
+
     /// <summary>
     /// Applies one patch class to one target.
     ///
@@ -46,7 +50,7 @@ internal static class Weave
     /// is added, so a patch that is rejected leaves no half-woven method
     /// behind.
     /// </summary>
-    public static bool Apply(
+    public bool Apply(
         MethodDefinition target,
         MethodDefinition? prefix,
         MethodDefinition? postfix,
@@ -86,12 +90,10 @@ internal static class Weave
         var simplified = false;
         try
         {
-            var wantsResult = target.ReturnType.MetadataType != MetadataType.Void;
-            VariableDefinition? resultVar = null;
-            if (wantsResult)
-            {
+            var firstWeave = !_targets.TryGetValue(target, out var composition);
+            var resultVar = composition?.Result;
+            if (firstWeave && target.ReturnType.MetadataType != MetadataType.Void)
                 resultVar = new VariableDefinition(module.ImportReference(target.ReturnType));
-            }
             VariableDefinition? stateVar = null;
 
             // Everything is built first and committed second. Building can fail --
@@ -101,7 +103,10 @@ internal static class Weave
             var postfixCode = new List<Instruction>();
             var scratch = new List<VariableDefinition>();
 
-            var postfixStart = Instruction.Create(OpCodes.Nop);
+            var postfixStart = composition?.PostfixStart ?? Instruction.Create(OpCodes.Nop);
+            var returnStart = composition?.ReturnStart ?? (resultVar is null
+                ? Instruction.Create(OpCodes.Ret)
+                : Instruction.Create(OpCodes.Ldloc, resultVar));
 
             if (prefix is not null)
             {
@@ -178,41 +183,50 @@ internal static class Weave
             body.SimplifyMacros();
             simplified = true;
 
-            if (resultVar is not null) body.Variables.Add(resultVar);
+            if (firstWeave && resultVar is not null) body.Variables.Add(resultVar);
             foreach (var v in scratch) body.Variables.Add(v);
             if (body.Variables.Count > 0) body.InitLocals = true;
 
             var il = body.GetILProcessor();
             var first = body.Instructions[0];
-            var rets = body.Instructions.Where(i => i.OpCode.Code == Code.Ret).ToList();
-
-            il.Append(postfixStart);
-
-            foreach (var ret in rets)
+            if (firstWeave)
             {
-                // Branching out of a try or a handler is only legal with `leave`,
-                // and a body written by something other than a C# compiler can
-                // perfectly well return from inside one.
-                var jump = Protected(body, ret) ? OpCodes.Leave : OpCodes.Br;
-                if (resultVar is not null)
+                var rets = body.Instructions.Where(i => i.OpCode.Code == Code.Ret).ToList();
+                il.Append(postfixStart);
+
+                // A null end means the end of the old body, not the postfixes
+                // and return path that are being appended outside its handlers.
+                foreach (var handler in body.ExceptionHandlers)
                 {
-                    // Mutated rather than replaced: branches and exception-handler
-                    // boundaries hold references to this instruction, and swapping
-                    // it for a new one silently repoints them at the wrong place.
-                    il.InsertAfter(ret, Instruction.Create(jump, postfixStart));
-                    ret.OpCode = OpCodes.Stloc;
-                    ret.Operand = resultVar;
+                    handler.TryEnd ??= postfixStart;
+                    handler.HandlerEnd ??= postfixStart;
                 }
-                else
+
+                foreach (var ret in rets)
                 {
-                    ret.OpCode = jump;
-                    ret.Operand = postfixStart;
+                    // Leaving a protected region must also run its finally.
+                    var jump = Protected(body, ret) ? OpCodes.Leave : OpCodes.Br;
+                    if (resultVar is not null)
+                    {
+                        // Keep branch targets and exception boundaries attached
+                        // to the original instruction.
+                        il.InsertAfter(ret, Instruction.Create(jump, postfixStart));
+                        ret.OpCode = OpCodes.Stloc;
+                        ret.Operand = resultVar;
+                    }
+                    else
+                    {
+                        ret.OpCode = jump;
+                        ret.Operand = postfixStart;
+                    }
                 }
+
+                il.Append(returnStart);
+                if (resultVar is not null) il.Append(Instruction.Create(OpCodes.Ret));
+                _targets.Add(target, new Composition(resultVar, postfixStart, returnStart));
             }
 
-            foreach (var ins in postfixCode) il.Append(ins);
-            if (resultVar is not null) il.Append(Instruction.Create(OpCodes.Ldloc, resultVar));
-            il.Append(Instruction.Create(OpCodes.Ret));
+            foreach (var ins in postfixCode) il.InsertBefore(returnStart, ins);
 
             // Last, so that the branches above are already pointing at real
             // instructions. Inserting before the original first instruction keeps

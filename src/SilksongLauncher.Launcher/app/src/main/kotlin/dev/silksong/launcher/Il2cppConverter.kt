@@ -133,7 +133,7 @@ object Il2cppConverter {
     private fun markComplete(root: File) {
         // Failing to write it costs a conversion that did not need to happen.
         // Failing to notice it is missing costs a build that cannot run.
-        runCatching { doneMarker(root).writeText(completionSignature(root)) }
+        BuildInstallation.writeAtomic(doneMarker(root), completionSignature(root))
     }
 
     /**
@@ -178,7 +178,7 @@ object Il2cppConverter {
         mods: File? = null,
         assets: android.content.res.AssetManager? = null,
     ): Boolean {
-        if (mods != null && Mods.isStale(mods, root, assets)) return true
+        if (mods != null && Mods.isConversionStale(mods, root, assets)) return true
         val ours = listOf(PackageCompiler.patchAssembly(root), PackageCompiler.ioAssembly(root)) +
             PackageCompiler.shimAssemblies(root)
         for (built in ours) {
@@ -247,6 +247,11 @@ object Il2cppConverter {
         if (!engine.isDirectory) throw IOException("the Android player's Managed folder is missing: $engine")
         if (!File(deploy, "il2cpp.dll").isFile) throw IOException("il2cpp.dll is missing: $deploy")
 
+        if (doneMarker(root).exists() && !doneMarker(root).delete()) {
+            throw IOException("Could not invalidate the previous conversion")
+        }
+        val modSnapshot = mods?.let { Mods.snapshot(it, assets) }
+        var modReport = emptyList<Mods.Plugin>()
         send(Progress("Preparing the converter", -1f, "assemblies"))
         var assemblies = stageAssemblies(bcl, engine, managed, PackageCompiler.outputDir(root), asmDir(root))
         LauncherLog.log("il2cpp input: ${assemblies.size} assemblies")
@@ -275,12 +280,13 @@ object Il2cppConverter {
         // toggle costs nothing and only adding or removing a file is a
         // rebuild. See Mods.gates.
         if (mods != null && assets != null) {
-            val plugins = Mods.all(mods)
-            if (plugins.isNotEmpty()) {
-                send(Progress("Weaving mods", -1f, "${plugins.size} plugin(s)"))
-                Mods.weave(context, root, mods, asmDir(root), assets) { line ->
-                    trySend(Progress("Weaving mods", -1f, line.take(80)))
-                }
+            if (modSnapshot != null && modSnapshot.files.isNotEmpty()) {
+                send(Progress("Weaving mods", -1f, "${modSnapshot.files.size} plugin(s)"))
+            }
+            modReport = Mods.weave(context, root, mods, asmDir(root), assets) { line ->
+                trySend(Progress("Weaving mods", -1f, line.take(80)))
+            }
+            if (modReport.isNotEmpty()) {
                 assemblies = asmDir(root).listFiles().orEmpty()
                     .filter { it.name.endsWith(".dll") }.sortedBy { it.name }
                 LauncherLog.log("il2cpp input after weaving: ${assemblies.size} assemblies")
@@ -416,6 +422,12 @@ object Il2cppConverter {
         val cpp = cppDir(root).listFiles()?.count { it.name.endsWith(".cpp") } ?: 0
         val c = cppDir(root).listFiles()?.count { it.name.endsWith(".c") } ?: 0
         rememberSources(root)
+        if (mods != null && modSnapshot != null) {
+            if (Mods.stamp(mods, assets) != modSnapshot.fingerprint) {
+                throw IOException("The mods folder changed during conversion. Rebuild again to use the new files.")
+            }
+            Mods.markConverted(root, modSnapshot, modReport)
+        }
         // Only now, and only after every check above: this is what the next
         // build reads as permission to skip the four minutes it took to get
         // here, so it has to mean the run reached this line.
@@ -423,9 +435,6 @@ object Il2cppConverter {
         LauncherLog.log(
             "il2cpp: ${seconds}s, $cpp cpp + $c c, metadata ${metadata(root).length()} bytes",
         )
-        // Only now: the stamp says "this build contains that mod set", and it
-        // would be a lie if the conversion had failed anywhere above.
-        if (mods != null) Mods.markCurrent(mods, root, assets)
         send(Progress("Converted", 1f, "$cpp C++ files in ${seconds}s"))
     }.flowOn(Dispatchers.IO)
 

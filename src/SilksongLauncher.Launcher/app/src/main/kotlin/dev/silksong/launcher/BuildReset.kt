@@ -64,6 +64,7 @@ object BuildReset {
      * this must not be called on the main thread.
      */
     fun clear(context: Context): Long {
+        BuildInstallation.invalidate(File(context.filesDir, "pkg"))
         var freed = 0L
 
         val external = context.getExternalFilesDir(null)
