@@ -1,5 +1,17 @@
-# Compile the BepInEx shims and resolve plugins against the same assembly
-# precedence used by Il2cppConverter.stageAssemblies in production.
+# Compile the BepInEx shims and resolve plugins against the same profile-aware
+# assembly precedence used by Il2cppConverter.stageAssemblies in production.
+#
+# A published BepInEx plugin references BepInEx.dll and 0Harmony.dll by name,
+# and here those are the port's own shims -- a vocabulary and a runtime, not a
+# loader. The weaver rejects definite mismatches before IL2CPP; this script
+# provides the same diagnostics without an on-device build.
+#
+# It checks that a plugin RESOLVES against one exact game profile. It cannot
+# tell whether the mod behaves correctly at runtime.
+#
+# Usage:
+#   pwsh tools/bepinex-shim/check.ps1 -Profile silksong -Plugin path\to\Plugin.dll [-Plugin ...]
+#   pwsh tools/bepinex-shim/check.ps1 -Profile hollow-knight # just compile the shims
 [CmdletBinding()]
 param(
     [ValidateSet('hollow-knight', 'silksong')]
@@ -292,6 +304,8 @@ if ($result.Code -ne 0) { Write-Error "[shim] the weaver failed (exit $($result.
 
 $failed = 0
 foreach ($entry in (Get-Content $report -Raw | ConvertFrom-Json).plugins) {
+    # Failed includes definite missing members. Keep the diagnostic check for
+    # older cached weaver builds that reported the same failures as Partial.
     $unresolved = @($entry.Issues | Where-Object { $_ -like '*which this build does not have*' })
     $fatal = $entry.Status -eq 'Failed' -or $unresolved.Count -gt 0
     $colour = if ($fatal) { 'Red' } elseif ($entry.Status -eq 'Ok') { 'Green' } else { 'Yellow' }

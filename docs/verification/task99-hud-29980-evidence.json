@@ -76,10 +76,10 @@
   },
   "compileManifest": {
     "project": "tools/shared-patches-tests/obj/task99-journal-continuation-20260908/ss-project/PatchCheck.csproj",
-    "sourceCount": 64,
+    "sourceCount": 68,
     "entryFormat": "lowercase SHA-256 of file bytes, two spaces, repository-relative path, LF",
     "order": "Compile Include order in PatchCheck.csproj",
-    "sha256OfConcatenatedEntries": "e680a8d856263afa0df61f24fcba80a72dec00dac0741ff48ed112e451598019"
+    "sha256OfConcatenatedEntries": "c45edc286bc2a19f78c2e77e00f44832797974621ac148b1f72af7b0ed701fd4"
   },
   "finalCompile": {
     "command": "dotnet build tools/shared-patches-tests/obj/task99-journal-continuation-20260908/ss-project/PatchCheck.csproj --no-restore -c Release -p:UseSharedCompilation=false -nodeReuse:false --output tools/shared-patches-tests/obj/task99-hud-correction-20260911/final-compile/bin --nologo",

@@ -40,6 +40,12 @@ object UnityDex {
     fun outputDir(filesDir: File, sourceJar: File): File =
         File(File(filesDir, "unity-dex"), UnityToolchainRegistry.sha256(sourceJar))
 
+    /** ART optimization is disposable and isolated from authored dex output. */
+    private const val OPT_DIR = "unity-dex-opt"
+
+    /** A type that can only have come from the dexed Unity player jar. */
+    private const val UNITY_PLAYER_CLASS = "com.unity3d.player.UnityPlayerForActivityOrService"
+
     private fun outputJar(filesDir: File, sourceJar: File): File =
         File(outputDir(filesDir, sourceJar), "classes.jar")
 
@@ -214,7 +220,7 @@ object UnityDex {
 
             val donor = DexClassLoader(
                 jar.absolutePath,
-                File(context.cacheDir, "unity-dex-opt").apply { mkdirs() }.absolutePath,
+                File(context.cacheDir, OPT_DIR).apply { mkdirs() }.absolutePath,
                 null,
                 appLoader,
             )
@@ -239,6 +245,61 @@ object UnityDex {
             throw IllegalStateException("Could not inject the verified Unity player dex", t)
         }
     }
+
+    /** Whether the exact registered player's dex jar supplies Unity's player type. */
+    fun playerClassesUsable(
+        context: Context,
+        descriptor: UnityToolchainDescriptor,
+        unityRoot: File,
+    ): Boolean {
+        val jar = builtPlayerDex(context.filesDir, descriptor, unityRoot) ?: return false
+        return jarProvidesPlayerClasses(context, jar)
+    }
+
+    /**
+     * Rebuilds and probes one exact profile toolchain's player dex. The launcher
+     * process never injects Unity classes; the cold game process binds and
+     * injects this verified artifact from GameProcessStartup.
+     */
+    fun repair(
+        context: Context,
+        descriptor: UnityToolchainDescriptor,
+        unityRoot: File,
+    ): String? {
+        if (playerClassesUsable(context, descriptor, unityRoot)) return null
+        LauncherLog.log("$TAG: the player classes do not load; rebuilding ${descriptor.unityVersion}")
+
+        runCatching { File(context.cacheDir, OPT_DIR).deleteRecursively() }
+        val source = sourceJar(unityRoot)
+            ?: return "The Unity ${descriptor.unityVersion} player has no classes.jar."
+        runCatching { outputDir(context.filesDir, source).deleteRecursively() }
+
+        runCatching { build(context, descriptor, unityRoot) }.onFailure {
+            LauncherLog.log("$TAG: could not rebuild the player classes", it)
+            return "The player classes could not be rebuilt: ${it.message}"
+        }
+
+        val jar = builtPlayerDex(context.filesDir, descriptor, unityRoot)
+            ?: return "The player classes were rebuilt but no dex jar was published."
+        return if (jarProvidesPlayerClasses(context, jar)) {
+            LauncherLog.log("$TAG: rebuilt; the game's process will load them fresh")
+            null
+        } else {
+            "The player classes were rebuilt but still do not load."
+        }
+    }
+
+    /** Probe a single authored dex jar without mutating this process's app loader. */
+    private fun jarProvidesPlayerClasses(context: Context, jar: File): Boolean =
+        runCatching {
+            val probe = DexClassLoader(
+                jar.absolutePath,
+                File(context.cacheDir, "$OPT_DIR-probe").apply { mkdirs() }.absolutePath,
+                null,
+                UnityDex::class.java.classLoader,
+            )
+            Class.forName(UNITY_PLAYER_CLASS, false, probe)
+        }.isSuccess
 
     /** Walks up the hierarchy, since the field is declared on a base class. */
     private fun field(start: Class<*>, name: String): java.lang.reflect.Field? {

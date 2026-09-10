@@ -305,6 +305,8 @@ class SilksongRegressionTest {
 
         assertEquals(
             listOf(
+                File(context.filesDir, "game-boot.log.prev"),
+                File(context.filesDir, "game-boot.log"),
                 File(logs, "errors.log.prev"),
                 File(logs, "errors.log"),
                 File(logs, "game.log.prev"),

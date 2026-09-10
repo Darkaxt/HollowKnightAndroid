@@ -25,7 +25,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import dev.silksong.launcher.build.GenerationPublisher
+import dev.silksong.launcher.build.UnityToolchainDescriptor
+import dev.silksong.launcher.build.UnityToolchainRegistry
 import dev.silksong.launcher.profiles.GameProfiles
 import dev.silksong.launcher.profiles.GameProfile
 import dev.silksong.launcher.profiles.LegacySilksongAdopter
@@ -85,6 +88,12 @@ class LauncherActivity : Activity() {
     private lateinit var btnSettings: Button
     private lateinit var btnLogs: Button
     private lateinit var btnLaunch: Button
+
+    /**
+     * One player-class repair per visit to this screen. See
+     * [repairPlayerClasses].
+     */
+    private var repairAttempted = false
     private lateinit var logScroll: ScrollView
     private lateinit var txtLog: TextView
 
@@ -673,34 +682,7 @@ class LauncherActivity : Activity() {
     // ── Launch the game ────────────────────────────────────────────────
 
     private fun onLaunchClicked() {
-        val state = runtime.inspect(runtimeRequest)
-        val processState = if (state.ready) {
-            GameProcessInspector.inspect(this, runtime.gameProcessName(runtimeRequest))
-        } else {
-            GameProcessState.INACTIVE
-        }
-        when (LaunchEligibility.evaluate(state, processState).code) {
-            LaunchEligibilityCode.NOT_READY -> {
-                btnLaunch.text = getString(R.string.action_prepare_game, profile.displayName)
-                startActivity(Intent(this, SetupActivity::class.java))
-                return
-            }
-            LaunchEligibilityCode.GAME_PROCESS_ACTIVE -> {
-                launchBlocked(
-                    getString(R.string.game_process_active_title),
-                    getString(R.string.game_process_active_message),
-                )
-                return
-            }
-            LaunchEligibilityCode.GAME_PROCESS_STATE_UNKNOWN -> {
-                launchBlocked(
-                    getString(R.string.game_process_unknown_title),
-                    getString(R.string.game_process_unknown_message),
-                )
-                return
-            }
-            LaunchEligibilityCode.READY -> Unit
-        }
+        if (!ensureLaunchEligible()) return
         // Before anything else, because it is the one thing here that changes
         // what the player is about to run rather than what it will read.
         if (modsNeedBuilding()) {
@@ -766,7 +748,10 @@ class LauncherActivity : Activity() {
                     "Rebuild now, or play the build you already have?",
             )
             .setPositiveButton("Rebuild") { _, _ ->
-                startActivity(Intent(this, SetupActivity::class.java))
+                startActivity(
+                    Intent(this, SetupActivity::class.java)
+                        .putExtra(SetupActivity.EXTRA_REBUILD, true),
+                )
                 finish()
             }
             .setNegativeButton("Play anyway") { _, _ -> continueLaunch() }
@@ -814,6 +799,23 @@ class LauncherActivity : Activity() {
             runCatching { DepotLocation.relink(buildPaths, depot) }
                 .onFailure { LauncherLog.log("could not relink the content", it) }
         }
+        // A current generation also binds one exact Unity toolchain. Probe the
+        // corresponding dex artifact before starting the cold game process so
+        // a broken optimized/player dex can be repaired while diagnostics and
+        // UI are still available.
+        val descriptor = UnityToolchainRegistry.resolve(profile)
+        val unityRoot = UnityToolchainRegistry.rootFor(filesDir, descriptor)
+        if (!UnityDex.playerClassesUsable(this, descriptor, unityRoot)) {
+            repairPlayerClasses(descriptor, unityRoot)
+            return
+        }
+        startGameActivity()
+    }
+
+    /** Starts the game after launch authority and player-dex checks. */
+    private fun startGameActivity() {
+        // Also covers returns from asynchronous cloud sync and dex repair.
+        if (!ensureLaunchEligible()) return
         try {
             val intent = runtime.gameIntent(runtimeRequest)
             LauncherLog.log("Launching ${intent.component?.className} for ${profile.id}")
@@ -848,6 +850,103 @@ class LauncherActivity : Activity() {
             returningFromGame = false
             LauncherLog.log("Failed to launch game: ${t.message}")
         }
+    }
+
+    private fun ensureLaunchEligible(): Boolean {
+        val state = runtime.inspect(runtimeRequest)
+        val processState = if (state.ready) {
+            GameProcessInspector.inspect(this, runtime.gameProcessName(runtimeRequest))
+        } else {
+            GameProcessState.INACTIVE
+        }
+        return when (LaunchEligibility.evaluate(state, processState).code) {
+            LaunchEligibilityCode.NOT_READY -> {
+                btnLaunch.text = getString(R.string.action_prepare_game, profile.displayName)
+                startActivity(Intent(this, SetupActivity::class.java))
+                false
+            }
+            LaunchEligibilityCode.GAME_PROCESS_ACTIVE -> {
+                launchBlocked(
+                    getString(R.string.game_process_active_title),
+                    getString(R.string.game_process_active_message),
+                )
+                false
+            }
+            LaunchEligibilityCode.GAME_PROCESS_STATE_UNKNOWN -> {
+                launchBlocked(
+                    getString(R.string.game_process_unknown_title),
+                    getString(R.string.game_process_unknown_message),
+                )
+                false
+            }
+            LaunchEligibilityCode.READY -> true
+        }
+    }
+
+    /**
+     * Rebuilds the player classes, then launches -- or says why it cannot.
+     *
+     * A second or two, off the main thread because it dexes, with the launch
+     * button held so it cannot be pressed into a second attempt on top of
+     * this one. Silent when it works: this is a repair the user did not ask
+     * for and does not need to know the details of, and the log has them.
+     */
+    private fun repairPlayerClasses(
+        descriptor: UnityToolchainDescriptor,
+        unityRoot: java.io.File,
+    ) {
+        if (repairAttempted) {
+            // Once per visit to this screen. Dexing the same jar a third time
+            // will not help, and a repair allowed to retry itself is a loop
+            // waiting for a reason to happen.
+            playerClassesBroken("The player classes could not be made loadable.")
+            return
+        }
+        repairAttempted = true
+        LauncherLog.log("Launch held: the player classes are not loadable")
+        btnLaunch.isEnabled = false
+        uiScope.launch {
+            val problem = withContext(Dispatchers.IO) {
+                UnityDex.repair(this@LauncherActivity, descriptor, unityRoot)
+            }
+            btnLaunch.isEnabled = true
+            if (problem == null) {
+                // Straight to the start, NOT back through launchGame: see
+                // startGameActivity for why re-checking here loops.
+                startGameActivity()
+            } else {
+                playerClassesBroken(problem)
+            }
+        }
+    }
+
+    /**
+     * The game cannot be started and rebuilding its classes did not help.
+     *
+     * A dialog rather than a log line for the same reason as
+     * [missingGameFiles]: from the outside this is the app declining to open
+     * the game with no explanation. Offering the reset is offering the thing
+     * that used to be the only known cure -- and saying what it costs, since
+     * the depot and the saves are not part of it.
+     */
+    private fun playerClassesBroken(problem: String) {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("The game cannot be started")
+            .setMessage(
+                "$problem\n\n" +
+                    "The engine's Java classes are built on this device, and the game " +
+                    "cannot open without them. Resetting the build will make them again. " +
+                    "The game's files and your saves are not affected.",
+            )
+            .setPositiveButton("Reset the build") { _, _ ->
+                startActivity(
+                    Intent(this, SetupActivity::class.java)
+                        .putExtra(SetupActivity.EXTRA_RESET, true),
+                )
+                finish()
+            }
+            .setNegativeButton("Not now", null)
+            .show()
     }
 
     /**

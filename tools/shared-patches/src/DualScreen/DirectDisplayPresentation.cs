@@ -47,6 +47,10 @@ namespace DualSouls.DualScreen
         readonly int _fallbackHeight;
         readonly int _ownedLayerMask;
         readonly Func<string, int, int> _readConfigInt;
+        readonly Func<bool> _beginSurfaceCapture;
+        readonly Func<bool> _surfaceReady;
+        readonly Func<Vector2> _surfaceSize;
+        readonly Action _stopSurfaceCapture;
         CanvasScaler _scaler;
         CanvasScaler _overlayScaler;
         bool _bringupInProgress;
@@ -62,7 +66,11 @@ namespace DualSouls.DualScreen
             int overlayLayer,
             int fallbackWidth,
             int fallbackHeight,
-            Func<string, int, int> readConfigInt)
+            Func<string, int, int> readConfigInt,
+            Func<bool> beginSurfaceCapture = null,
+            Func<bool> surfaceReady = null,
+            Func<Vector2> surfaceSize = null,
+            Action stopSurfaceCapture = null)
         {
             if (displayIndex < 0)
                 throw new ArgumentOutOfRangeException(nameof(displayIndex));
@@ -85,6 +93,10 @@ namespace DualSouls.DualScreen
             _fallbackHeight = fallbackHeight;
             _ownedLayerMask = (1 << contentLayer) | (1 << overlayLayer);
             _readConfigInt = readConfigInt;
+            _beginSurfaceCapture = beginSurfaceCapture;
+            _surfaceReady = surfaceReady;
+            _surfaceSize = surfaceSize;
+            _stopSurfaceCapture = stopSurfaceCapture;
         }
 
         int PositiveConfigInt(string key, int fallback)
@@ -116,10 +128,17 @@ namespace DualSouls.DualScreen
                 }
 
                 int availabilityRevision = _availabilityRevision;
+                if (_beginSurfaceCapture != null && !_beginSurfaceCapture())
+                {
+                    MarkUnavailable();
+                    Debug.LogError("[DualScreen] could not begin secondary surface capture");
+                    yield break;
+                }
                 try { displays[DisplayIndex].Activate(); }
                 catch (Exception e)
                 {
                     MarkUnavailable();
+                    if (_stopSurfaceCapture != null) _stopSurfaceCapture();
                     Debug.LogError("[DualScreen] could not activate display " +
                                    DisplayIndex + ": " + e);
                     yield break;
@@ -160,10 +179,46 @@ namespace DualSouls.DualScreen
                 }
                 else
                 {
-                    var panelSize = new Vector2(Width, Height);
-                    if (_scaler != null) _scaler.referenceResolution = panelSize;
-                    if (_overlayScaler != null) _overlayScaler.referenceResolution = panelSize;
+                    ApplyPanelGeometry();
                     SweepCameras(force: true);
+                }
+
+                // Unity creates its Android Presentation lazily on first draw.
+                // A surface-backed consumer therefore warms a blank owned rig,
+                // waits for the real SurfaceView geometry, then publishes that
+                // geometry before any game content or touch routing is admitted.
+                if (_surfaceReady != null)
+                {
+                    SetVisible(true);
+                    float waited = 0f;
+                    while (!_surfaceReady())
+                    {
+                        if (_disposed || availabilityRevision != _availabilityRevision)
+                            yield break;
+                        waited += Mathf.Min(Time.unscaledDeltaTime, 0.1f);
+                        if (waited > 5f)
+                        {
+                            MarkUnavailable();
+                            if (_stopSurfaceCapture != null) _stopSurfaceCapture();
+                            Debug.LogError("[DualScreen] secondary surface/input did not become ready");
+                            yield break;
+                        }
+                        yield return null;
+                    }
+
+                    Vector2 surface = _surfaceSize != null ? _surfaceSize() : Vector2.zero;
+                    if (surface.x <= 0f || surface.y <= 0f)
+                    {
+                        MarkUnavailable();
+                        if (_stopSurfaceCapture != null) _stopSurfaceCapture();
+                        Debug.LogError("[DualScreen] secondary surface reported invalid geometry");
+                        yield break;
+                    }
+                    Width = (int)surface.x;
+                    Height = (int)surface.y;
+                    ApplyPanelGeometry();
+                    UnityEngine.Canvas.ForceUpdateCanvases();
+                    SetVisible(false);
                 }
 
                 PublishCompatibilityState();
@@ -201,6 +256,13 @@ namespace DualSouls.DualScreen
 
             Width = width;
             Height = height;
+        }
+
+        void ApplyPanelGeometry()
+        {
+            var panelSize = new Vector2(Width, Height);
+            if (_scaler != null) _scaler.referenceResolution = panelSize;
+            if (_overlayScaler != null) _overlayScaler.referenceResolution = panelSize;
         }
 
         void PublishCompatibilityState()
@@ -271,11 +333,21 @@ namespace DualSouls.DualScreen
             canvasGo.layer = layer;
 
             var canvas = canvasGo.AddComponent<Canvas>();
+            canvas.targetDisplay = DisplayIndex;
             canvas.renderMode = RenderMode.ScreenSpaceCamera;
             canvas.worldCamera = camera;
             canvas.planeDistance = 1f;
 
-            scaler = canvasGo.AddComponent<CanvasScaler>();
+            if (_surfaceSize != null)
+            {
+                var surfaceScaler = canvasGo.AddComponent<DirectDisplayCanvasScaler>();
+                surfaceScaler.SurfaceSize = _surfaceSize;
+                scaler = surfaceScaler;
+            }
+            else
+            {
+                scaler = canvasGo.AddComponent<CanvasScaler>();
+            }
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(Width, Height);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
@@ -340,6 +412,7 @@ namespace DualSouls.DualScreen
             _availabilityRevision++;
             Ready = false;
             SetVisible(false);
+            if (_stopSurfaceCapture != null) _stopSurfaceCapture();
         }
 
         public void Destroy()
@@ -353,6 +426,7 @@ namespace DualSouls.DualScreen
             _disposed = true;
             _availabilityRevision++;
             SetVisible(false);
+            if (_stopSurfaceCapture != null) _stopSurfaceCapture();
             if (ReferenceEquals(_compatibilityOwner, this))
             {
                 _compatibilityOwner = null;
@@ -375,6 +449,28 @@ namespace DualSouls.DualScreen
             _camBuf = null;
             Ready = false;
             _bringupInProgress = false;
+        }
+    }
+
+    // Stock CanvasScaler reads secondary Display.renderingWidth/Height, which
+    // remain zero on the supported Android target. Surface-backed consumers
+    // provide the actual SurfaceView size instead.
+    public sealed class DirectDisplayCanvasScaler : CanvasScaler
+    {
+        public Func<Vector2> SurfaceSize;
+
+        protected override void HandleScaleWithScreenSize()
+        {
+            if (SurfaceSize == null)
+            {
+                base.HandleScaleWithScreenSize();
+                return;
+            }
+            Vector2 size = SurfaceSize();
+            if (size.x <= 0f || size.y <= 0f) return;
+            SetScaleFactor(Mathf.Sqrt(
+                size.x / referenceResolution.x * size.y / referenceResolution.y));
+            SetReferencePixelsPerUnit(referencePixelsPerUnit);
         }
     }
 }

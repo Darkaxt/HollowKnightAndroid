@@ -1024,7 +1024,9 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
             shim,
             r":\s*base\s*\(\s*parent\s*,\s*DISPLAY\s*,\s*CONTENT_LAYER\s*,\s*"
             r"OVERLAY_LAYER\s*,\s*FALLBACK_W\s*,\s*FALLBACK_H\s*,\s*"
-            r"DsConfig\.Int\s*\)",
+            r"DsConfig\.Int\s*,\s*DsTouch\.Begin\s*,\s*"
+            r"\(\s*\)\s*=>\s*DsTouch\.Ready\s*,\s*"
+            r"\(\s*\)\s*=>\s*DsTouch\.SurfaceSize\s*,\s*DsTouch\.Stop\s*\)",
         )
 
         for camera, layer in (
@@ -1307,7 +1309,10 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         )
         self.assertRegex(source, r"bool\s+present\s*=\s*now\s*>\s*DsPresentation\.DISPLAY\s*;")
         self.assertIn("host.SetPresentationReady(true, screen.Width, screen.Height);", source)
-        self.assertRegex(source, r"if\s*\(\s*DsTouch\.Enabled\s*&&\s*Time\.unscaledTime")
+        update = csharp_method_body(source, r"void\s+Update\s*\(\s*\)")
+        self.assertRegex(update, r"if\s*\(\s*!DsTouch\.Ready\s*\)")
+        self.assertIn("_host.SetPresentationReady(false);", update)
+        self.assertIn("_screen.MarkUnavailable();", update)
         pause = csharp_method_body(
             source,
             r"void\s+OnApplicationPause\s*\(\s*bool\s+paused\s*\)",
@@ -2028,7 +2033,7 @@ static class Program
         gesture = csharp_method_body(runtime, r"public\s+void\s+OnGesture\s*\([^)]*\)")
         self.assertIn("_progress.ObserveGesture(gesture)", gesture)
         self.assertLess(gesture.index("_progress.ObserveGesture(gesture)"), gesture.index("DsPortGesturePrecedence.Consume("))
-        for token in ("DsPortActionHold", "DsPortGuardedRoutine", "DsTouch.CollectSecondScreen(",
+        for token in ("DsPortActionHold", "DsPortGuardedRoutine", "SetTouchState(",
                       "DsGestureType.Down", "DsGestureType.Up", "StartUnlockHold(", "CancelAction(page)",
                       '"UnlockHoldRoutine"', "yield return native.Current", "slot.SubmitReleased()",
                       "ExtraLegal(", '"DoExtraPress"', '"SetReloading"'):
@@ -2039,6 +2044,40 @@ static class Program
             self.assertIn("CancelAction(page)", csharp_method_body(source, method + r"\s*\([^)]*\)"))
         for forbidden in (".SaveData =", ".Take(1", 'Set(slot, "IsUnlocked"', ".CustomAction(" ):
             self.assertNotIn(forbidden, source)
+
+    def test_hold_liveness_uses_the_single_drained_input_snapshot(self):
+        entry = read(DUAL_SCREEN)
+        input_source = read(DUALSCREEN_SOURCES / "DsInput.cs")
+        runtime = read(PORT_RUNTIME)
+        progress = read(DUALSCREEN_SOURCES / "DsPortProgress.cs")
+        inventory = read(DUALSCREEN_SOURCES / "DsPortProgress.Inventory.cs")
+        loadout = read(DUALSCREEN_SOURCES / "DsPortProgress.Loadout.cs")
+
+        self.assertIn("public bool SingleTouchActive => _active.Count == 1;", input_source)
+        update = csharp_method_body(entry, r"void\s+Update\s*\(\s*\)")
+        poll = update.index("_input.Poll();")
+        forward = update.index("_port.SetTouchState(_input.SingleTouchActive);")
+        gestures = update.index("var gestures = _input.Gestures;")
+        self.assertLess(poll, forward)
+        self.assertLess(forward, gestures)
+
+        deactivate = csharp_method_body(entry, r"void\s+SetTouchFenceActive\s*\([^)]*\)")
+        cancel = deactivate.index("_input.Cancel();")
+        forward_cancel = deactivate.index("_port.SetTouchState(_input.SingleTouchActive);")
+        dispatch = deactivate.index("var gestures = _input.Gestures;")
+        self.assertLess(cancel, forward_cancel)
+        self.assertLess(forward_cancel, dispatch)
+
+        runtime_forward = csharp_method_body(runtime, r"public\s+void\s+SetTouchState\s*\([^)]*\)")
+        self.assertIn("_progress.SetTouchState(singleTouchActive);", runtime_forward)
+        progress_forward = csharp_method_body(progress, r"public\s+void\s+SetTouchState\s*\([^)]*\)")
+        self.assertIn("_inventory.SetTouchState(singleTouchActive);", progress_forward)
+        self.assertIn("_loadout.SetTouchState(singleTouchActive);", progress_forward)
+
+        for source in (inventory, loadout):
+            self.assertNotIn("DsTouch.CollectSecondScreen(", source)
+            held = csharp_method_body(source, r"bool\s+TouchHeld\s*\([^)]*\)")
+            self.assertIn("_singleTouchActive", held)
 
     def test_loadout_socket_custom_icon_uses_owned_factory_without_static_item_setter(self):
         source = read(DUALSCREEN_SOURCES / "DsPortProgress.Loadout.cs")

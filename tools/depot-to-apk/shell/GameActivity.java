@@ -720,6 +720,79 @@ public class GameActivity extends PlayerActivity
         catch (Exception ignored) { }
     }
 
+    // ── The boot trace ─────────────────────────────────────────────────────
+    //
+    // Everything else this class records -- game.log, errors.log, the
+    // session.running marker -- shares two assumptions: that onCreate got far
+    // enough to start it, and that EXTERNAL storage is there to write it to.
+    // A launch that breaks either assumption writes nothing at all, and the
+    // report then says only that the game "did not start", which is the one
+    // thing already known.
+    //
+    // Issue #24 is that report. A burst of launches left game.log still
+    // holding a session from twelve hours earlier -- and since startLogCapture
+    // rotates that file unconditionally on every onCreate, the rotation had
+    // not happened, so onCreate had not run. Which of the assumptions failed
+    // was not decidable, because both fail silently and both fail alike.
+    //
+    // So: INTERNAL storage, which is always mounted and always writable and
+    // is where getFilesDir points whatever the state of the sd card; written
+    // from the FIRST line of onCreate; and appended across launches rather
+    // than rotated per launch, because the interesting thing about these
+    // failures is that they come in runs.
+    private static final String BOOT_LOG = "game-boot.log";
+
+    // Small: these are one short line per step. This holds hundreds of
+    // launches, which is more history than any of these bugs has needed.
+    private static final long BOOT_LOG_MAX_BYTES = 64L * 1024L;
+
+    /**
+     * One step of the launch, on internal storage, flushed immediately.
+     *
+     * The last line in the file names the step that was running when the
+     * process died -- so an empty file means the activity was never created
+     * at all, which is a different bug from any of the ones below it.
+     */
+    private void boot(String step)
+    {
+        android.util.Log.i(TAG, "boot: " + step);
+        try
+        {
+            java.io.File f = new java.io.File(getFilesDir(), BOOT_LOG);
+            if (f.length() > BOOT_LOG_MAX_BYTES)
+            {
+                rotate(f, new java.io.File(getFilesDir(), BOOT_LOG + ".prev"));
+            }
+            String line = new java.text.SimpleDateFormat(
+                    "yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(new java.util.Date())
+                + " pid " + android.os.Process.myPid() + "  " + step + "\n";
+            java.io.Writer w = new java.io.OutputStreamWriter(
+                new java.io.FileOutputStream(f, true));
+            try { w.write(line); w.flush(); }
+            finally { w.close(); }
+        }
+        catch (Exception ignored) { }
+    }
+
+    /**
+     * Whether external storage is usable, as one short string.
+     *
+     * getExternalFilesDir returns null when the volume is not mounted. That
+     * is worth recording on its own line because it is BOTH a reason the game
+     * fails -- the depot it plays from and the content tree the catalog is
+     * pointed at both live on that volume -- and the reason such a failure
+     * has been invisible, since every other log this class writes goes there.
+     */
+    private String describeExternal()
+    {
+        java.io.File ext = getExternalFilesDir(null);
+        if (ext == null) return "NULL -- external storage unavailable to this process";
+        String s = ext.getAbsolutePath();
+        if (!ext.isDirectory()) s += " (not a directory)";
+        else if (!ext.canWrite()) s += " (not writable)";
+        return s;
+    }
+
     private void reportPreviousSession()
     {
         java.io.File f = extFile(ALIVE);
@@ -830,6 +903,7 @@ public class GameActivity extends PlayerActivity
 
     @Override protected void onStop()
     {
+        boot("stopped");
         java.io.File f = extFile(ALIVE);
         if (f != null) f.delete();
         super.onStop();
@@ -837,6 +911,11 @@ public class GameActivity extends PlayerActivity
 
     @Override protected void onCreate(Bundle savedInstanceState)
     {
+        // FIRST, and to internal storage. Every other recorder below is
+        // started by one of these calls and written to external storage, so
+        // this is the only line that survives a launch in which either of
+        // those is what went wrong. See boot().
+        boot("onCreate: external=" + describeExternal());
         // First, so that everything below it is in the file too: the engine
         // install and the content link are the other two things that fail on
         // hardware we do not have.
@@ -846,12 +925,17 @@ public class GameActivity extends PlayerActivity
         // overwrites the evidence.
         reportPreviousSession();
         startHeartbeat();
-        // Before super.onCreate: that is where UnityPlayerActivity constructs
-        // the player, which is what triggers the engine's own library loading.
+        // The immutable profile generation is already installed before this
+        // process starts; only expose its native directory to Unity here.
+        boot("addNativeLibraryPath");
         addNativeLibraryPath();
+        boot("stagePackageLayout");
         stagePackageLayout();
+        boot("linkContent");
         linkContent();
+        boot("UnityPlayerActivity.onCreate");
         super.onCreate(savedInstanceState);
+        boot("created");
         // Draw into the cutout/waterfall region as well; the game already
         // expects to own the whole panel.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)

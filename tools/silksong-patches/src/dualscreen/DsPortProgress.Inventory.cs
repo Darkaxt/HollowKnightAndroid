@@ -26,8 +26,7 @@ public sealed partial class DsPortProgress
         bool _eligible;
         readonly DsPortActionBoundary _actions = new DsPortActionBoundary();
         readonly DsPortActionHold _hold = new DsPortActionHold();
-        readonly List<Touch> _touches = new List<Touch>();
-        int _downFrame;
+        bool _singleTouchActive;
         bool _suppressReleaseTap;
         DsJournalToken _fallback;
         long _fallbackEpoch;
@@ -103,6 +102,7 @@ public sealed partial class DsPortProgress
         }
         public Inventory(DsPortFrame frame)
         { _frame = frame; _state = new DsPortJournalState(this); _selection = new DsPortSelectState(this); }
+        public void SetTouchState(bool singleTouchActive) { _singleTouchActive = singleTouchActive; }
         bool _outgoing;
         public void SelectionChanged()
         {
@@ -121,7 +121,7 @@ public sealed partial class DsPortProgress
         }
         public void ObserveGesture(DsGesture gesture)
         {
-            if (gesture.Type == DsGestureType.Down) { _downFrame = Time.frameCount; _suppressReleaseTap = false; }
+            if (gesture.Type == DsGestureType.Down) _suppressReleaseTap = false;
             _hold.Observe(gesture.Type == DsGestureType.Down, gesture.Type == DsGestureType.Up);
             if (gesture.Type == DsGestureType.Drag) _hold.Liveness(false);
             var page = _state.Owned as InventoryPage;
@@ -129,10 +129,7 @@ public sealed partial class DsPortProgress
         }
         bool TouchHeld(long generation)
         {
-            DsTouch.CollectSecondScreen(_touches);
-            bool live = _touches.Count == 1 && _touches[0].phase != TouchPhase.Ended && _touches[0].phase != TouchPhase.Canceled &&
-                (_touches[0].phase != TouchPhase.Began || Time.frameCount == _downFrame);
-            _hold.Liveness(live);
+            _hold.Liveness(_singleTouchActive);
             return _hold.Current(generation);
         }
         public void Tick(bool eligible)

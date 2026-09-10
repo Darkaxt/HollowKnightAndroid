@@ -1,19 +1,5 @@
-// DsInput — turning this panel's raw touches into gestures.
-//
-// The old implementation had Android's GestureDetector do this, on the far side
-// of a JNI bridge, because the panel's touches only existed inside a
-// Presentation window. Unity now receives them directly (DsTouch tells us which
-// are ours), so the bridge is gone and the recognition moves here.
-//
-// That is a real loss worth naming: Android's detectors already know this
-// device's touch slop, its fling velocity threshold and its long-press timing.
-// Reimplementing that badly is how the old code ended up with a hand-tuned
-// tolerance constant and gestures that felt slightly wrong. The thresholds
-// below are therefore expressed in the panel's own pixels and kept in one
-// place, and the density (~369 dpi) is the reason they look large.
-//
-// Single finger only, for now. Pinch arrives with the map screen, which is the
-// first thing that needs it.
+// Gestures from ordered Android pointer events. A complete down/up between
+// Unity frames is still a tap; cancellation, resizing and pausing are not.
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System.Collections.Generic;
@@ -24,7 +10,7 @@ public enum DsGestureType { Down, Drag, Up, Tap, Fling, Pinch }
 public struct DsGesture
 {
     public DsGestureType Type;
-    /// <summary>Panel pixels, origin bottom-left, matching our canvas.</summary>
+    /// <summary>Layout units, y up; use DsPresentation.ToLayout for top-left coordinates.</summary>
     public Vector2 Position;
     /// <summary>Movement since the last event (Drag), or velocity (Fling).</summary>
     public Vector2 Delta;
@@ -37,157 +23,137 @@ public struct DsGesture
 
 public class DsInput
 {
-    // ~10 mm at this panel's density: below it a finger is holding still, above
-    // it the user meant to drag.
     const float TapSlop = 34f;
-    const float FlingMinSpeed = 900f;      // panel px/s
+    const float FlingMinSpeed = 900f;
 
-    readonly List<Touch> _touches = new List<Touch>();
+    readonly List<DsTouch.Point> _events = new List<DsTouch.Point>();
+    readonly List<DsTouch.Point> _active = new List<DsTouch.Point>();
     readonly List<DsGesture> _out = new List<DsGesture>();
-
-    bool _down;
+    long _generation = -1;
+    bool _down, _moved, _pinching;
     int _finger = -1;
-    Vector2 _start, _last;
-    float _startTime;
-    Vector2 _velocity;
-    bool _moved;
-
-    bool _pinching;
+    Vector2 _start, _last, _velocity;
+    double _lastMoveTime;
     float _pinchDist;
 
-    /// <summary>Gestures produced this frame. Valid until the next Poll.</summary>
     public IList<DsGesture> Gestures => _out;
+    public bool SingleTouchActive => _active.Count == 1;
 
     public void Poll()
     {
-        _out.Clear();
-        DsTouch.CollectSecondScreen(_touches);
+        DsTouch.CollectSecondScreen(_events);
+        Poll(_events, DsTouch.Generation);
+    }
 
-        // Two fingers is a pinch, and a pinch is not a drag. The map screen is
-        // the first thing here that needs one, which is why this arrived with it.
-        if (_touches.Count >= 2) { PollPinch(); return; }
+    public void Poll(IList<DsTouch.Point> events, long generation)
+    {
+        _out.Clear();
+        if (_generation != generation)
+        {
+            CancelState();
+            _generation = generation;
+        }
+        for (int i = 0; i < events.Count; i++) Process(events[i]);
+    }
+
+    public void Cancel()
+    {
+        _out.Clear();
+        CancelState();
+    }
+
+    void CancelState()
+    {
+        if (_down) Emit(DsGestureType.Up, _last, Vector2.zero);
+        _active.Clear();
+        _down = _moved = _pinching = false;
+        _finger = -1;
+        _velocity = Vector2.zero;
+    }
+
+    void Process(DsTouch.Point point)
+    {
+        if (point.Phase == TouchPhase.Canceled) { CancelState(); return; }
+
+        int index = -1;
+        for (int i = 0; i < _active.Count; i++)
+            if (_active[i].FingerId == point.FingerId) { index = i; break; }
+
+        if (point.Phase == TouchPhase.Began)
+        {
+            if (index >= 0) return;
+            if (_active.Count == 0)
+            {
+                _down = true;
+                _finger = point.FingerId;
+                _start = _last = point.Position;
+                _lastMoveTime = point.Time;
+                _moved = false;
+                _velocity = Vector2.zero;
+                Emit(DsGestureType.Down, point.Position, Vector2.zero);
+            }
+            _active.Add(point);
+            if (_active.Count == 2)
+            {
+                if (_down) Emit(DsGestureType.Up, _last, Vector2.zero);
+                _down = false;
+                _finger = -1;
+                _pinching = true;
+                _pinchDist = Vector2.Distance(_active[0].Position, _active[1].Position);
+            }
+            return;
+        }
+
+        // A held finger after a pause, resize or pinch cannot start a new tap.
+        if (index < 0) return;
+        _active[index] = point;
+
+        if (point.Phase == TouchPhase.Ended)
+        {
+            if (_down && point.FingerId == _finger)
+            {
+                Move(point);
+                Emit(DsGestureType.Up, point.Position, Vector2.zero);
+                if (!_moved) Emit(DsGestureType.Tap, point.Position, Vector2.zero);
+                else if (point.Time - _lastMoveTime <= 0.12 && _velocity.magnitude >= FlingMinSpeed)
+                    Emit(DsGestureType.Fling, point.Position, _velocity);
+                _down = false;
+                _finger = -1;
+            }
+            _active.RemoveAt(index);
+            _pinching = _active.Count >= 2;
+            if (_pinching)
+                _pinchDist = Vector2.Distance(_active[0].Position, _active[1].Position);
+            return;
+        }
+
         if (_pinching)
         {
-            _pinching = false;
-            // Do NOT resume the drag with whichever finger is left: it is
-            // somewhere else entirely by now, and picking it up mid-gesture
-            // makes the map jump. The single-finger path below only starts on a
-            // Began phase, so a lingering finger is ignored until it lifts.
-        }
-
-        // Track one finger: whichever went down first, until it leaves.
-        Touch? active = null;
-        for (int i = 0; i < _touches.Count; i++)
-        {
-            if (_down && _touches[i].fingerId == _finger) { active = _touches[i]; break; }
-            if (!_down) { active = _touches[i]; break; }
-        }
-
-        if (!_down)
-        {
-            if (active.HasValue && active.Value.phase == TouchPhase.Began)
+            Vector2 a = _active[0].Position, b = _active[1].Position;
+            float dist = Vector2.Distance(a, b);
+            if (_pinchDist > 2f && dist > 2f)
             {
-                var t = active.Value;
-                _down = true; _finger = t.fingerId;
-                _start = _last = t.position;
-                _startTime = Time.unscaledTime;
-                _velocity = Vector2.zero;
-                _moved = false;
-                Emit(DsGestureType.Down, t.position, Vector2.zero);
+                float scale = dist / _pinchDist;
+                if (Mathf.Abs(scale - 1f) > 0.002f)
+                    _out.Add(new DsGesture {
+                        Type = DsGestureType.Pinch, Position = (a + b) * 0.5f, Scale = scale,
+                    });
             }
-            return;
-        }
-
-        if (!active.HasValue)
-        {
-            // The finger left without us seeing an Ended phase (it can happen
-            // when a touch is cancelled): treat it as a release at the last
-            // known point, so a drag can never get stuck on.
-            Release(_last);
-            return;
-        }
-
-        var cur = active.Value;
-        Vector2 delta = cur.position - _last;
-
-        switch (cur.phase)
-        {
-            case TouchPhase.Moved:
-            case TouchPhase.Stationary:
-                if (delta.sqrMagnitude > 0f)
-                {
-                    float dt = Mathf.Max(Time.unscaledDeltaTime, 0.001f);
-                    // Smoothed so a single jittery frame cannot produce a fling.
-                    _velocity = Vector2.Lerp(_velocity, delta / dt, 0.4f);
-                    _last = cur.position;
-                    if ((cur.position - _start).sqrMagnitude > TapSlop * TapSlop) _moved = true;
-                    Emit(DsGestureType.Drag, cur.position, delta);
-                }
-                break;
-
-            case TouchPhase.Ended:
-            case TouchPhase.Canceled:
-                Release(cur.position);
-                break;
-        }
-    }
-
-    /// <summary>
-    /// Two fingers: emit the change in their separation as a scale.
-    ///
-    /// A ratio rather than an absolute distance, so the consumer never has to
-    /// know what the gesture started from and a dropped frame cannot accumulate
-    /// error. The midpoint rides along as the position, which is what a zoom
-    /// wants to zoom about.
-    /// </summary>
-    void PollPinch()
-    {
-        Vector2 a = _touches[0].position;
-        Vector2 b = _touches[1].position;
-        float dist = Vector2.Distance(a, b);
-        Vector2 mid = (a + b) * 0.5f;
-
-        if (!_pinching)
-        {
-            // A drag in progress has to be closed out, or whatever it was
-            // driving keeps moving from a finger that now means something else.
-            if (_down)
-            {
-                Emit(DsGestureType.Up, _last, Vector2.zero);
-                _down = false; _finger = -1; _moved = false;
-                _velocity = Vector2.zero;
-            }
-            _pinching = true;
             _pinchDist = dist;
-            return;
         }
-
-        // Below a couple of pixels the ratio is noise divided by noise.
-        if (_pinchDist > 2f && dist > 2f)
-        {
-            float scale = dist / _pinchDist;
-            if (Mathf.Abs(scale - 1f) > 0.002f)
-                _out.Add(new DsGesture
-                {
-                    Type = DsGestureType.Pinch,
-                    Position = mid,
-                    Delta = Vector2.zero,
-                    Scale = scale,
-                });
-        }
-        _pinchDist = dist;
+        else if (_down && point.FingerId == _finger) Move(point);
     }
 
-    void Release(Vector2 pos)
+    void Move(DsTouch.Point point)
     {
-        Emit(DsGestureType.Up, pos, Vector2.zero);
-
-        // A tap is a release that never travelled far.
-        if (!_moved) Emit(DsGestureType.Tap, pos, Vector2.zero);
-        else if (_moved && _velocity.magnitude >= FlingMinSpeed) Emit(DsGestureType.Fling, pos, _velocity);
-
-        _down = false; _finger = -1; _moved = false;
-        _velocity = Vector2.zero;
+        Vector2 delta = point.Position - _last;
+        if (delta.sqrMagnitude <= 0f) return;
+        float dt = Mathf.Max((float)(point.Time - _lastMoveTime), 0.001f);
+        _velocity = Vector2.Lerp(_velocity, delta / dt, 0.4f);
+        _last = point.Position;
+        _lastMoveTime = point.Time;
+        if ((point.Position - _start).sqrMagnitude > TapSlop * TapSlop) _moved = true;
+        Emit(DsGestureType.Drag, point.Position, delta);
     }
 
     void Emit(DsGestureType type, Vector2 pos, Vector2 delta)

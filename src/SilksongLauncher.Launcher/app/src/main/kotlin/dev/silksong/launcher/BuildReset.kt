@@ -61,6 +61,9 @@ object BuildReset {
      * this must not be called on the main thread.
      */
     fun clear(context: Context, paths: ProfileBuildPaths): Long {
+        // Invalidate first so an interrupted reset can never leave a package
+        // that the launcher still accepts as complete.
+        BuildInstallation.invalidate(paths.packageDir)
         val freed = clearGenerated(paths)
         clearPreferences(context, paths)
 

@@ -140,7 +140,7 @@ never be mixed.
 Steam-assisted acquisition remains optional. Users may instead select a
 complete, legitimately acquired Linux installation.
 
-## Mods
+## Mod support (beta)
 
 The merged build-time implementation supports a useful subset of BepInEx 5
 plugins by weaving Harmony prefixes and postfixes into managed assemblies
@@ -164,6 +164,12 @@ choices, and launch gates live under:
 ```text
 Android/data/io.github.darkaxt.dualsouls/files/profiles/<profile-id>/mods
 ```
+
+If a rebuild is interrupted, resume it before playing. Completed conversion and
+native compilation work is reused, but the launcher does not run a partly
+installed generation. Plugins with definite missing APIs or required
+dependencies are marked failed and omitted rather than breaking compilation for
+other mods.
 
 The Mods screen reports each plugin as **built** or **not built** only from the
 selected profile's immutable current generation. That generation contains the
@@ -192,6 +198,20 @@ changed without rebuilding.
 
 BepInEx and user mods are not shipped by this repository. The user's own device
 compiles selected plugin files into that user's game generation.
+
+### Mods tested with the Silksong profile
+
+Official v1.1.0 reports these on-device results for the Silksong profile:
+
+- [BepInEx 5 + Configuration Manager](https://www.nexusmods.com/hollowknightsilksong/mods/26)
+- [AutoMap](https://www.nexusmods.com/hollowknightsilksong/mods/31)
+- [SaveScopedConfig](https://www.nexusmods.com/hollowknightsilksong/mods/1123) — required by AutoMap
+- [Bonfire Teleport](https://www.nexusmods.com/hollowknightsilksong/mods/156) — use the top-screen full map to teleport
+- [Stakes of Marika – Rebirth Anywhere](https://www.nexusmods.com/hollowknightsilksong/mods/46) — partial; no custom spawn point
+- [Healthbar & Damage Show](https://www.nexusmods.com/hollowknightsilksong/mods/28)
+
+Other mods are not guaranteed to work, and compatibility in one game profile is
+not evidence for the other.
 
 ## Building and verification
 

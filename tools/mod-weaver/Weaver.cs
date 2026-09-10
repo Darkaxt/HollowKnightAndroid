@@ -12,6 +12,7 @@ internal sealed class Weaver
     readonly string _assemblies;
     readonly StagedResolver _resolver;
     readonly HashSet<AssemblyDefinition> _dirty = new();
+    readonly Weave _weave = new();
 
     /// Assemblies a plugin may ship a copy of, and which we supply ourselves.
     ///
@@ -87,8 +88,46 @@ internal sealed class Weaver
             plugins.Add((path, assembly, report));
         }
 
+        // Validate the complete input set before creating gates or touching any
+        // targets. A dependent can precede the broken DLL in the input order.
+        foreach (var (_, assembly, report) in plugins)
+        {
+            try
+            {
+                Validate(assembly, report);
+            }
+            catch (Exception e)
+            {
+                report.Fail($"validation threw {e.GetType().Name}: {e.Message}");
+            }
+        }
+
+        var rejected = plugins.Where(p => p.Report.Status == PluginStatus.Failed)
+            .Select(p => p.Assembly.Name.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach (var (_, assembly, report) in plugins)
+            {
+                if (report.Status == PluginStatus.Failed) continue;
+                var dependencies = assembly.MainModule.AssemblyReferences
+                    .Where(r => rejected.Contains(r.Name)).Select(r => r.Name).Distinct().ToList();
+                if (dependencies.Count == 0) continue;
+                report.Fail($"needs {string.Join(", ", dependencies)}, which was rejected from this build");
+                rejected.Add(assembly.Name.Name);
+                changed = true;
+            }
+        } while (changed);
+
+        // Rejected assemblies must not remain available to string-based target
+        // lookup either, or a valid plugin could weave calls into a missing DLL.
+        foreach (var (_, assembly, report) in plugins)
+            if (report.Status == PluginStatus.Failed) _resolver.Remove(assembly);
+
         foreach (var (path, assembly, report) in plugins)
         {
+            if (report.Status == PluginStatus.Failed) continue;
             try
             {
                 Process(assembly, report);
@@ -132,8 +171,9 @@ internal sealed class Weaver
         return report;
     }
 
-    void Process(AssemblyDefinition plugin, PluginReport report)
+    void Validate(AssemblyDefinition plugin, PluginReport report)
     {
+        Describe(plugin, report);
         foreach (var reference in plugin.MainModule.AssemblyReferences)
         {
             if (Supplied.Contains(reference.Name)) continue;
@@ -142,8 +182,11 @@ internal sealed class Weaver
             return;
         }
 
-        Describe(plugin, report);
-        if (!ReferencesResolve(plugin, report)) return;
+        ReferencesResolve(plugin, report);
+    }
+
+    void Process(AssemblyDefinition plugin, PluginReport report)
+    {
         NoteUnsupportedCalls(plugin, report);
 
         var gate = GateFor(plugin);
@@ -217,10 +260,9 @@ internal sealed class Weaver
     /// never starts, for one plugin using a Harmony class the shim does not
     /// have. Here it is one line in a report, before anything is built.
     ///
-    /// Types are fatal to the plugin, because a type that is not there cannot
-    /// be substituted. Members are only noted: Cecil cannot always resolve a
-    /// member of a generic type it can resolve perfectly well, and refusing a
-    /// working mod is worse than letting an unusual one through.
+    /// Missing types and definite missing members are fatal. Generic members
+    /// and array intrinsics remain best-effort: Cecil cannot always resolve
+    /// those even when the runtime can, so uncertainty is not a rejection.
     /// </summary>
     bool ReferencesResolve(AssemblyDefinition plugin, PluginReport report)
     {
@@ -244,13 +286,18 @@ internal sealed class Weaver
         {
             if (missing.Count >= 5) break;
             var declaring = reference.DeclaringType;
-            if (declaring is null || declaring.IsGenericInstance || declaring.IsArray) continue;
+            if (declaring is null || declaring.IsGenericInstance || declaring.IsArray ||
+                reference.ContainsGenericParameter ||
+                reference is MethodReference { IsGenericInstance: true }) continue;
             if (Resolves(() => reference.Resolve() is not null)) continue;
             missing.Add($"{declaring.FullName}.{reference.Name}");
         }
 
         if (missing.Count > 0)
-            report.Note($"calls {string.Join(", ", missing)}, which this build does not have");
+        {
+            report.Fail($"needs members {string.Join(", ", missing)}, which this build does not have");
+            return false;
+        }
 
         return true;
     }
@@ -319,13 +366,20 @@ internal sealed class Weaver
         var classSpec = Merge(type.CustomAttributes);
         var classPatched = type.CustomAttributes.Any(a => a.AttributeType.Name == "HarmonyPatch");
 
-        if (type.CustomAttributes.Any(a =>
-                a.AttributeType.Name is "HarmonyTargetMethod" or "HarmonyTargetMethods") ||
-            type.Methods.Any(m => m.CustomAttributes.Any(a =>
-                a.AttributeType.Name is "HarmonyTargetMethod" or "HarmonyTargetMethods")))
+        // A class that chooses its own target, by attribute or by the bare
+        // name Harmony also accepts. Most of these are a constant expression
+        // and are read here rather than refused -- see TargetMethods for why
+        // that is worth doing and where it stops.
+        var chooser = TargetMethods.Find(type);
+        if (chooser is not null)
         {
-            report.Note($"{type.Name} picks its targets at runtime, which a build-time weaver cannot follow");
-            return;
+            var chosen = TargetMethods.Read(chooser);
+            if (chosen is null)
+            {
+                report.Note($"{type.Name} picks its targets at runtime, which a build-time weaver cannot follow");
+                return;
+            }
+            classSpec = classSpec.MergedWith(chosen);
         }
 
         var prefixes = new Dictionary<MethodDefinition, List<MethodDefinition>>();
@@ -333,6 +387,7 @@ internal sealed class Weaver
 
         foreach (var method in type.Methods)
         {
+            if (method == chooser) continue;
             var kind = KindOf(method, classPatched);
             switch (kind)
             {
@@ -344,7 +399,14 @@ internal sealed class Weaver
             }
 
             var spec = classSpec.MergedWith(Merge(method.CustomAttributes));
-            if (spec.IsEmpty) continue;
+            if (spec.IsEmpty)
+            {
+                // Nothing said which method this patches, here or on the
+                // class. Silence was the old answer and it read as success:
+                // the plugin was reported "Ok" with nothing woven at all.
+                report.Note($"{type.Name}.{method.Name} does not say which method it patches");
+                continue;
+            }
 
             var target = spec.Resolve(FindType, out var why);
             if (target is null)
@@ -378,7 +440,7 @@ internal sealed class Weaver
             {
                 var prefix = i < pre.Count ? pre[i] : null;
                 var postfix = i < post.Count ? post[i] : null;
-                if (!Weave.Apply(target, prefix, postfix, gate, report, a => _dirty.Add(a))) continue;
+                if (!_weave.Apply(target, prefix, postfix, gate, report, a => _dirty.Add(a))) continue;
                 report.Patched++;
             }
         }
@@ -459,6 +521,8 @@ internal sealed class StagedResolver : IAssemblyResolver
     public IEnumerable<AssemblyDefinition> Loaded => _cache.Values;
 
     public void Add(AssemblyDefinition assembly) => _cache[assembly.Name.Name] = assembly;
+
+    public void Remove(AssemblyDefinition assembly) => _cache.Remove(assembly.Name.Name);
 
     public AssemblyDefinition Resolve(AssemblyNameReference name) => Resolve(name, new ReaderParameters());
 

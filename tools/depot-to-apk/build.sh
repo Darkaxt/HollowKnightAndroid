@@ -271,6 +271,14 @@ XML
     <uses-feature android:glEsVersion="0x00030002" android:required="true" />
     <uses-permission android:name="android.permission.INTERNET" />
     <!--
+      Haptics. The game mixes vibration every frame and hands it to InControl,
+      whose UnityInputDevice.Vibrate is an empty method on Android, so
+      AndroidRumble plays it through the platform Vibrator instead, and that
+      needs this. A normal permission: granted at install, never prompted for,
+      and inert if the device has no actuator.
+    -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!--
       Ending a builder process when a build is cancelled goes down the
       binding now, but this is still what clears a straggler left by a run
       that would not stop. A normal permission: granted at install, never
@@ -331,11 +339,31 @@ XML
                  android:largeHeap="true"
                  android:hasFragileUserData="true" $app_attrs>
 $launcher_block
+        <!--
+          resizeableActivity is TRUE, and that is a fix rather than a default.
+          A non-resizeable activity on a large screen (a foldable's inner
+          display, a tablet) is put into size compatibility mode: the system
+          gives it a phone-shaped window in the middle of the panel and fills
+          the rest with black. That is the "black bars top and bottom" report
+          from a Galaxy Z Fold 6, and it happens before a single line of the
+          game runs.
+
+          The usual reason to opt out is that a resizeable activity can be put
+          into split screen and resized under you. Both are handled: every
+          config that can change is in configChanges above, so the activity is
+          never recreated (a recreation here would restart the game), and
+          ResolutionGuard follows the window's shape whatever it becomes.
+
+          screenOrientation stays sensorLandscape. It is honoured in full
+          screen and ignored in split screen, which is the right behaviour in
+          both: the game is landscape, and a window the user has shaped by
+          hand is the user's business.
+        -->
         <activity android:name="dev.silksong.shell.GameActivity"
             android:exported="true" android:launchMode="singleTask"
             android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale|layoutDirection|density"
             android:screenOrientation="sensorLandscape"
-            android:resizeableActivity="false"
+            android:resizeableActivity="true"
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
 $game_filter
             <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
@@ -398,12 +426,13 @@ EOF
     mkdir -p "$sh/src"
     cp -f "$SCRIPT_DIR/shell/GameActivity.java" "$sh/src/"
     cp -f "$SCRIPT_DIR/shell/PlayerActivity.java" "$sh/src/"
+    cp -f "$SCRIPT_DIR/shell/SecondaryDisplay.java" "$sh/src/"
 
     local unity_classes="$VARIATION/Classes/classes.jar"
     local cp="$unity_classes:$android_jar"
     # fixed: never changes between rebuilds. changed: rebuilt every time.
     local fixed=() changed=()
-    local srcs=("$sh/src/PlayerActivity.java" "$sh/src/GameActivity.java")
+    local srcs=("$sh/src/PlayerActivity.java" "$sh/src/GameActivity.java" "$sh/src/SecondaryDisplay.java")
     if (( have_launcher )); then
         cp="$cp:$sh/aar/classes.jar"
         changed+=("$sh/aar/classes.jar")

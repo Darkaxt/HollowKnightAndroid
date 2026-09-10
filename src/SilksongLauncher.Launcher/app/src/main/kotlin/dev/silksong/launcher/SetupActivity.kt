@@ -77,7 +77,34 @@ import java.util.UUID
 
 class SetupActivity : Activity() {
 
-    private companion object {
+    companion object {
+        /**
+         * "Rebuild now", decided on the screen that sent us here.
+         *
+         * Without it this screen is opened to build a game that is, by every
+         * measure it has, already built -- and forwards straight back to the
+         * launcher. From the Mods screen that is indistinguishable from the
+         * button doing nothing at all, which is exactly what it was reported
+         * as. The mods folder is not part of [buildSignature] on purpose: it is
+         * not what the build was made by, it is what the build was made FROM,
+         * and it is checked separately by [modsPending].
+         */
+        const val EXTRA_REBUILD = "dev.silksong.launcher.extra.REBUILD"
+
+        /**
+         * "Reset the build", decided on the screen that sent us here.
+         *
+         * The same trap as [EXTRA_REBUILD] and a worse version of it. A build
+         * whose player classes cannot be loaded is broken in a way none of
+         * this screen's checks can see -- [UnityDex.isBuilt] asks whether a
+         * file is present, not whether it works -- so arriving without this
+         * means arriving at a screen that declares the game built and
+         * forwards straight back to the launcher. The button then reads
+         * "Reset the build" and demonstrably resets nothing, which is exactly
+         * how it was reported.
+         */
+        const val EXTRA_RESET = "dev.silksong.launcher.extra.RESET"
+
         // Where setup hands off to. The launcher is the app's home screen --
         // Steam login, cloud saves, and the button that starts the game; this
         // screen exists only to get the device to the point where that screen
@@ -141,12 +168,6 @@ class SetupActivity : Activity() {
             ?.let { File(it.root, "pkg") }
             ?: buildPaths.packageDir
     private val engineDir: File get() = File(pkgDir, "lib/$ABI")
-    // The player image and catalog, as one zip laid out like an APK. Only the
-    // zip counts: the engine opens "jar:file://<package path>!/assets" and
-    // reads the tree out of that archive itself, so loose files at the same
-    // paths are never read.
-    private val dataApk: File get() = File(pkgDir, "data.apk")
-
     // Where a download leaves things for us to install.
     private val stagingDir: File? get() = buildPaths.installStaging
 
@@ -191,6 +212,22 @@ class SetupActivity : Activity() {
                 if (!busy) refresh()
             }
         }
+        // The rebuild was already agreed to on the screen that sent us here,
+        // so it starts rather than being put behind another button. Only on a
+        // first creation: a rotation is not a second press.
+        if (savedInstanceState == null && intent?.getBooleanExtra(EXTRA_REBUILD, false) == true) {
+            intent.removeExtra(EXTRA_REBUILD)
+            LauncherLog.log("setup: rebuilding on request")
+            startPort()
+        }
+        // Same contract as the rebuild above: agreed to on the previous
+        // screen, so it starts rather than asking a second time. It sets busy
+        // synchronously, which is what stops onResume forwarding past it.
+        if (savedInstanceState == null && intent?.getBooleanExtra(EXTRA_RESET, false) == true) {
+            intent.removeExtra(EXTRA_RESET)
+            LauncherLog.log("setup: resetting the build on request")
+            clearBuild()
+        }
     }
 
     override fun onResume() {
@@ -204,40 +241,19 @@ class SetupActivity : Activity() {
             return
         }
         refresh()
-        if (isBuilt()) startLauncher()
+        // A finished build made from a mods folder that has since changed is
+        // not somewhere to send anybody: forwarding would put the launcher
+        // back up with the new mod still not in the game, and the Rebuild
+        // button that led here would have visibly done nothing.
+        if (isBuilt() && !modsPending()) startLauncher()
     }
 
     // ── what state are we in ───────────────────────────────────────────────
 
-    /**
-     * Written as the last act of a successful run, and required before the
-     * build counts as done.
-     *
-     * The two big outputs are each written atomically, so neither can be
-     * truncated under its final name -- but they are written at different
-     * points, and the content retarget runs after both. Judging "built" by
-     * their presence therefore accepts a run that died in between: a fresh
-     * engine beside the previous run's data, or a data package whose content
-     * was never retargeted. Both look finished and fail later, somewhere with
-     * no connection to the cause.
-     *
-     * The file holds a signature of what produced it, so a new app -- new
-     * patches, new player-image logic -- invalidates the previous build
-     * instead of being told it has nothing to do. Same reasoning as
-     * Il2cppConverter.isStale, one layer up.
-     */
+    /** The selected immutable generation's final readiness marker. */
     private val builtMarker: File get() = File(pkgDir, ".built")
 
-    /**
-     * What the current app would produce, as a string.
-     *
-     * The on-device assets and nothing else: the patch sources, the build
-     * script and the tools that run there are what end up in the built game.
-     * Signing with the APK's own timestamp would be simpler and wrong -- it
-     * changes on every install, so editing a settings screen would throw away
-     * a good build and charge the user twenty minutes to get an identical one
-     * back.
-     */
+    /** Signature of the exact staged patch/tool assets in this launcher. */
     private val buildSignature: String by lazy { ProductionBuildSignature.compute(this) }
 
     /**
@@ -270,6 +286,41 @@ class SetupActivity : Activity() {
             depotDir?.let {
                 PlayerImage.depotData(it) != null && PlayerImage.foreignBuild(it) == null
             } == true
+
+    /**
+     * A finished build, made from a different mods folder than the one on disk
+     * now.
+     *
+     * Deliberately not part of [isBuilt]. What that answers is "is there a
+     * game to play", and there is: a mod that has not been compiled in yet
+     * costs the mod, not the build. What this answers is "is it the game the
+     * mods folder describes", which is the only question a rebuild request is
+     * asking -- and the two have to be separate, or every mods folder edit
+     * would put the app back to a screen offering to port Silksong.
+     *
+     * The folder's contents only, never the switches: a toggle is applied at
+     * startup by the gate the weaver wove around each patch, so it is already
+     * true of the build that exists. [LauncherActivity] asks this same
+     * question before launching and has to get the same answer, or the two
+     * screens send each other in a circle.
+     */
+    private fun modsPending(): Boolean = try {
+        val published = generationPublisher.current()
+        if (published == null) {
+            false
+        } else {
+            Mods.isStale(
+                Mods.dir(this),
+                Mods.publishedMetadataRoot(published),
+                assets,
+            )
+        }
+    } catch (t: Throwable) {
+        // A folder that cannot be read is not a reason to withhold a build
+        // that works.
+        LauncherLog.log("Could not check the mods folder: $t")
+        false
+    }
 
     /**
      * The wrong platform's copy, and where it is, or null when there is none.
@@ -454,6 +505,23 @@ class SetupActivity : Activity() {
         val foreign = wrongBuild()
 
         when {
+            // Ahead of the plain built case, and the only state where this
+            // screen has something to say about a game that is finished: the
+            // build is real and playable, it simply is not the one the mods
+            // folder now describes.
+            built && modsPending() -> {
+                status.text = message ?: "Mods waiting to be built in"
+                detail.text =
+                    "The mods folder has changed since the game was last built. Mods are " +
+                    "compiled into the game rather than loaded by it, so the change is not " +
+                    "in there yet.\n\n" +
+                    "Rebuilding takes several minutes rather than the half hour the first " +
+                    "build took: only what actually changed is done again."
+                primary.text = "Rebuild"
+                primary.visibility = View.VISIBLE
+                secondary.text = "Play anyway"
+                secondary.visibility = View.VISIBLE
+            }
             built -> {
                 status.text = message ?: "Ready to play."
                 detail.text = ""
@@ -578,6 +646,10 @@ class SetupActivity : Activity() {
 
     private fun onPrimary() {
         when {
+            // Before the built case, not after it: this is the one state where
+            // "there is a build" is true and starting the game with it is
+            // still the wrong thing for this screen to do.
+            isBuilt() && modsPending() -> startPort()
             isBuilt() -> startLauncher()
             readyToPort || haveGameFiles() -> startPort()
             else -> onSteamClicked()
@@ -603,6 +675,13 @@ class SetupActivity : Activity() {
      * works. Nobody who already copied the game there has to do anything.
      */
     private fun onSecondary() {
+        // "Play anyway", which is the only thing this button is when a build
+        // exists: the folder picker is never offered beside one, because the
+        // depot is part of isBuilt.
+        if (isBuilt()) {
+            startLauncher()
+            return
+        }
         refresh()
         if (haveGameFiles()) return
         for (dir in depotDirs) LauncherLog.log("depot $dir: ${PlayerImage.depotProblem(dir)}")
@@ -664,6 +743,20 @@ class SetupActivity : Activity() {
             detail.text = "$dir\n\n$problem"
             return
         }
+        val moved = before != null && before.absolutePath != dir.absolutePath
+        if (moved) {
+            try {
+                // The current generation reads content from the remembered
+                // source directly. Retire it before changing that authority so
+                // it can never launch against an unretargeted replacement tree.
+                generationPublisher.clearPublished()
+                PlayerImage.invalidateContent(buildPaths.buildRoot)
+            } catch (e: Exception) {
+                LauncherLog.log("Could not prepare to change the game folder", e)
+                say("Could not change the game folder: ${e.message}")
+                return
+            }
+        }
         DepotLocation.remember(buildPaths, dir)
         DepotLocation.writeMarker(profile, dir)
         // A different folder is a different content tree, and the built game
@@ -673,10 +766,8 @@ class SetupActivity : Activity() {
         // "never seen". Dropping it, and the marker that says the build
         // finished, sends the user back through a run that redoes the retarget
         // and skips everything else.
-        if (before != null && before.absolutePath != dir.absolutePath) {
+        if (moved) {
             LauncherLog.log("depot moved from $before; the content will be retargeted again")
-            PlayerImage.invalidateContent(buildPaths.buildRoot)
-            builtMarker.delete()
         }
         message = null
         refresh()
@@ -737,12 +828,16 @@ class SetupActivity : Activity() {
     private fun moveStaged(destinationPackageDir: File = buildPaths.packageDir) {
         val src = stagingDir ?: return
         val destinationEngineDir = File(destinationPackageDir, "lib/$ABI")
-        for (f in src.listFiles().orEmpty()) {
+        val stagedFiles = src.listFiles().orEmpty().filter {
+            it.name.endsWith(".so") || it.name == "data.apk"
+        }
+        if (stagedFiles.isNotEmpty()) BuildInstallation.invalidate(destinationPackageDir)
+        for (f in stagedFiles) {
             val name = f.name
-            val dst = when {
-                name.endsWith(".so") -> File(destinationEngineDir, name)
-                name == "data.apk" -> File(destinationPackageDir, "data.apk")
-                else -> continue
+            val dst = if (name.endsWith(".so")) {
+                File(destinationEngineDir, name)
+            } else {
+                File(destinationPackageDir, "data.apk")
             }
             dst.parentFile?.mkdirs()
             val tmp = File(dst.parentFile, "${dst.name}.part")
@@ -927,6 +1022,9 @@ class SetupActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         scope.launch {
             try {
+                // Profile builds are assembled in a separate staging generation.
+                // Keep the current immutable generation launchable until publish
+                // atomically selects the verified replacement.
                 // ── Step 1: the game ──────────────────────────────────────
                 if (download != null && !DepotFetcher.isPresent(profile, depot)) {
                     setStep(1, "Downloading game files from Steam")
@@ -1118,8 +1216,6 @@ class SetupActivity : Activity() {
                         }
 
                         BuildStage.Verify -> withContext(Dispatchers.IO) {
-                            val targetMarker = File(workspace.packageDir, ".built")
-                            targetMarker.writeText(buildSignature)
                             check(PlayerImage.runtimeArchivesPresent(
                                 this@SetupActivity,
                                 profile,
@@ -1133,6 +1229,10 @@ class SetupActivity : Activity() {
                                 }
                             }
                             Mods.stageForGeneration(out, workspace.root)
+                            // Commit readiness only after the engine, player
+                            // image, content and exact candidate mod records all
+                            // exist. The marker itself is published atomically.
+                            BuildInstallation.complete(workspace.packageDir, buildSignature)
                         }
 
                         BuildStage.Publish -> Unit

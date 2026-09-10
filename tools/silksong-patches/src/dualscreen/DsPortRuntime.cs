@@ -64,6 +64,11 @@ public sealed class DsPortRuntime
         if (!_disposed) _modsGestureConsumer = consumer;
     }
 
+    public void SetTouchState(bool singleTouchActive)
+    {
+        if (!_disposed) _progress.SetTouchState(singleTouchActive);
+    }
+
     public void OnGesture(DsGesture gesture)
     {
         if (_disposed || !IsVisible) return;

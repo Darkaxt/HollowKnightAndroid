@@ -43,6 +43,7 @@ class SettingsActivity : Activity() {
     private lateinit var swPerfOverlay: Switch
     private lateinit var swSkipIntro: Switch
     private lateinit var swDualScreen: Switch
+    private lateinit var swWideAspect: Switch
     private lateinit var btnClearBuild: Button
     private val buildPaths by lazy {
         ProfileBuildPaths(
@@ -62,6 +63,7 @@ class SettingsActivity : Activity() {
         swPerfOverlay = findViewById(R.id.sw_perf_overlay)
         swSkipIntro = findViewById(R.id.sw_skip_intro)
         swDualScreen = findViewById(R.id.sw_dual_screen)
+        swWideAspect = findViewById(R.id.sw_wide_aspect)
 
         val btnBack: Button = findViewById(R.id.btn_settings_back)
 
@@ -70,6 +72,7 @@ class SettingsActivity : Activity() {
         swPerfOverlay.isChecked = settings.perfOverlay
         swSkipIntro.isChecked = settings.skipIntro
         swDualScreen.isChecked = settings.dualScreen
+        swWideAspect.isChecked = settings.wideAspect
 
         // Persist on every toggle — no separate Save button; the
         // settings screen is tiny enough that "click to toggle" is
@@ -96,6 +99,10 @@ class SettingsActivity : Activity() {
         swDualScreen.setOnCheckedChangeListener { _, checked ->
             settings.dualScreen = checked
             LauncherLog.log("Settings: dual screen → $checked (next game launch; requires DualScreen build)")
+        }
+        swWideAspect.setOnCheckedChangeListener { _, checked ->
+            settings.wideAspect = checked
+            LauncherLog.log("Settings: unlock aspect ratio → $checked (takes effect on next game launch)")
         }
 
         btnBack.setOnClickListener { finish() }

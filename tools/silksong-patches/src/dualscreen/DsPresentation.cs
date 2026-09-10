@@ -1,5 +1,7 @@
 // Silksong compatibility name and proven display-1 constants. The complete
-// presentation technology lives in the game-neutral shared patch source.
+// presentation technology lives in the game-neutral shared patch source; the
+// Silksong shell supplies official v1.1.0's SurfaceView geometry and input
+// capture so rendering and hit testing share one measured viewport.
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 using DualSouls.DualScreen;
@@ -23,8 +25,20 @@ public sealed class DsPresentation : DirectDisplayPresentation
             OVERLAY_LAYER,
             FALLBACK_W,
             FALLBACK_H,
-            DsConfig.Int)
+            DsConfig.Int,
+            DsTouch.Begin,
+            () => DsTouch.Ready,
+            () => DsTouch.SurfaceSize,
+            DsTouch.Stop)
     {
+    }
+
+    // Surface-local fractions map into the exact authored panel viewport. The
+    // returned point keeps Unity's bottom-left convention; ToLayout performs
+    // the one top-left conversion used by page hit testing.
+    public static Vector2 FromSurface(Vector2 normalized)
+    {
+        return new Vector2(normalized.x * PanelW, PanelH - normalized.y * PanelH);
     }
 }
 #endif

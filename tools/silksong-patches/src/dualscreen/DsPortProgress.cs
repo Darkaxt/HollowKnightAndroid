@@ -63,6 +63,12 @@ public sealed partial class DsPortProgress : IDisposable, IDsPortJournalNative, 
         _frame.SelectionChanged += SelectionChanged;
     }
 
+    public void SetTouchState(bool singleTouchActive)
+    {
+        _inventory.SetTouchState(singleTouchActive);
+        _loadout.SetTouchState(singleTouchActive);
+    }
+
     public void Tick(bool eligible)
     {
         if (_disposed) return;

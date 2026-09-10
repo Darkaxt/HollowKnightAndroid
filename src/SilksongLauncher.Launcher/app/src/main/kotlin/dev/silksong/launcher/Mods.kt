@@ -14,7 +14,7 @@
 //
 // The cost of that is honest and unavoidable: installing a mod means a
 // rebuild, not a restart. What is NOT owed is a rebuild for turning one off.
-// Every plugin in the folder is woven, enabled or not, and every call the
+// Every compatible plugin is woven, enabled or not, and every call the
 // weaver writes is wrapped in a test of a gate field in the plugin's own
 // assembly. The chainloader opens the gates of the plugins that are on. So
 // the stamp below covers what is IN the folder rather than what is switched
@@ -232,6 +232,11 @@ object Mods {
     // ── staleness ──────────────────────────────────────────────────────────
 
     private fun stampFile(root: File): File = File(root, "mods.stamp")
+    private fun convertedFile(root: File): File = File(root, "mods.converted")
+    private fun installedStampFile(root: File): File = File(root, "mods.installed.stamp")
+    private val digestPattern = Regex("[0-9a-f]{64}")
+
+    data class Snapshot(val fingerprint: String, val files: Map<String, String>)
 
     /**
      * What the folder and the weaver that consumes it contain, by content.
@@ -245,17 +250,33 @@ object Mods {
      * itself is the case that matters most, and it is also the case most
      * likely to arrive with whatever mtime the zip carried.
      */
-    fun stamp(mods: File, assets: android.content.res.AssetManager? = null): String {
+    fun stamp(mods: File, assets: android.content.res.AssetManager? = null): String =
+        snapshot(mods, assets).fingerprint
+
+    /** The exact inputs handed to a conversion, not a later view of the live folder. */
+    fun snapshot(mods: File, assets: android.content.res.AssetManager? = null): Snapshot {
         val sha = MessageDigest.getInstance("SHA-256")
         val plugins = all(mods)
+        val files = linkedMapOf<String, String>()
+        val buffer = ByteArray(1 shl 16)
         for (dll in plugins) {
-            sha.update(relativePath(mods, dll).toByteArray())
-            dll.inputStream().use { sha.updateFrom(it) }
+            val relative = relativePath(mods, dll)
+            sha.update(relative.toByteArray())
+            val fileSha = MessageDigest.getInstance("SHA-256")
+            dll.inputStream().use { input ->
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    sha.update(buffer, 0, count)
+                    fileSha.update(buffer, 0, count)
+                }
+            }
+            files[relative] = fileSha.digest().joinToString("") { "%02x".format(it) }
         }
         if (plugins.isNotEmpty() && assets != null) {
             sha.updateAssets(assets, WEAVER_ASSET_DIR)
         }
-        return sha.digest().joinToString("") { "%02x".format(it) }
+        return Snapshot(sha.digest().joinToString("") { "%02x".format(it) }, files)
     }
 
     internal fun recordedStamp(root: File): String {
@@ -278,11 +299,9 @@ object Mods {
             if (children.isNotEmpty()) {
                 updateAssets(assets, path)
             } else {
-                try {
-                    update(path.toByteArray())
-                    assets.open(path).use { updateFrom(it) }
-                } catch (_: IOException) {
-                }
+                update(path.toByteArray())
+                // Normalised for the same reason as the whole-build signature.
+                AssetDigest.update(this, assets, path)
             }
         }
     }
@@ -296,8 +315,23 @@ object Mods {
         }
     }
 
-    /** Whether the mods folder differs from what the current build was made from. */
+    /** Whether the mods folder differs from the published generation or legacy installation. */
     fun isStale(mods: File, root: File, assets: android.content.res.AssetManager? = null): Boolean {
+        val installed = installedStampFile(root)
+        val published = stampFile(root)
+        val previous = when {
+            installed.isFile -> installed.readText().trim()
+            convertedFile(root).isFile -> "" // converted legacy output is not installed yet
+            candidateMetadataPresent(root) -> published.readText().trim()
+            else -> ""
+        }
+        return previous != stamp(mods, assets)
+    }
+
+    /** Conversion caches remain reusable when a later installation step fails. */
+    fun isConversionStale(mods: File, root: File, assets: android.content.res.AssetManager? = null): Boolean {
+        if (!convertedFile(root).isFile) return true
+        readBuilt(convertedFile(root))
         val f = stampFile(root)
         val previous = if (f.isFile) f.readText().trim() else ""
         return previous != stamp(mods, assets)
@@ -312,9 +346,9 @@ object Mods {
         candidateRoot: File,
         assets: android.content.res.AssetManager? = null,
     ) {
-        check(reportFile(candidateRoot).isFile) { "candidate mod report is missing" }
-        writeBuilt(mods, candidateRoot)
-        stampFile(candidateRoot).writeText(stamp(mods, assets))
+        val report = lastReportStrict(candidateRoot)
+        writeBuilt(mods, candidateRoot, report)
+        BuildInstallation.writeAtomic(stampFile(candidateRoot), stamp(mods, assets))
     }
 
     private const val GENERATION_METADATA_DIR = "mods"
@@ -355,16 +389,36 @@ object Mods {
         }
     }
 
+    // Retained for v1.1.0's legacy installation-record tests and migration
+    // paths. Profile builds publish the equivalent records inside immutable
+    // generations through recordCandidate/stageForGeneration above.
+    fun markConverted(root: File, snapshot: Snapshot, report: List<Plugin>) {
+        val accepted = report.filterNot { it.failed }.map { it.file }.toSet()
+        val rejected = report.filter { it.failed }.map { it.file }.toSet()
+        val included = snapshot.files.filterKeys { File(it).name in accepted && File(it).name !in rejected }
+        writeBuilt(convertedFile(root), included)
+        BuildInstallation.writeAtomic(stampFile(root), snapshot.fingerprint)
+    }
+
+    /** Promote the conversion's captured inputs only after the complete game is installed. */
+    fun markInstalled(root: File) {
+        val converted = readBuilt(convertedFile(root))
+        val stamp = stampFile(root).readText().trim()
+        if (!digestPattern.matches(stamp)) throw IOException("The converted mod fingerprint is invalid")
+        writeBuilt(builtFile(root), converted)
+        BuildInstallation.writeAtomic(installedStampFile(root), stamp)
+    }
+
     fun clearStamp(root: File) {
         stampFile(root).delete()
-        builtFile(root).delete()
+        convertedFile(root).delete()
         reportFile(root).delete()
     }
 
     // ── what is in the build, per mod ──────────────────────────────────────
 
     /**
-     * Every plugin the current build was made from, by content.
+     * Every accepted plugin in the last successfully installed build, by content.
      *
      * The stamp above answers "is anything different" for the whole folder,
      * which is the question a rebuild prompt needs. This answers "is THIS file
@@ -378,24 +432,41 @@ object Mods {
      */
     private fun builtFile(root: File): File = File(root, "mods.built")
 
-    private fun writeBuilt(mods: File, root: File) {
-        val lines = all(mods).map { "${digest(it)}  ${relativePath(mods, it)}" }
-        builtFile(root).writeText(
-            if (lines.isEmpty()) "" else lines.joinToString("\n") + "\n",
-        )
+    private fun writeBuilt(mods: File, root: File, report: List<Plugin>) {
+        val accepted = report.filterNot { it.failed }.map { it.file }.toSet()
+        val rejected = report.filter { it.failed }.map { it.file }.toSet()
+        val files = all(mods)
+            .filter { it.name in accepted && it.name !in rejected }
+            .associate { relativePath(mods, it) to digest(it) }
+        writeBuilt(builtFile(root), files)
     }
+
+    private fun writeBuilt(file: File, files: Map<String, String>) {
+        val lines = files.entries.sortedBy { it.key }.map { "${it.value}  ${it.key}" }
+        BuildInstallation.writeAtomic(file, lines.joinToString("\n", postfix = if (lines.isEmpty()) "" else "\n"))
+    }
+
+    private fun readBuilt(file: File): Map<String, String> =
+        file.readLines().filter { it.isNotBlank() }.associate { line ->
+            val parts = line.split("  ", limit = 2)
+            if (parts.size != 2 || !digestPattern.matches(parts[0]) || parts[1].isEmpty()) {
+                throw IOException("Invalid mod build record in ${file.name}")
+            }
+            parts[1] to parts[0]
+        }
 
     /** Digests of the plugins in the build, by the path the user sees. */
     fun built(root: File): Map<String, String> =
-        runCatching { builtStrict(root) }.getOrDefault(emptyMap())
+        try {
+            builtStrict(root)
+        } catch (e: IOException) {
+            LauncherLog.log("mods: could not read the installed mod list", e)
+            emptyMap()
+        }
 
     internal fun builtStrict(root: File): Map<String, String> {
         val file = builtFile(root)
-        if (!file.isFile) return emptyMap()
-        return file.readLines().mapNotNull { line ->
-            val parts = line.trim().split("  ", limit = 2)
-            if (parts.size == 2 && parts[0].isNotEmpty()) parts[1] to parts[0] else null
-        }.toMap()
+        return if (file.isFile) readBuilt(file) else emptyMap()
     }
 
     /**
@@ -407,8 +478,8 @@ object Mods {
      * which is what that build was judged by.
      */
     fun isBuilt(mods: File, root: File, dll: File): Boolean? {
+        if (!builtFile(root).isFile) return null
         val known = built(root)
-        if (known.isEmpty()) return null
         return known[relativePath(mods, dll)] == digest(dll)
     }
 
@@ -489,6 +560,51 @@ object Mods {
     }
 
     /**
+     * The port's own weaves, over the staged assemblies.
+     *
+     * Separate from [weave] and unconditional, because these are not the
+     * user's mods: they ship with the port, there is no folder to look in, and
+     * the overwhelmingly common build has no plugins at all and would skip
+     * [weave] entirely. See the weaver's Builtin.cs for what they do.
+     *
+     * Never throws. A built-in weave that cannot be applied leaves the game
+     * exactly as Team Cherry shipped it, which is a game that works; failing a
+     * twenty-minute build over a frill would be the worse outcome by a wide
+     * margin, and the setting that depends on it says so at runtime instead.
+     */
+    suspend fun weaveBuiltin(
+        context: android.content.Context,
+        root: File,
+        assemblies: File,
+        assets: android.content.res.AssetManager,
+        onLine: (String) -> Unit = {},
+    ) {
+        try {
+            val weaver = stageWeaver(root, assets)
+            val argv = arrayListOf("builtin", "--assemblies", assemblies.absolutePath)
+            val result = MonoRuntime.exec(
+                context, weaver, argv, cwd = weaver.parentFile, onLine = onLine,
+            )
+            // Unconditionally, and that is the point: a weave that quietly did
+            // nothing and a weave that quietly worked look identical from the
+            // outside, and the setting that depends on this is the only thing
+            // that would eventually notice. One line either way is the whole
+            // difference between a fixable report and a mystery.
+            val said = result.output.trim().lines().filter { it.isNotBlank() }
+            if (said.isEmpty()) {
+                LauncherLog.log("builtin weave: exit ${result.code}, no output")
+            } else {
+                for (line in said) LauncherLog.log("builtin weave: $line")
+            }
+            if (!result.ok) {
+                LauncherLog.log("builtin weave: exit ${result.code}; stock behaviour kept")
+            }
+        } catch (t: Throwable) {
+            LauncherLog.log("builtin weave: skipped", t)
+        }
+    }
+
+    /**
      * Runs the chainloader over the staged assemblies.
      *
      * Every plugin in the folder, switched on or not: the gate the weaver
@@ -508,8 +624,12 @@ object Mods {
         onLine: (String) -> Unit = {},
     ): List<Plugin> {
         val plugins = all(mods)
+        val outputReport = reportFile(root)
+        if (outputReport.exists() && !outputReport.delete()) {
+            throw IOException("Could not replace the previous mod report")
+        }
         if (plugins.isEmpty()) {
-            reportFile(root).writeText("{\"plugins\":[]}")
+            BuildInstallation.writeAtomic(reportFile(root), "{\"plugins\":[]}")
             return emptyList()
         }
 
@@ -519,7 +639,7 @@ object Mods {
         argv += "--assemblies"
         argv += assemblies.absolutePath
         argv += "--report"
-        argv += reportFile(root).absolutePath
+        argv += outputReport.absolutePath
         for (dll in plugins) {
             argv += "--mod"
             argv += dll.absolutePath
@@ -533,7 +653,15 @@ object Mods {
             )
         }
 
-        val report = lastReport(root)
+        val report = try {
+            parse(outputReport.readText())
+        } catch (e: org.json.JSONException) {
+            throw IOException("The mod weaver's report is invalid", e)
+        }
+        if (report.map { it.file }.sorted() != plugins.map { it.name }.sorted() ||
+            report.any { it.status !in setOf("Ok", "Partial", "Failed") }) {
+            throw IOException("The mod weaver's report does not describe every input plugin")
+        }
         for (p in report) {
             LauncherLog.log(
                 "mod ${p.title}: ${p.status}, ${p.patched} patch(es)" +

@@ -24,7 +24,6 @@ public class DualScreenV2 : MonoBehaviour
     DsHudReleaseState _releaseState;
     DsHudReleasePump _releasePump;
     int _displayCount;
-    float _nextFence;
     float _idleSince = -1f;
     bool _everInGame;
     GameManager _gameManager;
@@ -55,7 +54,7 @@ public class DualScreenV2 : MonoBehaviour
         _managerCallbacks = new DsHudManagerCallbacks(() => GameManager.SilentInstance,
             () => { if (_port != null) _port.RestoreHud(); }, BeforeNativeUnload, OnFinishedEnteringScene);
         BindGameManager();
-        DsTouch.Enabled = false;
+        DsTouch.Stop();
 
         // This owner has no routing/input/activation loop. Keeping the presentation
         // beneath it prevents destruction of V2 itself from destroying native roots
@@ -148,14 +147,20 @@ public class DualScreenV2 : MonoBehaviour
         if (_host == null || !_host.IsActive || _screen == null || !_screen.Ready)
             return;
 
-        // The game creates cameras and event systems throughout its scene
-        // lifecycle, so preserve the proven periodic sweep/fence maintenance.
-        _screen.SweepCameras();
-        if (DsTouch.Enabled && Time.unscaledTime >= _nextFence)
+        // The Android SurfaceView is both the geometry authority and the input
+        // boundary. If it disappears while Unity still reports display 1,
+        // retire this readiness generation and reacquire it through the host.
+        if (!DsTouch.Ready)
         {
-            _nextFence = Time.unscaledTime + 0.25f;
-            DsTouch.InstallFence(gameObject);
+            _host.SetPresentationReady(false);
+            _screen.MarkUnavailable();
+            _host.SetDisplayPresent(Display.displays.Length > DsPresentation.DISPLAY);
+            return;
         }
+
+        // The game creates cameras throughout its scene lifecycle, so preserve
+        // periodic isolation of both owned direct-display layers.
+        _screen.SweepCameras();
 
         float dt = Time.unscaledDeltaTime;
         if (_card != null)
@@ -170,6 +175,7 @@ public class DualScreenV2 : MonoBehaviour
         if (_input != null)
         {
             _input.Poll();
+            _port.SetTouchState(_input.SingleTouchActive);
             var gestures = _input.Gestures;
             for (int i = 0; i < gestures.Count; i++)
                 _port.OnGesture(gestures[i]);
@@ -301,9 +307,20 @@ public class DualScreenV2 : MonoBehaviour
 
     void SetTouchFenceActive(bool active)
     {
-        DsTouch.Enabled = active;
-        if (active) DsTouch.InstallFence(gameObject);
-        else DsTouch.RemoveFence();
+        if (active)
+        {
+            if (!DsTouch.Begin())
+                throw new InvalidOperationException("Secondary display input could not be captured");
+            return;
+        }
+
+        DsTouch.Stop();
+        if (_input == null) return;
+        _input.Cancel();
+        if (_port == null) return;
+        _port.SetTouchState(_input.SingleTouchActive);
+        var gestures = _input.Gestures;
+        for (int i = 0; i < gestures.Count; i++) _port.OnGesture(gestures[i]);
     }
 
     void ReleasePresentation()
@@ -323,7 +340,7 @@ public class DualScreenV2 : MonoBehaviour
         _releaseState.RequestShutdown(() =>
         {
             if (_host != null) _host.Dispose();
-            else { DsTouch.RemoveFence(); ReleasePresentation(); }
+            else { DsTouch.Stop(); ReleasePresentation(); }
         });
         if (first && _releaseState.LastFailure != null)
             Debug.LogError("[DualScreen] native restoration pending; independent release owner retained: " + _releaseState.LastFailure);

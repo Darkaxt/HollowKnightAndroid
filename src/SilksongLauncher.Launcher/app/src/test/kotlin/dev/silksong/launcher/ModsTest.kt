@@ -65,13 +65,15 @@ class ModsTest {
     fun `one shared mod library keeps independent published profile records`() {
         val mods = temp.newFolder("shared-mods")
         val plugin = File(mods, "Example.dll").apply { writeText("one") }
+        val acceptedReport =
+            """{"plugins":[{"File":"Example.dll","Assembly":"Example.Plugin","Guid":"example","Name":"Example","Version":"1.0","Status":"Ok","Patched":1,"Issues":[]}]}"""
         val hollowKnightCandidate = temp.newFolder("hollow-knight-candidate")
         val hollowKnightGeneration = temp.newFolder("hollow-knight-generation")
         val silksongCandidate = temp.newFolder("silksong-candidate")
         val silksongGeneration = temp.newFolder("silksong-generation")
 
         val hollowKnightInput = Mods.snapshotForBuild(mods, hollowKnightCandidate)
-        Mods.reportFile(hollowKnightCandidate).writeText("{\"plugins\":[]}")
+        Mods.reportFile(hollowKnightCandidate).writeText(acceptedReport)
         Mods.recordCandidate(hollowKnightInput, hollowKnightCandidate)
         Mods.stageForGeneration(hollowKnightCandidate, hollowKnightGeneration)
         val hollowKnightPublished = Mods.generationMetadataRoot(hollowKnightGeneration)
@@ -86,7 +88,7 @@ class ModsTest {
         assertEquals(false, Mods.isBuilt(mods, hollowKnightPublished, plugin))
 
         val silksongInput = Mods.snapshotForBuild(mods, silksongCandidate)
-        Mods.reportFile(silksongCandidate).writeText("{\"plugins\":[]}")
+        Mods.reportFile(silksongCandidate).writeText(acceptedReport)
         Mods.recordCandidate(silksongInput, silksongCandidate)
         Mods.stageForGeneration(silksongCandidate, silksongGeneration)
         assertEquals(true, Mods.isBuilt(mods, Mods.generationMetadataRoot(silksongGeneration), plugin))

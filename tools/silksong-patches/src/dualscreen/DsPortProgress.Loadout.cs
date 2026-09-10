@@ -32,8 +32,7 @@ public sealed partial class DsPortProgress
         bool _eligible;
         readonly DsPortActionHold _hold = new DsPortActionHold();
         readonly DsPortActionBoundary _actions = new DsPortActionBoundary();
-        readonly List<Touch> _touches = new List<Touch>();
-        int _downFrame;
+        bool _singleTouchActive;
         bool _suppressReleaseTap;
         sealed class LoadoutPage
         {
@@ -95,6 +94,7 @@ public sealed partial class DsPortProgress
         }
         public Loadout(DsPortFrame frame)
         { _frame = frame; _state = new DsPortJournalState(this); _selection = new DsPortSelectState(this); }
+        public void SetTouchState(bool singleTouchActive) { _singleTouchActive = singleTouchActive; }
         bool _outgoing;
         public void SelectionChanged()
         {
@@ -114,7 +114,7 @@ public sealed partial class DsPortProgress
         }
         public void ObserveGesture(DsGesture gesture)
         {
-            if (gesture.Type == DsGestureType.Down) { _downFrame = Time.frameCount; _suppressReleaseTap = false; }
+            if (gesture.Type == DsGestureType.Down) _suppressReleaseTap = false;
             _hold.Observe(gesture.Type == DsGestureType.Down, gesture.Type == DsGestureType.Up);
             TouchHeld(_hold.Capture());
             // A new Down or an Up consumed by overlays still cancels the old native
@@ -124,10 +124,7 @@ public sealed partial class DsPortProgress
         }
         bool TouchHeld(long generation)
         {
-            DsTouch.CollectSecondScreen(_touches);
-            bool live = _touches.Count == 1 && _touches[0].phase != TouchPhase.Ended && _touches[0].phase != TouchPhase.Canceled &&
-                (_touches[0].phase != TouchPhase.Began || Time.frameCount == _downFrame);
-            _hold.Liveness(live);
+            _hold.Liveness(_singleTouchActive);
             return _hold.Current(generation);
         }
         public void Tick(bool eligible)
