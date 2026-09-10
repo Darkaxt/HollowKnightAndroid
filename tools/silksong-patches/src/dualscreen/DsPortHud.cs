@@ -68,73 +68,125 @@ public sealed class DsPortHud
 
     public bool Bind(DsResidentUi.HudSources sources, DsHudEligibility eligibility)
     {
-        if (_disposed || sources == null) return false;
-        if (_sources != sources) Restore();
+        if (_disposed || sources == null || sources.HudCanvas == null) return false;
+        // Layout measurement is authored in the native Hud Canvas coordinate
+        // space. Revisions therefore restore before taking fresh bounds.
+        if (_sources != sources || _state.IsBound) Restore();
         var routes = new List<DsHudRoute>();
-        int toolCount = 0, toolIndex = 0;
-        foreach (var root in sources.Roots) if (root.Role == DsHudRole.Tool) toolCount++;
+        var counts = new int[6];
+        var indices = new int[6];
+        foreach (var root in sources.Roots) counts[(int)root.Role]++;
+
+        Bounds healthBounds = new Bounds(); bool haveHealthBounds = false;
+        foreach (var source in sources.Roots)
+            if (source.Role == DsHudRole.Health)
+                IncludeNativeBounds(source.Root, sources.HudCanvas, ref healthBounds, ref haveHealthBounds);
+        haveHealthBounds = haveHealthBounds && healthBounds.size.x > 0.0001f &&
+            healthBounds.size.y > 0.0001f;
+        if (!haveHealthBounds)
+        {
+            _resident.CapabilityGap("hud-slot-Health", "native health geometry not ready; routing deferred");
+            return false;
+        }
+
         foreach (var source in sources.Roots)
         {
+            int role = (int)source.Role;
+            int index = indices[role]++;
             Rect slot;
-            Bounds nativeBounds;
-            int index = source.Role == DsHudRole.Tool ? toolIndex++ : 0;
-            if (!_frame.TryGetHudSlot(source.Role, index, toolCount, out slot) ||
-                !TryNativeBounds(source.Root, out nativeBounds))
+            if (!_frame.TryGetHudSlot(source.Role, index, counts[role], out slot))
             {
                 Restore();
-                _resident.CapabilityGap("hud-slot-" + source.Key, "native geometry not ready; routing deferred");
+                _resident.CapabilityGap("hud-slot-" + source.Key, "slot geometry not ready; routing deferred");
                 return false;
             }
-            float fit = Mathf.Min(slot.width / nativeBounds.size.x, slot.height / nativeBounds.size.y) * 0.92f;
-            var center = slot.center;
-            // Preserve every child transform/animation. Only the moved root gets
-            // a companion pose, with its native geometry uniformly fitted.
-            var pose = new DsHudPose(center.x - nativeBounds.center.x * fit,
-                center.y - nativeBounds.center.y * fit, 0f, 0f, 0f, 0f, 1f, fit, fit, fit);
+
+            Bounds nativeBounds = new Bounds(); bool haveBounds = false;
+            if (source.Role == DsHudRole.Health)
+            {
+                nativeBounds = healthBounds;
+                haveBounds = true;
+            }
+            else
+                IncludeNativeBounds(source.Root, sources.HudCanvas, ref nativeBounds, ref haveBounds);
+            haveBounds = haveBounds && nativeBounds.size.x > 0.0001f &&
+                nativeBounds.size.y > 0.0001f;
+
+            bool persistent = source.Role == DsHudRole.Silk || source.Role == DsHudRole.Counters ||
+                source.Role == DsHudRole.Tool;
+            if (!haveBounds && persistent)
+            {
+                Restore();
+                _resident.CapabilityGap("hud-slot-" + source.Key,
+                    "native persistent geometry not ready; routing deferred");
+                return false;
+            }
+
+            float fit = haveBounds
+                ? Mathf.Min(slot.width / nativeBounds.size.x, slot.height / nativeBounds.size.y) * 0.92f
+                : 1f;
+            Vector3 nativePosition = source.Root.localPosition;
+            Quaternion nativeRotation = source.Root.localRotation;
+            Vector3 nativeScale = source.Root.localScale;
+            Vector2 nativeCenter = haveBounds
+                ? new Vector2(nativeBounds.center.x, nativeBounds.center.y)
+                : new Vector2(nativePosition.x, nativePosition.y);
+            Vector2 offset = slot.center - nativeCenter * fit;
+            // Every route is an exact Hud Canvas direct child. Applying one
+            // parent-space fit preserves sibling effect alignment and every
+            // driver-owned descendant pose while moving the live hierarchy.
+            var pose = new DsHudPose(nativePosition.x * fit + offset.x,
+                nativePosition.y * fit + offset.y, nativePosition.z,
+                nativeRotation.x, nativeRotation.y, nativeRotation.z, nativeRotation.w,
+                nativeScale.x * fit, nativeScale.y * fit, nativeScale.z * fit);
             routes.Add(new DsHudRoute(source.Key, source.Role, source.Root, pose));
         }
         if (!_state.Bind(sources, routes.ToArray(), _layers.HUD, DsPresentation.CONTENT_LAYER, eligibility))
         {
             _sources = null;
-            _resident.CapabilityGap("live-hud", "missing, duplicate or overlapping essential roots; no partial routing");
+            _resident.CapabilityGap("live-hud", "missing, duplicate or overlapping exact roots; no partial routing");
             return false;
         }
         _sources = sources;
         _layoutRevision = _frame.LayoutRevision;
         foreach (var source in sources.Roots)
+        {
+            var identities = new List<string>();
+            foreach (var driver in source.Drivers)
+                identities.Add(driver.GetType().Name + "#" + driver.GetInstanceID());
             _resident.ResidentProvenance("live-" + source.Key, source.Root,
-                source.Driver.GetType().Name + " instance=" + source.Driver.GetInstanceID());
+                "Hud Canvas direct root; drivers=" + string.Join(",", identities.ToArray()));
+        }
         return true;
     }
 
     // Inspect local mesh/sprite/Graphic geometry, including currently inactive
     // native variants. Particle bounds are effects, not layout extents. Never
     // enable/normalize a renderer or edit sorting, colors, counters or drivers.
-    static bool TryNativeBounds(Transform root, out Bounds bounds)
+    static void IncludeNativeBounds(Transform root, Transform relativeTo,
+                                    ref Bounds bounds, ref bool have)
     {
-        bounds = new Bounds();
-        if (root == null) return false;
-        bool have = false;
+        if (root == null || relativeTo == null) return;
         foreach (var filter in root.GetComponentsInChildren<MeshFilter>(true))
             if (filter.sharedMesh != null)
-                IncludeBounds(root, filter.transform, filter.sharedMesh.bounds, ref bounds, ref have);
+                IncludeBounds(relativeTo, filter.transform, filter.sharedMesh.bounds, ref bounds, ref have);
         foreach (var renderer in root.GetComponentsInChildren<SpriteRenderer>(true))
             if (renderer.sprite != null)
-                IncludeBounds(root, renderer.transform, renderer.sprite.bounds, ref bounds, ref have);
+                IncludeBounds(relativeTo, renderer.transform, renderer.sprite.bounds, ref bounds, ref have);
         foreach (var graphic in root.GetComponentsInChildren<Graphic>(true))
         {
             var rect = graphic.rectTransform.rect;
-            IncludeBounds(root, graphic.transform, new Bounds(rect.center, rect.size), ref bounds, ref have);
+            IncludeBounds(relativeTo, graphic.transform, new Bounds(rect.center, rect.size), ref bounds, ref have);
         }
-        return have && bounds.size.x > 0.0001f && bounds.size.y > 0.0001f;
     }
 
-    static void IncludeBounds(Transform root, Transform child, Bounds source, ref Bounds result, ref bool have)
+    static void IncludeBounds(Transform relativeTo, Transform child, Bounds source,
+                              ref Bounds result, ref bool have)
     {
         for (int x = 0; x < 2; x++)
             for (int y = 0; y < 2; y++)
             {
-                var point = root.InverseTransformPoint(child.TransformPoint(new Vector3(
+                var point = relativeTo.InverseTransformPoint(child.TransformPoint(new Vector3(
                     x == 0 ? source.min.x : source.max.x, y == 0 ? source.min.y : source.max.y, source.center.z)));
                 if (!have) { result = new Bounds(point, Vector3.zero); have = true; }
                 else result.Encapsulate(point);

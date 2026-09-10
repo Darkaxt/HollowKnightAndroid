@@ -259,7 +259,7 @@ public sealed class DsResidentUi
         public string Key;
         public DsHudRole Role;
         public Transform Root;
-        public Component Driver;
+        public Component[] Drivers;
     }
 
     public sealed class HudSources
@@ -269,13 +269,23 @@ public sealed class DsResidentUi
         public GameObject Gameplay;
         public PlayMakerFSM Slide;
         public SilkSpool Spool;
+        public Transform HudCanvas;
         public HudRoot[] Roots;
         public bool OwnsCurrentRig(GameCameras cameras, HUDCamera camera)
         {
             if (Cameras != cameras || Camera != camera || camera == null ||
                 Gameplay != camera.GameplayChild || Slide != cameras.hudCanvasSlideOut ||
-                Spool != cameras.silkSpool) return false;
-            foreach (var root in Roots) if (root.Root == null || root.Driver == null) return false;
+                Spool != cameras.silkSpool || HudCanvas == null || Roots == null ||
+                Roots.Length != DsHud29980Topology.RootNames.Length) return false;
+            foreach (var root in Roots)
+            {
+                // A bound root intentionally no longer has HudCanvas as parent;
+                // identity and driver ancestry remain the current-rig authority.
+                if (root.Root == null || root.Drivers == null) return false;
+                foreach (var driver in root.Drivers)
+                    if (driver == null || (driver.transform != root.Root && !driver.transform.IsChildOf(root.Root)))
+                        return false;
+            }
             return true;
         }
     }
@@ -288,9 +298,17 @@ public sealed class DsResidentUi
     SilkSpool _hudSpool;
     float _nextHudProbe;
 
+    const string HudCanvasPath = "Anchor TL/Hud Canvas Offset/Hud Canvas";
+    static readonly DsHudRole[] HudRootRoles =
+    {
+        DsHudRole.Health, DsHudRole.Status, DsHudRole.Silk, DsHudRole.Tool,
+        DsHudRole.Context, DsHudRole.Context, DsHudRole.Counters,
+        DsHudRole.Health, DsHudRole.Health,
+    };
+
     // The combat HUD is instantiated at runtime, not present in the cached
-    // static HUD art bundle. Discover typed owners, never screenshot-derived paths.
-    // The exact serialized fields below were inspected in 1.0.29980 managed code.
+    // static HUD art bundle. Start at the typed current HUD rig, then admit only
+    // the exact coherent direct children of its 1.0.29980 Hud Canvas.
     public bool TryGetHudSources(out HudSources sources)
     {
         sources = null;
@@ -309,70 +327,196 @@ public sealed class DsResidentUi
             _hudCameras = cameras; _hudCamera = camera; _hudGameplay = gameplay;
             _hudSlide = slide; _hudSpool = spool;
         }
-        if (_hudSources != null && !_hudSources.OwnsCurrentRig(cameras, camera))
-        { _hudSources = null; _nextHudProbe = 0f; }
-        if (Time.unscaledTime < _nextHudProbe)
-        { sources = _hudSources; return sources != null; }
+        if (_hudSources != null)
+        {
+            if (_hudSources.OwnsCurrentRig(cameras, camera))
+            { sources = _hudSources; return true; }
+            _hudSources = null;
+            _nextHudProbe = 0f;
+        }
+        if (Time.unscaledTime < _nextHudProbe) return false;
         _nextHudProbe = Time.unscaledTime + 0.5f;
         if (gameplay == null || slide == null || spool == null ||
             !slide.transform.IsChildOf(gameplay.transform)) return false;
         try
         {
-            // Include our cached routed roots in the typed search: once routed,
-            // they intentionally no longer descend from the native slide owner.
-            var scopes = new List<Transform> { slide.transform };
-            if (_hudSources != null)
-                foreach (var root in _hudSources.Roots) scopes.Add(root.Root);
-            var roots = new List<HudRoot>();
-            var health = new HashSet<Transform>();
-            Component healthDriver = null;
-            foreach (var fsm in HudComponents<PlayMakerFSM>(scopes))
-                if (fsm.FsmName == "health_display" &&
-                    fsm.GetComponentInChildren<tk2dSprite>(true) != null)
-                { health.Add(fsm.transform); healthDriver = fsm; }
-            Transform healthRoot = null;
-            foreach (var candidate in health) healthRoot = CommonHudRoot(healthRoot, candidate);
-            if (healthRoot == null || healthRoot == slide.transform)
-                throw new InvalidOperationException("missing or ambiguous health_display tk2d subtree");
-            roots.Add(new HudRoot { Key = "health", Role = DsHudRole.Health,
-                Root = healthRoot, Driver = healthDriver });
-            roots.Add(new HudRoot { Key = "silk", Role = DsHudRole.Silk, Driver = spool,
-                Root = HudVisualRoot(spool, "chunkParent", "capR", "capRAnchored", "seg1",
-                    "bindNotch", "silkFailedAnimator", "spoolParent", "activeParent", "brokenParent",
-                    "cursedParent", "cursedAnimator", "silkFinalCutsceneBurst", "act3EndingParent",
-                    "act3EndingBarScaler", "act3EndingBarInverseScalers") });
-            foreach (var counter in HudComponents<CurrencyCounter>(scopes))
+            var hudCanvas = gameplay.transform.Find(HudCanvasPath);
+            if (hudCanvas == null || hudCanvas.childCount != DsHud29980Topology.RootNames.Length)
+                throw new InvalidOperationException("exact Hud Canvas topology unavailable");
+            if (slide.transform != hudCanvas && !slide.transform.IsChildOf(hudCanvas) &&
+                !hudCanvas.IsChildOf(slide.transform))
+                throw new InvalidOperationException("typed slide owner does not own exact Hud Canvas");
+
+            var direct = new Transform[DsHud29980Topology.RootNames.Length];
+            for (int i = 0; i < DsHud29980Topology.RootNames.Length; i++)
+                direct[i] = DirectHudChild(hudCanvas, DsHud29980Topology.RootNames[i]);
+
+            var healthFsms = HudComponents<PlayMakerFSM>(direct[0]);
+            var healthDisplays = new List<PlayMakerFSM>();
+            foreach (var fsm in healthFsms)
+                if (fsm.FsmName == "health_display") healthDisplays.Add(fsm);
+
+            var extras = new[]
             {
-                var kind = (CurrencyType)HudField(counter, "currencyType");
-                if (kind != CurrencyType.Money && kind != CurrencyType.Shard) continue;
-                roots.Add(new HudRoot { Key = "currency-" + kind,
-                    Role = kind == CurrencyType.Money ? DsHudRole.Money : DsHudRole.Shards,
-                    Driver = counter, Root = HudVisualRoot(counter, "icon", "geoTextMesh", "subTextMesh",
-                        "addTextMesh", "limitTextMesh", "fadeGroup", "rollerFade", "amountLayoutGroup", "failAnimator") });
+                DirectHudChild(direct[1], "Reserve Bind"),
+                DirectHudChild(direct[1], "Lava Bell HUD"),
+                DirectHudChild(direct[1], "Maggot Charm"),
+            };
+            var extrasFsms = new int[3];
+            var extrasPositioners = new int[3];
+            var extrasRegisters = new int[3];
+            var extrasAnimators = new int[3];
+            for (int i = 0; i < extras.Length; i++)
+            {
+                extrasFsms[i] = extras[i].GetComponents<PlayMakerFSM>().Length;
+                extrasPositioners[i] = extras[i].GetComponents<PositionRelativeTo>().Length;
+                extrasRegisters[i] = extras[i].GetComponents<EventRegister>().Length;
+                extrasAnimators[i] = extras[i].GetComponents<Animator>().Length;
             }
-            foreach (var bind in HudComponents<BindOrbHudFrame>(scopes))
-                roots.Add(new HudRoot { Key = "bind", Role = DsHudRole.Bind, Driver = bind,
-                    Root = HudVisualRoot(bind, "changeParticle", "hunterV2Bar", "hunterV3BarA",
-                        "hunterV3BarB", "hunterV3ExtraHitEffect", "reaperModeEffect") });
-            foreach (var tool in HudComponents<ToolHudIcon>(scopes))
-                roots.Add(new HudRoot { Key = "tool-" + HudField(tool, "binding"),
-                    Role = DsHudRole.Tool, Driver = tool,
-                    Root = HudVisualRoot(tool, "icon", "radialImage", "radialImageBg", "templateNotch",
-                        "animator", "skillZapIcon") });
-            // Reject unrelated/common container expansion before the routing state
-            // validates all essential role counts, uniqueness and independence.
-            foreach (var root in roots)
-                if (root.Root == null || root.Root == slide.transform || root.Root == gameplay.transform)
-                    throw new InvalidOperationException("non-independent HUD visual dependencies: " + root.Key);
-            roots.Sort((a, b) => string.CompareOrdinal(a.Key, b.Key));
-            bool same = _hudSources != null && _hudSources.Roots.Length == roots.Count;
+            bool exactExtrasOwners = HudComponents<PlayMakerFSM>(direct[1]).Count == 3 &&
+                HudComponents<PositionRelativeTo>(direct[1]).Count == 3 &&
+                HudComponents<EventRegister>(direct[1]).Count == 15 &&
+                HudComponents<Animator>(direct[1]).Count == 1;
+
+            var spoolRoot = DirectHudChild(direct[2], "Spool");
+            var bindOrbRoot = DirectHudChild(spoolRoot, "Bind Orb");
+            var spoolDrivers = spoolRoot.GetComponents<SilkSpool>();
+            var allSpoolDrivers = HudComponents<SilkSpool>(direct[2]);
+            var bindDrivers = HudComponents<BindOrbHudFrame>(direct[2]);
+            bool exactBindOwner = bindDrivers.Count == 1 &&
+                (bindDrivers[0].transform == bindOrbRoot || bindDrivers[0].transform.IsChildOf(bindOrbRoot));
+
+            var toolDrivers = HudComponents<ToolHudIcon>(direct[3]);
+            bool exactToolOwners = toolDrivers.Count == 3;
+            string[] toolNames = { "Tool Icon U", "Tool Icon N", "Tool Icon D" };
+            foreach (var toolName in toolNames)
+                if (DirectHudChild(direct[3], toolName).GetComponents<ToolHudIcon>().Length != 1)
+                    exactToolOwners = false;
+
+            var crestFlash = DirectHudChild(direct[4], "Crest Change Flash");
+            var crestParticles = DirectHudChild(direct[4], "Pt Dots");
+            var crestDeactivators = HudComponents<DeactivateAfter2dtkAnimation>(direct[4]);
+            var crestAnimators = HudComponents<tk2dSpriteAnimator>(direct[4]);
+            bool exactCrestDeactivator = crestDeactivators.Count == 1 &&
+                crestFlash.GetComponents<DeactivateAfter2dtkAnimation>().Length == 1;
+            bool exactCrestAnimator = crestAnimators.Count == 1 &&
+                crestFlash.GetComponents<tk2dSpriteAnimator>().Length == 1;
+            bool exactCrestParticles = HudComponents<ParticleSystem>(direct[4]).Count == 1 &&
+                crestParticles.GetComponents<ParticleSystem>().Length == 1;
+
+            var deliveryDrivers = HudComponents<DeliveryHudIcon>(direct[5]);
+            bool exactDeliveryOwner = deliveryDrivers.Count == 1 &&
+                direct[5].GetComponents<DeliveryHudIcon>().Length == 1;
+
+            var stacks = HudComponents<CurrencyCounterStack>(direct[6]);
+            var counters = HudComponents<CurrencyCounter>(direct[6]);
+            var geoRoot = DirectHudChild(direct[6], "Geo Counter");
+            var shardRoot = DirectHudChild(direct[6], "Shard Counter");
+            int money = CurrencyOwnerCount(geoRoot, CurrencyType.Money);
+            int shards = CurrencyOwnerCount(shardRoot, CurrencyType.Shard);
+            bool exactCounterOwners = stacks.Count == 1 &&
+                direct[6].GetComponents<CurrencyCounterStack>().Length == 1 &&
+                counters.Count == 2;
+            var itemTemplates = DirectHudChild(direct[6], "Item Counter Template")
+                .GetComponents<ItemCurrencyCounter>();
+            var liquidTemplates = DirectHudChild(direct[6], "Liquid Counter Template")
+                .GetComponents<LiquidReserveCounter>();
+            bool exactItemTemplate = itemTemplates.Length == 1 &&
+                HudComponents<ItemCurrencyCounter>(direct[6]).Count == 1;
+            bool exactLiquidTemplate = liquidTemplates.Length == 1 &&
+                HudComponents<LiquidReserveCounter>(direct[6]).Count == 1;
+
+            var burstCameraControls = direct[7].GetComponents<CameraControlAnimationEvents>();
+            var burstAnimators = direct[7].GetComponents<Animator>();
+            var burstTimers = direct[7].GetComponents<DisableAfterTime>();
+            var dripsChild = DirectHudChild(direct[8], "Blue_Health_Overblue_HUD_drips");
+            var dripsRootParticles = direct[8].GetComponents<ParticleSystem>();
+            var dripsChildParticles = dripsChild.GetComponents<ParticleSystem>();
+
+            var inventory = new DsHud29980Inventory
+            {
+                RootNames = DirectChildNames(hudCanvas),
+                ExtrasChildren = DirectChildNames(direct[1]),
+                ThreadChildren = DirectChildNames(direct[2]),
+                SpoolChildren = DirectChildNames(spoolRoot),
+                ToolChildren = DirectChildNames(direct[3]),
+                CounterChildren = DirectChildNames(direct[6]),
+                CrestChildren = DirectChildNames(direct[4]),
+                DeliveryChildren = DirectChildNames(direct[5]),
+                BurstChildren = DirectChildNames(direct[7]),
+                DripsChildren = DirectChildNames(direct[8]),
+                ExtrasPlayMakerFsms = exactExtrasOwners ? extrasFsms : null,
+                ExtrasPositioners = exactExtrasOwners ? extrasPositioners : null,
+                ExtrasEventRegisters = exactExtrasOwners ? extrasRegisters : null,
+                ExtrasAnimators = exactExtrasOwners ? extrasAnimators : null,
+                HealthDisplayDrivers = healthDisplays.Count,
+                SilkSpools = allSpoolDrivers.Count == 1 ? spoolDrivers.Length : 0,
+                BindOrbFrames = exactBindOwner ? bindDrivers.Count : 0,
+                ToolHudIcons = exactToolOwners ? toolDrivers.Count : 0,
+                CounterStacks = exactCounterOwners ? stacks.Count : 0,
+                MoneyCounters = money,
+                ShardCounters = shards,
+                ItemCounterTemplates = exactItemTemplate ? itemTemplates.Length : 0,
+                LiquidCounterTemplates = exactLiquidTemplate ? liquidTemplates.Length : 0,
+                DeliveryHudIcons = exactDeliveryOwner ? deliveryDrivers.Count : 0,
+                CrestDeactivators = exactCrestDeactivator ? crestDeactivators.Count : 0,
+                CrestAnimators = exactCrestAnimator ? crestAnimators.Count : 0,
+                CrestParticleSystems = exactCrestParticles ? 1 : 0,
+                BurstCameraControls = burstCameraControls.Length,
+                BurstAnimators = burstAnimators.Length,
+                BurstDisableAfterTime = burstTimers.Length,
+                DripsRootParticleSystems = dripsRootParticles.Length,
+                DripsChildParticleSystems = dripsChildParticles.Length,
+            };
+            string topologyGap;
+            if (!DsHud29980Topology.TryAdmit(inventory, out topologyGap))
+                throw new InvalidOperationException(topologyGap);
+            if (spool != spoolDrivers[0])
+                throw new InvalidOperationException("typed SilkSpool is not Thread/Spool");
+
+            var driverGroups = new List<Component>[DsHud29980Topology.RootNames.Length];
+            for (int i = 0; i < driverGroups.Length; i++) driverGroups[i] = new List<Component>();
+            foreach (var driver in healthFsms) driverGroups[0].Add(driver);
+            foreach (var driver in HudComponents<PlayMakerFSM>(direct[1])) driverGroups[1].Add(driver);
+            foreach (var driver in HudComponents<PositionRelativeTo>(direct[1])) driverGroups[1].Add(driver);
+            foreach (var driver in HudComponents<EventRegister>(direct[1])) driverGroups[1].Add(driver);
+            foreach (var driver in HudComponents<Animator>(direct[1])) driverGroups[1].Add(driver);
+            driverGroups[2].Add(spoolDrivers[0]); driverGroups[2].Add(bindDrivers[0]);
+            foreach (var driver in toolDrivers) driverGroups[3].Add(driver);
+            foreach (var driver in crestDeactivators) driverGroups[4].Add(driver);
+            foreach (var driver in crestAnimators) driverGroups[4].Add(driver);
+            driverGroups[4].Add(crestParticles.GetComponent<ParticleSystem>());
+            driverGroups[5].Add(deliveryDrivers[0]);
+            driverGroups[6].Add(stacks[0]);
+            foreach (var driver in counters) driverGroups[6].Add(driver);
+            driverGroups[6].Add(itemTemplates[0]); driverGroups[6].Add(liquidTemplates[0]);
+            foreach (var driver in burstCameraControls) driverGroups[7].Add(driver);
+            foreach (var driver in burstAnimators) driverGroups[7].Add(driver);
+            foreach (var driver in burstTimers) driverGroups[7].Add(driver);
+            foreach (var driver in dripsRootParticles) driverGroups[8].Add(driver);
+            foreach (var driver in dripsChildParticles) driverGroups[8].Add(driver);
+
+            var roots = new HudRoot[DsHud29980Topology.RootNames.Length];
+            for (int i = 0; i < roots.Length; i++)
+                roots[i] = new HudRoot { Key = DsHud29980Topology.RootNames[i], Role = HudRootRoles[i],
+                    Root = direct[i], Drivers = driverGroups[i].ToArray() };
+
+            bool same = _hudSources != null && _hudSources.HudCanvas == hudCanvas &&
+                _hudSources.Roots.Length == roots.Length;
             if (same)
-                for (int i = 0; i < roots.Count; i++)
-                    if (_hudSources.Roots[i].Root != roots[i].Root || _hudSources.Roots[i].Driver != roots[i].Driver ||
-                        _hudSources.Roots[i].Key != roots[i].Key) { same = false; break; }
+                for (int i = 0; i < roots.Length; i++)
+                {
+                    var old = _hudSources.Roots[i];
+                    if (old.Root != roots[i].Root || old.Key != roots[i].Key ||
+                        old.Role != roots[i].Role || old.Drivers.Length != roots[i].Drivers.Length)
+                    { same = false; break; }
+                    for (int d = 0; d < roots[i].Drivers.Length; d++)
+                        if (old.Drivers[d] != roots[i].Drivers[d]) { same = false; break; }
+                    if (!same) break;
+                }
             if (!same)
                 _hudSources = new HudSources { Cameras = cameras, Camera = camera, Gameplay = gameplay,
-                    Slide = slide, Spool = spool, Roots = roots.ToArray() };
+                    Slide = slide, Spool = spool, HudCanvas = hudCanvas, Roots = roots };
             sources = _hudSources;
             return true;
         }
@@ -384,16 +528,40 @@ public sealed class DsResidentUi
         }
     }
 
-    static List<T> HudComponents<T>(List<Transform> scopes) where T : Component
+    static int CurrencyOwnerCount(Transform owner, CurrencyType expected)
+    {
+        var drivers = owner.GetComponents<CurrencyCounter>();
+        if (drivers.Length != 1) return 0;
+        return (CurrencyType)HudField(drivers[0], "currencyType") == expected ? 1 : 0;
+    }
+
+    static string[] DirectChildNames(Transform parent)
+    {
+        var names = new string[parent.childCount];
+        for (int i = 0; i < names.Length; i++) names[i] = parent.GetChild(i).name;
+        return names;
+    }
+
+    static Transform DirectHudChild(Transform parent, string exactName)
+    {
+        Transform match = null;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            var child = parent.GetChild(i);
+            if (!string.Equals(child.name, exactName, StringComparison.Ordinal)) continue;
+            if (match != null) throw new InvalidOperationException("duplicate direct HUD root: " + exactName);
+            match = child;
+        }
+        if (match == null) throw new InvalidOperationException("missing direct HUD root: " + exactName);
+        return match;
+    }
+
+    static List<T> HudComponents<T>(Transform scope) where T : Component
     {
         var result = new List<T>();
-        var seen = new HashSet<int>();
-        foreach (var scope in scopes)
-        {
-            if (scope == null) continue;
-            foreach (var component in scope.GetComponentsInChildren<T>(true))
-                if (component != null && seen.Add(component.GetInstanceID())) result.Add(component);
-        }
+        if (scope == null) return result;
+        foreach (var component in scope.GetComponentsInChildren<T>(true))
+            if (component != null) result.Add(component);
         return result;
     }
 
@@ -405,37 +573,6 @@ public sealed class DsResidentUi
             if (field != null) return field.GetValue(driver);
         }
         throw new MissingFieldException(driver.GetType().Name, name);
-    }
-
-    static Transform HudVisualRoot(Component driver, params string[] fields)
-    {
-        Transform root = driver.transform;
-        foreach (string field in fields)
-        {
-            object value = HudField(driver, field);
-            var array = value as Array;
-            if (array != null)
-                foreach (object element in array) root = IncludeHudVisual(root, element);
-            else root = IncludeHudVisual(root, value);
-        }
-        return root;
-    }
-
-    static Transform IncludeHudVisual(Transform root, object value)
-    {
-        var component = value as Component;
-        var go = value as GameObject;
-        var visual = component != null ? component.transform : go != null ? go.transform : null;
-        if (visual == null || !visual.gameObject.scene.IsValid()) return root;
-        return CommonHudRoot(root, visual);
-    }
-
-    static Transform CommonHudRoot(Transform a, Transform b)
-    {
-        if (a == null) return b;
-        for (var at = a; at != null; at = at.parent)
-            if (b == at || b.IsChildOf(at)) return at;
-        throw new InvalidOperationException("HUD dependencies do not share a live root");
     }
 
     public void Forget()

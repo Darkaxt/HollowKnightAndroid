@@ -1,0 +1,102 @@
+{
+  "scope": "Task99 V1/V2 focused HUD correction",
+  "gameVersion": "Linux Silksong 1.0.29980",
+  "hudPrefabPath": "_GameCameras/HudCamera/In-game/Anchor TL/Hud Canvas Offset/Hud Canvas",
+  "sourceBundles": [
+    {
+      "name": "coremanagers_assets__gamecameras.bundle",
+      "sha256": "d5d89c754efae405caf5c6aa4feb6af51005a2024da90063206d4ec82beb0565"
+    },
+    {
+      "name": "94696d22b6ed0a74097d1bd58feb4dce_monoscripts.bundle",
+      "sha256": "2784ed528172eccad9725f2d5f18f21c466f52b190030398c34c9461dd597bda"
+    }
+  ],
+  "directRoots": [
+    "Health",
+    "Extras",
+    "Thread",
+    "Tool Icons",
+    "Crest Get Effects",
+    "Delivery Icon",
+    "Counters",
+    "Blue_Health_Overblue_HUD_burst",
+    "Blue_Health_Overblue_HUD_drips"
+  ],
+  "exactInventory": {
+    "Health": {
+      "health_display PlayMakerFSM": 2
+    },
+    "Extras": {
+      "children": ["Reserve Bind", "Lava Bell HUD", "Maggot Charm"],
+      "PlayMakerFSMByChild": [1, 1, 1],
+      "PositionRelativeToByChild": [1, 1, 1],
+      "EventRegisterByChild": [4, 8, 3],
+      "AnimatorByChild": [0, 1, 0]
+    },
+    "Thread": {
+      "children": ["Spool"],
+      "spoolChildren": ["Bind Orb", "Thread Spool", "Spool Appear", "Bind Cancel Effects", "Curse Silk Cancel Effects"],
+      "Spool/SilkSpool": 1,
+      "Spool/Bind Orb/BindOrbHudFrame": 1
+    },
+    "Tool Icons": {
+      "children": ["Tool Icon U", "Tool Icon N", "Tool Icon D"],
+      "ToolHudIconByChild": [1, 1, 1]
+    },
+    "Crest Get Effects": {
+      "children": ["Crest Change Flash", "white_light", "Pt Dots", "black_solid"],
+      "Crest Change Flash/DeactivateAfter2dtkAnimation": 1,
+      "Crest Change Flash/tk2dSpriteAnimator": 1,
+      "Pt Dots/ParticleSystem": 1
+    },
+    "Delivery Icon": {
+      "DeliveryHudIcon": 1,
+      "children": ["Parent", "burst_appear_generic"]
+    },
+    "Counters": {
+      "children": ["Geo Counter", "Shard Counter", "Item Counter Template", "Liquid Counter Template"],
+      "CurrencyCounterStack": 1,
+      "Geo Counter/CurrencyCounter.Money": 1,
+      "Shard Counter/CurrencyCounter.Shard": 1,
+      "Item Counter Template/ItemCurrencyCounter": 1,
+      "Liquid Counter Template/LiquidReserveCounter": 1
+    },
+    "Blue_Health_Overblue_HUD_burst": {
+      "children": ["haze2", "particles"],
+      "CameraControlAnimationEvents": 1,
+      "Animator": 1,
+      "DisableAfterTime": 1
+    },
+    "Blue_Health_Overblue_HUD_drips": {
+      "children": ["Blue_Health_Overblue_HUD_drips"],
+      "rootParticleSystem": 1,
+      "childParticleSystem": 1
+    }
+  },
+  "compileManifest": {
+    "project": "tools/shared-patches-tests/obj/task99-journal-continuation-20260908/ss-project/PatchCheck.csproj",
+    "sourceCount": 64,
+    "entryFormat": "lowercase SHA-256 of file bytes, two spaces, repository-relative path, LF",
+    "order": "Compile Include order in PatchCheck.csproj",
+    "sha256OfConcatenatedEntries": "e680a8d856263afa0df61f24fcba80a72dec00dac0741ff48ed112e451598019"
+  },
+  "finalCompile": {
+    "command": "dotnet build tools/shared-patches-tests/obj/task99-journal-continuation-20260908/ss-project/PatchCheck.csproj --no-restore -c Release -p:UseSharedCompilation=false -nodeReuse:false --output tools/shared-patches-tests/obj/task99-hud-correction-20260911/final-compile/bin --nologo",
+    "receipt": "tools/shared-patches-tests/obj/task99-hud-correction-20260911/final-compile/completion.json",
+    "log": "tools/shared-patches-tests/obj/task99-hud-correction-20260911/final-compile/compiler.log",
+    "headAuthority": "The receipt is written after the final local amend and records git rev-parse HEAD. The tracked file cannot embed its own commit object ID.",
+    "expectedWarnings": 7,
+    "expectedErrors": 0,
+    "expectedPatchCheckDllSha256": "73bcc429de6301d09e899ccf21f3f5a8c1d1a585e9e0963f83f4e94a235e101d"
+  },
+  "staleCachedProjectFailure": {
+    "project": "tools/shared-patches-tests/obj/task99-hud-20260908T154833Z/ss-project/PatchCheck.csproj",
+    "log": "tools/shared-patches-tests/obj/task99-hud-correction-20260911/stale-cached-project/compiler.log",
+    "exitCode": 1,
+    "warnings": 0,
+    "errors": 3,
+    "reason": "The stale project omits DsPortOverlays.cs, DsPortProgress.cs, and DsPortMap.cs. It is preserved as a non-current failure and receives no compile credit."
+  },
+  "evidenceBoundary": "Bundle census and host tests establish exact identities, admission, mutation bookkeeping, and restoration mechanics. They do not prove Unity rendering, display-1 visibility, scale, clipping, ordering, or contextual activation; those remain device gates."
+}

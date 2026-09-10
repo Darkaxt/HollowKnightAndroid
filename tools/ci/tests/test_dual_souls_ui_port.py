@@ -1,4 +1,6 @@
+import hashlib
 import inspect
+import json
 import os
 import pathlib
 import re
@@ -11,6 +13,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 SPEC = REPO_ROOT / "docs" / "superpowers" / "specs" / "2026-08-31-dual-souls-ui-port-design.md"
 PLAN = REPO_ROOT / "docs" / "superpowers" / "plans" / "2026-08-31-dual-souls-ui-port.md"
 MATRIX = REPO_ROOT / "docs" / "verification" / "dual-souls-ui-port-matrix.md"
+HUD_EVIDENCE = REPO_ROOT / "docs" / "verification" / "task99-hud-29980-evidence.json"
 SOURCE_AUDIT = REPO_ROOT / "docs" / "verification" / "dualscreen-source-audit.md"
 DUALSCREEN_SOURCES = (
     REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen"
@@ -1752,12 +1755,71 @@ static class Program
         body = csharp_method_body(source, r"public\s+bool\s+TryGetHudSources\s*\([^)]*\)")
         for required in ("GameCameras.SilentInstance", "GetComponent<HUDCamera>()", "camera.GameplayChild",
                          "cameras.hudCanvasSlideOut", "cameras.silkSpool", "OwnsCurrentRig",
+                         'gameplay.transform.Find(HudCanvasPath)', "DirectHudChild(hudCanvas",
+                         'DirectHudChild(direct[2], "Spool")', 'DirectHudChild(spoolRoot, "Bind Orb")',
                          "HudComponents<PlayMakerFSM>", 'FsmName == "health_display"',
-                         "HudComponents<CurrencyCounter>", "HudComponents<BindOrbHudFrame>",
-                         "HudComponents<ToolHudIcon>", "Time.unscaledTime + 0.5f", "_nextHudProbe = 0f"):
+                         "HudComponents<CurrencyCounterStack>", "HudComponents<CurrencyCounter>",
+                         "HudComponents<BindOrbHudFrame>", "HudComponents<ToolHudIcon>",
+                         "new DsHud29980Inventory", "DsHud29980Topology.TryAdmit",
+                         "Time.unscaledTime + 0.5f", "_nextHudProbe = 0f"):
             self.assertIn(required, body)
+        for contextual_owner in (
+            "PositionRelativeTo", "EventRegister", "DeliveryHudIcon",
+            "DeactivateAfter2dtkAnimation", "CameraControlAnimationEvents",
+            "DisableAfterTime", "ItemCurrencyCounter", "LiquidReserveCounter",
+            "ParticleSystem", "Animator",
+        ):
+            self.assertIn(contextual_owner, body)
+        state = read(PORT_HUD_STATE)
+        for exact_rule in (
+            "class DsHud29980Inventory", "class DsHud29980Topology",
+            "TryAdmit(DsHud29980Inventory value", "HealthDisplayDrivers != 2",
+            "ExtrasEventRegisters, 4, 8, 3", "ExtrasAnimators, 0, 1, 0",
+            "SpoolChildren, Spool",
+            "DeliveryChildren, Delivery", "DeliveryHudIcons != 1",
+            "CrestDeactivators != 1", "BurstCameraControls != 1",
+            "DripsRootParticleSystems != 1",
+        ):
+            self.assertIn(exact_rule, state)
+        for exact_root in ("Health", "Extras", "Thread", "Tool Icons", "Crest Get Effects",
+                           "Delivery Icon", "Counters", "Blue_Health_Overblue_HUD_burst",
+                           "Blue_Health_Overblue_HUD_drips"):
+            self.assertIn(f'"{exact_root}"', state)
+        self.assertIn('const string HudCanvasPath = "Anchor TL/Hud Canvas Offset/Hud Canvas"', source)
+        self.assertNotIn("HudVisualRoot", source)
+        self.assertNotIn("HudComponents<BlueHealth>", body)
+        self.assertNotIn("GetComponents<BlueHealth>", body)
         self.assertNotIn("GameObject.Find(", body)
         self.assertNotIn("Resources.FindObjectsOfTypeAll", body)
+
+    def test_hud_evidence_records_exact_census_manifest_and_host_boundary(self):
+        evidence = json.loads(read(HUD_EVIDENCE))
+        self.assertEqual("Linux Silksong 1.0.29980", evidence["gameVersion"])
+        self.assertEqual(9, len(evidence["directRoots"]))
+        self.assertEqual(
+            ["Bind Orb", "Thread Spool", "Spool Appear", "Bind Cancel Effects",
+             "Curse Silk Cancel Effects"],
+            evidence["exactInventory"]["Thread"]["spoolChildren"],
+        )
+        self.assertEqual(
+            [0, 1, 0], evidence["exactInventory"]["Extras"]["AnimatorByChild"]
+        )
+        self.assertIn("do not prove Unity rendering", evidence["evidenceBoundary"])
+        self.assertIn("final local amend", evidence["finalCompile"]["headAuthority"])
+        self.assertEqual(3, evidence["staleCachedProjectFailure"]["errors"])
+
+        project = REPO_ROOT / evidence["compileManifest"]["project"]
+        includes = re.findall(r'<Compile Include="([^"]+)"', read(project))
+        entries = []
+        for included in includes:
+            path = pathlib.Path(included)
+            relative = path.relative_to(REPO_ROOT).as_posix()
+            entries.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {relative}\n")
+        self.assertEqual(evidence["compileManifest"]["sourceCount"], len(entries))
+        self.assertEqual(
+            evidence["compileManifest"]["sha256OfConcatenatedEntries"],
+            hashlib.sha256("".join(entries).encode()).hexdigest(),
+        )
 
     def test_hud_restoration_precedes_every_composition_destruction(self):
         frame = read(PORT_FRAME)

@@ -44,6 +44,57 @@ accepted. `DsPortHud.cs` and `DsPortHudState.cs` remain `REWRITE_PORT`, not
 accepted HUD implementations. Any matrix text below describing accepted HUD
 state is historical and superseded by this section.
 
+### Task99 V1/V2 focused HUD candidate
+
+The exact Linux Silksong `1.0.29980` prefab path is
+`_GameCameras/HudCamera/In-game/Anchor TL/Hud Canvas Offset/Hud Canvas`.
+The candidate discovers that canvas from the typed current `GameCameras` /
+`HUDCamera.GameplayChild` rig and routes all nine direct children. It does not
+route the whole canvas or derive independent roots from serialized visual
+fields.
+
+| Exact direct child | Classification | Concrete ownership retained |
+| --- | --- | --- |
+| `Health` | **routed persistent** | exactly two `health_display` `PlayMakerFSM` drivers in the complete health/effect subtree |
+| `Extras` | **routed contextual** | exact children `Reserve Bind`, `Lava Bell HUD`, `Maggot Charm`; respectively 1/1/1 `PlayMakerFSM`, 1/1/1 `PositionRelativeTo`, 4/8/3 `EventRegister`, and 0/1/0 `Animator` owners |
+| `Thread` | **routed persistent** | sole `Spool` child with exact children `Bind Orb`, `Thread Spool`, `Spool Appear`, `Bind Cancel Effects`, `Curse Silk Cancel Effects`; one `SilkSpool` and nested `Bind Orb`/`BindOrbHudFrame` travel as one root |
+| `Tool Icons` | **routed persistent** | exact direct `Tool Icon U/N/D` children, each with one `ToolHudIcon` |
+| `Crest Get Effects` | **routed contextual** | exact children `Crest Change Flash`, `white_light`, `Pt Dots`, `black_solid`; flash owns one `DeactivateAfter2dtkAnimation` and one `tk2dSpriteAnimator`, dots own one `ParticleSystem`; no invented persistent Crest sprite |
+| `Delivery Icon` | **routed contextual** | one root `DeliveryHudIcon` with exact children `Parent` and `burst_appear_generic` |
+| `Counters` | **routed persistent** | exact `Geo Counter`, `Shard Counter`, `Item Counter Template`, `Liquid Counter Template` children; one root `CurrencyCounterStack`, one Money and one Shard `CurrencyCounter`, one `ItemCurrencyCounter`, and one `LiquidReserveCounter` |
+| `Blue_Health_Overblue_HUD_burst` | **routed contextual** | exact `haze2`/`particles` children and one each root `CameraControlAnimationEvents`, `Animator`, and `DisableAfterTime`; no unsupported `BlueHealth` assumption |
+| `Blue_Health_Overblue_HUD_drips` | **routed contextual** | one same-named direct child and exactly one `ParticleSystem` on both root and child |
+
+The early-game device state cannot currently reach Reserve Bind, Lava Bell,
+Maggot Charm, delivery, Crest-acquisition, overblue, or item/liquid-template
+presentations; these are **currently unreachable early-game**, not omitted.
+Their owning direct roots still route so later native activation and spawned
+children remain on display 1. The Unity-independent production admission core
+`DsHud29980Topology.TryAdmit` is called by `DsResidentUi`; any missing,
+duplicate, reordered, or wrongly owned exact inventory fact fails closed and the
+normal 0.5-second probe remains reachable. Focused host tests prove nine-root
+mutation, empty original parent, private target layer, unchanged
+driver/active/child state, spawned-child adoption, exact restoration, and
+rejection of genuinely nested route roots. They do not claim Unity rendering or
+fake host display visibility. The exact cached compile is host/source evidence
+only; visible scale, clipping, ordering, and native activation remain device
+gates.
+
+Tracked small evidence is
+`docs/verification/task99-hud-29980-evidence.json`. It records both exact source
+bundle hashes, the concrete census, the 64-source compile-manifest algorithm and
+hash, and the honest host/device boundary. Final compile command:
+`dotnet build tools/shared-patches-tests/obj/task99-journal-continuation-20260908/ss-project/PatchCheck.csproj --no-restore -c Release -p:UseSharedCompilation=false -nodeReuse:false --output tools/shared-patches-tests/obj/task99-hud-correction-20260911/final-compile/bin --nologo`.
+The post-amend receipt/log are
+`tools/shared-patches-tests/obj/task99-hud-correction-20260911/final-compile/completion.json`
+and `compiler.log`; the receipt records UTC start/end, exit code, `0 errors / 7
+existing warnings`, output SHA-256, compiled-manifest SHA-256, and the exact
+amended `git rev-parse HEAD`. The literal self commit ID cannot be embedded in
+its own tracked tree, so the post-commit receipt is authoritative for that
+field. The failed stale project is preserved separately at
+`tools/shared-patches-tests/obj/task99-hud-correction-20260911/stale-cached-project/compiler.log`
+(exit 1, 0 warnings, 3 missing-source errors) and receives no compile credit.
+
 The active gate is plan V0–V5: pin one bounded Hollow Knight reference, route the
 four minimum essential native Silksong groups directly, inventory every
 additional source-proven or runtime-observed Silksong HUD mechanic, integrate

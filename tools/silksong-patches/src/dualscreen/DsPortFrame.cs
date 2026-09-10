@@ -87,7 +87,7 @@ public sealed class DsPortFrame
     public long SelectionEpoch { get; private set; }
     public InventoryPane GetResidentPane(DsPageRole role) => _built ? _resident.GetPane(ToPaneType(role)) : null;
 
-    public bool TryGetHudSlot(DsHudRole role, int toolIndex, int toolCount, out Rect slot)
+    public bool TryGetHudSlot(DsHudRole role, int roleIndex, int roleCount, out Rect slot)
     {
         slot = new Rect();
         if (!HudReady) return false;
@@ -101,15 +101,20 @@ public sealed class DsPortFrame
                 left = -0.46f; right = -0.08f; lo = Mathf.Lerp(bottom, top, 0.53f); break;
             case DsHudRole.Silk:
                 left = -0.46f; right = -0.08f; hi = Mathf.Lerp(bottom, top, 0.44f); break;
-            case DsHudRole.Money:
-                left = -0.05f; right = 0.10f; lo = Mathf.Lerp(bottom, top, 0.53f); break;
-            case DsHudRole.Shards:
-                left = -0.05f; right = 0.10f; hi = Mathf.Lerp(bottom, top, 0.44f); break;
-            case DsHudRole.Bind:
+            case DsHudRole.Counters:
+                left = -0.05f; right = 0.10f; break;
+            case DsHudRole.Status:
                 left = 0.13f; right = 0.20f; break;
+            case DsHudRole.Tool:
+                left = 0.22f; right = 0.46f; break;
             default:
-                float step = 0.12f / Mathf.Max(1, toolCount);
-                left = 0.22f + step * toolIndex; right = left + step * 0.90f; break;
+                // The two transient roots deliberately share the corresponding
+                // persistent semantic region: Crest acquisition over loadout,
+                // Delivery over status. They are not persistent replacement art.
+                if (roleCount != 2) return false;
+                left = roleIndex == 0 ? 0.22f : 0.13f;
+                right = roleIndex == 0 ? 0.46f : 0.20f;
+                break;
         }
         slot = Rect.MinMaxRect(left * w, lo, right * w, hi);
         return true;

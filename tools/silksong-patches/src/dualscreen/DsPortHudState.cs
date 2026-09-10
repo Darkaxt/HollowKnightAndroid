@@ -3,7 +3,93 @@
 using System;
 using System.Collections.Generic;
 
-public enum DsHudRole { Health, Silk, Money, Shards, Bind, Tool }
+public enum DsHudRole { Health, Silk, Counters, Tool, Status, Context }
+
+// Exact Linux Silksong 1.0.29980 HUD admission contract. Unity discovery
+// supplies this inventory; host tests execute these same production rules.
+public sealed class DsHud29980Inventory
+{
+    public string[] RootNames, ExtrasChildren, ThreadChildren, SpoolChildren, ToolChildren;
+    public string[] CounterChildren, CrestChildren, DeliveryChildren, BurstChildren, DripsChildren;
+    public int[] ExtrasPlayMakerFsms, ExtrasPositioners, ExtrasEventRegisters, ExtrasAnimators;
+    public int HealthDisplayDrivers, SilkSpools, BindOrbFrames, ToolHudIcons;
+    public int CounterStacks, MoneyCounters, ShardCounters, ItemCounterTemplates, LiquidCounterTemplates;
+    public int DeliveryHudIcons, CrestDeactivators, CrestAnimators, CrestParticleSystems;
+    public int BurstCameraControls, BurstAnimators, BurstDisableAfterTime;
+    public int DripsRootParticleSystems, DripsChildParticleSystems;
+}
+
+public static class DsHud29980Topology
+{
+    public static readonly string[] RootNames =
+    {
+        "Health", "Extras", "Thread", "Tool Icons", "Crest Get Effects",
+        "Delivery Icon", "Counters", "Blue_Health_Overblue_HUD_burst",
+        "Blue_Health_Overblue_HUD_drips",
+    };
+    static readonly string[] Extras = { "Reserve Bind", "Lava Bell HUD", "Maggot Charm" };
+    static readonly string[] Thread = { "Spool" };
+    static readonly string[] Spool =
+        { "Bind Orb", "Thread Spool", "Spool Appear", "Bind Cancel Effects", "Curse Silk Cancel Effects" };
+    static readonly string[] Tools = { "Tool Icon U", "Tool Icon N", "Tool Icon D" };
+    static readonly string[] Counters =
+        { "Geo Counter", "Shard Counter", "Item Counter Template", "Liquid Counter Template" };
+    static readonly string[] Crest = { "Crest Change Flash", "white_light", "Pt Dots", "black_solid" };
+    static readonly string[] Delivery = { "Parent", "burst_appear_generic" };
+    static readonly string[] Burst = { "haze2", "particles" };
+    static readonly string[] Drips = { "Blue_Health_Overblue_HUD_drips" };
+
+    public static bool TryAdmit(DsHud29980Inventory value, out string reason)
+    {
+        if (value == null) return Reject("inventory missing", out reason);
+        if (!Exact(value.RootNames, RootNames)) return Reject("Hud Canvas direct roots changed", out reason);
+        if (!Exact(value.ExtrasChildren, Extras) || !Exact(value.ExtrasPlayMakerFsms, 1, 1, 1) ||
+            !Exact(value.ExtrasPositioners, 1, 1, 1) ||
+            !Exact(value.ExtrasEventRegisters, 4, 8, 3) || !Exact(value.ExtrasAnimators, 0, 1, 0))
+            return Reject("Extras topology/owners changed", out reason);
+        if (!Exact(value.ThreadChildren, Thread) || !Exact(value.SpoolChildren, Spool) ||
+            value.SilkSpools != 1 || value.BindOrbFrames != 1)
+            return Reject("Thread/Spool/Bind Orb ownership changed", out reason);
+        if (!Exact(value.ToolChildren, Tools) || value.ToolHudIcons != 3)
+            return Reject("Tool Icons ownership changed", out reason);
+        if (!Exact(value.CounterChildren, Counters) || value.CounterStacks != 1 ||
+            value.MoneyCounters != 1 || value.ShardCounters != 1 ||
+            value.ItemCounterTemplates != 1 || value.LiquidCounterTemplates != 1)
+            return Reject("Counters ownership changed", out reason);
+        if (value.HealthDisplayDrivers != 2)
+            return Reject("Health health_display ownership changed", out reason);
+        if (!Exact(value.DeliveryChildren, Delivery) || value.DeliveryHudIcons != 1)
+            return Reject("Delivery Icon topology/owner changed", out reason);
+        if (!Exact(value.CrestChildren, Crest) || value.CrestDeactivators != 1 ||
+            value.CrestAnimators != 1 || value.CrestParticleSystems != 1)
+            return Reject("Crest Get Effects ownership changed", out reason);
+        if (!Exact(value.BurstChildren, Burst) || value.BurstCameraControls != 1 ||
+            value.BurstAnimators != 1 || value.BurstDisableAfterTime != 1)
+            return Reject("overblue burst ownership changed", out reason);
+        if (!Exact(value.DripsChildren, Drips) || value.DripsRootParticleSystems != 1 ||
+            value.DripsChildParticleSystems != 1)
+            return Reject("overblue drips ownership changed", out reason);
+        reason = null;
+        return true;
+    }
+
+    static bool Exact(string[] actual, string[] expected)
+    {
+        if (actual == null || actual.Length != expected.Length) return false;
+        for (int i = 0; i < actual.Length; i++)
+            if (!string.Equals(actual[i], expected[i], StringComparison.Ordinal)) return false;
+        return true;
+    }
+
+    static bool Exact(int[] actual, params int[] expected)
+    {
+        if (actual == null || actual.Length != expected.Length) return false;
+        for (int i = 0; i < actual.Length; i++) if (actual[i] != expected[i]) return false;
+        return true;
+    }
+
+    static bool Reject(string message, out string reason) { reason = message; return false; }
+}
 
 public struct DsHudPose
 {
@@ -123,8 +209,12 @@ public sealed class DsPortHudState
                 (int)route.Role < 0 || (int)route.Role >= counts.Length) return false;
             counts[(int)route.Role]++;
         }
+        // Exact 1.0.29980 Hud Canvas topology: Health plus its two sibling
+        // overblue effects, one Thread, one Counters root, one Tool Icons root,
+        // one status root (Extras), and two contextual roots.
+        int[] expected = { 3, 1, 1, 1, 1, 2 };
         for (int i = 0; i < counts.Length; i++)
-            if (counts[i] == 0 || (i != (int)DsHudRole.Tool && counts[i] != 1)) return false;
+            if (counts[i] != expected[i]) return false;
         // Independent minimal roots only. Never route an ancestor of an owned host.
         for (object at = target; _nodes.Alive(at); at = _nodes.Parent(at))
             if (roots.Contains(at)) return false;

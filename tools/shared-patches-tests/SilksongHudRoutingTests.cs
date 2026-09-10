@@ -49,16 +49,42 @@ public sealed class SilksongHudRoutingTests
         public readonly object Owner = new();
         public readonly DsPortHudState State;
         public readonly DsHudRoute[] Routes;
+        public readonly Node Spool, BindOrb;
         public Rig()
         {
             State = new DsPortHudState(Nodes);
-            Routes = Enum.GetValues<DsHudRole>().Select((role, i) =>
+            Node health = RootAt(1), thread = RootAt(2), counters = RootAt(3);
+            Node extras = RootAt(4), delivery = RootAt(5), tools = RootAt(6);
+            Node crestEffects = RootAt(7), overblueBurst = RootAt(8), overblueDrips = RootAt(9);
+            foreach (var root in new[]
             {
-                var n = new Node { Pose = PoseAt(i + 1), Layer = i + 8 };
-                Attach(n, Vanilla);
-                return new DsHudRoute(role.ToString(), role, n, PoseAt(100 + i));
-            }).ToArray();
+                health, extras, thread, tools, crestEffects, delivery, counters,
+                overblueBurst, overblueDrips,
+            }) Attach(root, Vanilla);
+
+            Spool = new Node { Driver = "SilkSpool" }; Attach(Spool, thread);
+            BindOrb = new Node { Driver = "BindOrbHudFrame" }; Attach(BindOrb, Spool);
+            for (int i = 0; i < 3; i++) Attach(new Node { Driver = "ToolHudIcon-" + i }, tools);
+            var stack = new Node { Driver = "CurrencyCounterStack" }; Attach(stack, counters);
+            Attach(new Node { Driver = "Money" }, stack); Attach(new Node { Driver = "Shard" }, stack);
+            Attach(new Node { Driver = "Reserve Bind" }, extras);
+            Attach(new Node { Driver = "Lava Bell HUD" }, extras);
+            Attach(new Node { Driver = "Maggot Charm" }, extras);
+
+            Routes = new[]
+            {
+                new DsHudRoute("Health", DsHudRole.Health, health, PoseAt(100)),
+                new DsHudRoute("Thread", DsHudRole.Silk, thread, PoseAt(101)),
+                new DsHudRoute("Counters", DsHudRole.Counters, counters, PoseAt(102)),
+                new DsHudRoute("Extras", DsHudRole.Status, extras, PoseAt(103)),
+                new DsHudRoute("Delivery Icon", DsHudRole.Context, delivery, PoseAt(104)),
+                new DsHudRoute("Tool Icons", DsHudRole.Tool, tools, PoseAt(105)),
+                new DsHudRoute("Crest Get Effects", DsHudRole.Context, crestEffects, PoseAt(106)),
+                new DsHudRoute("Blue_Health_Overblue_HUD_burst", DsHudRole.Health, overblueBurst, PoseAt(107)),
+                new DsHudRoute("Blue_Health_Overblue_HUD_drips", DsHudRole.Health, overblueDrips, PoseAt(108)),
+            };
         }
+        static Node RootAt(int index) => new Node { Pose = PoseAt(index), Layer = index + 7 };
         public bool Bind(DsHudEligibility? eligibility = null) =>
             State.Bind(Owner, Routes, Hud, 6, eligibility ?? Eligible());
         public Node Root(int i = 0) => (Node)Routes[i].Node;
@@ -247,6 +273,140 @@ public sealed class SilksongHudRoutingTests
         });
         Assert.Equal(PoseAt(1), r.Root().Pose); Assert.Equal(8, r.Root().Layer);
         retryOwnerUpdate(); Assert.True(r.Root().Alive);
+    }
+
+    static DsHud29980Inventory Exact29980Inventory() => new DsHud29980Inventory
+    {
+        RootNames = new[]
+        {
+            "Health", "Extras", "Thread", "Tool Icons", "Crest Get Effects",
+            "Delivery Icon", "Counters", "Blue_Health_Overblue_HUD_burst",
+            "Blue_Health_Overblue_HUD_drips",
+        },
+        ExtrasChildren = new[] { "Reserve Bind", "Lava Bell HUD", "Maggot Charm" },
+        ThreadChildren = new[] { "Spool" },
+        SpoolChildren = new[]
+            { "Bind Orb", "Thread Spool", "Spool Appear", "Bind Cancel Effects", "Curse Silk Cancel Effects" },
+        ToolChildren = new[] { "Tool Icon U", "Tool Icon N", "Tool Icon D" },
+        CounterChildren = new[]
+            { "Geo Counter", "Shard Counter", "Item Counter Template", "Liquid Counter Template" },
+        ExtrasPlayMakerFsms = new[] { 1, 1, 1 },
+        ExtrasPositioners = new[] { 1, 1, 1 },
+        ExtrasEventRegisters = new[] { 4, 8, 3 },
+        ExtrasAnimators = new[] { 0, 1, 0 },
+        CrestChildren = new[] { "Crest Change Flash", "white_light", "Pt Dots", "black_solid" },
+        DeliveryChildren = new[] { "Parent", "burst_appear_generic" },
+        BurstChildren = new[] { "haze2", "particles" },
+        DripsChildren = new[] { "Blue_Health_Overblue_HUD_drips" },
+        HealthDisplayDrivers = 2,
+        SilkSpools = 1,
+        BindOrbFrames = 1,
+        ToolHudIcons = 3,
+        CounterStacks = 1,
+        MoneyCounters = 1,
+        ShardCounters = 1,
+        ItemCounterTemplates = 1,
+        LiquidCounterTemplates = 1,
+        DeliveryHudIcons = 1,
+        CrestDeactivators = 1,
+        CrestAnimators = 1,
+        CrestParticleSystems = 1,
+        BurstCameraControls = 1,
+        BurstAnimators = 1,
+        BurstDisableAfterTime = 1,
+        DripsRootParticleSystems = 1,
+        DripsChildParticleSystems = 1,
+    };
+
+    [Fact]
+    public void Exact_29980_contextual_inventory_is_admitted_by_production_rules()
+    {
+        Assert.True(DsHud29980Topology.TryAdmit(Exact29980Inventory(), out var reason), reason);
+    }
+
+    [Theory]
+    [InlineData("root-order")]
+    [InlineData("extras-child")]
+    [InlineData("extras-owner")]
+    [InlineData("thread-child")]
+    [InlineData("thread-owner")]
+    [InlineData("tool-owner")]
+    [InlineData("health-owner")]
+    [InlineData("delivery-child")]
+    [InlineData("delivery-owner")]
+    [InlineData("crest-owner")]
+    [InlineData("burst-owner")]
+    [InlineData("drips-owner")]
+    [InlineData("counter-owner")]
+    [InlineData("counter-template")]
+    public void Exact_29980_contextual_inventory_fails_closed_on_missing_or_duplicate_identity(string defect)
+    {
+        var inventory = Exact29980Inventory();
+        if (defect == "root-order") (inventory.RootNames[0], inventory.RootNames[1]) =
+            (inventory.RootNames[1], inventory.RootNames[0]);
+        if (defect == "extras-child") inventory.ExtrasChildren[0] = "Reserve Bind duplicate";
+        if (defect == "extras-owner") inventory.ExtrasEventRegisters[1]--;
+        if (defect == "thread-child") inventory.SpoolChildren[4] = "Bind Cancel Effects";
+        if (defect == "thread-owner") inventory.BindOrbFrames++;
+        if (defect == "tool-owner") inventory.ToolHudIcons--;
+        if (defect == "health-owner") inventory.HealthDisplayDrivers++;
+        if (defect == "delivery-child") inventory.DeliveryChildren[1] = "Parent";
+        if (defect == "delivery-owner") inventory.DeliveryHudIcons++;
+        if (defect == "crest-owner") inventory.CrestDeactivators--;
+        if (defect == "burst-owner") inventory.BurstCameraControls++;
+        if (defect == "drips-owner") inventory.DripsChildParticleSystems--;
+        if (defect == "counter-owner") inventory.MoneyCounters++;
+        if (defect == "counter-template") inventory.ItemCounterTemplates--;
+        Assert.False(DsHud29980Topology.TryAdmit(inventory, out var reason));
+        Assert.False(string.IsNullOrEmpty(reason));
+    }
+
+    [Fact]
+    public void Real_hud_canvas_direct_groups_route_as_one_safe_topology_and_restore_exactly()
+    {
+        var r = new Rig();
+        string[] names =
+        {
+            "Health", "Extras", "Thread", "Tool Icons", "Crest Get Effects",
+            "Delivery Icon", "Counters", "Blue_Health_Overblue_HUD_burst",
+            "Blue_Health_Overblue_HUD_drips",
+        };
+        var roots = r.Routes.Select(route => (Node)route.Node).ToArray();
+        var originalOrder = r.Vanilla.Children.ToArray();
+        var originalPoses = roots.Select(root => root.Pose).ToArray();
+        var originalLayers = roots.Select(root => root.Layer).ToArray();
+        var originalDrivers = roots.Select(root => root.Driver).ToArray();
+        r.Root(3).Active = false; // Extras is inactive in the early-game fixture.
+
+        Assert.Equal(names.Order(), r.Routes.Select(route => route.Key).Order());
+        Assert.Equal(9, r.Routes.Select(route => route.Target.X).Distinct().Count());
+        Assert.True(r.Bind());
+        Assert.Empty(r.Vanilla.Children);
+        Assert.All(roots, root =>
+        {
+            Assert.Same(r.Hud, root.Parent);
+            Assert.Equal(6, root.Layer);
+        });
+        Assert.Equal(originalDrivers, roots.Select(root => root.Driver));
+        Assert.False(r.Root(3).Active);
+        Assert.Same(r.Root(1), r.Spool.Parent); Assert.Same(r.Spool, r.BindOrb.Parent);
+
+        var spawned = new Node { Layer = 23, Driver = "spawned-bind-effect" };
+        Attach(spawned, r.BindOrb);
+        r.State.LateTick(Eligible());
+        Assert.Equal(6, spawned.Layer); Assert.Same(r.BindOrb, spawned.Parent);
+
+        r.State.Restore();
+        Assert.Equal(originalOrder, r.Vanilla.Children);
+        for (int i = 0; i < roots.Length; i++)
+        {
+            Assert.Same(r.Vanilla, roots[i].Parent);
+            Assert.Equal(originalPoses[i], roots[i].Pose);
+            Assert.Equal(originalLayers[i], roots[i].Layer);
+            Assert.Equal(originalDrivers[i], roots[i].Driver);
+        }
+        Assert.Equal(23, spawned.Layer); Assert.Same(r.BindOrb, spawned.Parent);
+        Assert.False(r.Root(3).Active);
     }
 
     [Fact]
