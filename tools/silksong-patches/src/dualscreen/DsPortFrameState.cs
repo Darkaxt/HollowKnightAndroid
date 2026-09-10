@@ -25,6 +25,13 @@ public static class DsPortFrameState
         };
     }
 
+    // Re-tap the selected companion tab to hide/reopen pages. Selecting another
+    // tab opens it. Neither action is native inventory or full transport off.
+    public static bool PagesVisibleAfterTab(bool visible, bool alreadySelected)
+    {
+        return !alreadySelected || !visible;
+    }
+
     public static float LabelAlpha(bool selected)
     {
         return selected ? 1f : 0.6f;

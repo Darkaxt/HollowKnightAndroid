@@ -7,6 +7,7 @@ using System.Collections;
 using DualSouls.DualScreen;
 using UnityEngine;
 
+[DefaultExecutionOrder(10000)]
 public class DualScreenV2 : MonoBehaviour
 {
     const string KEY_DUAL_SCREEN = "dualscreen_enabled";
@@ -20,15 +21,23 @@ public class DualScreenV2 : MonoBehaviour
     PortContent _portContent;
     DsInput _input;
     DsTestCard _card;
+    DsHudReleaseState _releaseState;
+    DsHudReleasePump _releasePump;
     int _displayCount;
     float _nextFence;
     float _idleSince = -1f;
     bool _everInGame;
+    GameManager _gameManager;
+    DsHudManagerCallbacks _managerCallbacks;
+    GameManager.GameStateEvent _stateHandler;
+    GameManager.PausedEvent _pauseHandler;
+    Action _unloadHandler;
+    GameManager.EnterSceneEvent _finishedHandler;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
     {
-        if (!ShouldRun()) return;
+        if (!ShouldRun() || !ReferenceEquals(Instance, null) || DsHudReleasePump.BlocksReplacement) return;
         var go = new GameObject("__DualScreenV2__");
         DontDestroyOnLoad(go);
         go.AddComponent<DualScreenV2>();
@@ -41,10 +50,23 @@ public class DualScreenV2 : MonoBehaviour
 
     void Start()
     {
+        if (DsHudReleasePump.BlocksReplacement) { Destroy(gameObject); return; }
         Instance = this;
+        _managerCallbacks = new DsHudManagerCallbacks(() => GameManager.SilentInstance,
+            () => { if (_port != null) _port.RestoreHud(); }, BeforeNativeUnload, OnFinishedEnteringScene);
+        BindGameManager();
         DsTouch.Enabled = false;
 
-        _screen = new DsPresentation(transform);
+        // This owner has no routing/input/activation loop. Keeping the presentation
+        // beneath it prevents destruction of V2 itself from destroying native roots
+        // while a failed restoration still needs a later Unity update to retry.
+        _releaseState = new DsHudReleaseState(
+            () => { if (_port != null) _port.RestoreHud(); },
+            () => { if (_portContent != null) _portContent.Dispose(); else if (_port != null) _port.Dispose(); },
+            () => { if (_screen != null) _screen.Dispose(); },
+            RetireReleasedOwners);
+        _releasePump = DsHudReleasePump.Create(_releaseState);
+        _screen = new DsPresentation(_releasePump.transform);
         _host = new DirectDisplayHost(
             requestActivation: RequestActivation,
             setPresentationVisible: visible =>
@@ -63,7 +85,7 @@ public class DualScreenV2 : MonoBehaviour
 
     void RequestActivation()
     {
-        if (_host == null || _host.IsDisposed) return;
+        if (_releaseState == null || !_releaseState.CanRoute || _host == null || _host.IsDisposed) return;
         StartCoroutine(Bringup());
     }
 
@@ -73,6 +95,7 @@ public class DualScreenV2 : MonoBehaviour
     /// </summary>
     IEnumerator Bringup()
     {
+        if (_releaseState == null || !_releaseState.CanRoute) yield break;
         var screen = _screen;
         var host = _host;
         if (screen == null || host == null) yield break;
@@ -82,7 +105,7 @@ public class DualScreenV2 : MonoBehaviour
         // Shutdown may dispose both retained owners while Unity is settling
         // display activation. The old coroutine must not publish into a new or
         // released host/presentation generation when it resumes.
-        if (host.IsDisposed || !ReferenceEquals(_host, host) ||
+        if (!_releaseState.CanRoute || host.IsDisposed || !ReferenceEquals(_host, host) ||
             !ReferenceEquals(_screen, screen)) yield break;
 
         bool present = Display.displays.Length > DsPresentation.DISPLAY;
@@ -107,6 +130,7 @@ public class DualScreenV2 : MonoBehaviour
             {
                 _input = new DsInput();
                 _port = new DsPortRuntime(screen);
+                if (_managerCallbacks.TransitionPending) _port.BeforeSceneTransition();
                 _portContent = new PortContent(_port);
                 host.AttachContent(_portContent);
             }
@@ -118,6 +142,9 @@ public class DualScreenV2 : MonoBehaviour
 
     void Update()
     {
+        if (_releaseState == null || !_releaseState.CanRoute) return;
+        BindGameManager();
+        if (_host != null) _host.SetEnabled(ShouldRun());
         if (_host == null || !_host.IsActive || _screen == null || !_screen.Ready)
             return;
 
@@ -166,8 +193,72 @@ public class DualScreenV2 : MonoBehaviour
         _port.Tick(dt);
     }
 
+    void LateUpdate()
+    {
+        if (_releaseState == null || !_releaseState.CanRoute) return;
+        if (_port == null) return;
+        if (_host == null || !_host.IsActive || _screen == null || !_screen.Ready)
+        { _port.RestoreHud(); return; }
+        _port.LateTick();
+    }
+
+    void BindGameManager()
+    {
+        var current = GameManager.SilentInstance;
+        if (ReferenceEquals(current, _gameManager)) return;
+        if (_port != null) _port.RestoreHud();
+        UnbindGameManager();
+        _gameManager = current;
+        var subscription = _managerCallbacks.Bind(current, current == null || current.IsInSceneTransition);
+        if (_gameManager == null) return;
+        // Store these exact native delegate instances. Their subscription closes
+        // over THIS manager, and checks SilentInstance again at invocation time.
+        _stateHandler = state => subscription.State(
+            state == GlobalEnums.GameState.EXITING_LEVEL || state == GlobalEnums.GameState.LOADING,
+            state == GlobalEnums.GameState.PLAYING);
+        _pauseHandler = paused => subscription.Pause(paused);
+        _unloadHandler = subscription.Unloading;
+        _finishedHandler = () => subscription.Finished();
+        _gameManager.GameStateChange += _stateHandler;
+        _gameManager.GamePausedChange += _pauseHandler;
+        _gameManager.UnloadingLevel += _unloadHandler;
+        _gameManager.OnFinishedEnteringScene += _finishedHandler;
+    }
+
+    void UnbindGameManager()
+    {
+        // Use managed identity even when Unity marks the old owner destroyed.
+        if (_managerCallbacks != null) _managerCallbacks.Unbind();
+        if (ReferenceEquals(_gameManager, null)) return;
+        _gameManager.GameStateChange -= _stateHandler;
+        _gameManager.GamePausedChange -= _pauseHandler;
+        _gameManager.UnloadingLevel -= _unloadHandler;
+        _gameManager.OnFinishedEnteringScene -= _finishedHandler;
+        _gameManager = null;
+        _stateHandler = null;
+        _pauseHandler = null;
+        _unloadHandler = null;
+        _finishedHandler = null;
+    }
+
+    void BeforeNativeUnload()
+    {
+        // Exact 1.0.29980 managed seam: UnloadingLevel precedes transition
+        // UnloadScene, direct/additive loads, and Quit_To_Menu.ActivateAsync.
+        // GameStateChange(EXITING_LEVEL) gives the earlier normal-path boundary.
+        // A completion or sceneUnloaded callback cannot provide this guarantee.
+        if (_port != null) _port.BeforeSceneTransition();
+    }
+
+    void OnFinishedEnteringScene()
+    {
+        // Completion only REARMS routing; it is never used as pre-unload proof.
+        if (_port != null) _port.FinishedEnteringScene();
+    }
+
     void OnDisplaysUpdated()
     {
+        if (_releaseState == null || !_releaseState.CanRoute) return;
         int now = Display.displays.Length;
         if (now == _displayCount) return;
 
@@ -190,6 +281,7 @@ public class DualScreenV2 : MonoBehaviour
 
     void OnApplicationPause(bool paused)
     {
+        if (_releaseState == null || !_releaseState.CanRoute) return;
         if (_host == null) return;
 
         bool present = Display.displays.Length > DsPresentation.DISPLAY;
@@ -216,9 +308,7 @@ public class DualScreenV2 : MonoBehaviour
 
     void ReleasePresentation()
     {
-        if (_screen == null) return;
-        _screen.Dispose();
-        _screen = null;
+        if (_releaseState != null) _releaseState.ReleasePresentation();
     }
 
     void OnApplicationQuit() { Shutdown(); }
@@ -226,25 +316,31 @@ public class DualScreenV2 : MonoBehaviour
 
     void Shutdown()
     {
-        if (Instance != this) return;
-        Instance = null;
+        if (_releaseState == null || _releaseState.Completed) return;
+        bool first = !_releaseState.ShutdownRequested;
         try { Display.onDisplaysUpdated -= OnDisplaysUpdated; } catch { }
-
-        if (_host != null)
+        UnbindGameManager();
+        _releaseState.RequestShutdown(() =>
         {
-            _host.Dispose();
-            _host = null;
-        }
-        else
-        {
-            DsTouch.RemoveFence();
-            ReleasePresentation();
-        }
+            if (_host != null) _host.Dispose();
+            else { DsTouch.RemoveFence(); ReleasePresentation(); }
+        });
+        if (first && _releaseState.LastFailure != null)
+            Debug.LogError("[DualScreen] native restoration pending; independent release owner retained: " + _releaseState.LastFailure);
+    }
 
+    void RetireReleasedOwners()
+    {
+        // Called only AFTER restore/content disposal/enclosing release succeeded.
+        // The release pump can call this managed method even after V2.OnDestroy.
+        if (ReferenceEquals(Instance, this)) Instance = null;
+        _screen = null;
+        _host = null;
         _portContent = null;
         _port = null;
         _input = null;
         _card = null;
+        _releasePump = null;
     }
 
     sealed class PortContent : IDirectDisplayContent
@@ -273,6 +369,42 @@ public class DualScreenV2 : MonoBehaviour
             _port.Dispose();
             _port = null;
         }
+    }
+}
+
+// A Silksong-only restoration/release owner. It never activates a transport,
+// discovers/reroutes HUD, polls input, or ticks companion content.
+public sealed class DsHudReleasePump : MonoBehaviour
+{
+    static DsHudReleasePump _owner;
+    DsHudReleaseState _state;
+    float _nextRetry;
+    public static bool BlocksReplacement => !ReferenceEquals(_owner, null) &&
+        _owner._state != null && _owner._state.BlocksReplacement;
+
+    public static DsHudReleasePump Create(DsHudReleaseState state)
+    {
+        if (BlocksReplacement) throw new InvalidOperationException("Silksong HUD release owner still retained");
+        var go = new GameObject("__DsHudReleaseOwner__");
+        DontDestroyOnLoad(go);
+        var pump = go.AddComponent<DsHudReleasePump>();
+        pump._state = state;
+        _owner = pump;
+        return pump;
+    }
+
+    void Update()
+    {
+        if (_state == null) return;
+        if (_state.Pending && Time.unscaledTime >= _nextRetry)
+        {
+            _nextRetry = Time.unscaledTime + 0.25f;
+            _state.Retry();
+        }
+        if (!_state.Completed) return;
+        if (ReferenceEquals(_owner, this)) _owner = null;
+        // Native survivors have left this independent parent before this point.
+        Destroy(gameObject);
     }
 }
 #endif

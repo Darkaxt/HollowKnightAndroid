@@ -67,10 +67,55 @@ public sealed class DsPortFrame
     bool _sourceStateKnown;
     bool _lastInGame;
     bool _buildAttempted;
+    float _nextBuildAttempt;
     bool _built;
     bool _disposed;
 
+    // Presentation only: outgoing pages must not regain selection/action authority.
+    public bool IsOutgoingPresentation(DsPageRole role) => HudReady && _slideT < 1f &&
+        _selectionState.Sliding && ApprovedPageOrder[_selectionState.OutgoingIndex] == role &&
+        _pageHosts.TryGetValue(role, out var host) && host != null && host.gameObject.activeInHierarchy;
+
     public DsPageRole SelectedRole => _selected;
+    public bool HudReady => !_disposed && _built && StatusAnchor != null;
+    public int LayoutRevision { get; private set; }
+    // Invoked BEFORE any owned composition can be destroyed, including Tick's
+    // internal invalidation. Live native roots never belong to this composition.
+    public event Action BeforeCompositionDestroyed;
+    public event Action<DsPageRole> TabPressed;
+    public event Action SelectionChanged;
+    public long SelectionEpoch { get; private set; }
+    public InventoryPane GetResidentPane(DsPageRole role) => _built ? _resident.GetPane(ToPaneType(role)) : null;
+
+    public bool TryGetHudSlot(DsHudRole role, int toolIndex, int toolCount, out Rect slot)
+    {
+        slot = new Rect();
+        if (!HudReady) return false;
+        float w = DsPresentation.PanelW, h = DsPresentation.PanelH;
+        float bottom = HudBandBottom(), top = h * 0.46f;
+        if (top <= bottom || w <= 0f) return false;
+        float left, right, lo = bottom, hi = top;
+        switch (role)
+        {
+            case DsHudRole.Health:
+                left = -0.46f; right = -0.08f; lo = Mathf.Lerp(bottom, top, 0.53f); break;
+            case DsHudRole.Silk:
+                left = -0.46f; right = -0.08f; hi = Mathf.Lerp(bottom, top, 0.44f); break;
+            case DsHudRole.Money:
+                left = -0.05f; right = 0.10f; lo = Mathf.Lerp(bottom, top, 0.53f); break;
+            case DsHudRole.Shards:
+                left = -0.05f; right = 0.10f; hi = Mathf.Lerp(bottom, top, 0.44f); break;
+            case DsHudRole.Bind:
+                left = 0.13f; right = 0.20f; break;
+            default:
+                float step = 0.12f / Mathf.Max(1, toolCount);
+                left = 0.22f + step * toolIndex; right = left + step * 0.90f; break;
+        }
+        slot = Rect.MinMaxRect(left * w, lo, right * w, hi);
+        return true;
+    }
+
+    float HudBandBottom() => Mathf.Max(InnerTop, DsPresentation.PanelH * 0.34f);
 
     public DsPortFrame(DsPortLayers layers)
     {
@@ -90,9 +135,11 @@ public sealed class DsPortFrame
         }
         if (!_built)
         {
-            if (inGame && !_buildAttempted)
+            if (inGame && (!_buildAttempted || Time.unscaledTime >= _nextBuildAttempt))
             {
+                if (_buildAttempted) _resident.Forget();
                 _buildAttempted = true;
+                _nextBuildAttempt = Time.unscaledTime + 0.5f;
                 TryBuild();
             }
             return;
@@ -365,6 +412,23 @@ public sealed class DsPortFrame
         DsPortUtil.NormalizeRenderers(visual, DsPortLayers.PAGE_RENDER_ORDER);
     }
 
+    // Probe the same cached tab slots before calling the legacy void entrypoint.
+    // This makes consumption explicit without changing its event-before-select
+    // contract (page-only visibility never releases the separately routed HUD).
+    public bool TryConsumeGesture(DsGesture gesture)
+    {
+        if (_disposed || !_built || gesture.Type != DsGestureType.Tap || _tabs.Count == 0) return false;
+        if (gesture.Position.y > Mathf.Max(1f, DsPresentation.PanelH) * 0.15f) return false;
+        float normalizedX = gesture.Position.x / Mathf.Max(1f, DsPresentation.PanelW);
+        for (int i = 0; i < _tabs.Count; i++)
+            if (DsPortFrameState.ContainsHit(normalizedX, _tabs[i].HitMinNorm, _tabs[i].HitMaxNorm))
+            {
+                OnGesture(gesture);
+                return true;
+            }
+        return false;
+    }
+
     public void OnGesture(DsGesture gesture)
     {
         if (_disposed || !_built || gesture.Type != DsGestureType.Tap || _tabs.Count == 0) return;
@@ -375,6 +439,7 @@ public sealed class DsPortFrame
             if (DsPortFrameState.ContainsHit(normalizedX, _tabs[i].HitMinNorm,
                                              _tabs[i].HitMaxNorm))
             {
+                TabPressed?.Invoke(_tabs[i].Role);
                 Select(_tabs[i].Role);
                 return;
             }
@@ -385,6 +450,8 @@ public sealed class DsPortFrame
         if (_disposed || !_built || role == _selected || !HasTab(role)) return;
         BeginHorizontalSlide(_selected, role);
         _selected = role;
+        SelectionEpoch++;
+        SelectionChanged?.Invoke();
         ApplyTabSelectionAlpha();
         PositionSelectedFleursFromGlyphBounds();
         UpdateDynamicInnerEdges();
@@ -470,6 +537,7 @@ public sealed class DsPortFrame
         PositionFrameOrnaments();
         PositionSelectedFleursFromGlyphBounds();
         UpdateDynamicInnerEdges();
+        LayoutRevision++;
     }
 
     void PositionFrameOrnaments()
@@ -581,7 +649,10 @@ public sealed class DsPortFrame
         float halfW = Mathf.Max(1f, DsPresentation.PanelW) * 0.5f;
         float halfH = Mathf.Max(1f, DsPresentation.PanelH) * 0.5f;
         if (_rendererMasks[0] == null) return;
-        _rendererMasks[0].SetRect(Rect.MinMaxRect(-halfW, InnerTop, halfW, halfH));
+        // tk2d HUD renderers retain native sorting (often Default/0). Do not
+        // put a sorting-3000 cover over their status band or normalize the HUD.
+        // Restrict OUR top page cover to the gap below that band instead.
+        _rendererMasks[0].SetRect(Rect.MinMaxRect(-halfW, InnerTop, halfW, HudBandBottom()));
         _rendererMasks[1].SetRect(Rect.MinMaxRect(-halfW, -halfH, halfW, InnerBottom));
         _rendererMasks[2].SetRect(Rect.MinMaxRect(-halfW, InnerBottom, _innerLeft, InnerTop));
         _rendererMasks[3].SetRect(Rect.MinMaxRect(_innerRight, InnerBottom, halfW, InnerTop));
@@ -639,6 +710,9 @@ public sealed class DsPortFrame
 
     void DestroyComposition()
     {
+        BeforeCompositionDestroyed?.Invoke();
+        _built = false;
+        LayoutRevision++;
         for (int i = 0; i < _rendererMasks.Length; i++)
         {
             if (_rendererMasks[i] != null) _rendererMasks[i].Dispose();
@@ -664,9 +738,9 @@ public sealed class DsPortFrame
     public void Dispose()
     {
         if (_disposed) return;
-        _disposed = true;
         DestroyComposition();
         _resident.Forget();
+        _disposed = true;
     }
 }
 #endif

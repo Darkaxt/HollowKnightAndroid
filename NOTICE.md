@@ -61,6 +61,21 @@ A copy of the Apache License 2.0 is at
 * **Mono.Cecil** — Copyright (c) Jb Evain
 * **AssetRipper.Primitives** — Copyright (c) AssetRipper contributors
 * **SLF4J** — Copyright (c) QOS.ch
+* **igawa6/dualsouls skin rendering source** — collection aliases, page-aware
+  material replacement, HUD sprite/repair algorithms, named hero-effect traversal,
+  charm variants, inventory/PlayMaker sprite targets, and GPU atlas copy/restore
+  adapted from `Assets/HKMods.cs` at commit
+  `5c22451435b772acde0c7e6456f9019bc1baef73` of
+  <https://github.com/igawa6/dualsouls>, in
+  `tools/hollow-knight-patches/src/skins/runtime/`. Its `LICENSE` states:
+
+  > MIT License — applies to the source code in this repository only.
+  >
+  > This repository contains no Hollow Knight assets or game code. Hollow Knight is
+  > © Team Cherry. Using this port requires a legally purchased copy of the game.
+
+  The reference supplies no separate source-code copyright notice. No game
+  assets, generated test skins, folder picker, or tweak controls are copied.
 
 ### BSD family
 

@@ -1,5 +1,6 @@
 #if UNITY_ANDROID && !UNITY_EDITOR
 using DualSouls.Mods;
+using DualSouls.Skins.HollowKnight.Runtime;
 using UnityEngine;
 
 namespace DualSouls.Mods.HollowKnight
@@ -14,6 +15,8 @@ namespace DualSouls.Mods.HollowKnight
 
         public static HollowKnightModsRuntime Current { get; private set; }
         public HollowKnightModsSession Session { get; private set; }
+        public HollowKnightSkinRuntime Skins { get; private set; }
+        HollowKnightSkinLibrary skinLibrary;
 
         public static void EnsureStarted()
         {
@@ -52,12 +55,17 @@ namespace DualSouls.Mods.HollowKnight
                 new PlayerPrefsTweakStore(),
                 VisibleRows);
             _lifebloodFlashPolicy = new HollowKnightLifebloodFlashPolicy();
+            // A failed prior teardown keeps the skin owner alive and blocked for an explicit restore retry.
+            Skins = HollowKnightSkinRuntime.Current ?? new HollowKnightSkinRuntime();
+            skinLibrary = new HollowKnightSkinLibrary(Skins);
             Current = this;
             DontDestroyOnLoad(gameObject);
         }
 
         void Update()
         {
+            if (Skins != null) Skins.Tick();
+            if (skinLibrary != null) skinLibrary.Tick();
             HollowKnightModsSession session = Session;
             if (session != null) session.Tick();
 
@@ -81,6 +89,7 @@ namespace DualSouls.Mods.HollowKnight
         void OnDestroy()
         {
             if (!ReferenceEquals(Current, this)) return;
+            if (skinLibrary != null) { skinLibrary.Dispose(); skinLibrary = null; }
 
             HollowKnightModsSession session = Session;
             HollowKnightLifebloodFlashPolicy policy = _lifebloodFlashPolicy;
@@ -93,7 +102,18 @@ namespace DualSouls.Mods.HollowKnight
             }
             finally
             {
-                if (policy != null) policy.Dispose();
+                try { if (policy != null) policy.Dispose(); }
+                finally
+                {
+                    if (Skins != null)
+                    {
+                        try { Skins.Dispose(); Skins = null; }
+                        catch (System.Exception error)
+                        {
+                            Debug.LogError("[HK skins] Teardown blocked; resources retained for restore retry: " + error);
+                        }
+                    }
+                }
             }
         }
     }

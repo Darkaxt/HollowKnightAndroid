@@ -7,7 +7,7 @@ internal fun interface SkinModeAdvancePort {
     fun advance(): SkinResult<Unit>
 }
 
-/** The later core executor owns OFF -> ON -> ROTATE -> OFF, including live-proof closure. */
+/** Advances requested configuration only. Runtime application is reported separately, never inferred here. */
 class SkinLibraryController internal constructor(private val modeAdvance: SkinModeAdvancePort) {
     fun advanceMode(): SkinResult<Unit> = modeAdvance.advance()
 }

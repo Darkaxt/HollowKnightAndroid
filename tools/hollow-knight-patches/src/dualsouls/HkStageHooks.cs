@@ -22,7 +22,7 @@ static class HkStageHooks
     internal static HollowKnightFlashMode? FlashOverride => _flashOverride;
     internal static HollowKnightFlashMode? LegacyFlashMode => _legacyFlashMode;
     internal static float? LegacyFlashAlpha => _legacyFlashAlpha;
-    internal static int SkinStamp => 0;
+    internal static int SkinStamp => DualSouls.Skins.HollowKnight.Runtime.HollowKnightSkinRuntime.SkinStamp;
 
     internal static void SetBackdropOverride(bool black)
     {

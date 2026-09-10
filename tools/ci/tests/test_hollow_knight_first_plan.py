@@ -45,7 +45,7 @@ class HollowKnightFirstPlanTests(unittest.TestCase):
         self.assertLess(plan.index("Extract shared contracts"),
                         plan.index("Resume the Silksong resident-object port"))
 
-    def test_silksong_work_is_preserved_but_deferred_behind_h5_h6(self):
+    def test_historical_silksong_deferral_is_preserved_but_host_override_is_current(self):
         old_plan = read(OLD_PLAN)
         matrix = read(MATRIX)
         traceability = read(TRACEABILITY)
@@ -56,6 +56,18 @@ class HollowKnightFirstPlanTests(unittest.TestCase):
         self.assertIn("Silksong adaptation", traceability)
         self.assertIn("stays parked", traceability)
         self.assertIn("| Dual Souls composition port | `IN-PROGRESS` |", matrix)
+        # Preserve the historical gate and unpassed evidence, but do not turn it
+        # into a current implementation stop after the explicit host addendum.
+        current = matrix.split("## 2026-09-08 current execution override", 1)[1]
+        self.assertIn("Silksong host work is now **RESUMED**", current)
+        for owner in ("Task99 Batch A", "Task99 Batch B", "Task100", "Task101", "Task102"):
+            self.assertIn(owner, current)
+        self.assertIn("does not prove Unity driver behavior or visual fit", current)
+        self.assertIn("No live-device gate precedes these host batches", current)
+        self.assertIn("current deletion authorization", current)
+        plan = read(PLAN)
+        self.assertIn("## 2026-09-08 execution addendum — Silksong host continuation", plan)
+        self.assertIn("### Task99: functional HUD and native companion pages", plan)
 
     def test_every_public_authority_links_the_new_plan(self):
         for document in (UNIFIED_SPEC, OLD_PLAN, MATRIX, README):

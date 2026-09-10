@@ -1317,6 +1317,18 @@ object PlayerImage {
      * On external storage beside the build: it is read by .NET, not executed,
      * and keeping it next to what it operates on means one place to clear.
      */
+    internal fun surgeryAssetSha256(assets: android.content.res.AssetManager): String =
+        assets.open("$SURGERY_ASSET_DIR/$SURGERY_DLL").use { input ->
+            val digest = MessageDigest.getInstance("SHA-256")
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                if (count > 0) digest.update(buffer, 0, count)
+            }
+            digest.digest().joinToString("") { "%02x".format(it) }
+        }
+
     internal fun stageSurgery(root: File, assets: android.content.res.AssetManager): File {
         val dir = File(root, "bundle-surgery")
         dir.mkdirs()

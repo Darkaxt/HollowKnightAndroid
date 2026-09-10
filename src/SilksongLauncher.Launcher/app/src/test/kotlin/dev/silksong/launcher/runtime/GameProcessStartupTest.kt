@@ -144,6 +144,33 @@ class GameProcessStartupTest {
         assertEquals(paths.modStateRoot.canonicalPath, GameProcessStartup.requireModStatePath())
     }
 
+    @Test fun `skin JNI remains bound to launched Hollow Knight after mutable launcher selection changes`() {
+        val profile = GameProfiles.require("hollow-knight"); val paths = paths(profile.id)
+        publish(paths,"gen-skin-profile",UnityToolchainRegistry.resolve(profile).contentHash)
+        GameProcessStartup.installForTests(GameProcessStartup.resolve(context,profile,paths))
+        val isolated = object : android.content.ContextWrapper(context) {
+            override fun getFilesDir() = File(root,"skin-context").apply { mkdirs() }
+        }
+        SkinLibraryRuntimeBridge.initialize(isolated,profile.id)
+        dev.silksong.launcher.profiles.SelectedGameStore(context).set(GameProfiles.require("silksong"))
+        val wire = com.google.gson.JsonParser.parseString(SkinLibraryRuntimeBridge.readConfiguration()).asJsonObject
+        assertTrue(wire.toString(),wire["ok"].asBoolean)
+        assertEquals("hollow-knight",wire["profileId"].asString)
+        assertTrue(File(isolated.filesDir,"profiles/hollow-knight/skins/library.json").isFile)
+        assertTrue(!File(isolated.filesDir,"profiles/silksong/skins").exists())
+    }
+    @Test fun `Silksong startup never creates Hollow Knight skin storage even after preference changes`() {
+        val profile = GameProfiles.require("silksong"); val paths = paths(profile.id)
+        publish(paths,"gen-no-hk-skins",UnityToolchainRegistry.resolve(profile).contentHash)
+        GameProcessStartup.installForTests(GameProcessStartup.resolve(context,profile,paths))
+        val isolated = object : android.content.ContextWrapper(context) {
+            override fun getFilesDir() = File(root,"no-skin-context").apply { mkdirs() }
+        }
+        SkinLibraryRuntimeBridge.initialize(isolated,profile.id)
+        dev.silksong.launcher.profiles.SelectedGameStore(context).set(GameProfiles.require("hollow-knight"))
+        assertTrue(!com.google.gson.JsonParser.parseString(SkinLibraryRuntimeBridge.readConfiguration()).asJsonObject["ok"].asBoolean)
+        assertTrue(!File(isolated.filesDir,"profiles/hollow-knight").exists())
+    }
     private fun paths(profileId: String): ProfileBuildPaths {
         val profile = GameProfiles.require(profileId)
         return ProfileBuildPaths(

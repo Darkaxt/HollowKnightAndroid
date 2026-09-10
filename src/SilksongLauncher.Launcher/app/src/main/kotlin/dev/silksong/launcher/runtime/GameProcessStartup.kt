@@ -65,7 +65,10 @@ object GameProcessStartup {
             check(existing == null || existing == resolved) {
                 "Unity process startup is already bound to ${existing?.profileId}/${existing?.generationId}"
             }
-            if (existing == null) snapshot = resolved
+            if (existing == null) {
+                snapshot = resolved
+                SkinLibraryRuntimeBridge.initialize(context, resolved.profileId)
+            }
             return requireNotNull(snapshot)
         }
     }
@@ -142,6 +145,6 @@ object GameProcessStartup {
     }
 
     internal fun resetForTests() {
-        synchronized(this) { snapshot = null }
+        synchronized(this) { snapshot = null; SkinLibraryRuntimeBridge.resetForTests() }
     }
 }

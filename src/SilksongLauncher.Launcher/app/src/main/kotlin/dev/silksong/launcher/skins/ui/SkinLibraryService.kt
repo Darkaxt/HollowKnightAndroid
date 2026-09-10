@@ -41,9 +41,10 @@ internal data class SkinLibraryViewState(
     val rollbackFailure: String?,
     val leaseObservation: String,
     val packs: List<SkinPackRow>,
+    val simplifiedAuthority: Boolean = false,
+    val runtimeObservation: String? = null,
 ) {
-    // H4-STORAGE-RETENTION-001 / H4-STORAGE-GC-002 still block production mutation binding.
-    val mutationsEnabled: Boolean get() = false
+    val mutationsEnabled: Boolean get() = simplifiedAuthority
 }
 
 /** Read-only first launcher slice. Snapshot injection grants no mutation authority. */
@@ -87,23 +88,20 @@ internal class SkinLibraryService(
     companion object {
         fun isVisible(profile: GameProfile): Boolean = profile == HollowKnightProfile
 
-        fun production(filesDir: File, profile: GameProfile): SkinLibraryService = SkinLibraryService(
-            profile,
-            SkinReceiptSummaryReader { digest ->
-                SkinImportReceiptRepository(SkinPaths(ProfilePaths(filesDir, profile).root)).verify(digest)
-            },
-        ) {
-            // Lazy: an unsupported profile does not even construct Hollow Knight storage adapters.
-            try {
-                val root = ProfilePaths(filesDir, profile).skinsRoot
-                val locks = SkinLockManager(root)
-                val store = SkinRegistryStore(root, ReadOnlyQuota(root), lockManager = locks)
-                // UNKNOWN is an observation, not recovered live lease state. Never manufacture CLEAR.
-                SkinLibraryReader(locks, store).read()
-            } catch (error: Exception) {
-                SkinResult.Error(SkinImportCode.DURABILITY_UNAVAILABLE,
-                    "Skin library snapshot unavailable: ${error.message}")
-            }
+        // Context-free callers have no packaged catalog authority; never dual-read the old registry.
+        fun production(filesDir: File, profile: GameProfile): SkinLibraryService = SkinLibraryService(profile) {
+            SkinResult.Error(SkinImportCode.DURABILITY_UNAVAILABLE, "Skin library requires the production Context binding")
+        }
+        fun readLibrary(store: dev.silksong.launcher.skins.library.SkinLibraryStore): SkinResult<SkinLibraryViewState> = store.locked {
+            val document = store.readLocked()
+            val receipts = SkinReceiptSummaryReader { digest -> store.receipts.verify(digest) }
+            SkinResult.Ok(SkinLibraryViewState(
+                store.configurationIdentity(document), document.mode.name, document.selectedPackId, null,
+                document.eligiblePackIds, "NOT_USED", null, null, "NOT_USED",
+                document.packs.map { pack -> SkinPackRow(pack.id, pack.name, pack.author, pack.candidateKey, pack.treeSha256,
+                    pack.receiptSha256, pack.id == document.selectedPackId, pack.id in document.eligiblePackIds,
+                    receipts.read(pack.candidateKey, pack.receiptSha256)) },
+                simplifiedAuthority = true, runtimeObservation = store.lastObservation(document)))
         }
 
         private fun unsupported() = SkinResult.Error(

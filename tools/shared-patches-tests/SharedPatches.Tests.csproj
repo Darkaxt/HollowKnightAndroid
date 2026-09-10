@@ -22,7 +22,15 @@
     <Content Include="../skin-goldens/v1/lifecycle.json" Link="skin-goldens/v1/lifecycle.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../skin-goldens/v1/transactions.json" Link="skin-goldens/v1/transactions.json" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="..\shared-patches\src\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="../silksong-patches/src/dualscreen/DsPortHudState.cs" Link="Silksong/DsPortHudState.cs" />
+    <Compile Include="../silksong-patches/src/dualscreen/DsPortSelectState.cs" Link="Silksong/DsPortSelectState.cs" />
+    <Compile Include="../silksong-patches/src/dualscreen/DsPortOverlays.cs" Link="Silksong/DsPortOverlays.cs" />
+    <Compile Include="../silksong-patches/src/dualscreen/DsPortJournalState.cs" Link="Silksong/DsPortJournalState.cs" />
+    <Compile Include="../silksong-patches/src/dualscreen/DsPortMap.cs" Link="Silksong/DsPortMap.cs" />
+    <Compile Include="../silksong-patches/src/dualscreen/DsPortCollectableManager.cs" Link="Silksong/DsPortCollectableManager.cs" />
+    <Compile Include="../silksong-patches/src/dualscreen/DsPortFrameState.cs" Link="Silksong/DsPortFrameState.cs" />
     <Compile Include="../hollow-knight-patches/src/skins/core/**/*.cs" Link="HollowKnightSkins/Core/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="../hollow-knight-patches/src/skins/runtime/*.cs" Link="HollowKnightSkins/Runtime/%(Filename)%(Extension)" />
     <Compile Include="..\silksong-patches\src\mods\SilksongTweakAdapter.cs" Link="Silksong\SilksongTweakAdapter.cs" Condition="Exists('..\silksong-patches\src\mods\SilksongTweakAdapter.cs')" />
     <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightTweakAdapter.cs" Link="HollowKnight\HollowKnightTweakAdapter.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightTweakAdapter.cs')" />
     <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightFlashPolicyCore.cs" Link="HollowKnight\HollowKnightFlashPolicyCore.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightFlashPolicyCore.cs')" />

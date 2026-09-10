@@ -18,7 +18,7 @@ import java.util.concurrent.Executors
 
 internal data class SkinActivityHostBinding(val services: SkinLibraryUiServices, val provider: SkinDocumentProvider, val worker: Executor)
 
-/** Launcher-only surface: production factories are read-only and install no launch/session authority. */
+/** Launcher controls for the single Kotlin library authority; runtime reports remain observations only. */
 class SkinsActivity : Activity() {
     private lateinit var profile: GameProfile
     private lateinit var session: SkinLibrarySession
@@ -36,7 +36,7 @@ class SkinsActivity : Activity() {
         val binding = hostBinding
         require(binding == null || binding.services.profile == profile) { "Host service uses another profile" }
         session = retained ?: SkinLibrarySession(
-            binding?.services ?: SkinLibraryUiServices.production(filesDir, profile),
+            binding?.services ?: SkinLibraryUiServices.production(application, profile),
             SkinSafInputs(binding?.provider ?: AndroidSkinDocumentProvider(application.contentResolver)),
             { SelectedGameStore(application).get() },
             binding?.worker ?: Executors.newSingleThreadExecutor { action -> Thread(action, "skin-library-worker") },
@@ -102,6 +102,7 @@ class SkinsActivity : Activity() {
             addText(prepared, "${candidate.name.orEmpty()} · ${candidate.rawPrefixHex}\n${candidate.code} · ${candidate.detail}\n${candidate.candidateKey.orEmpty()}")
         } }
         packs.removeAllViews()
+        if (session.canRecover) addButton(getString(R.string.skins_recover_off), !screen.busy) { session.recoverOff() }
         val state = screen.library
         val status = findViewById<TextView>(R.id.skins_status)
         if (state == null) {
@@ -110,7 +111,9 @@ class SkinsActivity : Activity() {
             return
         }
         val none = getString(R.string.skins_none)
-        status.text = getString(R.string.skins_status, state.mode, state.activePackId ?: getString(R.string.skins_vanilla),
+        status.text = if (state.simplifiedAuthority) getString(R.string.skins_library_status, state.mode,
+            state.selectedPackId ?: none, state.rotationOrder.joinToString(" → ").ifEmpty { none }, state.runtimeObservation.orEmpty())
+        else getString(R.string.skins_status, state.mode, state.activePackId ?: getString(R.string.skins_vanilla),
             state.selectedPackId ?: none, state.rotationOrder.joinToString(" → ").ifEmpty { none },
             state.interlock, state.originalFailure ?: none, state.rollbackFailure ?: none, state.leaseObservation)
         if (state.packs.isEmpty()) addText(packs, getString(R.string.skins_empty))
@@ -130,7 +133,13 @@ class SkinsActivity : Activity() {
             addButton(getString(if (pack.rotationEligible) R.string.skins_exclude else R.string.skins_include, pack.name), screen.canEdit && !screen.busy) {
                 session.eligibility(target, !pack.rotationEligible)
             }
-            addButton(getString(R.string.skins_replace, pack.name), screen.canImport && !screen.busy && pack.selected && screen.handles.any {
+            if (state.simplifiedAuthority) addButton(getString(R.string.skins_remove, pack.name), screen.canEdit && !screen.busy) {
+                dialog = AlertDialog.Builder(this).setTitle(getString(R.string.skins_remove, pack.name))
+                    .setMessage(R.string.skins_remove_detail)
+                    .setPositiveButton(android.R.string.ok) { _, _ -> if (acceptsCallback()) session.remove(target) }
+                    .setNegativeButton(android.R.string.cancel, null).show()
+            }
+            addButton(getString(R.string.skins_replace, pack.name), screen.canImport && !screen.busy && (pack.selected || state.simplifiedAuthority) && screen.handles.any {
                 it.candidates.any { candidate -> candidate.code == SkinImportCode.OK && candidate.candidateKey != null }
             }) { chooseSource(screen, pack.name, target) }
         }

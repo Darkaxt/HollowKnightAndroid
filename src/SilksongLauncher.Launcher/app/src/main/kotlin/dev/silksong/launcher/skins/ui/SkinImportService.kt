@@ -46,6 +46,8 @@ internal interface SkinImportService {
     fun importAttempt(handleId: UUID): SkinImportAttempt<List<SkinImportSummary>> = SkinImportAttempt(commitImport(handleId))
     fun replaceAttempt(request: SkinReplaceRequest): SkinImportAttempt<SkinImportSummary> = SkinImportAttempt(commitReplace(request))
     fun cancel(handleId: UUID): SkinResult<Unit>
+    /** Worker-only retry of cleanup already owned by this service, including failed prepare without a handle. */
+    fun retryPendingCleanup(): SkinResult<Unit> = SkinResult.Ok(Unit)
 }
 
 internal object UnavailableSkinImportService : SkinImportService {

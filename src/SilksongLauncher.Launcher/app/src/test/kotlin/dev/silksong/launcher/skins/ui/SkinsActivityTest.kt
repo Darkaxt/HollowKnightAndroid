@@ -30,13 +30,19 @@ import java.util.concurrent.Executor
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class SkinsActivityTest {
-    @Test fun `default surface is unavailable and cannot launch picker`() {
+    @Test fun `default production surface enables ordinary ZIP picker and mode control`() {
         SelectedGameStore(ApplicationProvider.getApplicationContext()).set(HollowKnightProfile)
         val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
         try {
             val activity = controller.get()
-            assertFalse(activity.findViewById<Button>(R.id.skins_prepare_file).isEnabled)
-            assertFalse(activity.findViewById<Button>(R.id.skins_advance_mode).isEnabled)
+            val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5)
+            while (!activity.findViewById<Button>(R.id.skins_prepare_file).isEnabled && System.nanoTime() < deadline) {
+                Thread.sleep(20); shadowOf(Looper.getMainLooper()).idle()
+            }
+            assertTrue(activity.findViewById<Button>(R.id.skins_prepare_file).isEnabled)
+            assertTrue(activity.findViewById<Button>(R.id.skins_advance_mode).isEnabled)
+            activity.findViewById<Button>(R.id.skins_prepare_file).performClick()
+            assertEquals(Intent.ACTION_OPEN_DOCUMENT, shadowOf(activity).nextStartedActivityForResult.intent.action)
         } finally { controller.pause().stop().destroy() }
     }
 
@@ -173,6 +179,31 @@ class SkinsActivityTest {
         }
     }
 
+    @Test fun `production Context imports ordinary ZIP through Android decoder and exposes runtime mappings`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val isolated = object : android.content.ContextWrapper(context) {
+            override fun getFilesDir() = java.io.File(context.cacheDir,"production-import").apply { mkdirs() }
+        }
+        val services = SkinLibraryUiServices.production(isolated,HollowKnightProfile)
+        val archive = dev.silksong.launcher.skins.fixtures.RawZipFixture.build(listOf(
+            dev.silksong.launcher.skins.fixtures.RawZipFixture.Entry("Blue/Knight.png".toByteArray(), dev.silksong.launcher.skins.fixtures.TinyPngFixture.rgba())))
+        val prepared = services.imports.prepare(SkinImportInput.SelectedFile("Blue.zip") { archive.bytes.inputStream() })
+        assertTrue(prepared.toString(),prepared is SkinResult.Ok)
+        val installed = services.imports.commitImport((prepared as SkinResult.Ok).value.handleId)
+        assertTrue(installed.toString(),installed is SkinResult.Ok)
+        val view = (services.read() as SkinResult.Ok).value; val pack = view.packs.single()
+        assertEquals("OFF",view.mode); assertFalse(pack.selected); assertFalse(pack.rotationEligible)
+        val target = SkinReplaceTarget(pack.id,view.generationSha256,pack.treeSha256,pack.importReceiptSha256)
+        assertTrue(services.mutations.select(target) is SkinResult.Ok)
+        assertTrue(services.mode.advance() is SkinResult.Ok)
+        val store = dev.silksong.launcher.skins.library.SkinLibraryStore.production(isolated,HollowKnightProfile)
+        val wire = com.google.gson.JsonParser.parseString(dev.silksong.launcher.runtime.SkinLibraryRuntimeAccess(store).readConfiguration()).asJsonObject
+        assertTrue(wire["ok"].asBoolean); assertEquals("ON",wire["mode"].asString)
+        val mapping = wire["textures"].asJsonArray.single().asJsonObject
+        assertEquals("Knight.png",mapping["target"].asString)
+        assertTrue(mapping["path"].asString.matches(Regex("assets/[a-z2-7]{52}")))
+        assertTrue(java.io.File(wire["root"].asString,mapping["path"].asString).isFile)
+    }
     @Test fun `status read error does not claim that no changes were made`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         assertFalse(context.getString(R.string.skins_read_error, "ERROR", "refresh failed").contains("No changes were made"))

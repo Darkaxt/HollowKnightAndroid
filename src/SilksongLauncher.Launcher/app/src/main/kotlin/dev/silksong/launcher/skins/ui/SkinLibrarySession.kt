@@ -50,6 +50,10 @@ internal class SkinLibrarySession(
 
     fun prepare(document: String, folder: Boolean) = submit {
         if (!admitUi(services.imports.available)) return@submit
+        if (synchronized(cleanupOwners) { cleanupOwners.any { it.services.profile == services.profile } }) {
+            state = state.copy(message = "Preparation cleanup pending; refresh to retry before importing")
+            return@submit
+        }
         if (workflow.handles().isNotEmpty()) { state = state.copy(message = "Import or cancel the current preparation first"); return@submit }
         state = state.copy(preparationOwner = UUID.randomUUID())
         val inputs = if (folder) saf.folder(document) else when (val file = saf.file(document)) {
@@ -99,6 +103,13 @@ internal class SkinLibrarySession(
 
     fun select(target: SkinReplaceTarget) = edit { services.mutations.select(target) }
     fun eligibility(target: SkinReplaceTarget, eligible: Boolean) = edit { services.mutations.eligibility(target, eligible) }
+    fun remove(target: SkinReplaceTarget) = edit { services.mutations.remove(target) }
+    val canRecover: Boolean get() = services.recover != null
+    fun recoverOff() = submit {
+        val recover = services.recover ?: return@submit
+        report(recover(), "OFF configuration saved; game process will restore on its next poll")
+        readLibrary(preserveMessage = true)
+    }
     private fun edit(action: () -> SkinResult<Unit>) = submit {
         if (!admitUi(services.mutations.available)) return@submit
         report(action())
@@ -135,6 +146,8 @@ internal class SkinLibrarySession(
         if (!ended.compareAndSet(false, true)) return
         detach()
         workflow.requestCancel()
+        // Retain before enqueue: a reopened screen must not race this worker's terminal cleanup.
+        synchronized(cleanupOwners) { cleanupOwners += this }
         retryCleanup()
     }
 
@@ -145,7 +158,12 @@ internal class SkinLibrarySession(
         }
     }
     private fun cleanup() {
-        val result = try { workflow.cancel() } catch (error: Exception) {
+        val result = try {
+            when (val cancelled = workflow.cancel()) {
+                is SkinResult.Error -> cancelled
+                is SkinResult.Ok -> services.imports.retryPendingCleanup()
+            }
+        } catch (error: Exception) {
             SkinResult.Error(SkinImportCode.DURABILITY_UNAVAILABLE, "Cleanup transport failed: ${error.message}")
         }
         state = state.copy(cleanupPending = result is SkinResult.Error || workflow.handles().isNotEmpty())
@@ -155,7 +173,7 @@ internal class SkinLibrarySession(
     private fun admitUi(available: Boolean): Boolean {
         // Fresh observation is only a UI preflight. Each injected mutation service must gate independently.
         readLibrary()
-        if (!available || state.library?.leaseObservation != "CLEAR") {
+        if (!available || state.library == null || (!services.simplifiedAuthority && state.library?.leaseObservation != "CLEAR")) {
             state = state.copy(message = "Mutation unavailable: service disabled or session ACTIVE/UNKNOWN")
             return false
         }
@@ -171,7 +189,7 @@ internal class SkinLibrarySession(
                     refreshError = result, message = if (preserveMessage) state.message else "")
             }
             is SkinResult.Ok -> {
-                val clear = result.value.leaseObservation == "CLEAR"
+                val clear = services.simplifiedAuthority || result.value.leaseObservation == "CLEAR"
                 state = state.copy(library = result.value, refreshError = null,
                     canImport = clear && services.imports.available,
                     canEdit = clear && services.mutations.available,
@@ -219,7 +237,7 @@ internal class SkinLibrarySession(
     }
 
     companion object {
-        // Summary-only owners whose cleanup was independently blocked; no Activity or provider grant is retained.
+        // Closing owners until queued or blocked cleanup completes; no Activity or provider grant is retained.
         private val cleanupOwners = mutableSetOf<SkinLibrarySession>()
         fun retryPendingCleanup() {
             synchronized(cleanupOwners) { cleanupOwners.toList() }.forEach { it.retryCleanup() }

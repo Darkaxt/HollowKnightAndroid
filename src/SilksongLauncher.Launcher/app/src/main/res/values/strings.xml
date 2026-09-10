@@ -24,7 +24,11 @@
     <string name="action_mods">Mods</string>
     <string name="action_skins">Skins</string>
     <string name="skins_title">Hollow Knight · Skins</string>
-    <string name="skins_binding_unavailable">Library preview: import, Replace, selection and eligibility changes are unavailable. Storage hardening is still required (H4-STORAGE-RETENTION-001 / H4-STORAGE-GC-002). Live mode changes require the later core/runtime executor. No live apply is attempted.</string>
+    <string name="skins_binding_unavailable">Import ordinary CustomKnight ZIPs, select one pack, and choose OFF → ON → ROTATE → OFF. ON and ROTATE currently apply the selected pack; death rotation is not enabled yet. Published bytes remain retained and count against import capacity.</string>
+    <string name="skins_library_status">Requested mode: %1$s\nSelected pack: %2$s\nEligibility order: %3$s\n%4$s\nConfiguration is not proof of current visuals. The game retries busy or failed operations.</string>
+    <string name="skins_recover_off">Turn OFF / recover configuration</string>
+    <string name="skins_remove">Remove %1$s from library</string>
+    <string name="skins_remove_detail">Remove only this library entry. Published files remain retained and still count against import capacity. A selected ON skin must be turned OFF first.</string>
     <string name="skins_advance_mode">Advance mode · OFF → ON → ROTATE → OFF</string>
     <string name="skins_prepare_file">Prepare archive file</string>
     <string name="skins_prepare_folder">Prepare immediate folder files</string>
@@ -40,7 +44,7 @@
     <string name="skins_host_preview">Host-injected service preview. Recorded state is not proof of a live apply.</string>
     <string name="skins_refresh">Refresh library status</string>
     <string name="skins_loading">Reading library status…</string>
-    <string name="skins_read_error">Status unavailable · %1$s\n%2$s\nSession observation: UNKNOWN. Check the operation result separately.</string>
+    <string name="skins_read_error">Status unavailable · %1$s\n%2$s\nCheck the operation result separately. Refresh or use OFF / recover configuration to retry.</string>
     <string name="skins_status">Recorded mode: %1$s\nRecorded active visual: %2$s\nSelected pack: %3$s\nRotation order (pack ID): %4$s\nInterlock: %5$s\nOriginal error: %6$s\nRollback error: %7$s\nSession observation: %8$s\nThis snapshot is not proof of a live apply.</string>
     <string name="skins_none">None</string>
     <string name="skins_vanilla">Vanilla</string>

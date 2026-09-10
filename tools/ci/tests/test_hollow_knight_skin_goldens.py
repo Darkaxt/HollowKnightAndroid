@@ -359,7 +359,7 @@ class HollowKnightSkinTransactionGoldensTest(unittest.TestCase):
     fixture = ROOT / 'tools/skin-goldens/v1/transactions.json'
 
     def forward_cases(self):
-        return [c for c in oracle.load_transaction_fixture(self.fixture) if c['oracleContract'] == oracle.TRANSACTION_CONTRACT]
+        return [c for c in oracle.load_transaction_fixture(self.fixture)[:262] if c['oracleContract'] == oracle.TRANSACTION_CONTRACT]
 
     def test_corpus_full_forward_logs(self):
         cases = self.forward_cases()
@@ -550,7 +550,7 @@ class HollowKnightSkinRollbackGoldensTest(unittest.TestCase):
     assert_transaction_leaves = HollowKnightSkinTransactionGoldensTest.assert_transaction_leaves
     # Reuse assertion helpers without duplicating the accepted forward test suite.
     def rollback_cases(self):
-        return [c for c in oracle.load_transaction_fixture(self.fixture) if c['oracleContract'] == oracle.TRANSACTION_ROLLBACK_CONTRACT]
+        return [c for c in oracle.load_transaction_fixture(self.fixture)[:262] if c['oracleContract'] == oracle.TRANSACTION_ROLLBACK_CONTRACT]
 
     def test_rollback_inventory_and_forward_byte_semantic_pins(self):
         raw = self.fixture.read_bytes()
@@ -566,7 +566,7 @@ class HollowKnightSkinRollbackGoldensTest(unittest.TestCase):
         self.assertEqual('32e70c5a41e5eff6f22a0a8ba722a7473f24db42ee548dfbea779c1b735c672b', hashlib.sha256(semantic).hexdigest())
         rollback = self.rollback_cases()
         self.assertEqual(33, len(rollback)); self.assertEqual(77, sum(len(c['expected']) for c in rollback))
-        self.assertEqual(115, len([c for c in cases if c['oracleContract'] in (oracle.TRANSACTION_CONTRACT, oracle.TRANSACTION_ROLLBACK_CONTRACT)]))
+        self.assertEqual(115, len([c for c in cases[:262] if c['oracleContract'] in (oracle.TRANSACTION_CONTRACT, oracle.TRANSACTION_ROLLBACK_CONTRACT)]))
 
     def test_rollback_full_logs_replay_and_substitutions(self):
         cases = self.rollback_cases(); before = copy.deepcopy(cases)
@@ -680,7 +680,8 @@ class HollowKnightSkinFailureGoldensTest(unittest.TestCase):
     assert_transaction_leaves = HollowKnightSkinTransactionGoldensTest.assert_transaction_leaves
 
     def failure_cases(self):
-        return [c for c in oracle.load_transaction_fixture(self.fixture) if c['oracleContract'] == oracle.TRANSACTION_FAILURE_CONTRACT]
+        # Original IDs are pinned by the accepted138 byte/semantic checks below.
+        return [c for c in oracle.load_transaction_fixture(self.fixture)[:138] if c['oracleContract'] == oracle.TRANSACTION_FAILURE_CONTRACT]
 
     def test_failure_inventory_and_accepted115_byte_semantic_pins(self):
         raw = self.fixture.read_bytes(); suffix = b'\r\n  ]\r\n}\r\n'
@@ -689,7 +690,7 @@ class HollowKnightSkinFailureGoldensTest(unittest.TestCase):
         self.assertEqual(115, len(accepted)); self.assertEqual(241, sum(len(c['expected']) for c in accepted))
         self.assertEqual('1a0f282f324641738ee7b0c0b76f4430900ba7efd80139521b67cedd5423e48d', hashlib.sha256(json.dumps(accepted, sort_keys=True, separators=(',', ':'), ensure_ascii=True).encode()).hexdigest())
         failure = self.failure_cases()
-        self.assertEqual(23, len(failure)); self.assertEqual(136, sum(len(c['expected']) for c in failure)); self.assertEqual(138, len(cases))
+        self.assertEqual(23, len(failure)); self.assertEqual(136, sum(len(c['expected']) for c in failure)); self.assertEqual(138, len([c for c in cases[:262] if not c['caseId'].startswith('failure-proof-')]))
         for family, count in [('history', 10), ('code', 3), ('correlation', 5), ('terminal', 5)]:
             self.assertEqual(count, sum(c['caseId'].startswith('failure-' + family + '-') for c in failure))
 
@@ -790,6 +791,1056 @@ class HollowKnightSkinFailureGoldensTest(unittest.TestCase):
                 with self.assertRaises(AssertionError): namespace['verify_transaction_case'](cases[case_id])
         self.assertEqual(raw, path.read_bytes())
 
+
+class HollowKnightSkinFailureProofGoldensTest(unittest.TestCase):
+    fixture = HollowKnightSkinTransactionGoldensTest.fixture
+    reinput = staticmethod(HollowKnightSkinTransactionGoldensTest.reinput)
+    options = {'contract': oracle.TRANSACTION_FAILURE_CONTRACT}
+
+    def proof_cases(self):
+        return [c for c in oracle.load_transaction_fixture(self.fixture) if c['caseId'].startswith('failure-proof-')]
+
+    @staticmethod
+    def semantic(value):
+        return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True).encode()).hexdigest()
+
+    def test_proof_inventory_accepted138_exact_bytes_records_and_logs(self):
+        raw = self.fixture.read_bytes()
+        self.assertEqual('ce51b6aed12113dbdf457edaa8c0518b4ae668883978c541392d886dcbe4b482', hashlib.sha256(raw[:2373974]).hexdigest())
+        all_cases = oracle.load_transaction_fixture(self.fixture); old = all_cases[:138]
+        self.assertEqual('f3d7dafecfb076c1c7694db97a32d51b196b445ff0285264b2f924b7df136d13', self.semantic(old))
+        self.assertEqual('1d744e8af105e0cf5e4b487aea793d41657e802ef6c84129db78b66318396445', self.semantic([c['expected'] for c in old]))
+        self.assertEqual('fcbe5e1692457e2c827c7411db25e161a5acf94252552ef94b3b94db64cbeb96', self.semantic(old[115:]))
+        self.assertEqual('6ee13a79be90b5b61eff15b5daf32c52ccf084960b2a6899c0537803e8f3c418', self.semantic([c['expected'] for c in old[115:]]))
+        self.assertEqual((262, 625), (len(all_cases[:262]), sum(len(c['expected']) for c in all_cases[:262])))
+        cases = self.proof_cases(); self.assertEqual((124, 248), (len(cases), sum(len(c['expected']) for c in cases)))
+        self.assertEqual(96, sum(not c['caseId'].startswith('failure-proof-blocked-') for c in cases))
+        self.assertEqual(28, sum(c['caseId'].startswith('failure-proof-blocked-') for c in cases))
+        self.assertTrue(all(c['oracleContract'] == oracle.TRANSACTION_FAILURE_CONTRACT for c in cases))
+
+    def test_proof_full_logs_and_separate_original_pending_repairs(self):
+        cases = {c['caseId']: c for c in self.proof_cases()}
+        for name, case in cases.items():
+            with self.subTest(case=name):
+                before = copy.deepcopy(case); oracle.verify_transaction_case(case); oracle.verify_transaction_case(case)
+                self.assertEqual(before, case)
+                if not name.endswith('-negative'): continue
+                repaired = cases[name[:-9] + '-repair']
+                bad, good = oracle._tx_case(case), oracle._tx_case(repaired)
+                if '-blocked-' not in name:
+                    self.assertEqual(bad['initialState'], good['initialState'])
+                    self.assertEqual('ROLLBACK_PENDING', bad['initialState']['phase'])
+                    self.assertEqual(bad['events'][1], good['events'][0])
+                    self.assertEqual('ARMED', case['expected'][0]['state']['interlock']['state'])
+                    self.assertIsNone(case['expected'][0]['state']['failureReceipt'])
+                    self.assertEqual('ROLLBACK_FAILED', repaired['expected'][0]['state']['interlock']['state'])
+                    self.assertEqual(good['events'][0]['persistedFailureReceipt'], repaired['expected'][0]['state']['failureReceipt'])
+                    self.assertEqual(['rollback-failed', 'terminal'], [r['diagnosis'] for r in case['expected']])
+                    self.assertEqual(case['expected'][0]['state'], case['expected'][1]['state'])
+                else:
+                    self.assertEqual(bad['events'], good['events'])
+                    self.assertFalse(oracle.transaction_state_valid(bad['initialState'], **self.options))
+                    self.assertTrue(oracle.transaction_state_valid(good['initialState'], **self.options))
+                    self.assertEqual(['invalid-state'] * 2, [r['diagnosis'] for r in case['expected']])
+                    self.assertEqual(['terminal'] * 2, [r['diagnosis'] for r in repaired['expected']])
+
+    def test_proof_all_repaired_positives_kill_default_substitutions(self):
+        for case in self.proof_cases():
+            if not case['caseId'].endswith('-repair'): continue
+            for diagnosis in ('stale-phase', 'invalid-state'):
+                with self.subTest(case=case['caseId'], substitution=diagnosis):
+                    with patch.object(oracle, 'decide_transaction', side_effect=lambda s,e,**kw: dict(state=copy.deepcopy(s), diagnosis=diagnosis, commands=[])):
+                        with self.assertRaisesRegex(AssertionError, 'full ordered transaction log mismatch'): oracle.verify_transaction_case(case)
+
+    @staticmethod
+    def receipt_omitting(r, generation, digest, omission):
+        if r is None: return False
+        checks = [('syntax-' + k, oracle._tx_match(oracle.UUID if k.endswith('Id') else oracle.HASH, v)) for k,v in r.items()]
+        checks += [('expected-mismatch-expectedGenerationId', r['expectedGenerationId'] == generation), ('expected-mismatch-expectedGenerationSha256', r['expectedGenerationSha256'] == digest), ('new-equals-arm-newGenerationId', r['newGenerationId'] != generation), ('new-equals-arm-newGenerationSha256', r['newGenerationSha256'] != digest)]
+        return all(ok for name,ok in checks if name != omission)
+
+    @staticmethod
+    def follows_omitting(s, r, omission):
+        arm, e = s['armCommitReceipt'], s['envelope']
+        return (arm is not None and oracle._tx_receipt(r, arm['newGenerationId'], arm['newGenerationSha256']) and
+                (omission == 'new-equals-base-newGenerationId' or r['newGenerationId'] != e['baseGenerationId']) and
+                (omission == 'new-equals-base-newGenerationSha256' or r['newGenerationSha256'] != e['baseGenerationSha256']))
+
+    @staticmethod
+    def equal_except(a, b, path):
+        # Omit only the named equality component; retain every sibling comparison.
+        if not path: return True
+        if type(a) is not dict or type(b) is not dict or a.keys() != b.keys(): return False
+        return all(HollowKnightSkinFailureProofGoldensTest.equal_except(a[k], b[k], path[1:]) if k == path[0] else a[k] == b[k] for k in a)
+
+    def test_proof_named_receipt_and_head_guard_omissions_kill(self):
+        cases = {c['caseId']: c for c in self.proof_cases()}
+        snapshot_paths = [('mode', ['mode']), ('selectedPackId', ['selectedPackId']), ('skinStamp', ['skinStamp']), ('active-id', ['active','id']), ('active-treeSha256', ['active','treeSha256']), ('active-contentSha256', ['active','contentSha256']), ('active-importReceiptSha256', ['active','importReceiptSha256']), ('visual-variant', ['active'])]
+        head_paths = [('head-generationId', ['generationId']), ('head-generationSha256', ['generationSha256'])]
+        head_paths += [('head-activation-' + n, ['activation'] + p) for n,p in snapshot_paths]
+        head_paths += [('lock-' + k, ['interlock', k]) for k in ('state','transactionId','operation','baseGenerationId','baseGenerationSha256')]
+        head_paths += [('lock-' + side + '-' + n, ['interlock', side] + p) for side in ('prior','target') for n,p in snapshot_paths]
+        head_paths += [('lock-binding', ['interlock','bindingToken','value']), ('lock-established', ['interlock','priorEstablishedOnBinding']), ('lock-originalFailure', ['interlock','originalFailure']), ('lock-rollbackFailure', ['interlock','rollbackFailure'])]
+        probes = [(n, '_tx_head', lambda h,r,a,l,p=p: h is not None and r is not None and self.equal_except(h, dict(generationId=r['newGenerationId'], generationSha256=r['newGenerationSha256'], activation=a, interlock=l), p)) for n,p in head_paths]
+        probes.append(('missing-head', '_tx_head', lambda h,r,a,l: r is not None and (h is None or oracle_head(h,r,a,l))))
+        oracle_head = oracle._tx_head
+        for family in ('syntax', 'expected-mismatch', 'new-equals-arm'):
+            fields = ('newGenerationId','newGenerationSha256') if family != 'expected-mismatch' else ('expectedGenerationId','expectedGenerationSha256')
+            for field in fields:
+                name = family + '-' + field
+                probes.append((name, '_tx_receipt', lambda r,g,d,n=name: self.receipt_omitting(r,g,d,n)))
+        for field in ('newGenerationId','newGenerationSha256'):
+            name = 'new-equals-base-' + field
+            probes.append((name, '_tx_follows', lambda s,r,n=name: self.follows_omitting(s,r,n)))
+        self.assertEqual(44, len(probes))
+        for name, helper, replacement in probes:
+            bad = cases['failure-proof-' + name + '-negative']; repaired = cases['failure-proof-' + name + '-repair']
+            data = oracle._tx_case(bad); state = data['initialState']; event = data['events'][0]
+            with self.subTest(omission=name):
+                self.assertTrue(oracle.transaction_state_valid(state, **self.options))
+                if helper == '_tx_head': self.assertTrue(oracle._tx_follows(state, event['persistedFailureReceipt']))
+                else:
+                    lock = dict(state['interlock'], state='ROLLBACK_FAILED', originalFailure=state['originalFailure'], rollbackFailure=event['code'])
+                    self.assertTrue(oracle._tx_head(event['verifiedHead'], event['persistedFailureReceipt'], state['envelope']['prior'], lock))
+                oracle.verify_transaction_case(repaired)
+                with patch.object(oracle, helper, side_effect=replacement):
+                    # Only a genuine full-log assertion counts, never format/scope or setup errors.
+                    self.assertIsNotNone(oracle.decide_transaction(state, event, **self.options)['state']['failureReceipt'])
+                    with self.assertRaisesRegex(AssertionError, 'full ordered transaction log mismatch'): oracle.verify_transaction_case(bad)
+                    oracle.verify_transaction_case(repaired)
+                print('Task86 isolated proof omission killed:', name)
+
+    @staticmethod
+    def blocked_validator_omitting(s, contract, omission, original):
+        # Trusted fixed-function substitution, no source extraction or dynamic compilation.
+        # This is the BLOCKED structural branch with exactly one named predicate omitted.
+        if s['phase'] != 'BLOCKED': return original(s, contract=contract)
+        oracle._tx_type(s, 'State'); phases, _ = oracle._tx_scope(contract)
+        if s['phase'] not in phases: raise oracle.OracleOutOfScope('Excluded transaction phase')
+        if not oracle._tx_token(s['binding']) or not oracle._tx_snapshot(s['activation']): return False
+        if any(s[k] is not None and not oracle._tx_match(oracle.FAILURE_CODE, s[k]) for k in ('originalFailure','rollbackFailure')): return False
+        e = s['envelope']
+        if not oracle._tx_envelope(e) or e['binding'] != s['binding']: return False
+        if not oracle._tx_receipt(s['armCommitReceipt'], e['baseGenerationId'], e['baseGenerationSha256']): return False
+        if s['activation'] != e['prior'] or s['completionReceipt'] is not None: return False
+        closure = e['target'] if s['originalFailure'] is None else oracle._tx_prior_closure(e)
+        if omission != 'closure' and s['pendingClosure'] is not None and s['pendingClosure'] != closure: return False
+        if s['pendingClosure'] is None:
+            for field in ('originalFailure','rollbackFailure'):
+                if omission != 'null-pending-' + field and s[field] is None: return False
+        if s['failureReceipt'] is None: return omission == 'absent-receipt-armed' or s['interlock'] == oracle._tx_armed(e)
+        if omission != 'present-receipt-pending' and s['pendingClosure'] is not None: return False
+        if s['originalFailure'] is None or s['rollbackFailure'] is None or not oracle._tx_follows(s, s['failureReceipt']): return False
+        lock = dict(oracle._tx_armed(e), state='ROLLBACK_FAILED', originalFailure=s['originalFailure'], rollbackFailure=s['rollbackFailure'])
+        if omission.startswith('lock-'): return HollowKnightSkinFailureProofGoldensTest.equal_except(s['interlock'], lock, [omission[5:]])
+        return s['interlock'] == lock
+
+    def test_proof_named_blocked_validator_omissions_kill(self):
+        cases = {c['caseId']: c for c in self.proof_cases()}; original = oracle.transaction_state_valid
+        panels = [('target-closure', 'closure'), ('prior-closure', 'closure'), ('null-pending-missing-originalFailure', 'null-pending-originalFailure'), ('null-pending-missing-rollbackFailure', 'null-pending-rollbackFailure'), ('null-receipt-failed-lock', 'absent-receipt-armed'), ('present-receipt-pending', 'present-receipt-pending'), ('lock-originalFailure', 'lock-originalFailure'), ('lock-rollbackFailure', 'lock-rollbackFailure')]
+        probes = [(n, 'transaction_state_valid', lambda s,contract=oracle.TRANSACTION_CONTRACT,o=o: self.blocked_validator_omitting(s,contract,o,original)) for n,o in panels]
+        for field in ('expectedGenerationId','expectedGenerationSha256'):
+            name = 'expected-mismatch-' + field
+            probes.append((name, '_tx_receipt', lambda r,g,d,n=name: self.receipt_omitting(r,g,d,n)))
+        for field in ('newGenerationId','newGenerationSha256'):
+            name = 'new-equals-base-' + field
+            probes.append((name, '_tx_follows', lambda s,r,n=name: self.follows_omitting(s,r,n)))
+        self.assertEqual(12, len(probes))
+        for name, helper, replacement in probes:
+            bad = cases['failure-proof-blocked-' + name + '-negative']; repaired = cases['failure-proof-blocked-' + name + '-repair']
+            state = oracle._tx_case(bad)['initialState']
+            with self.subTest(omission=name):
+                self.assertFalse(original(state, **self.options)); oracle.verify_transaction_case(repaired)
+                with patch.object(oracle, helper, side_effect=replacement):
+                    self.assertTrue(oracle.transaction_state_valid(state, **self.options))
+                    with self.assertRaisesRegex(AssertionError, 'full ordered transaction log mismatch'): oracle.verify_transaction_case(bad)
+                    oracle.verify_transaction_case(repaired)
+                print('Task86 isolated BLOCKED omission killed:', name)
+
+    def test_proof_dominated_and_overlapping_guards_not_claimed_isolated(self):
+        cases = {c['caseId']: c for c in self.proof_cases()}
+        for field in ('expectedGenerationId','expectedGenerationSha256'):
+            name = 'syntax-' + field
+            # A valid arm fixes expected receipt syntax through equality. Omitting syntax alone survives.
+            with patch.object(oracle, '_tx_receipt', side_effect=lambda r,g,d,n=name: self.receipt_omitting(r,g,d,n)):
+                oracle.verify_transaction_case(cases['failure-proof-' + name + '-negative'])
+            oracle.verify_transaction_case(cases['failure-proof-' + name + '-repair'])
+        original = oracle.transaction_state_valid
+        for field in ('originalFailure','rollbackFailure'):
+            bad = cases['failure-proof-blocked-present-receipt-missing-' + field + '-negative']
+            # Omitting the outer null-pending condition alone still fails the inner required-failure condition.
+            with patch.object(oracle, 'transaction_state_valid', side_effect=lambda s,contract=oracle.TRANSACTION_CONTRACT,f=field: self.blocked_validator_omitting(s,contract,'null-pending-' + f,original)):
+                oracle.verify_transaction_case(bad)
+            oracle.verify_transaction_case(cases['failure-proof-blocked-present-receipt-missing-' + field + '-repair'])
+        for name in ('missing-receipt','missing-both'):
+            oracle.verify_transaction_case(cases['failure-proof-' + name + '-negative'])
+            oracle.verify_transaction_case(cases['failure-proof-' + name + '-repair'])
+
+    def test_proof_recursive_nonnull_state_receipts_failures_validity_and_order(self):
+        cases = oracle.load_transaction_fixture(self.fixture)
+        # Existing full recursive assertion helper requires distinct rows to prove ordering.
+        positive = next(c for c in cases if c['caseId'] == 'failure-proof-missing-head-repair')
+        HollowKnightSkinTransactionGoldensTest.assert_transaction_leaves(self, [positive] + cases)
+        pool = {}
+        def collect(value):
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    if child is not None: pool[key] = copy.deepcopy(child)
+                    collect(child)
+            elif isinstance(value, list):
+                for child in value: collect(child)
+        def leaves(value, path=()):
+            if isinstance(value, dict):
+                for key, child in value.items(): yield from leaves(child, path + (key,))
+            elif isinstance(value, list):
+                for key, child in enumerate(value): yield from leaves(child, path + (key,))
+            else: yield path, value
+        for c in cases: collect(c['expected'])
+        pool.update(originalFailure='FAILURE', rollbackFailure='ROLLBACK', failureReceipt=pool['completionReceipt'])
+        for name in ('failure-proof-blocked-target-closure-negative','failure-proof-blocked-prior-closure-repair'):
+            case = next(c for c in cases if c['caseId'] == name)
+            # Exhaust every leaf, without claiming order sensitivity for identical terminal rows.
+            for path, value in leaves(case['expected']):
+                key = path[-1]
+                if key == 'step': continue
+                bad = copy.deepcopy(case); part = bad['expected']
+                for k in path[:-1]: part = part[k]
+                if key == 'type':
+                    parent = bad['expected']
+                    for k in path[:-2]: parent = parent[k]
+                    parent[path[-2]] = {'type':'Vanilla'} if value == 'Pack' else dict(type='Pack',id='changed',treeSha256='x',contentSha256='y',importReceiptSha256='z')
+                else:
+                    choices = {'phase':('IDLE','ARMED'), 'state':('CLEAR','ARMED'), 'mode':('OFF','ON'), 'operation':('MODE_ON','MODE_OFF'), 'skinStamp':('7','8')}
+                    part[key] = copy.deepcopy(pool[key]) if value is None else next(v for v in choices[key] if v != value) if key in choices else not value if type(value) is bool else value + 'changed'
+                with self.subTest(case=name, leaf=path):
+                    with self.assertRaisesRegex(AssertionError, 'full ordered transaction log mismatch'): oracle.verify_transaction_case(bad)
+
+    def test_proof_recursive_representation_precedes_scope_and_semantics(self):
+        cases = self.proof_cases(); names = ('failure-proof-missing-head-repair','failure-proof-blocked-prior-closure-repair')
+        def objects(value, path=()):
+            if isinstance(value, dict):
+                yield path, value
+                for k,v in value.items(): yield from objects(v,path+(k,))
+            elif isinstance(value, list):
+                for k,v in enumerate(value): yield from objects(v,path+(k,))
+        for case in (c for c in cases if c['caseId'] in names):
+            data = oracle._tx_case(case)
+            for path, obj in objects(data):
+                for damage in ('missing','extra'):
+                    bad = copy.deepcopy(case); altered = copy.deepcopy(data); part = altered
+                    for key in path: part = part[key]
+                    if damage == 'missing': del part[next(iter(obj))]
+                    else: part['unknown'] = None
+                    self.reinput(bad,altered); bad['oracleContract'] = 'future'
+                    with patch.object(oracle, 'decide_transaction') as reducer, patch.object(oracle, 'transaction_state_valid') as validator:
+                        with self.assertRaises(oracle.FixtureFormatError): oracle.verify_transaction_case(bad)
+                        reducer.assert_not_called(); validator.assert_not_called()
+            for contract in (oracle.TRANSACTION_CONTRACT, oracle.TRANSACTION_ROLLBACK_CONTRACT):
+                bad = copy.deepcopy(case); bad['oracleContract'] = contract
+                with self.assertRaises(oracle.OracleOutOfScope): oracle.verify_transaction_case(bad)
+
+
+class HollowKnightSkinDispatchGoldensTest(unittest.TestCase):
+    fixture = HollowKnightSkinTransactionGoldensTest.fixture
+    semantic = staticmethod(HollowKnightSkinFailureProofGoldensTest.semantic)
+    dispatch_map = """IDLE|Begin|prepare|mode-on-zero|0
+IDLE|Prepared|stale-correlation|wrong-correlation-idle|0
+IDLE|ArmCommitted|stale-correlation|dispatch-idle-armcommitted|0
+IDLE|ApplyVerified|stale-correlation|dispatch-idle-applyverified|0
+IDLE|ApplyFailed|stale-correlation|dispatch-idle-applyfailed|0
+IDLE|RollbackVerified|stale-correlation|dispatch-idle-rollbackverified|0
+IDLE|RollbackFailed|stale-correlation|dispatch-idle-rollbackfailed|0
+IDLE|CompletionCommitted|stale-correlation|dispatch-idle-completioncommitted|0
+IDLE|CompletionRejected|stale-correlation|dispatch-idle-completionrejected|0
+IDLE|CompletionIndeterminate|stale-correlation|dispatch-idle-completionindeterminate|0
+PREPARING|Begin|transaction-in-progress|repair-state-preparing-arm|0
+PREPARING|Prepared|arm|mode-on-zero|1
+PREPARING|ArmCommitted|stale-phase|dispatch-preparing-armcommitted|0
+PREPARING|ApplyVerified|stale-phase|wrong-phase-preparing|0
+PREPARING|ApplyFailed|stale-phase|dispatch-preparing-applyfailed|0
+PREPARING|RollbackVerified|stale-phase|dispatch-preparing-rollbackverified|0
+PREPARING|RollbackFailed|stale-phase|dispatch-preparing-rollbackfailed|0
+PREPARING|CompletionCommitted|stale-phase|dispatch-preparing-completioncommitted|0
+PREPARING|CompletionRejected|stale-phase|dispatch-preparing-completionrejected|0
+PREPARING|CompletionIndeterminate|stale-phase|dispatch-preparing-completionindeterminate|0
+PREPARED|Begin|transaction-in-progress|begin-in-progress|0
+PREPARED|Prepared|stale-phase|wrong-phase-prepared|0
+PREPARED|ArmCommitted|apply|mode-on-zero|2
+PREPARED|ApplyVerified|stale-phase|dispatch-prepared-applyverified|0
+PREPARED|ApplyFailed|stale-phase|rollback-phase-applyfailed-prepared|0
+PREPARED|RollbackVerified|stale-phase|dispatch-prepared-rollbackverified|0
+PREPARED|RollbackFailed|stale-phase|dispatch-prepared-rollbackfailed|0
+PREPARED|CompletionCommitted|stale-phase|dispatch-prepared-completioncommitted|0
+PREPARED|CompletionRejected|stale-phase|dispatch-prepared-completionrejected|0
+PREPARED|CompletionIndeterminate|stale-phase|dispatch-prepared-completionindeterminate|0
+ARMED|Begin|transaction-in-progress|repair-state-armed-clear|0
+ARMED|Prepared|stale-phase|dispatch-armed-prepared|0
+ARMED|ArmCommitted|stale-phase|wrong-phase-armed|0
+ARMED|ApplyVerified|commit-closure|mode-on-zero|3
+ARMED|ApplyFailed|rollback|rollback-history-established-pack|3
+ARMED|RollbackVerified|stale-phase|rollback-phase-rollbackverified-armed|0
+ARMED|RollbackFailed|stale-phase|dispatch-armed-rollbackfailed|0
+ARMED|CompletionCommitted|stale-phase|dispatch-armed-completioncommitted|0
+ARMED|CompletionRejected|stale-phase|dispatch-armed-completionrejected|0
+ARMED|CompletionIndeterminate|stale-phase|dispatch-armed-completionindeterminate|0
+APPLIED|Begin|transaction-in-progress|repair-state-applied-no-closure|0
+APPLIED|Prepared|stale-phase|dispatch-applied-prepared|0
+APPLIED|ArmCommitted|stale-phase|dispatch-applied-armcommitted|0
+APPLIED|ApplyVerified|stale-phase|wrong-phase-applied|0
+APPLIED|ApplyFailed|stale-phase|rollback-phase-applyfailed-applied|0
+APPLIED|RollbackVerified|stale-phase|dispatch-applied-rollbackverified|0
+APPLIED|RollbackFailed|stale-phase|dispatch-applied-rollbackfailed|0
+APPLIED|CompletionCommitted|committed|mode-on-zero|4
+APPLIED|CompletionRejected|rollback|failure-history-reject-restored-established-pack|4
+APPLIED|CompletionIndeterminate|completion-indeterminate|failure-history-applied-indeterminate|4
+ROLLBACK_PENDING|Begin|transaction-in-progress|dispatch-rollback-pending-begin|0
+ROLLBACK_PENDING|Prepared|stale-phase|dispatch-rollback-pending-prepared|0
+ROLLBACK_PENDING|ArmCommitted|stale-phase|dispatch-rollback-pending-armcommitted|0
+ROLLBACK_PENDING|ApplyVerified|stale-phase|dispatch-rollback-pending-applyverified|0
+ROLLBACK_PENDING|ApplyFailed|stale-phase|dispatch-rollback-pending-applyfailed|0
+ROLLBACK_PENDING|RollbackVerified|commit-closure|rollback-history-established-pack|4
+ROLLBACK_PENDING|RollbackFailed|rollback-failed|failure-history-reject-rollback-persisted|5
+ROLLBACK_PENDING|CompletionCommitted|stale-phase|dispatch-rollback-pending-completioncommitted|0
+ROLLBACK_PENDING|CompletionRejected|stale-phase|dispatch-rollback-pending-completionrejected|0
+ROLLBACK_PENDING|CompletionIndeterminate|stale-phase|dispatch-rollback-pending-completionindeterminate|0
+ROLLED_BACK|Begin|transaction-in-progress|dispatch-rolled-back-begin|0
+ROLLED_BACK|Prepared|stale-phase|dispatch-rolled-back-prepared|0
+ROLLED_BACK|ArmCommitted|stale-phase|dispatch-rolled-back-armcommitted|0
+ROLLED_BACK|ApplyVerified|stale-phase|dispatch-rolled-back-applyverified|0
+ROLLED_BACK|ApplyFailed|stale-phase|dispatch-rolled-back-applyfailed|0
+ROLLED_BACK|RollbackVerified|stale-phase|rollback-phase-rollbackverified-rolled|0
+ROLLED_BACK|RollbackFailed|stale-phase|dispatch-rolled-back-rollbackfailed|0
+ROLLED_BACK|CompletionCommitted|committed|rollback-history-established-pack|5
+ROLLED_BACK|CompletionRejected|rollback-closure-rejected|failure-history-rolled-rejected|6
+ROLLED_BACK|CompletionIndeterminate|completion-indeterminate|failure-history-rolled-indeterminate|6
+COMMITTED|Begin|terminal|committed-original-failure-valid|0
+COMMITTED|Prepared|terminal|dispatch-committed-prepared|0
+COMMITTED|ArmCommitted|terminal|dispatch-committed-armcommitted|0
+COMMITTED|ApplyVerified|terminal|dispatch-committed-applyverified|0
+COMMITTED|ApplyFailed|terminal|dispatch-committed-applyfailed|0
+COMMITTED|RollbackVerified|terminal|dispatch-committed-rollbackverified|0
+COMMITTED|RollbackFailed|terminal|dispatch-committed-rollbackfailed|0
+COMMITTED|CompletionCommitted|terminal|mode-on-zero|5
+COMMITTED|CompletionRejected|terminal|dispatch-committed-completionrejected|0
+COMMITTED|CompletionIndeterminate|terminal|dispatch-committed-completionindeterminate|0
+BLOCKED|Begin|terminal|failure-terminal-persisted|0
+BLOCKED|Prepared|terminal|failure-terminal-persisted|2
+BLOCKED|ArmCommitted|terminal|dispatch-blocked-armcommitted|0
+BLOCKED|ApplyVerified|terminal|dispatch-blocked-applyverified|0
+BLOCKED|ApplyFailed|terminal|failure-terminal-persisted|3
+BLOCKED|RollbackVerified|terminal|dispatch-blocked-rollbackverified|0
+BLOCKED|RollbackFailed|terminal|failure-terminal-persisted|4
+BLOCKED|CompletionCommitted|terminal|dispatch-blocked-completioncommitted|0
+BLOCKED|CompletionRejected|terminal|failure-terminal-persisted|5
+BLOCKED|CompletionIndeterminate|terminal|failure-terminal-persisted|6"""
+
+    def test_dispatch_corpus_and_accepted262_raw_semantic_input_log_pins(self):
+        raw = self.fixture.read_bytes(); all_cases = oracle.load_transaction_fixture(self.fixture)[:318]
+        self.assertEqual((318, 681), (len(all_cases), sum(len(c['expected']) for c in all_cases)))
+        self.assertEqual('a898f1621701a4617279e483255de89089d2e9fc270852a399eb23e8a2b33839', hashlib.sha256(raw[:4632889]).hexdigest())
+        self.assertEqual('1ebb4f52e2c11d042bae966f95d9ac8d121a12b497cfe7232d949e50920484a8', self.semantic(all_cases[:262]))
+        self.assertEqual('965c51b70c1846aaabe8c5b218b6f3bcbe0e7991e1657ce96123b822e3322f08', self.semantic([c['expected'] for c in all_cases[:262]]))
+        self.assertEqual('d425acb5418c4cb2b68a5fcdc195cfbd0f8c46c5ed7d595e19602a02cae4fbb7', self.semantic([c['input'] for c in all_cases[:262]]))
+        added = all_cases[262:318]; self.assertEqual(56, len(added))
+        for contract, count in [('transaction-forward-v1',14), ('transaction-rollback-success-v1',19), ('transaction-failure-blocked-v1',23)]:
+            self.assertEqual(count, sum(c['oracleContract'] == contract for c in added))
+        for case in added:
+            self.assertTrue(case['caseId'].startswith('dispatch-'))
+            data = oracle._tx_case(case); self.assertEqual(1, len(data['events'])); self.assertEqual(1,len(case['expected']))
+            row = case['expected'][0]
+            self.assertTrue(row['inputStateValid']); self.assertTrue(row['stateValid']); self.assertEqual([],row['commands']); self.assertEqual(data['initialState'],row['state'])
+            oracle.verify_transaction_case(case)
+
+    def test_dispatch_exact90_canonical_cells_and13_reused_action_witnesses(self):
+        cases = {c['caseId']:c for c in oracle.load_transaction_fixture(self.fixture)}; cells=set(); actions=0
+        for line in self.dispatch_map.splitlines():
+            phase,event,diagnosis,name,step = line.split('|'); step=int(step)
+            self.assertNotIn((phase,event),cells); cells.add((phase,event))
+            self.assertIn(name,cases); case=cases[name]; data=oracle._tx_case(case)
+            state=data['initialState'] if step==0 else case['expected'][step-1]['state']; row=case['expected'][step]
+            self.assertEqual(phase,state['phase']); self.assertEqual(event,data['events'][step]['type'])
+            self.assertTrue(row['inputStateValid']); self.assertTrue(row['stateValid']); self.assertEqual(diagnosis,row['diagnosis'])
+            oracle.verify_transaction_case(case)
+            if diagnosis not in ('terminal','stale-phase','stale-correlation','transaction-in-progress'):
+                actions+=1; self.assertNotEqual(state,row['state'])
+        phases='IDLE PREPARING PREPARED ARMED APPLIED ROLLBACK_PENDING ROLLED_BACK COMMITTED BLOCKED'.split()
+        events='Begin Prepared ArmCommitted ApplyVerified ApplyFailed RollbackVerified RollbackFailed CompletionCommitted CompletionRejected CompletionIndeterminate'.split()
+        self.assertEqual({(p,e) for p in phases for e in events},cells); self.assertEqual(13,actions)
+
+    def test_dispatch_full_replay_input_immutability_and_actual_correlation(self):
+        for case in oracle.load_transaction_fixture(self.fixture)[262:318]:
+            before=copy.deepcopy(case); data=oracle._tx_case(case); original=copy.deepcopy(data); s=data['initialState']; e=data['events'][0]; options={'contract':case['oracleContract']}
+            if e['type']!='Begin':
+                self.assertRegex(e['correlation']['transactionId'],r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+                self.assertTrue(oracle._tx_token(e['correlation']['binding']))
+                if s['envelope'] is not None:
+                    self.assertEqual(s['envelope']['transactionId'],e['correlation']['transactionId']); self.assertEqual(s['binding'],e['correlation']['binding'])
+            oracle.verify_transaction_case(case); oracle.verify_transaction_case(case)
+            self.assertEqual(oracle.decide_transaction(s,e,**options),oracle.decide_transaction(s,e,**options))
+            self.assertEqual(original,data); self.assertEqual(before,case)
+
+    def test_dispatch_recursive_leaves_diagnosis_phase_and_commands_observed(self):
+        cases=oracle.load_transaction_fixture(self.fixture); pool={}
+        def collect(v):
+            if isinstance(v,dict):
+                for k,c in v.items():
+                    if c is not None: pool[k]=copy.deepcopy(c)
+                    collect(c)
+            elif isinstance(v,list):
+                for c in v: collect(c)
+        def leaves(v,path=()):
+            if isinstance(v,dict):
+                for k,c in v.items(): yield from leaves(c,path+(k,))
+            elif isinstance(v,list):
+                for k,c in enumerate(v): yield from leaves(c,path+(k,))
+            else: yield path,v
+        for c in cases: collect(c['expected'])
+        pool.update(originalFailure='FAILURE',rollbackFailure='ROLLBACK',failureReceipt=pool['completionReceipt'])
+        for case in cases[262:318]:
+            for path,value in leaves(case['expected']):
+                key=path[-1]
+                if key=='step': continue
+                bad=copy.deepcopy(case); part=bad['expected']
+                for k in path[:-1]: part=part[k]
+                if key=='type':
+                    parent=bad['expected']
+                    for k in path[:-2]: parent=parent[k]
+                    parent[path[-2]]={'type':'Vanilla'} if value=='Pack' else dict(type='Pack',id='changed',treeSha256='x',contentSha256='y',importReceiptSha256='z')
+                else:
+                    choices={'phase':('IDLE','ARMED'),'state':('CLEAR','ARMED'),'mode':('OFF','ON'),'operation':('MODE_ON','MODE_OFF'),'skinStamp':('7','8')}
+                    part[key]=copy.deepcopy(pool[key]) if value is None else next(v for v in choices[key] if v!=value) if key in choices else not value if type(value) is bool else value+'changed'
+                with self.subTest(case=case['caseId'],leaf=path):
+                    with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'): oracle.verify_transaction_case(bad)
+            bad=copy.deepcopy(case); bad['expected'][0]['commands']=[dict(type='Apply',correlation=copy.deepcopy(pool['correlation']))]
+            with self.assertRaises(AssertionError): oracle.verify_transaction_case(bad)
+        # These one-row no-ops make no ordering claim. Accepted distinct histories retain that proof.
+
+    def test_dispatch_named_observer_and_noop_invalid_substitutions(self):
+        cases=oracle.load_transaction_fixture(self.fixture); original=oracle.decide_transaction
+        for case in cases[262:318]:
+            for diagnosis in ('stale-phase','invalid-state'):
+                with patch.object(oracle,'decide_transaction',side_effect=lambda s,e,**kw:dict(state=copy.deepcopy(s),diagnosis=diagnosis,commands=[])):
+                    if case['expected'][0]['diagnosis']==diagnosis: oracle.verify_transaction_case(case)
+                    else:
+                        with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'): oracle.verify_transaction_case(case)
+            for field in ('diagnosis','phase'):
+                def damaged(s,e,**kw):
+                    result=original(s,e,**kw)
+                    if field=='diagnosis': result['diagnosis']='observer-damaged'
+                    else: result['state']['phase']='ARMED' if result['state']['phase']=='IDLE' else 'IDLE'
+                    return result
+                with patch.object(oracle,'decide_transaction',side_effect=damaged):
+                    with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'): oracle.verify_transaction_case(case)
+        # Exact existing positive witnesses execute real actions, even when a command list is empty.
+        byid={c['caseId']:c for c in cases}
+        for line in self.dispatch_map.splitlines():
+            p=line.split('|')
+            if p[2] in ('terminal','stale-phase','stale-correlation','transaction-in-progress'): continue
+            for diagnosis in ('stale-phase','invalid-state'):
+                with patch.object(oracle,'decide_transaction',side_effect=lambda s,e,**kw:dict(state=copy.deepcopy(s),diagnosis=diagnosis,commands=[])):
+                    with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'): oracle.verify_transaction_case(byid[p[3]])
+
+    def test_dispatch_narrowest_contract_and_recursive_representation_precedence(self):
+        def objects(value, path=()):
+            if isinstance(value, dict):
+                yield path, value
+                for key, child in value.items(): yield from objects(child, path + (key,))
+            elif isinstance(value, list):
+                for key, child in enumerate(value): yield from objects(child, path + (key,))
+        contracts = [oracle.TRANSACTION_CONTRACT, oracle.TRANSACTION_ROLLBACK_CONTRACT, oracle.TRANSACTION_FAILURE_CONTRACT]
+        for case in oracle.load_transaction_fixture(self.fixture)[262:318]:
+            data = oracle._tx_case(case)
+            for narrower in contracts[:contracts.index(case['oracleContract'])]:
+                bad = copy.deepcopy(case); bad['oracleContract'] = narrower
+                with patch.object(oracle, 'decide_transaction') as reducer, patch.object(oracle, 'transaction_state_valid') as validator:
+                    with self.assertRaises(oracle.OracleOutOfScope): oracle.verify_transaction_case(bad)
+                    reducer.assert_not_called(); validator.assert_not_called()
+            for path, obj in objects(data):
+                for damage in ('missing', 'extra'):
+                    bad = copy.deepcopy(case); altered = copy.deepcopy(data); part = altered
+                    for key in path: part = part[key]
+                    if damage == 'missing': del part[next(iter(obj))]
+                    else: part['unexpected'] = None
+                    HollowKnightSkinTransactionGoldensTest.reinput(bad, altered); bad['oracleContract'] = 'future'
+                    with self.subTest(case=case['caseId'], path=path, damage=damage):
+                        with patch.object(oracle, 'decide_transaction') as reducer, patch.object(oracle, 'transaction_state_valid') as validator:
+                            with self.assertRaises(oracle.FixtureFormatError): oracle.verify_transaction_case(bad)
+                            reducer.assert_not_called(); validator.assert_not_called()
+
+
+
+class HollowKnightSkinCorrelationGoldensTest(unittest.TestCase):
+    fixture = HollowKnightSkinTransactionGoldensTest.fixture
+    semantic = staticmethod(HollowKnightSkinFailureProofGoldensTest.semantic)
+    correlation_map = """PREPARING|Prepared|uuid-syntax|correlation-preparing-prepared-uuid-syntax|0|correlation-preparing-prepared-uuid-syntax|1|arm
+PREPARING|Prepared|uuid-equality|wrong-correlation-preparing|0|mode-on-zero|1|arm
+PREPARING|Prepared|token-syntax|correlation-preparing-prepared-token-syntax|0|correlation-preparing-prepared-token-syntax|1|arm
+PREPARING|Prepared|token-equality|correlation-preparing-prepared-token-equality|0|correlation-preparing-prepared-token-equality|1|arm
+PREPARED|ArmCommitted|uuid-syntax|correlation-prepared-armcommitted-uuid-syntax|0|correlation-prepared-armcommitted-uuid-syntax|1|apply
+PREPARED|ArmCommitted|uuid-equality|correlation-prepared-armcommitted-uuid-equality|0|correlation-prepared-armcommitted-uuid-equality|1|apply
+PREPARED|ArmCommitted|token-syntax|correlation-prepared-armcommitted-token-syntax|0|correlation-prepared-armcommitted-token-syntax|1|apply
+PREPARED|ArmCommitted|token-equality|correlation-prepared-armcommitted-token-equality|0|correlation-prepared-armcommitted-token-equality|1|apply
+ARMED|ApplyVerified|uuid-syntax|correlation-armed-applyverified-uuid-syntax|0|correlation-armed-applyverified-uuid-syntax|1|commit-closure
+ARMED|ApplyVerified|uuid-equality|correlation-armed-applyverified-uuid-equality|0|correlation-armed-applyverified-uuid-equality|1|commit-closure
+ARMED|ApplyVerified|token-syntax|correlation-armed-applyverified-token-syntax|0|correlation-armed-applyverified-token-syntax|1|commit-closure
+ARMED|ApplyVerified|token-equality|correlation-armed-applyverified-token-equality|0|correlation-armed-applyverified-token-equality|1|commit-closure
+ARMED|ApplyFailed|uuid-syntax|rollback-correlation-applyfailed-uuid-syntax|0|rollback-history-unestablished-pack|3|rollback
+ARMED|ApplyFailed|uuid-equality|rollback-correlation-applyfailed-uuid-mismatch|0|rollback-history-unestablished-pack|3|rollback
+ARMED|ApplyFailed|token-syntax|rollback-correlation-applyfailed-token-syntax|0|rollback-history-unestablished-pack|3|rollback
+ARMED|ApplyFailed|token-equality|rollback-correlation-applyfailed-token-mismatch|0|rollback-history-unestablished-pack|3|rollback
+ROLLBACK_PENDING|RollbackVerified|uuid-syntax|rollback-correlation-rollbackverified-uuid-syntax|0|rollback-history-unestablished-pack|4|commit-closure
+ROLLBACK_PENDING|RollbackVerified|uuid-equality|rollback-correlation-rollbackverified-uuid-mismatch|0|rollback-history-unestablished-pack|4|commit-closure
+ROLLBACK_PENDING|RollbackVerified|token-syntax|rollback-correlation-rollbackverified-token-syntax|0|rollback-history-unestablished-pack|4|commit-closure
+ROLLBACK_PENDING|RollbackVerified|token-equality|rollback-correlation-rollbackverified-token-mismatch|0|rollback-history-unestablished-pack|4|commit-closure
+ROLLBACK_PENDING|RollbackFailed|uuid-syntax|failure-correlation-rollbackfailed|0|failure-history-reject-rollback-unpersisted|5|rollback-failed
+ROLLBACK_PENDING|RollbackFailed|uuid-equality|failure-correlation-rollbackfailed|1|failure-history-reject-rollback-unpersisted|5|rollback-failed
+ROLLBACK_PENDING|RollbackFailed|token-syntax|failure-correlation-rollbackfailed|2|failure-history-reject-rollback-unpersisted|5|rollback-failed
+ROLLBACK_PENDING|RollbackFailed|token-equality|failure-correlation-rollbackfailed|3|failure-history-reject-rollback-unpersisted|5|rollback-failed
+APPLIED|CompletionCommitted|uuid-syntax|correlation-applied-completioncommitted-uuid-syntax|0|correlation-applied-completioncommitted-repair|0|committed
+APPLIED|CompletionCommitted|uuid-equality|correlation-applied-completioncommitted-uuid-equality|0|correlation-applied-completioncommitted-repair|0|committed
+APPLIED|CompletionCommitted|token-syntax|correlation-applied-completioncommitted-token-syntax|0|correlation-applied-completioncommitted-repair|0|committed
+APPLIED|CompletionCommitted|token-equality|correlation-applied-completioncommitted-token-equality|0|correlation-applied-completioncommitted-repair|0|committed
+ROLLED_BACK|CompletionCommitted|uuid-syntax|correlation-rolled-back-completioncommitted-uuid-syntax|0|correlation-rolled-back-completioncommitted-repair|0|committed
+ROLLED_BACK|CompletionCommitted|uuid-equality|correlation-rolled-back-completioncommitted-uuid-equality|0|correlation-rolled-back-completioncommitted-repair|0|committed
+ROLLED_BACK|CompletionCommitted|token-syntax|correlation-rolled-back-completioncommitted-token-syntax|0|correlation-rolled-back-completioncommitted-repair|0|committed
+ROLLED_BACK|CompletionCommitted|token-equality|correlation-rolled-back-completioncommitted-token-equality|0|correlation-rolled-back-completioncommitted-repair|0|committed
+APPLIED|CompletionRejected|uuid-syntax|failure-correlation-applied-rejected|0|failure-history-reject-restored-unestablished-pack|4|rollback
+APPLIED|CompletionRejected|uuid-equality|failure-correlation-applied-rejected|1|failure-history-reject-restored-unestablished-pack|4|rollback
+APPLIED|CompletionRejected|token-syntax|failure-correlation-applied-rejected|2|failure-history-reject-restored-unestablished-pack|4|rollback
+APPLIED|CompletionRejected|token-equality|failure-correlation-applied-rejected|3|failure-history-reject-restored-unestablished-pack|4|rollback
+ROLLED_BACK|CompletionRejected|uuid-syntax|failure-correlation-rolled-rejected|0|failure-history-rolled-rejected|6|rollback-closure-rejected
+ROLLED_BACK|CompletionRejected|uuid-equality|failure-correlation-rolled-rejected|1|failure-history-rolled-rejected|6|rollback-closure-rejected
+ROLLED_BACK|CompletionRejected|token-syntax|failure-correlation-rolled-rejected|2|failure-history-rolled-rejected|6|rollback-closure-rejected
+ROLLED_BACK|CompletionRejected|token-equality|failure-correlation-rolled-rejected|3|failure-history-rolled-rejected|6|rollback-closure-rejected
+APPLIED|CompletionIndeterminate|uuid-syntax|failure-correlation-applied-indeterminate|0|failure-history-applied-indeterminate|4|completion-indeterminate
+APPLIED|CompletionIndeterminate|uuid-equality|failure-correlation-applied-indeterminate|1|failure-history-applied-indeterminate|4|completion-indeterminate
+APPLIED|CompletionIndeterminate|token-syntax|failure-correlation-applied-indeterminate|2|failure-history-applied-indeterminate|4|completion-indeterminate
+APPLIED|CompletionIndeterminate|token-equality|failure-correlation-applied-indeterminate|3|failure-history-applied-indeterminate|4|completion-indeterminate
+ROLLED_BACK|CompletionIndeterminate|uuid-syntax|failure-correlation-rolled-indeterminate|0|failure-history-rolled-indeterminate|6|completion-indeterminate
+ROLLED_BACK|CompletionIndeterminate|uuid-equality|failure-correlation-rolled-indeterminate|1|failure-history-rolled-indeterminate|6|completion-indeterminate
+ROLLED_BACK|CompletionIndeterminate|token-syntax|failure-correlation-rolled-indeterminate|2|failure-history-rolled-indeterminate|6|completion-indeterminate
+ROLLED_BACK|CompletionIndeterminate|token-equality|failure-correlation-rolled-indeterminate|3|failure-history-rolled-indeterminate|6|completion-indeterminate"""
+
+    def test_correlation_corpus_and_accepted318_pins(self):
+        cases=oracle.load_transaction_fixture(self.fixture)[:339]; old=cases[:318]
+        self.assertEqual((339,713),(len(cases),sum(len(c['expected']) for c in cases)))
+        self.assertEqual((21,32),(len(cases[318:339]),sum(len(c['expected']) for c in cases[318:339])))
+        self.assertEqual('e346800246c19ef81d59174bc0ad29af1ccd5c1de09e9addb3080511d5a2ec78',hashlib.sha256(self.fixture.read_bytes()[:5014066]).hexdigest())
+        self.assertEqual('923a1ff2e830cc8b86c00cae28ebc4f565a30b2d2890b8c56c5e382a80f9e6d0',self.semantic(old)); self.assertEqual('eb8b5ef66678709bd81405674db2775cd3d57ac55984e86361067a34a9b19742',self.semantic([c['expected'] for c in old])); self.assertEqual('afb867646a0597ebc63243aedc699cfa919fd452ed67bace69f414eda3f95c15',self.semantic([c['input'] for c in old]))
+        for contract,count,steps in [('transaction-forward-v1',112,205),('transaction-rollback-success-v1',57,101),('transaction-failure-blocked-v1',170,407)]:
+            partition=[c for c in cases if c['oracleContract']==contract]; self.assertEqual((count,steps),(len(partition),sum(len(c['expected']) for c in partition)))
+        for case in cases: oracle.verify_transaction_case(case)
+
+    @staticmethod
+    def witness(cases,name,step):
+        case=cases[name]; data=oracle._tx_case(case); step=int(step)
+        return case,data['initialState'] if step==0 else case['expected'][step-1]['state'],data['events'][step],case['expected'][step]
+
+    def test_correlation_exact48_axes_and_original_snapshot_positive_proof(self):
+        cases={c['caseId']:c for c in oracle.load_transaction_fixture(self.fixture)}; cells=set(); reused=0
+        for line in self.correlation_map.splitlines():
+            phase,event,axis,name,step,positive,positive_step,diagnosis=line.split('|')
+            self.assertNotIn((phase,event,axis),cells); cells.add((phase,event,axis))
+            case,s,e,row=self.witness(cases,name,step); pc,ps,pe,pr=self.witness(cases,positive,positive_step); c=e['correlation']
+            self.assertEqual((phase,event),(s['phase'],e['type'])); self.assertTrue(oracle.transaction_state_valid(s,contract=case['oracleContract']))
+            self.assertTrue(row['inputStateValid']); self.assertTrue(row['stateValid']); self.assertEqual('stale-correlation',row['diagnosis']); self.assertEqual(s,row['state']); self.assertEqual([],row['commands'])
+            syntax=axis.endswith('-syntax')
+            if axis.startswith('uuid-'):
+                self.assertEqual(s['binding'],c['binding']); self.assertNotEqual(s['envelope']['transactionId'],c['transactionId']); self.assertEqual(not syntax,oracle._tx_match(oracle.UUID,c['transactionId']))
+            else:
+                self.assertEqual(s['envelope']['transactionId'],c['transactionId']); self.assertNotEqual(s['binding'],c['binding']); self.assertEqual(not syntax,oracle._tx_token(c['binding']))
+            # Repairs change exactly one identity component, not receipt/code/phase prerequisites.
+            self.assertEqual(s,ps); repaired=copy.deepcopy(e); repaired['correlation']=dict(transactionId=s['envelope']['transactionId'],binding=copy.deepcopy(s['binding'])); self.assertEqual(repaired,pe)
+            self.assertTrue(pr['inputStateValid']); self.assertTrue(pr['stateValid']); self.assertEqual(diagnosis,pr['diagnosis']); self.assertNotEqual(s,pr['state'])
+            oracle.verify_transaction_case(case); oracle.verify_transaction_case(pc)
+            actual=oracle.decide_transaction(copy.deepcopy(s),copy.deepcopy(pe),contract=pc['oracleContract']); self.assertEqual({k:pr[k] for k in ('state','diagnosis','commands')},actual)
+            if not name.startswith('correlation-'): reused+=1
+            elif event=='CompletionCommitted': self.assertNotEqual(name,positive); self.assertEqual(1,len(case['expected'])); self.assertEqual('0',positive_step)
+            else: self.assertEqual(name,positive); self.assertEqual('1',positive_step)
+        contexts=[('PREPARING','Prepared'),('PREPARED','ArmCommitted'),('ARMED','ApplyVerified'),('ARMED','ApplyFailed'),('ROLLBACK_PENDING','RollbackVerified'),('ROLLBACK_PENDING','RollbackFailed')]+[(p,e) for p in ('APPLIED','ROLLED_BACK') for e in ('CompletionCommitted','CompletionRejected','CompletionIndeterminate')]
+        self.assertEqual({(p,e,a) for p,e in contexts for a in ('uuid-syntax','uuid-equality','token-syntax','token-equality')},cells); self.assertEqual(29,reused)
+
+    def test_correlation_full_replay_and_input_immutability(self):
+        for case in oracle.load_transaction_fixture(self.fixture)[318:339]:
+            before=copy.deepcopy(case); oracle.verify_transaction_case(case); oracle.verify_transaction_case(case); self.assertEqual(before,case)
+            data=oracle._tx_case(case); original=copy.deepcopy(data); s=data['initialState']
+            for event,row in zip(data['events'],case['expected']):
+                a=oracle.decide_transaction(s,event,contract=case['oracleContract']); b=oracle.decide_transaction(s,event,contract=case['oracleContract']); self.assertEqual(a,b); s=a['state']
+            self.assertEqual(original,data)
+
+    def test_correlation_named_diagnosis_phase_noop_invalid_and_order_observers(self):
+        original=oracle.decide_transaction
+        for case in oracle.load_transaction_fixture(self.fixture)[318:339]:
+            for diagnosis in ('stale-phase','invalid-state'):
+                with patch.object(oracle,'decide_transaction',side_effect=lambda s,e,**kw:dict(state=copy.deepcopy(s),diagnosis=diagnosis,commands=[])):
+                    with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'): oracle.verify_transaction_case(case)
+            for field in ('diagnosis','phase'):
+                def damaged(s,e,**kw):
+                    result=original(s,e,**kw)
+                    if field=='diagnosis': result['diagnosis']='observer-damaged'
+                    else: result['state']['phase']='IDLE'
+                    return result
+                with patch.object(oracle,'decide_transaction',side_effect=damaged):
+                    with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'): oracle.verify_transaction_case(case)
+            if len(case['expected'])==2:
+                bad=copy.deepcopy(case);bad['expected'].reverse()
+                for i,row in enumerate(bad['expected']):row['step']=i
+                with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'):oracle.verify_transaction_case(bad)
+        # Invalid syntax necessarily also mismatches identity; no isolated syntax omission claim.
+    def test_correlation_recursive_full_state_command_and_validity_leaves(self):
+        cases=oracle.load_transaction_fixture(self.fixture); pool={}
+        def collect(v):
+            if isinstance(v,dict):
+                for k,c in v.items():
+                    if c is not None: pool[k]=copy.deepcopy(c)
+                    collect(c)
+            elif isinstance(v,list):
+                for c in v: collect(c)
+        def leaves(v,path=()):
+            if isinstance(v,dict):
+                for k,c in v.items(): yield from leaves(c,path+(k,))
+            elif isinstance(v,list):
+                for k,c in enumerate(v): yield from leaves(c,path+(k,))
+            else: yield path,v
+        for c in cases: collect(c['expected'])
+        pool.update(originalFailure='FAILURE',rollbackFailure='ROLLBACK',failureReceipt=pool['completionReceipt'])
+        for case in cases[318:339]:
+            for path,value in leaves(case['expected']):
+                key=path[-1]
+                if key=='step': continue
+                bad=copy.deepcopy(case); part=bad['expected']
+                for k in path[:-1]: part=part[k]
+                if key=='type':
+                    parent=bad['expected']
+                    for k in path[:-2]: parent=parent[k]
+                    parent[path[-2]]={'type':'Vanilla'} if value=='Pack' else dict(type='Pack',id='changed',treeSha256='x',contentSha256='y',importReceiptSha256='z') if value=='Vanilla' else dict(type='Rollback' if value=='Apply' else 'Apply',correlation=copy.deepcopy(pool['correlation']))
+                else:
+                    choices={'phase':('IDLE','ARMED'),'state':('CLEAR','ARMED'),'mode':('OFF','ON'),'operation':('MODE_ON','MODE_OFF'),'skinStamp':('7','8')}
+                    part[key]=copy.deepcopy(pool[key]) if value is None else next(v for v in choices[key] if v!=value) if key in choices else not value if type(value) is bool else value+'changed'
+                with self.subTest(case=case['caseId'],leaf=path):
+                    with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'): oracle.verify_transaction_case(bad)
+            bad=copy.deepcopy(case); bad['expected'][0]['commands']=[dict(type='Apply',correlation=copy.deepcopy(pool['correlation']))]
+            with self.assertRaises(AssertionError): oracle.verify_transaction_case(bad)
+        # Separate terminal repairs have one row; distinct inline bad/repaired rows prove order in the named observer test.
+
+    def test_correlation_narrowest_contract_recursive_representation_precedence(self):
+        def objects(value, path=()):
+            if isinstance(value, dict):
+                yield path, value
+                for key, child in value.items(): yield from objects(child, path + (key,))
+            elif isinstance(value, list):
+                for key, child in enumerate(value): yield from objects(child, path + (key,))
+        contracts = [oracle.TRANSACTION_CONTRACT, oracle.TRANSACTION_ROLLBACK_CONTRACT, oracle.TRANSACTION_FAILURE_CONTRACT]
+        for case in oracle.load_transaction_fixture(self.fixture)[318:339]:
+            data = oracle._tx_case(case)
+            for narrower in contracts[:contracts.index(case['oracleContract'])]:
+                bad = copy.deepcopy(case); bad['oracleContract'] = narrower
+                with patch.object(oracle, 'decide_transaction') as reducer, patch.object(oracle, 'transaction_state_valid') as validator:
+                    with self.assertRaises(oracle.OracleOutOfScope): oracle.verify_transaction_case(bad)
+                    reducer.assert_not_called(); validator.assert_not_called()
+            for path, obj in objects(data):
+                for damage in ('missing', 'extra'):
+                    bad = copy.deepcopy(case); altered = copy.deepcopy(data); part = altered
+                    for key in path: part = part[key]
+                    if damage == 'missing': del part[next(iter(obj))]
+                    else: part['unexpected'] = None
+                    HollowKnightSkinTransactionGoldensTest.reinput(bad, altered); bad['oracleContract'] = 'future'
+                    with self.subTest(case=case['caseId'], path=path, damage=damage):
+                        with patch.object(oracle, 'decide_transaction') as reducer, patch.object(oracle, 'transaction_state_valid') as validator:
+                            with self.assertRaises(oracle.FixtureFormatError): oracle.verify_transaction_case(bad)
+                            reducer.assert_not_called(); validator.assert_not_called()
+
+
+
+
+class HollowKnightSkinCodeLexicalGoldensTest(unittest.TestCase):
+    # Task89: applicable-state code lexical panel only, not correlation/state/precedence closure.
+    fixture = HollowKnightSkinTransactionGoldensTest.fixture
+    semantic = staticmethod(HollowKnightSkinFailureProofGoldensTest.semantic)
+    negative = ['0A','_A','@A','[A','Aa','A/','A:','A[','A^','A`','A-',
+                ' A','A ','A A','A\0','A\t','A\n','A\r','A\x7f','A\x9f',
+                'Ａ','Aé','A\U0001f600','A\u202e']
+    contexts = [('applyfailed','rollback-code-empty','ARMED','ApplyFailed','rollback'),
+                ('rollbackfailed','failure-code-rollbackfailed','ROLLBACK_PENDING','RollbackFailed','rollback-failed'),
+                ('applied-rejected','failure-code-applied-rejected','APPLIED','CompletionRejected','rollback'),
+                ('rolled-rejected','failure-code-rolled-rejected','ROLLED_BACK','CompletionRejected','rollback-closure-rejected')]
+    suffixes = ['negative-panel-and-min-repair','uppercase-last','min-plus-one','body-classes','max-minus-one']
+
+    def code_cases(self):
+        return oracle.load_transaction_fixture(self.fixture)[339:359]
+
+    def test_code_corpus_and_accepted339_pins(self):
+        cases=oracle.load_transaction_fixture(self.fixture)[:359]; old=cases[:339]
+        self.assertEqual((359,829),(len(cases),sum(len(c['expected']) for c in cases)))
+        self.assertEqual((20,116),(len(cases[339:]),sum(len(c['expected']) for c in cases[339:])))
+        raw=self.fixture.read_bytes(); suffix=b'\r\n  ]\r\n}\r\n'
+        self.assertEqual('25d9edf7294e4f53bbed4fbc9b5579fac9db93e873edbc4d8d478c32f976047c',hashlib.sha256(raw[:5228164]).hexdigest())
+        self.assertEqual('abd80e5eb9320ae21f00ac7f1527b271545d8723f4cd610dbf7ad82ec538d683',hashlib.sha256(raw[:5228164]+suffix).hexdigest())
+        self.assertEqual('3eba074572588742df14b9127d3ab8df9c3796b59c29d75b3beb8f69bfd10317',self.semantic(old))
+        self.assertEqual('8aa78e2234b6141850627467fc5753a47751e8b7e8165e1fdada11976e0a3e69',self.semantic([c['input'] for c in old]))
+        self.assertEqual('afdcc4b754dd722f9890366916f74dbf180d176b2b904eeb93ad374f5d800159',self.semantic([c['expected'] for c in old]))
+        for contract,count,steps in [('transaction-forward-v1',112,205),('transaction-rollback-success-v1',62,130),('transaction-failure-blocked-v1',185,494)]:
+            part=[c for c in cases if c['oracleContract']==contract]
+            self.assertEqual((count,steps),(len(part),sum(len(c['expected']) for c in part)))
+        for case in cases[339:]: oracle.verify_transaction_case(case)
+
+    def test_code_exact_panels_and_original_snapshot_repairs(self):
+        all_cases={c['caseId']:c for c in oracle.load_transaction_fixture(self.fixture)}
+        self.assertEqual(24,len(self.negative)); witnessed=set()
+        for context,seed,phase,event,diagnosis in self.contexts:
+            initial=oracle._tx_case(all_cases[seed]); s=initial['initialState']; original=initial['events'][0]
+            for suffix,codes in zip(self.suffixes,[self.negative+['A'],['Z'],['A0'],['AZ09_'],['A'*127]]):
+                case=all_cases['lex-code-'+context+'-'+suffix]; witnessed.add(case['caseId']); d=oracle._tx_case(case)
+                self.assertEqual(s,d['initialState']); self.assertEqual(phase,s['phase']); self.assertEqual(codes,[e['code'] for e in d['events']])
+                self.assertEqual('transaction-rollback-success-v1' if context=='applyfailed' else 'transaction-failure-blocked-v1',case['oracleContract'])
+                options={'contract':case['oracleContract']}; self.assertTrue(oracle.transaction_state_valid(s,**options))
+                for i,(ev,row) in enumerate(zip(d['events'],case['expected'])):
+                    with self.subTest(context=context,suffix=suffix,step=i):
+                        self.assertEqual(dict(original,code=codes[i]),ev); self.assertEqual(event,ev['type'])
+                        self.assertEqual(s['binding'],ev['correlation']['binding']); self.assertEqual(s['envelope']['transactionId'],ev['correlation']['transactionId'])
+                        self.assertTrue(row['inputStateValid']); self.assertTrue(row['stateValid'])
+                        if suffix==self.suffixes[0] and i<24:
+                            self.assertEqual('invalid-code',row['diagnosis']); self.assertEqual(s,row['state']); self.assertEqual([],row['commands'])
+                            repaired=dict(ev,code='A'); self.assertEqual(d['events'][24],repaired)
+                            positive=oracle.decide_transaction(copy.deepcopy(s),repaired,**options)
+                            self.assertEqual({k:case['expected'][24][k] for k in ('state','diagnosis','commands')},positive)
+                        else:
+                            expected=copy.deepcopy(s)
+                            if diagnosis=='rollback': expected.update(phase='ROLLBACK_PENDING',pendingClosure=None,originalFailure=codes[i])
+                            else: expected.update(phase='BLOCKED',rollbackFailure=codes[i])
+                            commands=[dict(type='Rollback',correlation=copy.deepcopy(ev['correlation']))] if diagnosis=='rollback' else []
+                            self.assertEqual(expected,row['state']); self.assertEqual(diagnosis,row['diagnosis']); self.assertEqual(commands,row['commands']); self.assertNotEqual(s,row['state'])
+                oracle.verify_transaction_case(case)
+        self.assertEqual(20,len(witnessed))
+        # Existing empty/lower/129/128 boundaries remain exact; no duplicate golden cases.
+        for context,seed,_,_,_ in self.contexts:
+            if context=='applyfailed':
+                names=['rollback-code-empty','rollback-code-lower','rollback-code-over128','rollback-code-max128']
+                self.assertEqual(['','lower','A'*129,'A'*128],[oracle._tx_case(all_cases[n])['events'][0]['code'] for n in names])
+                for n in names: oracle.verify_transaction_case(all_cases[n])
+            else:
+                self.assertEqual(['','lower','A'*129,'A'*128],[e['code'] for e in oracle._tx_case(all_cases[seed])['events']]); oracle.verify_transaction_case(all_cases[seed])
+
+    def test_code_full_replay_and_input_immutability(self):
+        for case in self.code_cases():
+            before=copy.deepcopy(case); oracle.verify_transaction_case(case); oracle.verify_transaction_case(case); self.assertEqual(before,case)
+            d=oracle._tx_case(case); original=copy.deepcopy(d); s=d['initialState']
+            for ev in d['events']:
+                a=oracle.decide_transaction(s,ev,contract=case['oracleContract']); b=oracle.decide_transaction(s,ev,contract=case['oracleContract']); self.assertEqual(a,b); s=a['state']
+            self.assertEqual(original,d)
+
+    def test_code_named32_malformed_code_controls_precede_reducer(self):
+        cases={c['caseId']:c for c in self.code_cases()}; controls=set()
+        damages=[('null',None),('bool',True),('integer',0),('array',[]),('object',{}),('missing',None),('high','\ud800'),('low','\udc00')]
+        for context,_,_,_,_ in self.contexts:
+            base=cases['lex-code-'+context+'-uppercase-last']
+            for label,value in damages:
+                bad=copy.deepcopy(base); d=oracle._tx_case(bad)
+                if label=='missing': del d['events'][0]['code']
+                else: d['events'][0]['code']=value
+                raw=json.dumps(d,ensure_ascii=True,separators=(',',':')).encode('utf8'); bad['input']={'utf8Text':raw.decode('utf8')}; bad['inputSha256']=hashlib.sha256(raw).hexdigest()
+                with self.subTest(context=context,damage=label), patch.object(oracle,'decide_transaction') as reducer, patch.object(oracle,'transaction_state_valid') as validator:
+                    with self.assertRaises(oracle.FixtureFormatError): oracle.verify_transaction_case(bad)
+                    reducer.assert_not_called(); validator.assert_not_called()
+                controls.add((context,label))
+        self.assertEqual(32,len(controls))
+        # Escaped LF/NUL/control strings are semantic invalid-code, not malformed Unicode.
+        for c in self.code_cases(): oracle.verify_transaction_case(c)
+
+    def test_code_named_validity_diagnosis_phase_commands_and_order_observers(self):
+        original=oracle.decide_transaction
+        for case in self.code_cases():
+            for diagnosis in ('stale-phase','invalid-state'):
+                with patch.object(oracle,'decide_transaction',side_effect=lambda s,e,**kw:dict(state=copy.deepcopy(s),diagnosis=diagnosis,commands=[])):
+                    with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'): oracle.verify_transaction_case(case)
+            with patch.object(oracle,'transaction_state_valid',return_value=False):
+                with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'): oracle.verify_transaction_case(case)
+            for field in ('diagnosis','phase','commands'):
+                def damaged(s,e,**kw):
+                    result=original(s,e,**kw)
+                    if field=='diagnosis': result['diagnosis']='observer-damaged'
+                    elif field=='phase': result['state']['phase']='IDLE'
+                    else: result['commands']=[dict(type='Apply',correlation=copy.deepcopy(e['correlation']))]
+                    return result
+                with patch.object(oracle,'decide_transaction',side_effect=damaged):
+                    with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'): oracle.verify_transaction_case(case)
+            if len(case['expected'])==25:
+                bad=copy.deepcopy(case); bad['expected'][0],bad['expected'][24]=bad['expected'][24],bad['expected'][0]
+                for i,row in enumerate(bad['expected']): row['step']=i
+                with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'): oracle.verify_transaction_case(bad)
+                # The24 negative rows are identical except step; only final positive distinguishes order.
+            for i,row in enumerate(case['expected']):
+                bad=copy.deepcopy(case); del bad['expected'][i]
+                with self.assertRaises(oracle.FixtureFormatError): oracle.verify_transaction_case(bad)
+                if row['commands']:
+                    for commands in ([],row['commands']*2):
+                        bad=copy.deepcopy(case);bad['expected'][i]['commands']=copy.deepcopy(commands)
+                        with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'):oracle.verify_transaction_case(bad)
+        # Zero/one commands do not prove ordering among multiple distinct commands.
+
+    def test_code_narrowest_contracts_and_default_api_preserved(self):
+        contracts=[oracle.TRANSACTION_CONTRACT,oracle.TRANSACTION_ROLLBACK_CONTRACT,oracle.TRANSACTION_FAILURE_CONTRACT]
+        for case in self.code_cases():
+            data=oracle._tx_case(case)
+            for contract in contracts[:contracts.index(case['oracleContract'])]:
+                bad=copy.deepcopy(case);bad['oracleContract']=contract
+                with patch.object(oracle,'decide_transaction') as reducer,patch.object(oracle,'transaction_state_valid') as validator:
+                    with self.assertRaises(oracle.OracleOutOfScope):oracle.verify_transaction_case(bad)
+                    reducer.assert_not_called();validator.assert_not_called()
+            with self.assertRaises(oracle.OracleOutOfScope):oracle.decide_transaction(data['initialState'],data['events'][0])
+
+    def _assert_code_recursive_full_state_command_and_validity_leaves(self, context):
+        cases=oracle.load_transaction_fixture(self.fixture); pool={}
+        def collect(v):
+            if isinstance(v,dict):
+                for k,c in v.items():
+                    if c is not None: pool[k]=copy.deepcopy(c)
+                    collect(c)
+            elif isinstance(v,list):
+                for c in v: collect(c)
+        def leaves(v,path=()):
+            if isinstance(v,dict):
+                for k,c in v.items(): yield from leaves(c,path+(k,))
+            elif isinstance(v,list):
+                for k,c in enumerate(v): yield from leaves(c,path+(k,))
+            else: yield path,v
+        for c in cases: collect(c['expected'])
+        pool.update(originalFailure='FAILURE',rollbackFailure='ROLLBACK',failureReceipt=pool['completionReceipt'])
+        for case in cases[339:359]:
+            if not case['caseId'].startswith('lex-code-'+context+'-'): continue
+            for path,value in leaves(case['expected']):
+                key=path[-1]
+                if key=='step': continue
+                bad=copy.deepcopy(case); part=bad['expected']
+                for k in path[:-1]: part=part[k]
+                if key=='type':
+                    parent=bad['expected']
+                    for k in path[:-2]: parent=parent[k]
+                    parent[path[-2]]={'type':'Vanilla'} if value=='Pack' else dict(type='Pack',id='changed',treeSha256='x',contentSha256='y',importReceiptSha256='z') if value=='Vanilla' else dict(type='Rollback' if value=='Apply' else 'Apply',correlation=copy.deepcopy(pool['correlation']))
+                else:
+                    choices={'phase':('IDLE','ARMED'),'state':('CLEAR','ARMED'),'mode':('OFF','ON'),'operation':('MODE_ON','MODE_OFF'),'skinStamp':('7','8')}
+                    part[key]=copy.deepcopy(pool[key]) if value is None else next(v for v in choices[key] if v!=value) if key in choices else not value if type(value) is bool else value+'changed'
+                with self.subTest(case=case['caseId'],leaf=path):
+                    with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'): oracle.verify_transaction_case(bad)
+            bad=copy.deepcopy(case); bad['expected'][0]['commands']=[dict(type='Apply',correlation=copy.deepcopy(pool['correlation']))]
+            with self.assertRaises(AssertionError): oracle.verify_transaction_case(bad)
+        # Separate terminal repairs have one row; distinct inline bad/repaired rows prove order in the named observer test.
+
+
+
+
+class HollowKnightSkinCodeApplyFailedRecursiveGoldensTest(unittest.TestCase):
+    fixture = HollowKnightSkinTransactionGoldensTest.fixture
+
+    def test_code_applyfailed_recursive_full_state_command_and_validity_leaves(self):
+        HollowKnightSkinCodeLexicalGoldensTest._assert_code_recursive_full_state_command_and_validity_leaves(self, 'applyfailed')
+
+
+class HollowKnightSkinCodeRollbackFailedRecursiveGoldensTest(unittest.TestCase):
+    fixture = HollowKnightSkinTransactionGoldensTest.fixture
+
+    def test_code_rollbackfailed_recursive_full_state_command_and_validity_leaves(self):
+        HollowKnightSkinCodeLexicalGoldensTest._assert_code_recursive_full_state_command_and_validity_leaves(self, 'rollbackfailed')
+
+
+class HollowKnightSkinCodeAppliedRejectedRecursiveGoldensTest(unittest.TestCase):
+    fixture = HollowKnightSkinTransactionGoldensTest.fixture
+
+    def test_code_applied_rejected_recursive_full_state_command_and_validity_leaves(self):
+        HollowKnightSkinCodeLexicalGoldensTest._assert_code_recursive_full_state_command_and_validity_leaves(self, 'applied-rejected')
+
+
+class HollowKnightSkinCodeRolledRejectedRecursiveGoldensTest(unittest.TestCase):
+    fixture = HollowKnightSkinTransactionGoldensTest.fixture
+
+    def test_code_rolled_rejected_recursive_full_state_command_and_validity_leaves(self):
+        HollowKnightSkinCodeLexicalGoldensTest._assert_code_recursive_full_state_command_and_validity_leaves(self, 'rolled-rejected')
+
+
+
+
+class HollowKnightSkinUuidLexicalGoldensTest(unittest.TestCase):
+    # Representative UUID-only strings; syntax also mismatches identity. No RFC semantics.
+    fixture = HollowKnightSkinTransactionGoldensTest.fixture
+    semantic = staticmethod(HollowKnightSkinFailureProofGoldensTest.semantic)
+    panels = [('shape', ['', '11111111-1111-1111-1111-11111111111', '11111111-1111-1111-1111-1111111111111', '111111111111-1111-1111-111111111111', '11111111--1111-1111-1111-111111111111', '1111111-11111-1111-1111-111111111111', '11111111_1111-1111-1111-111111111111', '11111111111111111111111111111111', '{11111111-1111-1111-1111-111111111111}', 'urn:uuid:11111111-1111-1111-1111-111111111111']), ('ascii', ['A1111111-1111-1111-1111-111111111111', 'F1111111-1111-1111-1111-111111111111', 'AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA', '/1111111-1111-1111-1111-111111111111', ':1111111-1111-1111-1111-111111111111', '`1111111-1111-1111-1111-111111111111', 'g1111111-1111-1111-1111-111111111111', 'G1111111-1111-1111-1111-111111111111']), ('whitespace', [' 11111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111 ', '1111 111-1111-1111-1111-111111111111', '\t11111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111\t', '1111\t111-1111-1111-1111-111111111111', '\n11111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111\n', '1111\n111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111\r', '11111111-1111-1111-1111-111111111111\r\n', '1111\x00111-1111-1111-1111-111111111111', '1111\x7f111-1111-1111-1111-111111111111', '1111\x85111-1111-1111-1111-111111111111', '\xa011111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111\xa0', '1111\u2028111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111\u2028']), ('unicode', ['\u06601111111-1111-1111-1111-111111111111', '\uff101111111-1111-1111-1111-111111111111', '\uff411111111-1111-1111-1111-111111111111', '\u03b11111111-1111-1111-1111-111111111111', '\u04301111111-1111-1111-1111-111111111111', '11111111\u20101111-1111-1111-111111111111', '\U0001f6001111111-1111-1111-1111-111111111111', '\U0001d7ce1111111-1111-1111-1111-111111111111'])]
+    positives = [('zero', '00000000-0000-0000-0000-000000000000'), ('nine', '99999999-9999-9999-9999-999999999999'), ('a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), ('f', 'ffffffff-ffff-ffff-ffff-ffffffffffff')]
+    donor = 'correlation-preparing-prepared-uuid-syntax'
+
+    def uuid_cases(self):
+        return oracle.load_transaction_fixture(self.fixture)[359:367]
+
+    def test_uuid_corpus_and_accepted359_pins(self):
+        cases=oracle.load_transaction_fixture(self.fixture); old=cases[:359]
+        self.assertEqual((367,881),(len(cases),sum(len(c['expected']) for c in cases)))
+        self.assertEqual((8,52),(len(cases[359:]),sum(len(c['expected']) for c in cases[359:])))
+        raw=self.fixture.read_bytes(); suffix=b'\r\n  ]\r\n}\r\n'
+        self.assertEqual('88dc3230cbe4fc346120b26c003aa2e716d71d3ca7b27f2eb66098d9716c5b2d',hashlib.sha256(raw[:5937735]).hexdigest())
+        self.assertEqual('e9b0d6eef5b2fb03cc4156b97c2ced01e31a1ec71dbdc015fe6d1be5bbaf896e',hashlib.sha256(raw[:5937735]+suffix).hexdigest())
+        self.assertEqual('7bdd4fb5f85a41fecb8d71e642e56875a4ff95cfb209b97fc00338217e37e5cd',self.semantic(old))
+        self.assertEqual('50ead1606cd504bfadd72bfaceef6b92bc0a43db841822c7089c272b2bcd9502',self.semantic([c['input'] for c in old]))
+        self.assertEqual('db3564f733657d9d527f072ef92f82afc1e0d3d866970051d0df65b28500d7dc',self.semantic([c['expected'] for c in old]))
+        for contract,count,steps in [('transaction-forward-v1',120,257),('transaction-rollback-success-v1',62,130),('transaction-failure-blocked-v1',185,494)]:
+            part=[c for c in cases if c['oracleContract']==contract]
+            self.assertEqual((count,steps),(len(part),sum(len(c['expected']) for c in part)))
+        for case in cases: oracle.verify_transaction_case(case)
+
+    def test_uuid_exact_panels_original_snapshot_repairs_and_coherent_positives(self):
+        all_cases={c['caseId']:c for c in oracle.load_transaction_fixture(self.fixture)}
+        donor=oracle._tx_case(all_cases[self.donor]); original=donor['events'][1]; original_state=donor['initialState']; count=0; negatives=0
+        panels=[(name,values+[original['correlation']['transactionId']],False) for name,values in self.panels]+[('positive-'+name,[value],True) for name,value in self.positives]
+        for name,values,positive in panels:
+            case=all_cases['lex-uuid-preparing-prepared-'+name]; data=oracle._tx_case(case); s=data['initialState']; expected_initial=copy.deepcopy(original_state)
+            if positive: expected_initial['envelope']['transactionId']=values[0]
+            self.assertEqual(expected_initial,s); self.assertTrue(oracle.transaction_state_valid(s)); self.assertEqual('transaction-forward-v1',case['oracleContract'])
+            self.assertEqual(values,[e['correlation']['transactionId'] for e in data['events']])
+            for i,(ev,row) in enumerate(zip(data['events'],case['expected'])):
+                expected_event=copy.deepcopy(original); expected_event['correlation']['transactionId']=values[i]; self.assertEqual(expected_event,ev)
+                self.assertTrue(row['inputStateValid']); self.assertTrue(row['stateValid']); out=copy.deepcopy(s)
+                if not positive and i<len(values)-1:
+                    negatives+=1; self.assertEqual(s,row['state']); self.assertEqual('stale-correlation',row['diagnosis']); self.assertEqual([],row['commands'])
+                    repair=copy.deepcopy(ev); repair['correlation']['transactionId']=original['correlation']['transactionId']; self.assertEqual(original,repair)
+                    result=oracle.decide_transaction(copy.deepcopy(original_state),repair)
+                    repaired_state=copy.deepcopy(original_state); repaired_state['phase']='PREPARED'
+                    self.assertEqual(dict(state=repaired_state,diagnosis='arm',commands=[dict(type='Arm',envelope=copy.deepcopy(original_state['envelope']))]),result)
+                else:
+                    out['phase']='PREPARED'; self.assertEqual(out,row['state']); self.assertEqual('arm',row['diagnosis'])
+                    self.assertEqual([dict(type='Arm',envelope=copy.deepcopy(s['envelope']))],row['commands'])
+            oracle.verify_transaction_case(case); count+=1
+        self.assertEqual((8,44),(count,negatives))
+
+    def test_uuid_full_replay_and_input_immutability(self):
+        for case in self.uuid_cases():
+            before=copy.deepcopy(case); oracle.verify_transaction_case(case); oracle.verify_transaction_case(case); self.assertEqual(before,case)
+            data=oracle._tx_case(case); original=copy.deepcopy(data); s=data['initialState']
+            for event in data['events']:
+                a=oracle.decide_transaction(s,event); b=oracle.decide_transaction(s,event); self.assertEqual(a,b); s=a['state']
+            self.assertEqual(original,data)
+
+    def test_uuid_named_representation_scope_and_default_contract_controls(self):
+        cases=oracle.load_transaction_fixture(self.fixture); base=next(c for c in cases if c['caseId']==self.donor); controls=set()
+        def reinput(case,data):
+            text=json.dumps(data,ensure_ascii=True,separators=(',',':')); case['input']={'utf8Text':text}; case['inputSha256']=hashlib.sha256(text.encode()).hexdigest()
+        damages=[('null',None),('bool',True),('integer',1),('array',[]),('object',{}),('missing',None),('high','\ud800'),('low','\udc00'),('reversed','\udc00\ud800')]
+        for name,value in damages:
+            bad=copy.deepcopy(base); data=oracle._tx_case(bad)
+            if name=='missing': del data['events'][0]['correlation']['transactionId']
+            else: data['events'][0]['correlation']['transactionId']=value
+            reinput(bad,data)
+            with patch.object(oracle,'decide_transaction') as reducer,patch.object(oracle,'transaction_state_valid') as validator:
+                with self.assertRaises(oracle.FixtureFormatError):oracle.verify_transaction_case(bad)
+                reducer.assert_not_called();validator.assert_not_called()
+            controls.add('Prepared|'+name)
+        for kind in ('ApplyFailed','RollbackVerified','RollbackFailed','CompletionRejected','CompletionIndeterminate'):
+            seed=next(e for c in cases for e in oracle._tx_case(c)['events'] if e['type']==kind)
+            for malformed in (False,True):
+                bad=copy.deepcopy(base); data=oracle._tx_case(bad); event=copy.deepcopy(seed); event['correlation']['transactionId']=None if malformed else ''; data['events'][0]=event; reinput(bad,data)
+                with patch.object(oracle,'decide_transaction') as reducer,patch.object(oracle,'transaction_state_valid') as validator:
+                    with self.assertRaises(oracle.FixtureFormatError if malformed else oracle.OracleOutOfScope):oracle.verify_transaction_case(bad)
+                    reducer.assert_not_called();validator.assert_not_called()
+                controls.add(kind+'|'+str(malformed))
+        self.assertEqual(19,len(controls))
+        for case in self.uuid_cases():
+            data=oracle._tx_case(case)
+            for contract in (oracle.TRANSACTION_CONTRACT,oracle.TRANSACTION_ROLLBACK_CONTRACT,oracle.TRANSACTION_FAILURE_CONTRACT):
+                other=copy.deepcopy(case);other['oracleContract']=contract;oracle.verify_transaction_case(other)
+                self.assertEqual(oracle.decide_transaction(data['initialState'],data['events'][0]),oracle.decide_transaction(data['initialState'],data['events'][0],contract=contract))
+
+    def test_uuid_named_validity_diagnosis_phase_commands_and_order_observers(self):
+        original=oracle.decide_transaction
+        for case in self.uuid_cases():
+            for diagnosis in ('stale-phase','invalid-state'):
+                with patch.object(oracle,'decide_transaction',side_effect=lambda s,e,**kw:dict(state=copy.deepcopy(s),diagnosis=diagnosis,commands=[])):
+                    with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'):oracle.verify_transaction_case(case)
+            with patch.object(oracle,'transaction_state_valid',return_value=False):
+                with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'):oracle.verify_transaction_case(case)
+            for field in ('diagnosis','phase','commands'):
+                def damaged(s,e,**kw):
+                    result=original(s,e,**kw)
+                    if field=='diagnosis':result['diagnosis']='observer-damaged'
+                    elif field=='phase':result['state']['phase']='IDLE'
+                    else:result['commands']=[dict(type='Apply',correlation=copy.deepcopy(e['correlation']))]
+                    return result
+                with patch.object(oracle,'decide_transaction',side_effect=damaged):
+                    with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'):oracle.verify_transaction_case(case)
+            if len(case['expected'])>1:
+                bad=copy.deepcopy(case);bad['expected'][0],bad['expected'][-1]=bad['expected'][-1],bad['expected'][0]
+                for i,row in enumerate(bad['expected']):row['step']=i
+                with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'):oracle.verify_transaction_case(bad)
+            for i,row in enumerate(case['expected']):
+                bad=copy.deepcopy(case);del bad['expected'][i]
+                with self.assertRaises(oracle.FixtureFormatError):oracle.verify_transaction_case(bad)
+                if row['commands']:
+                    for commands in ([],row['commands']*2):
+                        bad=copy.deepcopy(case);bad['expected'][i]['commands']=copy.deepcopy(commands)
+                        with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'):oracle.verify_transaction_case(bad)
+        # Identical negative rows do not prove their mutual order; distinct final arm does.
+
+
+    def _assert_uuid_recursive_full_state_command_and_validity_leaves(self, panel_index):
+        cases=oracle.load_transaction_fixture(self.fixture); pool={}
+        def collect(v):
+            if isinstance(v,dict):
+                for k,c in v.items():
+                    if c is not None: pool[k]=copy.deepcopy(c)
+                    collect(c)
+            elif isinstance(v,list):
+                for c in v: collect(c)
+        def leaves(v,path=()):
+            if isinstance(v,dict):
+                for k,c in v.items(): yield from leaves(c,path+(k,))
+            elif isinstance(v,list):
+                for k,c in enumerate(v): yield from leaves(c,path+(k,))
+            else: yield path,v
+        for c in cases: collect(c['expected'])
+        pool.update(originalFailure='FAILURE',rollbackFailure='ROLLBACK',failureReceipt=pool['completionReceipt'])
+        observed=0
+        for case in (cases[359+panel_index],cases[363+panel_index]):
+            for path,value in leaves(case['expected']):
+                key=path[-1]
+                if key=='step': continue
+                observed+=1
+                bad=copy.deepcopy(case); part=bad['expected']
+                for k in path[:-1]: part=part[k]
+                if key=='type':
+                    parent=bad['expected']
+                    for k in path[:-2]: parent=parent[k]
+                    parent[path[-2]]={'type':'Vanilla'} if value=='Pack' else dict(type='Pack',id='changed',treeSha256='x',contentSha256='y',importReceiptSha256='z') if value=='Vanilla' else dict(type='Rollback' if value=='Apply' else 'Apply',correlation=copy.deepcopy(pool['correlation']))
+                else:
+                    choices={'phase':('IDLE','ARMED'),'state':('CLEAR','ARMED'),'mode':('OFF','ON'),'operation':('MODE_ON','MODE_OFF'),'skinStamp':('7','8')}
+                    part[key]=copy.deepcopy(pool[key]) if value is None else next(v for v in choices[key] if v!=value) if key in choices else not value if type(value) is bool else value+'changed'
+                with self.subTest(case=case['caseId'],leaf=path):
+                    with self.assertRaisesRegex(AssertionError,'full ordered transaction log mismatch'): oracle.verify_transaction_case(bad)
+            bad=copy.deepcopy(case); bad['expected'][0]['commands']=[dict(type='Apply',correlation=copy.deepcopy(pool['correlation']))]
+        self.assertEqual([566,478,918,478][panel_index],observed)
+
+
+class HollowKnightSkinUuidShapeRecursiveGoldensTest(unittest.TestCase):
+    fixture = HollowKnightSkinTransactionGoldensTest.fixture
+
+    def test_uuid_shape_recursive_full_state_command_and_validity_leaves(self):
+        HollowKnightSkinUuidLexicalGoldensTest._assert_uuid_recursive_full_state_command_and_validity_leaves(self, 0)
+
+
+class HollowKnightSkinUuidAsciiRecursiveGoldensTest(unittest.TestCase):
+    fixture = HollowKnightSkinTransactionGoldensTest.fixture
+
+    def test_uuid_ascii_recursive_full_state_command_and_validity_leaves(self):
+        HollowKnightSkinUuidLexicalGoldensTest._assert_uuid_recursive_full_state_command_and_validity_leaves(self, 1)
+
+
+class HollowKnightSkinUuidWhitespaceRecursiveGoldensTest(unittest.TestCase):
+    fixture = HollowKnightSkinTransactionGoldensTest.fixture
+
+    def test_uuid_whitespace_recursive_full_state_command_and_validity_leaves(self):
+        HollowKnightSkinUuidLexicalGoldensTest._assert_uuid_recursive_full_state_command_and_validity_leaves(self, 2)
+
+
+class HollowKnightSkinUuidUnicodePositiveRecursiveGoldensTest(unittest.TestCase):
+    fixture = HollowKnightSkinTransactionGoldensTest.fixture
+
+    def test_uuid_unicode_and_positive_recursive_full_state_command_and_validity_leaves(self):
+        HollowKnightSkinUuidLexicalGoldensTest._assert_uuid_recursive_full_state_command_and_validity_leaves(self, 3)
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,5 +1,10 @@
 # Hollow Knight-First Dual Souls Implementation Plan
 
+> **Current execution authority:** The 2026-09-08 Silksong host-continuation
+> addendum below supersedes this document's historical authorization and
+> H5/H6/device-first ordering for current host work. Earlier evidence and
+> unchecked device rows remain preserved, not passed.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:subagent-driven-development` (recommended) or
 > `superpowers:executing-plans` to implement this plan task by task. Steps use
@@ -33,6 +38,213 @@ authorized. Do not interact with a locked physical device; otherwise continue
 until completion, a genuine blocker, or an explicit pause request.
 
 ---
+
+## Task99 residual6 font-owner handoff — 2026-09-09 19:41 UTC
+
+**SAME SPEC reviewer:1/2/3/4/5 RESOLVED;6's committed-effect lifetime corrected.**
+One conditional text-bearing-extra ownership mismatch was corrected and now awaits
+that reviewer's6-only recheck. **Task99/parent97 OPEN,7/8 unchanged unapproved
+blockers; no QUALITY/full acceptance/Mods/Task100.** No repeated broader review or
+new discovery. Reviewed344/105/DLL`70c8a59f…` and all failures remain preserved.
+
+- Only production change is `DsPortProgress.Inventory.cs`: prepare committed extras
+  with the same page.Text owner that later traverses them, like existing custom
+  icons. Remove unused ConsumeVisual.Text/its Clear. No exclusions or font-check
+  relaxation. Common text ownership, poison-before-validation and exact page-state
+  retirement mechanics remain unchanged. All extra/page roots must retire before
+  page.Text.Clear; failure retains exact obligations. No native response/Take,
+  signal/lifetime/reparenting/budget changes.
+- **13/13 focused,351/351 combined,106 allowed source contracts**, actual SS
+  CoreCompile=true,0 errors/7 existing unrelated warnings. Seven new linked font
+  controls cover text/plain, foreign font, exact root/font retirement retry,
+  failed preparation and separate-owner negative mismatch. Actual source wiring
+  checks the shared owner and strict validation/cleanup boundaries. Managed linked
+  mechanics + source/native proof only, NOT Unity text/signal/render execution or
+  required serialized graph inclusion.
+- Receipts under the existing Task99 evidence root are
+  `spec-residual6-font-focused-final`, `spec-residual6-font-contracts`,
+  `spec-residual6-font-combined`, `spec-residual6-font-ss`,
+  `spec-residual6-font-identities-source`; all exit0/timedOut=false. Matrix addendum
+  records PID/start/end/elapsed and preserves source-wiring RED plus the historical
+  misleadingly named focused-green11/13 failure (fixture omitted expected Tick
+  rethrow, corrected only in tests). No active owned child.
+- All **314/334/344/275 identities** preserved;64 compiled-source hashes compared,
+  exactly Inventory changed. Inventory SHA-256:
+  `6a1900f033874d870bff8562b31aa73390adae6228cbc9be49ec7a8c24773d2e`.
+  Current SS DLL SHA-256:
+  `7a5305039ddb62994bb533a3d4ca0687862aacc23b72889cd8db8e8da5c7e810`.
+  Compiled-source manifest SHA-256:
+  `0484ad134f51a2e7e9674950f9dead21dac28710a0941397895dd4e0fd31a484`.
+  No production/test edits after final verification/hash capture. Only existing
+  status addenda changed afterward. All prior operation/scope boundaries unchanged.
+
+## Task99 residual3/6 handoff — 2026-09-09 19:20 UTC
+
+**SAME independent SPEC recheck:1/2/4/5 RESOLVED,3/6 PARTIAL,7/8 OPEN.**
+Only concrete residual3/6 were corrected; candidates now await that same reviewer's
+recheck, not self-acceptance. **Task99/parent97 OPEN; no QUALITY/full acceptance,
+Mods or Task100 advancement.** Matching matrix addendum contains source/native line
+references and PID/start/end/elapsed/exit/timedOut receipts. Preserve the reviewed
+334/103 checkpoint, historical addenda, failures, old cores, goldens and evidence.
+
+- **3:** retain exact owned InventoryItemTool slotAnimator alongside crest slot
+  Animators. Validate all three native controller arrays on the born-inactive copy
+  with finally restoration; native SetData/refresh retains live controller choice.
+  Pin/recheck exact entry, template mapping, manager, Animator and ordered variants
+  after page refresh and before submit. Primary input remains disabled. Four linked
+  fixture cases plus actual production-wiring contracts cover the candidate.
+- **6:** separate hold/audio cancellation from exact per-entry page-owned committed
+  signal/extra lifetime. Ordinary release detaches callbacks/stops the routine but
+  preserves committed visuals; a cancelled next hold cannot retire prior effects.
+  Distinct extras spawn only after the reached native signal wait, so early release
+  cannot spawn an unreached extra and later commits do not restart previous extras.
+  Known extra-node budget admission precedes native commit; postcommit presentation
+  failure cannot replay response/Take. Native independent fade timing is preserved.
+  Bounded exact-owner visual cleanup remains retryable at page retirement. Six linked
+  fixture cases plus actual production-wiring contracts cover cancellation, signal,
+  extra, successive holds/commits, retirement retry and owner loss.
+- Current-source evidence: **10/10 focused,344/344 combined,105 allowed contracts**;
+  actual SS CoreCompile=true,0 errors and7 existing warnings outside changed files.
+  Receipts `spec-residual36-focused-green`, `spec-residual36-contracts`,
+  `spec-residual36-combined`, `spec-residual36-ss`,
+  `spec-residual36-identities-source` are under
+  `tools/shared-patches-tests/obj/task99-journal-continuation-20260908/`.
+  All exit0/timedOut=false; no active owned child. RED source failures and nine
+  missing-policy-type failures are preserved, not misrepresented as Unity REDs.
+- All **314 baseline/334 reviewed/275 overlay identities** retained. Compiled-source
+  comparison changes exactly Inventory,Loadout,SelectState; resolved source files
+  remain unchanged. No production edit follows the final compile/hash capture.
+  SS DLL SHA-256:
+  `70c8a59f6fdfa799b26198a9c042bae52745f574a7762d2dba50604ceaefc756`.
+  Compiled-source manifest SHA-256:
+  `71d9f1b0a6bba6d4388b47422b29a3abc10520320836e8d82ff245a095b2256e`.
+- Evidence is linked managed policy/fixture + reachable source wiring + exact native
+  source + cached compilation, **not Unity animation/coroutine/effect execution or
+  required serialized graph inclusion**.7/8 remain unchanged OPEN/unapproved; no
+  additional searches or scope waiver. Existing offline/no-restore, command/child
+  bounds, no config/git mutation/cleanup/device/packaging/source-image activation,
+  native-memory/save edits or publication boundaries remain unchanged.
+
+## Task99 same-SPEC correction handoff — 2026-09-09 18:38 UTC
+
+**Task99/parent97 remain OPEN; SAME independent SPEC recheck next. No QUALITY,
+acceptance, Mods or Task100 advancement.** Per-finding corrections, residuals and
+receipts are recorded in the matching addendum in
+`docs/verification/dual-souls-ui-port-matrix.md`; all prior sections remain historical.
+
+- Candidate corrections1–6 are wired in production: exact native fade bridges;
+  retained ordinary Loadout submit targets/callback boundary; exact owned slot
+  visual Animators and same-page success refresh; retryable Dialogue/credits
+  parent-plus-sibling restoration; outgoing page CONTENT retained separately from
+  revoked interaction; guarded native Inventory hold/consume/closing consequences,
+  cancellation and denied feedback with owned memory-message state. Native primary
+  `paneList.InSubMenu` is not written by the Inventory adapter.
+- Final current-source verification: **334/334 linked tests,103 allowed source
+  contracts**, actual SS CoreCompile=true; all **314 baseline/275 overlay case
+  identities** preserved. Receipts are `spec-corrections-final-contracts`,
+  `spec-corrections-final-combined`, `spec-corrections-final-ss` and
+  `spec-corrections-final-identities-source` under the existing Task99 evidence
+  root. All exit0/timedOut=false, each child <=175s; no active owned child.
+- Current SS DLL SHA-256:
+  `5fca0c0c395164730a17b9b518b71a7a2b674bccfbc4a102468cee88339bf8ed`.
+  Compiled-source manifest SHA-256:
+  `7cf3f9a8886a010815a691d39701b8d46bbae7d2ee6f654e7dd72b5e73469ebd`.
+- This is **managed policy/source-wiring/real compilation evidence**, not native
+  Unity graph, coroutine, animation/audio, GPU or live execution. Bridge-populated
+  graphs, required serialized slot Animator topology and Inventory effect/audio/
+  custom-display/failed-animation graph inclusion remain unproven under existing
+  T99B-CREST-GRAPH / T99B-PAGE / T99B-VISUAL gates. Outgoing visible-content tests use
+  managed fixture content. No completeness claim follows from conservative rejection.
+- **T99B-OVERLAY-TUTORIAL-INPUT remains OPEN:** inspected native DoMsg exposes only
+  native skip polling before its completion sequence, no proven legal retained-instance
+  companion dismissal endpoint. Legal endpoint or explicit user scope approval is
+  required; no synthetic skip, Spawn/Setup replay or early completion was added.
+- **T99B-MAP-PRESENT-MIXED-QUEUE remains OPEN:** required serialized graph/pass
+  inclusion/exclusion and interleave are not established. Mixed queues in one
+  SortingGroup still fail closed; this is not evidence that all Maps fail or that
+  required support is complete.
+- All REDs, compilation/test-harness failures, old cores/goldens and evidence are
+  retained and classified in the matrix. No restore/download/config/git mutation,
+  cleanup, packaging/source-image activation, native-memory/save edit, device or
+  publication work occurred. No fresh HK compile is claimed for this correction run.
+
+## Task99 current bounded handoff — 2026-09-09 17:10 UTC
+
+Historical unchecked implementation rows below describe their named checkpoint;
+this addendum supersedes their ACTION/Map-pending status, not their evidence.
+**Task99/parent97 remain OPEN.** No independent acceptance or Mods advance.
+
+- [x] Implement Map same-observation recipe-value/membership freshness, owned
+  command-only rendering without native camera callbacks/buffer mutation, and
+  native material/layer/order/camera/SortingGroup-informed sorting. Map checkpoint
+  **308/308**, **96/96** contracts retained all299 plus9 and original overlay275.
+- [x] Correct the concrete equipped-crest-only action gate using native supplied
+  slot and exact selected crest/name/descriptor/SaveEquips callback authority.
+  Global equipped ID remains freshness authority; ordinary legality gates remain.
+  Focused **0/6 RED → 6/6 GREEN**, wiring RED/GREEN, combined **314/314** (308+6),
+  **97/97** allowed contracts. No unknown-prefab deferral for that code restriction.
+- [x] Correct all four existing named hold-loss cases without changing identities:
+  distinct owner/resource/selection/visibility fixtures feed actual linked
+  selection/hold policy, each asserts only its named input changes. Focused4/4,
+  final combined314/314, exact314/overlay275 retained, no xUnit1026 warning.
+  This is modeled native input, not execution of Unity action legality.
+- [x] Cached actual current SS CoreCompile, exit0/no timeout. Latest DLL SHA-256
+  `c3148b81ff20d221abee7f59c70bb802ff7d32e430b3071f5e3b9100a9ce83ca`.
+  Receipt `action-current-source-drift-compile-red` is GREEN by actual result,
+  despite its directory name: syntax failure did not reproduce; captured source
+  comment was valid, no syntax edit/RED credit. Earlier selected-crest DLL
+  `ef39b4b7edb0933ef94f90fc01241ab4918c7307ba1621318cede394565556e6`
+  and earlier Map DLL remain separately retained historical evidence.
+- [ ] **T99B-OVERLAY-TUTORIAL-INPUT:** native tutorial/PowerUp coroutine owns
+  dismissal; close with proven legal staged companion endpoint or explicit
+  acceptance of precise native-only input. No injected confirm/progression replay.
+- [ ] **T99B-MAP-PRESENT-MIXED-QUEUE:** mixed queues within a SortingGroup are
+  rejected pending exact pass/group interleave authority. Close with required
+  concrete graph/pass evidence plus matching ordering, or evidence required graphs
+  do not use this case. Rejection is not support.
+- [ ] Required ordinary graph coverage and Unity/native callback/coroutine/action/
+  particle/animation/GPU clipping/pass/visual execution remain separate unpassed
+  evidence. Independent SPEC, separate QUALITY and fresh main verification are next;
+  no full Task99 acceptance, fresh HK compile or native execution is claimed here.
+
+Receipts: `tools/shared-patches-tests/obj/task99-journal-continuation-20260908/`,
+including `action-selected-crest-*`, `task99-bounded-implementation-*`,
+`action-distinct-loss-green`, `task99-handoff-combined-green`,
+`task99-handoff-identities` and `action-current-source-drift-capture`.
+Exact command metadata/hashes and residual closure conditions are in the existing
+matrix. All historical receipts, offline/no-restore and operational restrictions
+remain intact; no active owned child, accepted HUD/shared edit, nested agent,
+device/publication/source activation, git/config/save edit or cleanup.
+
+## Task99 ACTION continuation checkpoint — 2026-09-09 16:37 UTC
+
+- [x] Wire native locked-slot hold/removal, source reload/toggle dispatch, exact
+  pre-precedence touch cancellation, owned socket icons and action effects;
+  preserve native commit authority, waits, and cancellation-before-retirement.
+- [x] Preserve same owned page after native action refresh without replaying
+  commits; fence reentrant retirement until native callback unwind. Native
+  particle callbacks are page-owned rather than creating a global singleton.
+- [x] Combined **299/299** linked cases retain all **275** overlay checkpoint
+  identities plus exactly **24** action controls. Focused **124/124**, allowed
+  source contracts **93/93**, actual cached current SS CoreCompile. DLL SHA-256
+  `7688e4e064873d32db6cfcbcdf3cfab39490b687aee34ca9c18bdc26f5d5b83f`.
+  Receipt directory `tools/shared-patches-tests/obj/task99-journal-continuation-20260908/`:
+  `action-unwind-selection-green`, `action-unwind-contracts-green`,
+  `action-unwind-current-compile-green`, `action-factories-combined-green`,
+  `action-factories-case-identities`; all exit0/no timeout. Detailed command
+  metadata, preserved REDs and implementation limits are in the existing matrix.
+- Native `CustomButtonCombo` is informational gameplay instruction, not a missing
+  inventory `CustomAction` dispatch. This corrects earlier broad action wording.
+- [ ] **T99B-MAP-PRESENT** dynamic freshness/sorting/native callback-buffer authority.
+- [ ] Full99 implementation, independent SPEC, separate QUALITY, fresh main QA.
+
+Task99/parent97 remain **OPEN**, Tasks100/101/102 separate and incomplete. No
+Unity/native coroutine, concrete prefab, native action, animation/particle or
+rendering execution is claimed. Unknown concrete graphs and non-equipped-crest
+variants remain unaccepted; strict ownership guards are not proof of support.
+The native-only tutorial dismissal gap remains separately tracked. All prior
+history/receipts and current offline/no-restore/no-device/no-publication/no-git-
+mutation/no-cleanup boundaries are unchanged.
 
 ## Non-negotiable execution order
 
@@ -728,3 +940,417 @@ No stage passes merely because code compiles or something renders on display
 1. After every stage, re-read the specifications, update this ledger and the
 two verification ledgers, classify every gap, update the README for a major
 achievement, and stop advancement while a stage blocker remains.
+
+## 2026-09-08 execution addendum — Silksong host continuation
+
+The user has resumed Silksong host implementation. This addendum supersedes
+historical H5/H6 and per-module device prerequisites for this continuation;
+historical states and unpassed evidence remain preserved, not converted to
+passes. The approved product scope includes both games, not only Hollow Knight.
+
+Retain Silksong's direct-display engine and adapt Hollow Knight's bottom-screen
+design using Silksong's same live semantic HUD objects/native drivers and native
+page, selection, prompt and overlay composition. DsShell, cloned/mirrored gameplay
+HUD, the intact default Silksong HUD layout and synthetic replacement widgets
+remain rejected. Static/status chrome may reuse native donors separately.
+
+Task96 closes the simplified Hollow Knight skin host gate: 121 accepted C# and
+84 accepted Kotlin cases over the recorded 566-source/27-input freeze. It does
+not establish device parity, complete texture-family support or full gameplay
+Mods parity. H3 still has two implemented presentation capabilities and eighteen
+disabled gameplay rows. The retained final acceptance artifact is
+`tools/shared-patches-tests/obj/task96-main-20260908T125700Z/final-main-host-verification.json`,
+SHA-256 `cd72d5757ba7cca8a6833e8dc0e11640b60aa33804f56e6a499944335818ff5d`.
+These documentation and subsequent implementation changes establish a new
+source baseline; they do not extend that historical freeze or its test credit.
+
+### Task99: functional HUD and native companion pages
+
+Execute two coherent internal batches, with focused behavioral RED/GREEN,
+exact cached two-game compiles, independent SPEC then QUALITY review, and fresh
+main verification. These are host boundaries, not per-module device gates.
+
+- [ ] **Batch A — live HUD and frame ownership.** Create
+  `tools/silksong-patches/src/dualscreen/DsPortHud.cs` and the Unity-independent
+  production routing implementation `DsPortHudState.cs`; link that actual code
+  into `tools/shared-patches-tests/SharedPatches.Tests.csproj` and test through
+  `SilksongHudRoutingTests.cs`, faking only node access. Extend `DsResidentUi.cs`
+  with unique typed semantic-root discovery from `GameCameras.SilentInstance`,
+  `HUDCamera.GameplayChild`, `hudCanvasSlideOut`, `silkSpool`, health, Money/Shard
+  `CurrencyCounter`, `BindOrbHudFrame` and `ToolHudIcon` owners. Verify the exact
+  minimal roots and native transition ordering from cached managed source.
+  Missing/ambiguous essential roots must move nothing and retry on valid
+  residency, including replacement within the same scene.
+- [ ] Route the same native objects into health/Silk/currency/loadout slots;
+  capture original parent, sibling, moved-root local transform and changed node
+  layers before mutation. Reassert after native updates and adopt new children
+  without recapturing companion state as vanilla. Restore only these routing
+  properties, never child animation, color, active flags or native drivers.
+  Native HUD belongs to `DsPortLayers.HUD`, not disposable static frame chrome.
+- [ ] Expose slot geometry/readiness/revision from `DsPortFrame.cs` and notify
+  before every `DestroyComposition()` path. Integrate ownership into
+  `DsPortRuntime.cs`; restore before frame invalidation, hiding roots and
+  disposal. Forward `LateUpdate()` from `DualScreenV2.cs`. Establish a typed
+  pre-transition restore boundary, not merely `sceneUnloaded`. Pause, native
+  inventory, full-off and display loss restore primary HUD; companion-page
+  switching/toggling does not. Never use static `NormalizeRenderers()` on live HUD.
+- [ ] Execute routing tests for identity/native-state preservation, each restore
+  gate, page-only toggles, spawned-child layers, driver reparenting, same-scene
+  replacement, missing/duplicate roots and retry, restoration before frame
+  destruction, idempotence and surviving objects after child destruction.
+- [ ] **Batch B — native pages, selection and overlays.** Add
+  `DsPortInventory.cs`, `DsPortLoadout.cs`, `DsPortProgress.cs`, `DsPortMap.cs`,
+  `DsPortSelect.cs` and `DsPortOverlays.cs` in the same dualscreen directory.
+  Reuse `DsGameArt` discovery and native manager open/settle/selective-freeze
+  knowledge, not Widget/Piece reconstruction or a generic grid. Do not invoke
+  `PlayerDataTestResponse.Evaluate` on live sources without proving UnityEvent
+  effects. Reuse Crest/Tool reads but establish legal native action dispatch
+  and native glyph/verb producers; browsing must not equip items. Reuse
+  `DsMapView` source/map/compass knowledge, not its render-texture wrapper;
+  restore primary-map state in `finally` and yield to a native primary map.
+  Map direct-clone side effects and dialogue/tutorial/title/item/fade owners
+  require bounded game-specific source checks. Do not apply static-frame
+  sanitization to functional pages/overlays.
+- [ ] Test interrupted host switching, stale selection after source replacement,
+  unavailable actions, no equip from browsing, action-time legality, failed map
+  setup restoration and overlay visibility/ownership. Consume each gesture once
+  in overlay, Mods, tabs, selected-page precedence. Preserve dormant prototypes;
+  historical deletion directions are not current cleanup permission.
+
+### Task99 Batch B partial continuation checkpoint
+
+Batch B and parent97 remain **OPEN**. This checkpoint does not populate any
+native page and is not SPEC/QUALITY/main acceptance. Its source/evidence boundary
+is `tools/shared-patches-tests/obj/task99-batchb-20260908T190000Z/verification.json`.
+
+- [x] Implement the reachable `DsPortOverlays` native fade consumer and its
+  overlay-first gesture path, with the concrete future Task100 Mods callback
+  followed by cached frame tabs. The primary `ScreenFaderState` instance and
+  renderer remain untouched; the companion follows the current native sprite,
+  shared material, tint and visibility, and clears when unavailable. Native
+  material/Canvas rendering is Unity-unproved. The selected-page consumer is
+  still absent.
+- [x] Implement the bounded scenery consumer behind the HUD using only the
+  current native `LightBlurredBackground` post-`LightBlur.OnRenderImage` output.
+  Require active/supported native blur/material and the background-only plane
+  slice; clear stale owner/texture/visibility output, wait a later frame, use
+  one-sixth/bounded bilinear output and 0.08 brightness, and restore the active
+  render target in `finally`. Never activate native producers or substitute a
+  gameplay-camera mirror. Actual ordinary-gameplay availability and blur pixels
+  remain Unity/GPU-unproved; native `BlurManager` source provides the gameplay
+  shader-quality enablement, not a runtime observation.
+- [x] Execute meaningful selection/fade/scenery RED/GREEN and the exact retained
+  regression filter: 224/224 (187 retained, 14 selection, 23 overlay/scenery).
+  `DsPortSelectState` is selection-core evidence only until the native adapter is
+  connected. Both cached compiles pass, with 57 Silksong sources/29 references;
+  accepted HUD state/tests and the shared direct-display engine are preserved.
+  The material-corrected rerun preserves all 224 case identities. Source/docs
+  contracts pass 50 with the one explicit legacy restore/delete-harness exclusion;
+  the initial Image-ban failure and material-binding RED remain recorded. Only
+  one native fade Image allocation is admitted, with six mutated-source and
+  frame/HUD/page negative controls retaining the authored-replacement ban.
+  Silksong's 7 and Hollow Knight's 1 existing compiler warnings remain recorded;
+  all ten registered entrypoint signatures/phases are checked in compiled IL.
+- [ ] **T99B-PAGE — next concrete implementation:** create the smallest complete
+  reachable native Journal page in `DsPortProgress.cs`, followed by Inventory
+  and Tasks in the approved modules. Already-read native authority is
+  `JournalItemManager.UpdateList`/`GetGridSections`/`SetDisplay`,
+  `JournalEntryItem.Setup`, `InventoryItemListManager.SetupGrid`,
+  `InventoryItemGrid.Setup`, `InventoryCursor`, `InventoryPaneInput`, and
+  `ScrollView`. Do not call `PaneStart`, `GetStartSelectable`, or item `Select`
+  merely to browse. Preflight actual resident component types, the external
+  cursor/template prefab dependencies, and serialized callback targets before
+  activation; preserve native visual/open/settle behavior and selectively adapt
+  input/scroll. `ScrollView`'s unscaled world-space bounds invalidate naive
+  parent-scale fitting. Start RED with rejection-before-activation of an
+  external/unknown callback or template, interrupted/inactive-host settle, and
+  no seen/new writes from display/clear. A rejected shape must name its exact
+  component/reference and retry on a real residency/source event, not become a
+  generic replacement page or a falsely completed capability.
+- [ ] **T99B-ACTION:** native Loadout/selection/details/cursor/glyph/verb integration
+  and explicit legal native equip dispatch with current owner/item/data/crest/
+  slot and native legal conditions rechecked synchronously. Native manual
+  `InventoryToolCrestSlot.SetEquipped` → `SaveEquips` is a dispatch relation,
+  not permission to bypass its caller's legality checks.
+- [ ] **T99B-MAP:** native map hierarchy/setup/compass/markers/room/zone updates,
+  secondary gestures, primary-map yield and complete failed-setup `finally`
+  restoration. Resolve shared pin registration/clear in native `GameMap` before
+  any ordinary clone activation/destruction; do not invent bench teleport.
+- [ ] **T99B-OVERLAY:** same-instance dialogue/speaker/tutorial/focus/title/credits/
+  item/lore ownership and pre-destructive restoration. `DialogueBox._instance`
+  and the `NpcDialogueTitle` → `AreaTitle` relation are source-established, not
+  implemented routing. Native fade reproduction does not close every overlay
+  family or native death/cutscene state.
+- [ ] **T99B-VISUAL:** finish actual page fit/sorting/clipping below the HUD band,
+  selected-page input reachability, independent SPEC then QUALITY and fresh main
+  verification. Preserve all unpassed Unity/native/GPU and device observations.
+
+The matching open-ID acceptance conditions are in
+`docs/verification/dual-souls-ui-port-matrix.md`. Failed lookups, interrupted
+uncredited decompiler launches and unsuccessful cached prefab metadata reads
+remain evidence, not passes. No native page/action gap moves to Task100 or
+Task101; those remain separate Mods/skins assignments. No device, packaging,
+publication, cleanup or save/native-memory action occurred in this checkpoint.
+
+### Task99 Batch B bounded consolidation and required continuation
+
+**PARTIAL / NOT BATCH-B ACCEPTANCE. Task99 and parent97 remain OPEN.** The
+preceding 224-case partial checkpoint is historical, not the current page state.
+Native Journal, Inventory, Tasks, Loadout and Map adapters now occupy cached
+DsPortFrame PageHosts, with selected-page input after overlays → Mods seam →
+tabs, consumed once. Native browse/clear remains separate from actions and may
+not change seen/new flags, progression, equipment or saves. Journal never calls
+SetSelected/Select/PaneStart/PaneEnd/InstantScroll/GetStartSelectable/seen setters.
+Accepted HUD/shared direct-display sources remain preserved.
+
+Four reported defects are implementer-corrected only: selected-owned optional
+ToolItem details no longer reject all Loadout items; native all-source crest
+setup uses fresh blank presentation metadata rather than unsafe source asset
+cloning; exact native floating-config/slot/callback authority enables manual
+floating equip dispatch; Inventory optional detail exceptions now clear only
+owned detail/selection while retaining list/retry. Exact source CrestData and
+every slot/delegate/SaveEquips callback are verified before activation. Source
+ToolCrest OnEnable/OnValidate version links are never copied or changed. Native
+manual dispatch remains source-proven but Unity-unexecuted; no direct save setter
+is introduced. These corrections do not implement still-rejected detail overrides
+or establish required selected prefab graph coverage.
+
+Map now has finite owned cold room/condition/layout/renderer-donor recipes and
+mapped/visited membership freshness, native marker-template local hierarchy and
+retained text-mesh access without native GameMap initialization, registry/cache
+writes or placed-marker insertion. Truly ungenerated text still needs private
+text/font/material closure. DialogueBox now routes the same exact native root
+through an empty original-parent carrier, preserving native root pose/fade
+ancestry, mapping/restoring exact clip coordinates and guarding native advance.
+Nested finally restoration reaches HUD, Map and overlays before enclosing
+retirement, with the existing release pump retaining failed restoration.
+
+- [x] Run one bounded partial consolidation: 179/179 combined production-linked
+  cases (Selection/Map 68, Overlay 27, Journal 42, HUD/frame/release 37,
+  Collectable hooks 5); 66/66 allowed source contracts, with the exact legacy
+  implicit-restore/unbounded/auto-delete frame harness excluded, not passed.
+  Preserve the first 65-pass/one-error stale RestoreHud contract run and its
+  narrow expectation correction. Both cached/no-restore builds execute real
+  CoreCompile. Exact source delta, prior test identities, compiler input/output
+  hashes, registered compiled entrypoints and PID timing records are bound by
+  `tools/shared-patches-tests/obj/task99-journal-continuation-20260908/partial-consolidated/verification.json`.
+  Reuse pinned historical preservation; do not rescan old evidence or expand
+  unrelated suites. This is an implementation checkpoint, not an acceptance gate.
+- [x] Implement the finite existing-started `OpeningGameplayCredits` host slice:
+  retain exact native owner/animator/camera and native pose/animation/progression;
+  original-parent carrier maps world aspect, with parent/sibling/layer recovery
+  registered before mutation and independent family restoration attempts. Provisional
+  evidence: 37/37 linked overlay cases, 68/68 allowed source contracts and actual
+  cached SS compile in `opening-credits-*-green` continuation outputs. Preserve
+  REDs and the stale Dialogue literal failure; do not alter the frozen partial.
+  Root motion/StateMachineBehaviours, unknown component/world-clip graphs and
+  unsupported XY bases remain rejected. Ordinary serialized credits graph coverage
+  is unavailable evidence, not demonstrated support or universal failure. No Unity
+  lifecycle/animation/rendering acceptance; T99B-OVERLAY remains OPEN.
+- [ ] **T99B-OVERLAY — remaining implementation:** exact native visual
+  AreaTitle/speaker, tutorial, focus, title, other credits, item/lore and required
+  overlay families. Prove each family's coordinate/lifecycle authority rather
+  than applying the Dialogue carrier indiscriminately. Preserve same-instance
+  native pose/drivers and partial-failure restoration. AreaTitle, not the NPC
+  event-owner transform, owns speaker visuals. Tutorial has no proven callable
+  staged dismissal yet; do not invent one or inject broad native confirm input.
+- [ ] **T99B-MAP-TEXT:** finite born-inactive private native text donor; independently
+  own mutable font/glyph/kerning/fallback/weight/material state, preserve exact
+  characters/styles, avoid lazy global initialization and borrowed graph writes,
+  and retire text/submeshes before owned fonts/materials. Use retained advisor
+  source evidence; do not repeat discovery or claim cold support by polling.
+- [ ] **T99B-DETAIL:** implement required exact Inventory/Loadout
+  SetupExtraDescription overrides and selected-slot native condition/destination/
+  template binding. Current DeclaringType != SavedItem rejection is still an
+  implementation gap even though optional failure is local.
+- [ ] **T99B-CREST-GRAPH / T99B-INVENTORY:** admit required selected native custom
+  component/reference/lifecycle graphs and privately owned materials. Unknown
+  selected crest visuals hide that subtree and block its actions, but retain
+  native tool-list/next-crest browsing; no substitute art. Missing actual serialized
+  evidence does not prove every ordinary pane fails and cannot justify blind
+  allowlist growth.
+- [x] Implement the finite Tasks selected custom-counter path using exact native
+  regular/main/subquest template condition, prefab and mapped destination; retain
+  native base details, privately own selected counter materials, never touch its
+  global prefab cache or clone quest assets. Preserve local unsupported-detail
+  retry. This does not establish required ordinary custom graph coverage.
+- [x] Implement owner-stable native content snapshots and real page rebuild wiring
+  for Journal/Tasks/Inventory/Loadout. Explicit identity/value reads detect
+  same-count membership and value changes; stable/empty pages poll at 125 ms,
+  each snapshot rejects rather than truncates over 65,536 input values, and
+  gestures/actions recapture without cadence caching. Getter/bound failures clear
+  noninteractively and remain retryable. Actual rebuilds reenter born-inactive,
+  hidden unit-world native layout and later settling; reentrant refresh cancels
+  stale selection/generation and waits for native callback unwind. All four
+  adapters retain failed cleanup with separate Released/Destroyed latches.
+  Current provisional evidence: 218/218 linked cases (all prior 203 retained),
+  74/74 allowed source contracts, actual cached SS CoreCompile in
+  `page-snapshot-final-*-green`; REDs and frozen partial evidence remain unchanged.
+  See the matrix continuation for exact source scope, DLL hash and lifecycle limits.
+- [ ] **T99B-PAGE / T99B-TASKS / T99B-ACTION:** required ordinary native/custom
+  graph coverage, required locked-slot action semantics and full native
+  prompts/action equivalence. Finite named snapshot inputs do not establish
+  arbitrary unknown custom-script freshness or Unity lifecycle acceptance.
+  Test actual linked boundaries, not copied recipes.
+- [ ] **T99B-MAP-PRESENT / T99B-VISUAL:** native camera callbacks/pre-existing buffers,
+  dynamic geometry/material/condition freshness, normal graph/sorting/clipping;
+  Unity lifecycle, native action execution and visual parity remain unproved by
+  host tests/compiles.
+
+Continue this remaining coherent Batch B scope without awaiting user approval.
+No new independent acceptance stage starts at this partial checkpoint; main may
+audit handoff integrity only. Eventual independent SPEC, separate QUALITY and
+fresh main verification remain required. Task100 Mods and Task101 skins stay
+separate. The matching current table/open-ID closure conditions are in
+`docs/verification/dual-souls-ui-port-matrix.md`; historical evidence and all
+operational restrictions below remain unchanged.
+
+### Task99 current owned-text checkpoint — remaining Batch B order
+
+Historical sections/receipts above remain intact. **Task99/parent97 are OPEN**;
+this is an implementation checkpoint, not full Batch B or independent acceptance.
+- [x] Implement exact selected-slot/extra-description binding and owned native
+  text/font/material closure across Journal, Inventory, Loadout, Tasks and their
+  auxiliaries/details, plus genuinely cold Map text. Preserve native per-text
+  decoding/tag/weight and ordered fallback authority, shared graph identities,
+  resource guards and text/root-before-font retryable retirement.
+- [x] Verify **243/243** combined linked cases, **81/81** allowed source contracts
+  and current actual cached SS CoreCompile. Receipts under
+  `tools/shared-patches-tests/obj/task99-journal-continuation-20260908/` are
+  `owned-native-text-combined-final/completion.json`,
+  `owned-native-text-contracts-final/completion.json`, and
+  `owned-native-text-current-compile-final/completion.json`;
+  DLL SHA-256 `5651eb35f70a70c0eed0d4943a0c75a882ccce134ac5a39313cc7a6664c44255`.
+  All exited 0 without timeout. Preserve failures (including the removed
+  experimental HarmonyLib hook), frozen partial receipts and excluded-harness
+  no-credit status. No automatic native parser interception, Unity lifecycle,
+  native actions, rendering or ordinary/custom prefab-graph acceptance is proved.
+- [ ] **Next T99B-OVERLAY:** exact AreaTitle speaker/title visual authority, then
+  tutorial/focus/item/lore, using existing native instances/drivers and ownership/
+  restore machinery with source-backed lifecycle, coordinates and clipping.
+  Never route `NpcDialogueTitle.transform` as the speaker visual. Preserve native
+  animation/fade/progression and restore only adapter-owned routing before teardown.
+  Tutorial coroutine owns dismissal; use only a source-proven legal callable
+  endpoint if one exists, otherwise record its exact interaction gap separately.
+  Each concrete family requires reachable wiring, focused RED/GREEN and bounded
+  cached compile; preserve Dialogue/OpeningCredits/HUD regression.
+- [ ] Then reconcile **T99B-ACTION** locked slots/full native prompts/actions and
+  **T99B-MAP-PRESENT** dynamic freshness/sorting; unknown ordinary prefab evidence
+  does not excuse missing host-fixable bindings. Do not advance to Task100 yet.
+- [ ] Complete full Batch B before independent SPEC, separate QUALITY and fresh
+  main verification. Continue automatically unless a real blocker is reported.
+
+The matrix records the detailed current outcomes and limitations. Accepted
+HUD/shared sources remain untouched. No nested agents, restores, config/git
+mutation, device/publication/source activation, save edits or cleanup; commands
+<=180s, every child wait <=175s with retained PID/timing/exit/timeout records.
+
+### Task99 AreaTitle/tutorial continuation checkpoint
+
+- [x] Exact AreaTitle visual/FSM/local-coordinate routing and same-instance
+  ToolTutorialMsg running-registration routing now reach overlay tick, gestures
+  and independent restoration. Native pose/animation/fade/progression remain native.
+- [x] Preserved receipts under the preceding checkpoint directory:
+  `area-title-focused-green` **47/47**, `area-title-contracts-green` **82/82**,
+  `area-title-current-compile-green` actual SS CoreCompile;
+  `tutorial-focused-green` **52/52**, `tutorial-contracts-green` **83/83**,
+  `tutorial-current-compile-green` actual SS CoreCompile. All exited 0/no timeout;
+  hashes and precise boundaries are in the existing matrix. Parent-after-write
+  behavioral RED was fixed; helper-absence REDs retain their narrower meaning.
+- [ ] **T99B-OVERLAY-TUTORIAL-INPUT:** native coroutine has no source-proven
+  callable staged companion dismissal. Preserve native skip and page fencing;
+  closure requires a legal endpoint with tests or explicit gap acceptance, not
+  invented confirm/progression writes. Visual routing does not close interaction.
+- [ ] Continue PowerUpGetMsg/EvaHeal, item/lore, then Action/Map host gaps above.
+  Full combined regression and native graph/runtime acceptance are not claimed.
+  Task99/parent97 remain OPEN; full implementation precedes SPEC/QUALITY/main.
+
+### Task99 PowerUp/item/lore current host checkpoint
+
+- [x] Exact registered PowerUpGetMsg/EvaHeal native visual sequence; preserve
+  native selected prompts and the existing native-only dismissal gap.
+- [x] CollectableUIMsg child visual islands preserve native root stack/spawn-limit
+  and coroutine/sorting authority. Actual root-layout targets remain fixed;
+  parent rect/pivot and moving-anchor mapping are checked on the owned carrier.
+- [x] Exact backing MemoryMsgBox/NeedolinMsgBox singleton routes retain native
+  text selection, proximity, fade/animation and complete hide continuation.
+- [x] Preserved focused/contracts/current actual SS compile checkpoints under
+  `tools/shared-patches-tests/obj/task99-journal-continuation-20260908/`:
+  `powerup-*-green` **57/84**, `item-*-green` **62/85**, `lore-*-green` **69/86**;
+  the existing matrix records exact directories/hashes and evidence limits.
+- [x] Combined overlay checkpoint **275/275** with all original **243** exact
+  `(testId, testName)` identities retained and exactly **32** new cases;
+  **86/86** allowed contracts and current actual SS compile. Receipts are
+  `overlay-families-combined-green`, `overlay-families-case-identities`,
+  `overlay-families-contracts-green`, `overlay-families-current-compile-green`;
+  current DLL SHA-256 `c0bedefac32443bb458f77b549705c26a7b272680776fe6f6ab0e62c7ca2a6d3`.
+- [ ] Remaining locked-slot/native prompt/action and Map freshness/sorting work.
+  Fixed-target/cross-island graph restrictions remain explicit; no ordinary Unity
+  graph/runtime equivalence, full Task99 handoff or independent acceptance claimed.
+
+### Tasks100–102: reachable Mods, shared skins and combined host acceptance
+
+- [ ] **Task100.** Reuse shared `tools/shared-patches/src/Mods/` controller,
+  persistence and presenter logic. Extract `TweakSession.cs` from
+  `HollowKnightModsSession.cs` only with its actual second consumer; retain
+  guarded initialization/restoration and the existing 60-ready-tick retry.
+  Add process-owned `SilksongModsRuntime.cs` under the Silksong `src/mods/`
+  directory and reachable `DsPortMods.cs` under `src/dualscreen/`, using the
+  frame's ModsAnchor and HK native-style gear/modal design. Start the runtime
+  before the display-enabled early return; presenter detach must not reset
+  settings. Existing typed SS bindings cover invincibility, unlimited Silk,
+  nail damage and equip-anywhere. Additional unbound capabilities remain
+  explicitly unavailable, not claimed as full Mods parity. Test default-off,
+  baseline restoration/reset, initialization retry, rebuild/hotplug ownership,
+  unavailable actions and HK/SS persistence isolation.
+- [ ] **Task101.** Share existing bounded Kotlin import/library/UI algorithms
+  through a closed immutable HK/SS catalog/profile definition. Thread it through
+  catalog, library codec/store, object builder, canonical manifest, tree verifier,
+  quota, UI services and runtime bridge; retain immutable GameProcessStartup
+  authority. SS never invokes HK legacy migration. Extract managed session,
+  library-controller/polling and occurrence/ack/stability mechanics only when
+  SS consumes them, retaining original identity, rollback, accounting and
+  retirement algorithms. Add SS target/policy/runtime/death adapters under
+  `tools/silksong-patches/src/skins/runtime/`. Establish actual SS writable
+  texture bindings/catalog and normal-death/stable-respawn event ordering;
+  neither HK filenames nor its death exclusions are SS evidence. Preserve
+  ON full supported pack, ROTATE character/HUD-associated visuals with excluded
+  environment restored immediately, and OFF original restoration. Test foreign
+  profiles/catalogs, identical pack IDs across games, startup-selection changes,
+  selected/pending protection, mode changes, duplicate/hazard events, prompt
+  matching acknowledgments, next death before polling and owner replacement.
+- [ ] **Task102.** Verify production reachability, focused behavioral suites,
+  exact two-game compiles and cross-game isolation, with independent SPEC,
+  separate QUALITY and fresh main verification. Distinguish executed host
+  behavior, static wiring/compile evidence, unsupported bindings and unproved
+  Unity/GPU/JNI/native lifecycle/rendering/artist-pack/device acceptance. The
+  parent Silksong milestone remains open until this host coverage is accepted.
+
+Extract proven game-neutral logic when the second consumer needs it, with
+focused Hollow Knight regression. No generalized receipt/lease/transaction
+framework or separate H6 abstraction project is a prerequisite. Missing native
+bindings remain assigned to Tasks99–101 with explicit acceptance conditions;
+they neither block unrelated host work nor count as implemented behavior.
+
+### Current operational boundary
+
+No ADB, physical-device, emulator, signing, release workflow, or live Android
+testing until explicit approval. No packaging/source-image integration activation,
+commits, pushes, merges, cleanup or upstream-visible action involving
+`igawa6/dualsouls`. No native addresses, IL2CPP offsets, process scanning,
+injected `PlayerData` fields or save edits. Local source reading/adaptation is
+allowed with provenance/notices preserved. Preserve old cores, goldens and
+evidence. Earlier broader authorization text is historical, not permission.
+
+Use offline cached inputs, no downloads or restores, commands at most 180 seconds
+and each build/test subprocess wait at most 175 seconds. Use task-owned fresh
+output/cache/temp locations, preserve timeout records and never credit late
+success. Do not kill global Java/.NET processes or inspect game processes. Do not
+run the existing Silksong check script's implicit restore; use its exact source
+and entrypoint contract with cached restore assets and `--no-restore`. Android
+host-test resources/fixtures remain the sole packaging-task exception; no APK
+assemble/sign/stage/install/deploy. Exclude preBuild, stageBuildScript,
+stageBundleSurgery, stagePatches, stageHollowKnightPatches, stageIo,
+stageModWeaver, stageBepInExShim and fetchMonoRuntime. No project/global
+configuration changes beyond scoped source/test wiring. Delegates spawn no
+subagents; use completion events plus session-only 17-minute checkpoints.

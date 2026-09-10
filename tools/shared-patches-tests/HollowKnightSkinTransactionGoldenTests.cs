@@ -188,7 +188,7 @@ public sealed class HollowKnightSkinTransactionGoldenTests
     }
     [Fact] public void CorpusFullForwardLogs()
     {
-        var cases = Load(Source()).Where(c => Text(c["oracleContract"]) == "transaction-forward-v1").ToList(); Assert.Equal(82, cases.Count); Assert.Equal(164, cases.Sum(c => c["expected"].AsArray().Count)); foreach (var c in cases) Verify(c);
+        var cases = Load(Source()).Take(262).Where(c => Text(c["oracleContract"]) == "transaction-forward-v1").ToList(); Assert.Equal(82, cases.Count); Assert.Equal(164, cases.Sum(c => c["expected"].AsArray().Count)); foreach (var c in cases) Verify(c);
     }
     [Fact] public void NoopAndInvalidSubstitutionsKillPositive()
     {
@@ -212,7 +212,7 @@ public sealed class HollowKnightSkinTransactionGoldenTests
     [Fact] public void RecursiveStateCommandLeavesAndOrderAreObserved()
     {
         var cases = Load(Source());
-        foreach (var c in new[] { cases[0], cases.First(c => Text(c["caseId"]) == "rollback-history-unestablished-pack"), cases.First(c => Text(c["caseId"]) == "failure-history-reject-rollback-persisted"), cases.First(c => Text(c["caseId"]) == "failure-history-rolled-rejected"), cases.First(c => Text(c["caseId"]) == "failure-history-applied-indeterminate") })
+        foreach (var c in new[] { cases[0], cases.First(c => Text(c["caseId"]) == "rollback-history-unestablished-pack"), cases.First(c => Text(c["caseId"]) == "failure-history-reject-rollback-persisted"), cases.First(c => Text(c["caseId"]) == "failure-history-rolled-rejected"), cases.First(c => Text(c["caseId"]) == "failure-history-applied-indeterminate"), cases.First(c => Text(c["caseId"]) == "failure-proof-missing-head-repair"), cases.First(c => Text(c["caseId"]) == "failure-proof-blocked-target-closure-negative"), cases.First(c => Text(c["caseId"]) == "failure-proof-blocked-prior-closure-repair") })
         {
         var pool = new Dictionary<string, JsonNode>();
         foreach (var row in cases.SelectMany(x => x["expected"].AsArray()))
@@ -250,7 +250,8 @@ public sealed class HollowKnightSkinTransactionGoldenTests
             if (c["expected"][i]["commands"].AsArray().Count > 0) { var bad = c.DeepClone().AsObject(); bad["expected"][i]["commands"] = new JsonArray(); Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad)); }
         }
         var reordered = c.DeepClone().AsObject(); var rows = reordered["expected"].AsArray(); var first = rows[0].DeepClone(); rows[0] = rows[1].DeepClone(); rows[1] = first; for (var i = 0; i < rows.Count; i++) rows[i]["step"] = i;
-        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(reordered));
+        // Identical terminal/invalid observations cannot demonstrate order sensitivity.
+        if (!JsonNode.DeepEquals(c["expected"], reordered["expected"])) Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(reordered));
         }
     }
     [Fact] public void FailureContractBoundsAndCompleteRepresentationPrecedeReducer()
@@ -288,13 +289,29 @@ public sealed class HollowKnightSkinTransactionGoldenTests
     }
     [Fact] public void CorpusFailureBlockedLogs()
     {
-        var cases = Load(Source()).Where(c => Text(c["oracleContract"]) == "transaction-failure-blocked-v1").ToList();
+        // Original 23-case partition is also pinned byte-for-byte by the proof corpus test.
+        var cases = Load(Source()).Take(138).Where(c => Text(c["oracleContract"]) == "transaction-failure-blocked-v1").ToList();
         Assert.Equal(23, cases.Count); Assert.Equal(136, cases.Sum(c => c["expected"].AsArray().Count));
         foreach (var c in cases) Verify(c);
     }
+    [Fact] public void CorpusFailureProofAndBlockedValidatorLogs()
+    {
+        var raw = Utf8.GetBytes(Source());
+        Assert.Equal("ce51b6aed12113dbdf457edaa8c0518b4ae668883978c541392d886dcbe4b482", Sha(raw.Take(2373974).ToArray()));
+        var all = Load(Source()).Take(262).ToList(); Assert.Equal(262, all.Count);
+        var cases = all.Where(c => Text(c["caseId"]).StartsWith("failure-proof-", StringComparison.Ordinal)).ToList();
+        Assert.Equal(124, cases.Count); Assert.Equal(248, cases.Sum(c => c["expected"].AsArray().Count));
+        foreach (var c in cases) { Assert.Equal("transaction-failure-blocked-v1", Text(c["oracleContract"])); Verify(c); }
+    }
+    [Fact] public void FailureProofRepairedPositivesKillSubstitutions()
+    {
+        foreach (var c in Load(Source()).Where(c => Text(c["caseId"]).StartsWith("failure-proof-", StringComparison.Ordinal) && Text(c["caseId"]).EndsWith("-repair", StringComparison.Ordinal)))
+            foreach (var diagnosis in new[] { "stale-phase", "invalid-state" })
+                Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(c, (s, e) => new TransactionDecision(s, diagnosis)));
+    }
     [Fact] public void CorpusSuccessfulRollbackLogs()
     {
-        var cases = Load(Source()).Where(c => Text(c["oracleContract"]) == "transaction-rollback-success-v1").ToList();
+        var cases = Load(Source()).Take(262).Where(c => Text(c["oracleContract"]) == "transaction-rollback-success-v1").ToList();
         Assert.Equal(33, cases.Count); Assert.Equal(77, cases.Sum(c => c["expected"].AsArray().Count));
         foreach (var c in cases) Verify(c);
     }
@@ -380,4 +397,591 @@ public sealed class HollowKnightSkinTransactionGoldenTests
             if (excluded.Contains(mode)) { d["events"][0]["correlation"]["binding"]["value"] = 4; Reinput(c, d); Assert.Throws<FixtureFormatError>(() => Verify(c)); }
         }
     }
+
+    // Task87: literal canonical witnesses; contract admission alone is not coverage.
+    private const string DispatchMap = @"IDLE|Begin|prepare|mode-on-zero|0
+IDLE|Prepared|stale-correlation|wrong-correlation-idle|0
+IDLE|ArmCommitted|stale-correlation|dispatch-idle-armcommitted|0
+IDLE|ApplyVerified|stale-correlation|dispatch-idle-applyverified|0
+IDLE|ApplyFailed|stale-correlation|dispatch-idle-applyfailed|0
+IDLE|RollbackVerified|stale-correlation|dispatch-idle-rollbackverified|0
+IDLE|RollbackFailed|stale-correlation|dispatch-idle-rollbackfailed|0
+IDLE|CompletionCommitted|stale-correlation|dispatch-idle-completioncommitted|0
+IDLE|CompletionRejected|stale-correlation|dispatch-idle-completionrejected|0
+IDLE|CompletionIndeterminate|stale-correlation|dispatch-idle-completionindeterminate|0
+PREPARING|Begin|transaction-in-progress|repair-state-preparing-arm|0
+PREPARING|Prepared|arm|mode-on-zero|1
+PREPARING|ArmCommitted|stale-phase|dispatch-preparing-armcommitted|0
+PREPARING|ApplyVerified|stale-phase|wrong-phase-preparing|0
+PREPARING|ApplyFailed|stale-phase|dispatch-preparing-applyfailed|0
+PREPARING|RollbackVerified|stale-phase|dispatch-preparing-rollbackverified|0
+PREPARING|RollbackFailed|stale-phase|dispatch-preparing-rollbackfailed|0
+PREPARING|CompletionCommitted|stale-phase|dispatch-preparing-completioncommitted|0
+PREPARING|CompletionRejected|stale-phase|dispatch-preparing-completionrejected|0
+PREPARING|CompletionIndeterminate|stale-phase|dispatch-preparing-completionindeterminate|0
+PREPARED|Begin|transaction-in-progress|begin-in-progress|0
+PREPARED|Prepared|stale-phase|wrong-phase-prepared|0
+PREPARED|ArmCommitted|apply|mode-on-zero|2
+PREPARED|ApplyVerified|stale-phase|dispatch-prepared-applyverified|0
+PREPARED|ApplyFailed|stale-phase|rollback-phase-applyfailed-prepared|0
+PREPARED|RollbackVerified|stale-phase|dispatch-prepared-rollbackverified|0
+PREPARED|RollbackFailed|stale-phase|dispatch-prepared-rollbackfailed|0
+PREPARED|CompletionCommitted|stale-phase|dispatch-prepared-completioncommitted|0
+PREPARED|CompletionRejected|stale-phase|dispatch-prepared-completionrejected|0
+PREPARED|CompletionIndeterminate|stale-phase|dispatch-prepared-completionindeterminate|0
+ARMED|Begin|transaction-in-progress|repair-state-armed-clear|0
+ARMED|Prepared|stale-phase|dispatch-armed-prepared|0
+ARMED|ArmCommitted|stale-phase|wrong-phase-armed|0
+ARMED|ApplyVerified|commit-closure|mode-on-zero|3
+ARMED|ApplyFailed|rollback|rollback-history-established-pack|3
+ARMED|RollbackVerified|stale-phase|rollback-phase-rollbackverified-armed|0
+ARMED|RollbackFailed|stale-phase|dispatch-armed-rollbackfailed|0
+ARMED|CompletionCommitted|stale-phase|dispatch-armed-completioncommitted|0
+ARMED|CompletionRejected|stale-phase|dispatch-armed-completionrejected|0
+ARMED|CompletionIndeterminate|stale-phase|dispatch-armed-completionindeterminate|0
+APPLIED|Begin|transaction-in-progress|repair-state-applied-no-closure|0
+APPLIED|Prepared|stale-phase|dispatch-applied-prepared|0
+APPLIED|ArmCommitted|stale-phase|dispatch-applied-armcommitted|0
+APPLIED|ApplyVerified|stale-phase|wrong-phase-applied|0
+APPLIED|ApplyFailed|stale-phase|rollback-phase-applyfailed-applied|0
+APPLIED|RollbackVerified|stale-phase|dispatch-applied-rollbackverified|0
+APPLIED|RollbackFailed|stale-phase|dispatch-applied-rollbackfailed|0
+APPLIED|CompletionCommitted|committed|mode-on-zero|4
+APPLIED|CompletionRejected|rollback|failure-history-reject-restored-established-pack|4
+APPLIED|CompletionIndeterminate|completion-indeterminate|failure-history-applied-indeterminate|4
+ROLLBACK_PENDING|Begin|transaction-in-progress|dispatch-rollback-pending-begin|0
+ROLLBACK_PENDING|Prepared|stale-phase|dispatch-rollback-pending-prepared|0
+ROLLBACK_PENDING|ArmCommitted|stale-phase|dispatch-rollback-pending-armcommitted|0
+ROLLBACK_PENDING|ApplyVerified|stale-phase|dispatch-rollback-pending-applyverified|0
+ROLLBACK_PENDING|ApplyFailed|stale-phase|dispatch-rollback-pending-applyfailed|0
+ROLLBACK_PENDING|RollbackVerified|commit-closure|rollback-history-established-pack|4
+ROLLBACK_PENDING|RollbackFailed|rollback-failed|failure-history-reject-rollback-persisted|5
+ROLLBACK_PENDING|CompletionCommitted|stale-phase|dispatch-rollback-pending-completioncommitted|0
+ROLLBACK_PENDING|CompletionRejected|stale-phase|dispatch-rollback-pending-completionrejected|0
+ROLLBACK_PENDING|CompletionIndeterminate|stale-phase|dispatch-rollback-pending-completionindeterminate|0
+ROLLED_BACK|Begin|transaction-in-progress|dispatch-rolled-back-begin|0
+ROLLED_BACK|Prepared|stale-phase|dispatch-rolled-back-prepared|0
+ROLLED_BACK|ArmCommitted|stale-phase|dispatch-rolled-back-armcommitted|0
+ROLLED_BACK|ApplyVerified|stale-phase|dispatch-rolled-back-applyverified|0
+ROLLED_BACK|ApplyFailed|stale-phase|dispatch-rolled-back-applyfailed|0
+ROLLED_BACK|RollbackVerified|stale-phase|rollback-phase-rollbackverified-rolled|0
+ROLLED_BACK|RollbackFailed|stale-phase|dispatch-rolled-back-rollbackfailed|0
+ROLLED_BACK|CompletionCommitted|committed|rollback-history-established-pack|5
+ROLLED_BACK|CompletionRejected|rollback-closure-rejected|failure-history-rolled-rejected|6
+ROLLED_BACK|CompletionIndeterminate|completion-indeterminate|failure-history-rolled-indeterminate|6
+COMMITTED|Begin|terminal|committed-original-failure-valid|0
+COMMITTED|Prepared|terminal|dispatch-committed-prepared|0
+COMMITTED|ArmCommitted|terminal|dispatch-committed-armcommitted|0
+COMMITTED|ApplyVerified|terminal|dispatch-committed-applyverified|0
+COMMITTED|ApplyFailed|terminal|dispatch-committed-applyfailed|0
+COMMITTED|RollbackVerified|terminal|dispatch-committed-rollbackverified|0
+COMMITTED|RollbackFailed|terminal|dispatch-committed-rollbackfailed|0
+COMMITTED|CompletionCommitted|terminal|mode-on-zero|5
+COMMITTED|CompletionRejected|terminal|dispatch-committed-completionrejected|0
+COMMITTED|CompletionIndeterminate|terminal|dispatch-committed-completionindeterminate|0
+BLOCKED|Begin|terminal|failure-terminal-persisted|0
+BLOCKED|Prepared|terminal|failure-terminal-persisted|2
+BLOCKED|ArmCommitted|terminal|dispatch-blocked-armcommitted|0
+BLOCKED|ApplyVerified|terminal|dispatch-blocked-applyverified|0
+BLOCKED|ApplyFailed|terminal|failure-terminal-persisted|3
+BLOCKED|RollbackVerified|terminal|dispatch-blocked-rollbackverified|0
+BLOCKED|RollbackFailed|terminal|failure-terminal-persisted|4
+BLOCKED|CompletionCommitted|terminal|dispatch-blocked-completioncommitted|0
+BLOCKED|CompletionRejected|terminal|failure-terminal-persisted|5
+BLOCKED|CompletionIndeterminate|terminal|failure-terminal-persisted|6";
+    [Fact] public void CorpusCanonicalDispatchLogs()
+    {
+        var all = Load(Source()).Take(318).ToList(); Assert.Equal(318, all.Count);
+        Assert.Equal("a898f1621701a4617279e483255de89089d2e9fc270852a399eb23e8a2b33839", Sha(Utf8.GetBytes(Source()).Take(4632889).ToArray()));
+        var added = all.Skip(262).ToList(); Assert.Equal(56, added.Count);
+        Assert.Equal(681, all.Sum(c => c["expected"].AsArray().Count));
+        foreach (var c in added) {
+            var before = c.ToJsonString(); var data = Validate(c);
+            Assert.Single(data["events"].AsArray()); Assert.Single(c["expected"].AsArray());
+            Assert.True(Bool(c["expected"][0]["inputStateValid"])); Assert.True(Bool(c["expected"][0]["stateValid"]));
+            Assert.True(JsonNode.DeepEquals(data["initialState"], c["expected"][0]["state"])); Assert.Empty(c["expected"][0]["commands"].AsArray());
+            Verify(c); Verify(c); Assert.Equal(before, c.ToJsonString());
+        }
+        var cells = new HashSet<string>(); var actionCells = 0;
+        foreach (var line in DispatchMap.Split((char)10)) {
+            var p = line.Trim().Split('|'); Assert.True(cells.Add(p[0] + "|" + p[1]));
+            var c = all.Single(c => Text(c["caseId"]) == p[3]); var data = Validate(c); var step = int.Parse(p[4], CultureInfo.InvariantCulture);
+            var input = step == 0 ? data["initialState"] : c["expected"][step - 1]["state"]; var row = c["expected"][step];
+            Assert.Equal(p[0], Text(input["phase"])); Assert.Equal(p[1], Text(data["events"][step]["type"]));
+            Assert.True(Bool(row["inputStateValid"])); Assert.True(Bool(row["stateValid"])); Assert.Equal(p[2], Text(row["diagnosis"]));
+            Verify(c); // Full real replay protects the precise witness row and command payloads.
+            if (!new[] { "terminal", "stale-phase", "stale-correlation", "transaction-in-progress" }.Contains(p[2])) {
+                actionCells++; Assert.False(JsonNode.DeepEquals(input, row["state"]));
+            }
+        }
+        Assert.Equal(90, cells.Count); Assert.Equal(13, actionCells);
+        foreach (var phase in "IDLE PREPARING PREPARED ARMED APPLIED ROLLBACK_PENDING ROLLED_BACK COMMITTED BLOCKED".Split(' '))
+            foreach (var ev in "Begin Prepared ArmCommitted ApplyVerified ApplyFailed RollbackVerified RollbackFailed CompletionCommitted CompletionRejected CompletionIndeterminate".Split(' ')) Assert.Contains(phase + "|" + ev, cells);
+        foreach (var pair in new[] { ("transaction-forward-v1",14), ("transaction-rollback-success-v1",19), ("transaction-failure-blocked-v1",23) })
+            Assert.Equal(pair.Item2, added.Count(c => Text(c["oracleContract"]) == pair.Item1));
+    }
+    [Fact] public void DispatchObserverDiagnosisPhaseAndDefaultSubstitutions()
+    {
+        foreach (var c in Load(Source()).Skip(262).Take(56)) {
+            foreach (var field in new[] { "diagnosis", "phase" }) {
+                var bad = c.DeepClone().AsObject();
+                if (field == "diagnosis") bad["expected"][0][field] = "observer-damaged";
+                else bad["expected"][0]["state"][field] = Text(bad["expected"][0]["state"][field]) == "IDLE" ? "ARMED" : "IDLE";
+                Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad));
+            }
+            foreach (var diagnosis in new[] { "stale-phase", "invalid-state" }) {
+                // Stale-phase no-op rows do not independently kill the same no-op substitution.
+                if (Text(c["expected"][0]["diagnosis"]) == diagnosis) Verify(c, (s,e) => new TransactionDecision(s, diagnosis));
+                else Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(c, (s,e) => new TransactionDecision(s, diagnosis)));
+            }
+        }
+    }
+    [Fact] public void DispatchRecursiveLeavesAreObserved()
+    {
+        var cases = Load(Source());
+        foreach (var c in cases.Skip(262).Take(56))
+        {
+        var pool = new Dictionary<string, JsonNode>();
+        foreach (var row in cases.SelectMany(x => x["expected"].AsArray()))
+        {
+            void Collect(JsonNode n) { if (n is JsonObject o) foreach (var p in o) { if (p.Value != null) pool[p.Key] = p.Value.DeepClone(); Collect(p.Value); } else if (n is JsonArray a) foreach (var v in a) Collect(v); }
+            Collect(row);
+        }
+        pool["originalFailure"] = JsonValue.Create("FAILURE"); pool["rollbackFailure"] = JsonValue.Create("ROLLBACK"); pool["failureReceipt"] = pool["completionReceipt"].DeepClone();
+        foreach (var (path, value) in Leaves(c["expected"], Array.Empty<string>()))
+        {
+            var key = path.Last(); if (key == "step") continue;
+            var bad = c.DeepClone().AsObject(); JsonNode part = bad["expected"]; foreach (var k in path.SkipLast(1)) part = Child(part, k);
+            if (key == "type")
+            {
+                // The discriminant is not an arbitrary string: change the complete union to another representable subtype.
+                JsonNode replacement = Text(value) switch { "Vanilla" => new JsonObject { ["type"] = "Pack", ["id"] = "changed", ["treeSha256"] = "x", ["contentSha256"] = "y", ["importReceiptSha256"] = "z" }, "Pack" => new JsonObject { ["type"] = "Vanilla" }, "Apply" => new JsonObject { ["type"] = "Rollback", ["correlation"] = part["correlation"].DeepClone() }, _ => new JsonObject { ["type"] = "Apply", ["correlation"] = pool["correlation"].DeepClone() } };
+                JsonNode parent = bad["expected"]; foreach (var k in path.SkipLast(2)) parent = Child(parent, k); Set(parent, path[^2], replacement);
+            }
+            else
+            {
+                JsonNode replacement = value == null ? pool[key].DeepClone() : key switch {
+                    "phase" => JsonValue.Create(Text(value) == "IDLE" ? "ARMED" : "IDLE"),
+                    "state" => JsonValue.Create(Text(value) == "CLEAR" ? "ARMED" : "CLEAR"),
+                    "mode" => JsonValue.Create(Text(value) == "OFF" ? "ON" : "OFF"),
+                    "operation" => JsonValue.Create(Text(value) == "MODE_ON" ? "MODE_OFF" : "MODE_ON"),
+                    "skinStamp" => JsonValue.Create(Text(value) == "7" ? "8" : "7"),
+                    _ => value.GetValueKind() is JsonValueKind.True or JsonValueKind.False ? JsonValue.Create(!Bool(value)) : JsonValue.Create(Text(value) + "changed") };
+                Set(part, key, replacement);
+            }
+            Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad));
+        }
+        for (var i = 0; i < c["expected"].AsArray().Count; i++)
+        {
+            var omitted = c.DeepClone().AsObject(); omitted["expected"].AsArray().RemoveAt(i); Assert.Throws<FixtureFormatError>(() => Verify(omitted));
+            if (c["expected"][i]["commands"].AsArray().Count > 0) { var bad = c.DeepClone().AsObject(); bad["expected"][i]["commands"] = new JsonArray(); Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad)); }
+        }
+        }
+    }
+    // Task88: representative axes only. Invalid syntax also mismatches valid state identity.
+    private const string CorrelationMap = @"PREPARING|Prepared|uuid-syntax|correlation-preparing-prepared-uuid-syntax|0|correlation-preparing-prepared-uuid-syntax|1|arm
+PREPARING|Prepared|uuid-equality|wrong-correlation-preparing|0|mode-on-zero|1|arm
+PREPARING|Prepared|token-syntax|correlation-preparing-prepared-token-syntax|0|correlation-preparing-prepared-token-syntax|1|arm
+PREPARING|Prepared|token-equality|correlation-preparing-prepared-token-equality|0|correlation-preparing-prepared-token-equality|1|arm
+PREPARED|ArmCommitted|uuid-syntax|correlation-prepared-armcommitted-uuid-syntax|0|correlation-prepared-armcommitted-uuid-syntax|1|apply
+PREPARED|ArmCommitted|uuid-equality|correlation-prepared-armcommitted-uuid-equality|0|correlation-prepared-armcommitted-uuid-equality|1|apply
+PREPARED|ArmCommitted|token-syntax|correlation-prepared-armcommitted-token-syntax|0|correlation-prepared-armcommitted-token-syntax|1|apply
+PREPARED|ArmCommitted|token-equality|correlation-prepared-armcommitted-token-equality|0|correlation-prepared-armcommitted-token-equality|1|apply
+ARMED|ApplyVerified|uuid-syntax|correlation-armed-applyverified-uuid-syntax|0|correlation-armed-applyverified-uuid-syntax|1|commit-closure
+ARMED|ApplyVerified|uuid-equality|correlation-armed-applyverified-uuid-equality|0|correlation-armed-applyverified-uuid-equality|1|commit-closure
+ARMED|ApplyVerified|token-syntax|correlation-armed-applyverified-token-syntax|0|correlation-armed-applyverified-token-syntax|1|commit-closure
+ARMED|ApplyVerified|token-equality|correlation-armed-applyverified-token-equality|0|correlation-armed-applyverified-token-equality|1|commit-closure
+ARMED|ApplyFailed|uuid-syntax|rollback-correlation-applyfailed-uuid-syntax|0|rollback-history-unestablished-pack|3|rollback
+ARMED|ApplyFailed|uuid-equality|rollback-correlation-applyfailed-uuid-mismatch|0|rollback-history-unestablished-pack|3|rollback
+ARMED|ApplyFailed|token-syntax|rollback-correlation-applyfailed-token-syntax|0|rollback-history-unestablished-pack|3|rollback
+ARMED|ApplyFailed|token-equality|rollback-correlation-applyfailed-token-mismatch|0|rollback-history-unestablished-pack|3|rollback
+ROLLBACK_PENDING|RollbackVerified|uuid-syntax|rollback-correlation-rollbackverified-uuid-syntax|0|rollback-history-unestablished-pack|4|commit-closure
+ROLLBACK_PENDING|RollbackVerified|uuid-equality|rollback-correlation-rollbackverified-uuid-mismatch|0|rollback-history-unestablished-pack|4|commit-closure
+ROLLBACK_PENDING|RollbackVerified|token-syntax|rollback-correlation-rollbackverified-token-syntax|0|rollback-history-unestablished-pack|4|commit-closure
+ROLLBACK_PENDING|RollbackVerified|token-equality|rollback-correlation-rollbackverified-token-mismatch|0|rollback-history-unestablished-pack|4|commit-closure
+ROLLBACK_PENDING|RollbackFailed|uuid-syntax|failure-correlation-rollbackfailed|0|failure-history-reject-rollback-unpersisted|5|rollback-failed
+ROLLBACK_PENDING|RollbackFailed|uuid-equality|failure-correlation-rollbackfailed|1|failure-history-reject-rollback-unpersisted|5|rollback-failed
+ROLLBACK_PENDING|RollbackFailed|token-syntax|failure-correlation-rollbackfailed|2|failure-history-reject-rollback-unpersisted|5|rollback-failed
+ROLLBACK_PENDING|RollbackFailed|token-equality|failure-correlation-rollbackfailed|3|failure-history-reject-rollback-unpersisted|5|rollback-failed
+APPLIED|CompletionCommitted|uuid-syntax|correlation-applied-completioncommitted-uuid-syntax|0|correlation-applied-completioncommitted-repair|0|committed
+APPLIED|CompletionCommitted|uuid-equality|correlation-applied-completioncommitted-uuid-equality|0|correlation-applied-completioncommitted-repair|0|committed
+APPLIED|CompletionCommitted|token-syntax|correlation-applied-completioncommitted-token-syntax|0|correlation-applied-completioncommitted-repair|0|committed
+APPLIED|CompletionCommitted|token-equality|correlation-applied-completioncommitted-token-equality|0|correlation-applied-completioncommitted-repair|0|committed
+ROLLED_BACK|CompletionCommitted|uuid-syntax|correlation-rolled-back-completioncommitted-uuid-syntax|0|correlation-rolled-back-completioncommitted-repair|0|committed
+ROLLED_BACK|CompletionCommitted|uuid-equality|correlation-rolled-back-completioncommitted-uuid-equality|0|correlation-rolled-back-completioncommitted-repair|0|committed
+ROLLED_BACK|CompletionCommitted|token-syntax|correlation-rolled-back-completioncommitted-token-syntax|0|correlation-rolled-back-completioncommitted-repair|0|committed
+ROLLED_BACK|CompletionCommitted|token-equality|correlation-rolled-back-completioncommitted-token-equality|0|correlation-rolled-back-completioncommitted-repair|0|committed
+APPLIED|CompletionRejected|uuid-syntax|failure-correlation-applied-rejected|0|failure-history-reject-restored-unestablished-pack|4|rollback
+APPLIED|CompletionRejected|uuid-equality|failure-correlation-applied-rejected|1|failure-history-reject-restored-unestablished-pack|4|rollback
+APPLIED|CompletionRejected|token-syntax|failure-correlation-applied-rejected|2|failure-history-reject-restored-unestablished-pack|4|rollback
+APPLIED|CompletionRejected|token-equality|failure-correlation-applied-rejected|3|failure-history-reject-restored-unestablished-pack|4|rollback
+ROLLED_BACK|CompletionRejected|uuid-syntax|failure-correlation-rolled-rejected|0|failure-history-rolled-rejected|6|rollback-closure-rejected
+ROLLED_BACK|CompletionRejected|uuid-equality|failure-correlation-rolled-rejected|1|failure-history-rolled-rejected|6|rollback-closure-rejected
+ROLLED_BACK|CompletionRejected|token-syntax|failure-correlation-rolled-rejected|2|failure-history-rolled-rejected|6|rollback-closure-rejected
+ROLLED_BACK|CompletionRejected|token-equality|failure-correlation-rolled-rejected|3|failure-history-rolled-rejected|6|rollback-closure-rejected
+APPLIED|CompletionIndeterminate|uuid-syntax|failure-correlation-applied-indeterminate|0|failure-history-applied-indeterminate|4|completion-indeterminate
+APPLIED|CompletionIndeterminate|uuid-equality|failure-correlation-applied-indeterminate|1|failure-history-applied-indeterminate|4|completion-indeterminate
+APPLIED|CompletionIndeterminate|token-syntax|failure-correlation-applied-indeterminate|2|failure-history-applied-indeterminate|4|completion-indeterminate
+APPLIED|CompletionIndeterminate|token-equality|failure-correlation-applied-indeterminate|3|failure-history-applied-indeterminate|4|completion-indeterminate
+ROLLED_BACK|CompletionIndeterminate|uuid-syntax|failure-correlation-rolled-indeterminate|0|failure-history-rolled-indeterminate|6|completion-indeterminate
+ROLLED_BACK|CompletionIndeterminate|uuid-equality|failure-correlation-rolled-indeterminate|1|failure-history-rolled-indeterminate|6|completion-indeterminate
+ROLLED_BACK|CompletionIndeterminate|token-syntax|failure-correlation-rolled-indeterminate|2|failure-history-rolled-indeterminate|6|completion-indeterminate
+ROLLED_BACK|CompletionIndeterminate|token-equality|failure-correlation-rolled-indeterminate|3|failure-history-rolled-indeterminate|6|completion-indeterminate";
+    [Fact] public void CorpusCorrelationAxisLogs()
+    {
+        var all = Load(Source()).Take(339).ToList(); Assert.Equal(339, all.Count); Assert.Equal(713, all.Sum(c => c["expected"].AsArray().Count));
+        Assert.Equal("e346800246c19ef81d59174bc0ad29af1ccd5c1de09e9addb3080511d5a2ec78", Sha(Utf8.GetBytes(Source()).Take(5014066).ToArray()));
+        var added = all.Skip(318).ToList(); Assert.Equal(21, added.Count); Assert.Equal(32, added.Sum(c => c["expected"].AsArray().Count));
+        foreach (var pair in new[] { ("transaction-forward-v1",112,205), ("transaction-rollback-success-v1",57,101), ("transaction-failure-blocked-v1",170,407) }) {
+            var partition = all.Where(c => Text(c["oracleContract"]) == pair.Item1).ToList(); Assert.Equal(pair.Item2, partition.Count); Assert.Equal(pair.Item3, partition.Sum(c => c["expected"].AsArray().Count));
+        }
+        foreach (var c in added) { var before = c.ToJsonString(); Verify(c); Verify(c); Assert.Equal(before, c.ToJsonString()); }
+    }
+    [Fact] public void CorpusAccepted318Logs()
+    {
+        var old = Load(Source()).Take(318).ToList(); Assert.Equal(318, old.Count); Assert.Equal(681, old.Sum(c => c["expected"].AsArray().Count));
+        foreach (var c in old) Verify(c);
+    }
+    [Fact] public void CorrelationExact48AxesAndSameSnapshotRepairs()
+    {
+        var all = Load(Source()).ToDictionary(c => Text(c["caseId"])); var cells = new HashSet<string>(); var reused = 0;
+        JsonNode Input(JsonObject c, JsonObject d, int i) => i == 0 ? d["initialState"] : c["expected"][i-1]["state"];
+        foreach (var line in CorrelationMap.Split((char)10)) {
+            var p = line.Trim().Split('|'); Assert.True(cells.Add(string.Join("|", p.Take(3))));
+            var c = all[p[3]]; var d = Validate(c); var i = int.Parse(p[4], CultureInfo.InvariantCulture); var s = Input(c,d,i); var ev = d["events"][i]; var row = c["expected"][i]; var corr = ev["correlation"];
+            Assert.Equal(p[0], Text(s["phase"])); Assert.Equal(p[1], Text(ev["type"])); Assert.True(new SkinTransactionCore().IsStateValid(ReadTransactionState(s)));
+            Assert.True(Bool(row["inputStateValid"])); Assert.True(Bool(row["stateValid"])); Assert.Equal("stale-correlation",Text(row["diagnosis"])); Assert.True(JsonNode.DeepEquals(s,row["state"])); Assert.Empty(row["commands"].AsArray());
+            var idAxis = p[2].StartsWith("uuid-",StringComparison.Ordinal); var syntax = p[2].EndsWith("-syntax",StringComparison.Ordinal);
+            if (idAxis) {
+                Assert.True(JsonNode.DeepEquals(s["binding"],corr["binding"])); Assert.NotEqual(Text(s["envelope"]["transactionId"]),Text(corr["transactionId"]));
+                Assert.Equal(!syntax,Regex.IsMatch(Text(corr["transactionId"]),@"\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z"));
+            } else {
+                Assert.Equal(Text(s["envelope"]["transactionId"]),Text(corr["transactionId"])); Assert.False(JsonNode.DeepEquals(s["binding"],corr["binding"]));
+                // The bounded lexical witnesses are leading-space invalid versus ASCII valid tokens.
+                if (syntax) Assert.Equal(" bad",Text(corr["binding"]["value"])); else Assert.Matches(@"\A[A-Za-z0-9-]{1,256}\z",Text(corr["binding"]["value"]));
+            }
+            var positive = all[p[5]]; var pd = Validate(positive); var pi = int.Parse(p[6],CultureInfo.InvariantCulture); var ps = Input(positive,pd,pi); var pe = pd["events"][pi]; var pr = positive["expected"][pi];
+            Assert.True(JsonNode.DeepEquals(s,ps)); var repaired = ev.DeepClone(); repaired["correlation"] = new JsonObject { ["transactionId"] = s["envelope"]["transactionId"].DeepClone(), ["binding"] = s["binding"].DeepClone() };
+            Assert.True(JsonNode.DeepEquals(repaired,pe)); Assert.True(Bool(pr["inputStateValid"])); Assert.True(Bool(pr["stateValid"])); Assert.Equal(p[7],Text(pr["diagnosis"])); Assert.False(JsonNode.DeepEquals(s,pr["state"]));
+            Verify(c); Verify(positive);
+            if (!p[3].StartsWith("correlation-",StringComparison.Ordinal)) reused++;
+            else if (p[1] == "CompletionCommitted") { Assert.NotEqual(p[3],p[5]); Assert.Single(d["events"].AsArray()); Assert.Equal(0,pi); }
+            else { Assert.Equal(p[3],p[5]); Assert.Equal(1,pi); }
+        }
+        Assert.Equal(48,cells.Count); Assert.Equal(29,reused);
+        foreach (var context in new[] { "PREPARING|Prepared", "PREPARED|ArmCommitted", "ARMED|ApplyVerified", "ARMED|ApplyFailed", "ROLLBACK_PENDING|RollbackVerified", "ROLLBACK_PENDING|RollbackFailed", "APPLIED|CompletionCommitted", "ROLLED_BACK|CompletionCommitted", "APPLIED|CompletionRejected", "ROLLED_BACK|CompletionRejected", "APPLIED|CompletionIndeterminate", "ROLLED_BACK|CompletionIndeterminate" })
+            foreach (var axis in new[] { "uuid-syntax","uuid-equality","token-syntax","token-equality" }) Assert.Contains(context+"|"+axis,cells);
+    }
+    [Fact] public void CorrelationObserverDiagnosisPhaseAndNoopInvalidSubstitutions()
+    {
+        foreach (var c in Load(Source()).Skip(318).Take(21)) {
+            foreach (var diagnosis in new[] { "stale-phase", "invalid-state" }) Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(c,(s,e) => new TransactionDecision(s,diagnosis)));
+            for (var i = 0; i < c["expected"].AsArray().Count; i++) {
+                foreach (var field in new[] { "diagnosis", "phase" }) {
+                    var bad = c.DeepClone().AsObject(); if (field == "diagnosis") bad["expected"][i][field] = "observer-damaged";
+                    else bad["expected"][i]["state"][field] = "IDLE";
+                    Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad));
+                }
+            }
+            if (c["expected"].AsArray().Count == 2) {
+                var bad = c.DeepClone().AsObject(); var first = bad["expected"][0].DeepClone(); bad["expected"][0] = bad["expected"][1].DeepClone(); bad["expected"][1] = first; bad["expected"][0]["step"] = 0; bad["expected"][1]["step"] = 1;
+                Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad));
+            }
+        }
+    }
+    [Fact] public void CorrelationRecursiveLeavesAreObserved()
+    {
+        var cases = Load(Source());
+        foreach (var c in cases.Skip(318).Take(21))
+        {
+        var pool = new Dictionary<string, JsonNode>();
+        foreach (var row in cases.SelectMany(x => x["expected"].AsArray()))
+        {
+            void Collect(JsonNode n) { if (n is JsonObject o) foreach (var p in o) { if (p.Value != null) pool[p.Key] = p.Value.DeepClone(); Collect(p.Value); } else if (n is JsonArray a) foreach (var v in a) Collect(v); }
+            Collect(row);
+        }
+        pool["originalFailure"] = JsonValue.Create("FAILURE"); pool["rollbackFailure"] = JsonValue.Create("ROLLBACK"); pool["failureReceipt"] = pool["completionReceipt"].DeepClone();
+        foreach (var (path, value) in Leaves(c["expected"], Array.Empty<string>()))
+        {
+            var key = path.Last(); if (key == "step") continue;
+            var bad = c.DeepClone().AsObject(); JsonNode part = bad["expected"]; foreach (var k in path.SkipLast(1)) part = Child(part, k);
+            if (key == "type")
+            {
+                // The discriminant is not an arbitrary string: change the complete union to another representable subtype.
+                JsonNode replacement = Text(value) switch { "Vanilla" => new JsonObject { ["type"] = "Pack", ["id"] = "changed", ["treeSha256"] = "x", ["contentSha256"] = "y", ["importReceiptSha256"] = "z" }, "Pack" => new JsonObject { ["type"] = "Vanilla" }, "Apply" => new JsonObject { ["type"] = "Rollback", ["correlation"] = part["correlation"].DeepClone() }, _ => new JsonObject { ["type"] = "Apply", ["correlation"] = pool["correlation"].DeepClone() } };
+                JsonNode parent = bad["expected"]; foreach (var k in path.SkipLast(2)) parent = Child(parent, k); Set(parent, path[^2], replacement);
+            }
+            else
+            {
+                JsonNode replacement = value == null ? pool[key].DeepClone() : key switch {
+                    "phase" => JsonValue.Create(Text(value) == "IDLE" ? "ARMED" : "IDLE"),
+                    "state" => JsonValue.Create(Text(value) == "CLEAR" ? "ARMED" : "CLEAR"),
+                    "mode" => JsonValue.Create(Text(value) == "OFF" ? "ON" : "OFF"),
+                    "operation" => JsonValue.Create(Text(value) == "MODE_ON" ? "MODE_OFF" : "MODE_ON"),
+                    "skinStamp" => JsonValue.Create(Text(value) == "7" ? "8" : "7"),
+                    _ => value.GetValueKind() is JsonValueKind.True or JsonValueKind.False ? JsonValue.Create(!Bool(value)) : JsonValue.Create(Text(value) + "changed") };
+                Set(part, key, replacement);
+            }
+            Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad));
+        }
+        for (var i = 0; i < c["expected"].AsArray().Count; i++)
+        {
+            var omitted = c.DeepClone().AsObject(); omitted["expected"].AsArray().RemoveAt(i); Assert.Throws<FixtureFormatError>(() => Verify(omitted));
+            if (c["expected"][i]["commands"].AsArray().Count > 0) { var bad = c.DeepClone().AsObject(); bad["expected"][i]["commands"] = new JsonArray(); Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad)); }
+        }
+        }
+    }
+    // Task89 code-only lexical witnesses: no UUID/token, precedence, or broad guard closure.
+    private static readonly string[] CodeNegative = { "0A", "_A", "@A", "[A", "Aa", "A/", "A:", "A[", "A^", "A`", "A-", " A", "A ", "A A", "A\0", "A\t", "A\n", "A\r", "A\u007f", "A\u009f", "Ａ", "Aé", "A\U0001f600", "A\u202e" };
+    private static readonly string[] CodeContexts = { "applyfailed", "rollbackfailed", "applied-rejected", "rolled-rejected" };
+    [Fact] public void CorpusAccepted339Logs()
+    {
+        var old = Load(Source()).Take(339).ToList(); Assert.Equal(339,old.Count); Assert.Equal(713,old.Sum(c => c["expected"].AsArray().Count));
+        Assert.Equal("25d9edf7294e4f53bbed4fbc9b5579fac9db93e873edbc4d8d478c32f976047c",Sha(Utf8.GetBytes(Source()).Take(5228164).ToArray()));
+        foreach (var c in old) Verify(c);
+    }
+    [Fact] public void CorpusCodeLexicalLogs()
+    {
+        var all=Load(Source()).Take(359).ToList(); Assert.Equal(359,all.Count); Assert.Equal(829,all.Sum(c => c["expected"].AsArray().Count));
+        var added=all.Skip(339).ToList(); Assert.Equal(20,added.Count); Assert.Equal(116,added.Sum(c => c["expected"].AsArray().Count));
+        foreach (var p in new[] { ("transaction-forward-v1",112,205),("transaction-rollback-success-v1",62,130),("transaction-failure-blocked-v1",185,494) }) {
+            var part=all.Where(c => Text(c["oracleContract"])==p.Item1).ToList(); Assert.Equal(p.Item2,part.Count); Assert.Equal(p.Item3,part.Sum(c => c["expected"].AsArray().Count));
+        }
+        foreach (var c in added) { var before=c.ToJsonString(); Verify(c); Verify(c); Assert.Equal(before,c.ToJsonString()); }
+    }
+    [Fact] public void CodeExactPanelsAndOriginalSnapshotRepairs()
+    {
+        var all=Load(Source()).ToDictionary(c => Text(c["caseId"])); var seeds=new[] { "rollback-code-empty","failure-code-rollbackfailed","failure-code-applied-rejected","failure-code-rolled-rejected" };
+        var phases=new[] { "ARMED","ROLLBACK_PENDING","APPLIED","ROLLED_BACK" }; var suffixes=new[] { "negative-panel-and-min-repair","uppercase-last","min-plus-one","body-classes","max-minus-one" };
+        var panels=new[] { CodeNegative.Concat(new[] { "A" }).ToArray(),new[] { "Z" },new[] { "A0" },new[] { "AZ09_" },new[] { new string('A',127) } }; var count=0;
+        for(var n=0;n<4;n++) {
+            var seed=Validate(all[seeds[n]]); var s=seed["initialState"]; var original=seed["events"][0]; Assert.Equal(phases[n],Text(s["phase"]));
+            for(var p=0;p<5;p++) {
+                var c=all["lex-code-"+CodeContexts[n]+"-"+suffixes[p]]; var d=Validate(c); Assert.True(JsonNode.DeepEquals(s,d["initialState"])); Assert.Equal(panels[p],d["events"].AsArray().Select(e => Text(e["code"])).ToArray());
+                for(var i=0;i<panels[p].Length;i++) {
+                    var ev=d["events"][i]; var row=c["expected"][i]; var expectedEvent=original.DeepClone(); expectedEvent["code"]=panels[p][i]; Assert.True(JsonNode.DeepEquals(expectedEvent,ev));
+                    Assert.True(Bool(row["inputStateValid"])); Assert.True(Bool(row["stateValid"]));
+                    if(p==0 && i<24) {
+                        Assert.Equal("invalid-code",Text(row["diagnosis"])); Assert.True(JsonNode.DeepEquals(s,row["state"])); Assert.Empty(row["commands"].AsArray());
+                        var repaired=ev.DeepClone(); repaired["code"]="A"; Assert.True(JsonNode.DeepEquals(repaired,d["events"][24]));
+                        var core=new SkinTransactionCore(); var decision=core.Decide(ReadTransactionState(s),ReadTransactionEvent(repaired)); Assert.True(core.IsStateValid(decision.State)); Assert.Equal(Text(c["expected"][24]["diagnosis"]),decision.Diagnosis);
+                    } else {
+                        var expected=s.DeepClone(); var reverse=n==0 || n==2; expected["phase"]=reverse?"ROLLBACK_PENDING":"BLOCKED";
+                        if(reverse) { expected["pendingClosure"]=null; expected["originalFailure"]=panels[p][i]; } else expected["rollbackFailure"]=panels[p][i];
+                        Assert.True(JsonNode.DeepEquals(expected,row["state"])); Assert.False(JsonNode.DeepEquals(s,row["state"])); Assert.Equal(reverse?"rollback":n==1?"rollback-failed":"rollback-closure-rejected",Text(row["diagnosis"]));
+                        var commands=new JsonArray(); if(reverse) commands.Add(new JsonObject { ["type"]="Rollback",["correlation"]=ev["correlation"].DeepClone() }); Assert.True(JsonNode.DeepEquals(commands,row["commands"]));
+                    }
+                }
+                Verify(c); count++;
+            }
+        }
+        Assert.Equal(20,count);
+    }
+    [Fact] public void CodeNamed32MalformedControlsPrecedeReducer()
+    {
+        var all=Load(Source()).ToDictionary(c => Text(c["caseId"])); var names=new HashSet<string>();
+        foreach(var context in CodeContexts) foreach(var damage in new[] { "null","bool","integer","array","object","missing","high","low" }) {
+            var bad=all["lex-code-"+context+"-uppercase-last"].DeepClone().AsObject(); var d=Validate(bad); var ev=d["events"][0].AsObject();
+            if(damage=="missing") ev.Remove("code"); else ev["code"]=damage switch { "null" => null,"bool" => JsonValue.Create(true),"integer" => JsonValue.Create(0),"array" => new JsonArray(),"object" => new JsonObject(),_ => JsonValue.Create("SURROGATE_SENTINEL") };
+            var text=d.ToJsonString(); if(damage=="high" || damage=="low") text=text.Replace("SURROGATE_SENTINEL",damage=="high"?"\\ud800":"\\udc00");
+            bad["input"]=new JsonObject { ["utf8Text"]=text }; bad["inputSha256"]=Sha(Utf8.GetBytes(text)); var calls=0;
+            Assert.Throws<FixtureFormatError>(() => Verify(bad,(s,e) => { calls++; return new SkinTransactionCore().Decide(s,e); })); Assert.Equal(0,calls); Assert.True(names.Add(context+"|"+damage));
+        }
+        Assert.Equal(32,names.Count);
+    }
+    [Fact] public void CodeObserverDiagnosisPhaseNoopInvalidAndDistinctFinalOrder()
+    {
+        foreach(var c in Load(Source()).Skip(339).Take(20)) {
+            foreach(var diagnosis in new[] { "stale-phase","invalid-state" }) Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(c,(s,e) => new TransactionDecision(s,diagnosis)));
+            if(c["expected"].AsArray().Count==25) {
+                var bad=c.DeepClone().AsObject(); var first=bad["expected"][0].DeepClone(); bad["expected"][0]=bad["expected"][24].DeepClone(); bad["expected"][24]=first; bad["expected"][0]["step"]=0; bad["expected"][24]["step"]=24;
+                Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad));
+            }
+            for(var i=0;i<c["expected"].AsArray().Count;i++) {
+                foreach(var field in new[] { "diagnosis","phase" }) { var bad=c.DeepClone().AsObject(); if(field=="diagnosis") bad["expected"][i][field]="observer-damaged"; else bad["expected"][i]["state"][field]="IDLE"; Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad)); }
+                var commands=c["expected"][i]["commands"].AsArray(); if(commands.Count>0) { var bad=c.DeepClone().AsObject(); bad["expected"][i]["commands"].AsArray().Add(commands[0].DeepClone()); Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad)); }
+            }
+        }
+        // Identical negative rows cannot prove order; the changing final positive can. No multi-command ordering claim.
+    }
+
+    [Fact] public void CodeRecursiveLeavesAreObserved()
+    {
+        var cases = Load(Source());
+        foreach (var c in cases.Skip(339).Take(20))
+        {
+        var pool = new Dictionary<string, JsonNode>();
+        foreach (var row in cases.SelectMany(x => x["expected"].AsArray()))
+        {
+            void Collect(JsonNode n) { if (n is JsonObject o) foreach (var p in o) { if (p.Value != null) pool[p.Key] = p.Value.DeepClone(); Collect(p.Value); } else if (n is JsonArray a) foreach (var v in a) Collect(v); }
+            Collect(row);
+        }
+        pool["originalFailure"] = JsonValue.Create("FAILURE"); pool["rollbackFailure"] = JsonValue.Create("ROLLBACK"); pool["failureReceipt"] = pool["completionReceipt"].DeepClone();
+        foreach (var (path, value) in Leaves(c["expected"], Array.Empty<string>()))
+        {
+            var key = path.Last(); if (key == "step") continue;
+            var bad = c.DeepClone().AsObject(); JsonNode part = bad["expected"]; foreach (var k in path.SkipLast(1)) part = Child(part, k);
+            if (key == "type")
+            {
+                // The discriminant is not an arbitrary string: change the complete union to another representable subtype.
+                JsonNode replacement = Text(value) switch { "Vanilla" => new JsonObject { ["type"] = "Pack", ["id"] = "changed", ["treeSha256"] = "x", ["contentSha256"] = "y", ["importReceiptSha256"] = "z" }, "Pack" => new JsonObject { ["type"] = "Vanilla" }, "Apply" => new JsonObject { ["type"] = "Rollback", ["correlation"] = part["correlation"].DeepClone() }, _ => new JsonObject { ["type"] = "Apply", ["correlation"] = pool["correlation"].DeepClone() } };
+                JsonNode parent = bad["expected"]; foreach (var k in path.SkipLast(2)) parent = Child(parent, k); Set(parent, path[^2], replacement);
+            }
+            else
+            {
+                JsonNode replacement = value == null ? pool[key].DeepClone() : key switch {
+                    "phase" => JsonValue.Create(Text(value) == "IDLE" ? "ARMED" : "IDLE"),
+                    "state" => JsonValue.Create(Text(value) == "CLEAR" ? "ARMED" : "CLEAR"),
+                    "mode" => JsonValue.Create(Text(value) == "OFF" ? "ON" : "OFF"),
+                    "operation" => JsonValue.Create(Text(value) == "MODE_ON" ? "MODE_OFF" : "MODE_ON"),
+                    "skinStamp" => JsonValue.Create(Text(value) == "7" ? "8" : "7"),
+                    _ => value.GetValueKind() is JsonValueKind.True or JsonValueKind.False ? JsonValue.Create(!Bool(value)) : JsonValue.Create(Text(value) + "changed") };
+                Set(part, key, replacement);
+            }
+            Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad));
+        }
+        for (var i = 0; i < c["expected"].AsArray().Count; i++)
+        {
+            var omitted = c.DeepClone().AsObject(); omitted["expected"].AsArray().RemoveAt(i); Assert.Throws<FixtureFormatError>(() => Verify(omitted));
+            if (c["expected"][i]["commands"].AsArray().Count > 0) { var bad = c.DeepClone().AsObject(); bad["expected"][i]["commands"] = new JsonArray(); Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad)); }
+        }
+        }
+    }
+    // Task90: UUID shape only in PREPARING/Prepared; identity also rejects invalid syntax.
+    private static readonly string[][] UuidPanels = new[] { new[] { "","11111111-1111-1111-1111-11111111111","11111111-1111-1111-1111-1111111111111","111111111111-1111-1111-111111111111","11111111--1111-1111-1111-111111111111","1111111-11111-1111-1111-111111111111","11111111_1111-1111-1111-111111111111","11111111111111111111111111111111","{11111111-1111-1111-1111-111111111111}","urn:uuid:11111111-1111-1111-1111-111111111111" },new[] { "A1111111-1111-1111-1111-111111111111","F1111111-1111-1111-1111-111111111111","AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA","/1111111-1111-1111-1111-111111111111",":1111111-1111-1111-1111-111111111111","`1111111-1111-1111-1111-111111111111","g1111111-1111-1111-1111-111111111111","G1111111-1111-1111-1111-111111111111" },new[] { " 11111111-1111-1111-1111-111111111111","11111111-1111-1111-1111-111111111111 ","1111 111-1111-1111-1111-111111111111","\t11111111-1111-1111-1111-111111111111","11111111-1111-1111-1111-111111111111\t","1111\t111-1111-1111-1111-111111111111","\n11111111-1111-1111-1111-111111111111","11111111-1111-1111-1111-111111111111\n","1111\n111-1111-1111-1111-111111111111","11111111-1111-1111-1111-111111111111\r","11111111-1111-1111-1111-111111111111\r\n","1111\u0000111-1111-1111-1111-111111111111","1111\u007f111-1111-1111-1111-111111111111","1111\u0085111-1111-1111-1111-111111111111","\u00a011111111-1111-1111-1111-111111111111","11111111-1111-1111-1111-111111111111\u00a0","1111\u2028111-1111-1111-1111-111111111111","11111111-1111-1111-1111-111111111111\u2028" },new[] { "\u06601111111-1111-1111-1111-111111111111","\uff101111111-1111-1111-1111-111111111111","\uff411111111-1111-1111-1111-111111111111","\u03b11111111-1111-1111-1111-111111111111","\u04301111111-1111-1111-1111-111111111111","11111111\u20101111-1111-1111-111111111111","\ud83d\ude001111111-1111-1111-1111-111111111111","\ud835\udfce1111111-1111-1111-1111-111111111111" } };
+    private static readonly string[] UuidPanelNames = { "shape", "ascii", "whitespace", "unicode" };
+    private static readonly string[] UuidPositiveNames = { "zero", "nine", "a", "f" };
+    private static readonly string[] UuidPositiveValues = new[] { "00000000-0000-0000-0000-000000000000","99999999-9999-9999-9999-999999999999","aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","ffffffff-ffff-ffff-ffff-ffffffffffff" };
+    [Fact] public void CorpusAccepted359Logs()
+    {
+        var old=Load(Source()).Take(359).ToList(); Assert.Equal(359,old.Count); Assert.Equal(829,old.Sum(c=>c["expected"].AsArray().Count));
+        Assert.Equal("88dc3230cbe4fc346120b26c003aa2e716d71d3ca7b27f2eb66098d9716c5b2d",Sha(Utf8.GetBytes(Source()).Take(5937735).ToArray()));
+        foreach(var c in old) Verify(c);
+    }
+    [Fact] public void CorpusUuidLexicalLogs()
+    {
+        var all=Load(Source()); Assert.Equal(367,all.Count); Assert.Equal(881,all.Sum(c=>c["expected"].AsArray().Count));
+        Assert.Equal(8,all.Skip(359).Count()); Assert.Equal(52,all.Skip(359).Sum(c=>c["expected"].AsArray().Count));
+        foreach(var p in new[] { ("transaction-forward-v1",120,257),("transaction-rollback-success-v1",62,130),("transaction-failure-blocked-v1",185,494) }) {
+            var part=all.Where(c=>Text(c["oracleContract"])==p.Item1).ToList(); Assert.Equal(p.Item2,part.Count); Assert.Equal(p.Item3,part.Sum(c=>c["expected"].AsArray().Count));
+        }
+        foreach(var c in all) { var before=c.ToJsonString(); Verify(c); Assert.Equal(before,c.ToJsonString()); }
+    }
+    [Fact] public void UuidExactPanelsAndOriginalSnapshotRepairs()
+    {
+        var all=Load(Source()).ToDictionary(c=>Text(c["caseId"])); var donor=Validate(all["correlation-preparing-prepared-uuid-syntax"]); var original=donor["events"][1]; var originalState=donor["initialState"]; var negatives=0;
+        for(var p=0;p<8;p++) {
+            var positive=p>=4; var name=positive?"positive-"+UuidPositiveNames[p-4]:UuidPanelNames[p]; var values=positive?new[]{UuidPositiveValues[p-4]}:UuidPanels[p].Concat(new[]{Text(original["correlation"]["transactionId"])}).ToArray();
+            var c=all["lex-uuid-preparing-prepared-"+name]; var d=Validate(c); var s=d["initialState"]; var initial=originalState.DeepClone(); if(positive) initial["envelope"]["transactionId"]=values[0];
+            Assert.True(JsonNode.DeepEquals(initial,s)); Assert.True(new SkinTransactionCore().IsStateValid(ReadTransactionState(s))); Assert.Equal("transaction-forward-v1",Text(c["oracleContract"]));
+            Assert.Equal(values,d["events"].AsArray().Select(e=>Text(e["correlation"]["transactionId"])).ToArray());
+            for(var i=0;i<values.Length;i++) {
+                var ev=d["events"][i]; var row=c["expected"][i]; var expectedEvent=original.DeepClone(); expectedEvent["correlation"]["transactionId"]=values[i]; Assert.True(JsonNode.DeepEquals(expectedEvent,ev));
+                Assert.True(Bool(row["inputStateValid"])); Assert.True(Bool(row["stateValid"]));
+                if(!positive && i<values.Length-1) {
+                    negatives++; Assert.Equal("stale-correlation",Text(row["diagnosis"])); Assert.True(JsonNode.DeepEquals(s,row["state"])); Assert.Empty(row["commands"].AsArray());
+                    var repair=ev.DeepClone(); repair["correlation"]["transactionId"]=Text(original["correlation"]["transactionId"]); Assert.True(JsonNode.DeepEquals(original,repair));
+                    var core=new SkinTransactionCore(); var result=core.Decide(ReadTransactionState(originalState),ReadTransactionEvent(repair)); var outState=originalState.DeepClone(); outState["phase"]="PREPARED";
+                    Assert.Equal("arm",result.Diagnosis); Assert.True(core.IsStateValid(result.State)); Assert.True(JsonNode.DeepEquals(outState,Project(result.State)));
+                    Assert.Single(result.Commands); Assert.True(JsonNode.DeepEquals(new JsonObject { ["type"]="Arm",["envelope"]=originalState["envelope"].DeepClone() },Project(result.Commands[0])));
+                } else {
+                    var expected=s.DeepClone(); expected["phase"]="PREPARED"; Assert.True(JsonNode.DeepEquals(expected,row["state"])); Assert.Equal("arm",Text(row["diagnosis"]));
+                    Assert.True(JsonNode.DeepEquals(new JsonArray(new JsonObject { ["type"]="Arm",["envelope"]=s["envelope"].DeepClone() }),row["commands"]));
+                }
+            }
+            Verify(c);
+        }
+        Assert.Equal(44,negatives);
+    }
+    [Fact] public void UuidNamed19RepresentationAndScopeControls()
+    {
+        var cases=Load(Source()); var basis=cases.Single(c=>Text(c["caseId"])=="correlation-preparing-prepared-uuid-syntax"); var names=new HashSet<string>();
+        foreach(var damage in new[] { "null","bool","integer","array","object","missing","high","low","reversed" }) {
+            var bad=basis.DeepClone().AsObject(); var d=Validate(bad); var correlation=d["events"][0]["correlation"].AsObject();
+            if(damage=="missing") correlation.Remove("transactionId"); else correlation["transactionId"]=damage switch { "null"=>null,"bool"=>JsonValue.Create(true),"integer"=>JsonValue.Create(1),"array"=>new JsonArray(),"object"=>new JsonObject(),_=>JsonValue.Create("SURROGATE_SENTINEL") };
+            var text=d.ToJsonString(); if(damage=="high" || damage=="low" || damage=="reversed") text=text.Replace("SURROGATE_SENTINEL",damage=="high"?"\\ud800":damage=="low"?"\\udc00":"\\udc00\\ud800");
+            bad["input"]=new JsonObject { ["utf8Text"]=text }; bad["inputSha256"]=Sha(Utf8.GetBytes(text)); var calls=0;
+            Assert.Throws<FixtureFormatError>(()=>Verify(bad,(s,e)=>{calls++;return new SkinTransactionCore().Decide(s,e);})); Assert.Equal(0,calls); Assert.True(names.Add("Prepared|"+damage));
+        }
+        foreach(var kind in new[] { "ApplyFailed","RollbackVerified","RollbackFailed","CompletionRejected","CompletionIndeterminate" }) {
+            var seed=cases.SelectMany(c=>Validate(c)["events"].AsArray()).First(e=>Text(e["type"])==kind);
+            foreach(var malformed in new[]{false,true}) {
+                var bad=basis.DeepClone().AsObject(); var d=Validate(bad); var ev=seed.DeepClone(); ev["correlation"]["transactionId"]=malformed?null:JsonValue.Create(""); d["events"][0]=ev; Reinput(bad,d); var calls=0;
+                Action run=()=>Verify(bad,(s,e)=>{calls++;return new SkinTransactionCore().Decide(s,e);});
+                if(malformed) Assert.Throws<FixtureFormatError>(run); else Assert.Throws<OracleOutOfScope>(run); Assert.Equal(0,calls); Assert.True(names.Add(kind+"|"+malformed));
+            }
+        }
+        Assert.Equal(19,names.Count);
+    }
+    [Fact] public void UuidContractsReplayAndInputImmutability()
+    {
+        foreach(var c in Load(Source()).Skip(359).Take(8)) {
+            var before=c.ToJsonString(); Verify(c); Verify(c); Assert.Equal(before,c.ToJsonString());
+            foreach(var contract in new[]{"transaction-forward-v1","transaction-rollback-success-v1","transaction-failure-blocked-v1"}) { var other=c.DeepClone().AsObject(); other["oracleContract"]=contract; Verify(other); }
+            var data=Validate(c); var input=data.ToJsonString(); var s=ReadTransactionState(data["initialState"]); var core=new SkinTransactionCore();
+            foreach(var ev in data["events"].AsArray()) { var e=ReadTransactionEvent(ev); var a=core.Decide(s,e); var b=core.Decide(s,e); Assert.Equal(a.Diagnosis,b.Diagnosis); Assert.True(JsonNode.DeepEquals(Project(a.State),Project(b.State))); Assert.Equal(a.Commands,b.Commands); s=a.State; }
+            Assert.Equal(input,data.ToJsonString());
+        }
+    }
+
+    [Fact] public void UuidObserverDiagnosisPhaseNoopInvalidAndDistinctFinalOrder()
+    {
+        foreach(var c in Load(Source()).Skip(359).Take(8)) {
+            foreach(var diagnosis in new[] { "stale-phase","invalid-state" }) Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(c,(s,e) => new TransactionDecision(s,diagnosis)));
+            if(c["expected"].AsArray().Count>1) {
+                var last=c["expected"].AsArray().Count-1; var bad=c.DeepClone().AsObject(); var first=bad["expected"][0].DeepClone(); bad["expected"][0]=bad["expected"][last].DeepClone(); bad["expected"][last]=first; bad["expected"][0]["step"]=0; bad["expected"][last]["step"]=last;
+                Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad));
+            }
+            for(var i=0;i<c["expected"].AsArray().Count;i++) {
+                foreach(var field in new[] { "diagnosis","phase" }) { var bad=c.DeepClone().AsObject(); if(field=="diagnosis") bad["expected"][i][field]="observer-damaged"; else bad["expected"][i]["state"][field]="IDLE"; Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad)); }
+                var commands=c["expected"][i]["commands"].AsArray(); if(commands.Count>0) { var bad=c.DeepClone().AsObject(); bad["expected"][i]["commands"].AsArray().Add(commands[0].DeepClone()); Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad)); }
+            }
+        }
+        // Identical negative rows cannot prove order; the changing final positive can. No multi-command ordering claim.
+    }
+
+    [Fact] public void UuidRecursiveLeavesAreObserved()
+    {
+        var cases = Load(Source()); var observed=0;
+        foreach (var c in cases.Skip(359).Take(8))
+        {
+        var pool = new Dictionary<string, JsonNode>();
+        foreach (var row in cases.SelectMany(x => x["expected"].AsArray()))
+        {
+            void Collect(JsonNode n) { if (n is JsonObject o) foreach (var p in o) { if (p.Value != null) pool[p.Key] = p.Value.DeepClone(); Collect(p.Value); } else if (n is JsonArray a) foreach (var v in a) Collect(v); }
+            Collect(row);
+        }
+        pool["originalFailure"] = JsonValue.Create("FAILURE"); pool["rollbackFailure"] = JsonValue.Create("ROLLBACK"); pool["failureReceipt"] = pool["completionReceipt"].DeepClone();
+        foreach (var (path, value) in Leaves(c["expected"], Array.Empty<string>()))
+        {
+            var key = path.Last(); if (key == "step") continue; observed++;
+            var bad = c.DeepClone().AsObject(); JsonNode part = bad["expected"]; foreach (var k in path.SkipLast(1)) part = Child(part, k);
+            if (key == "type")
+            {
+                // The discriminant is not an arbitrary string: change the complete union to another representable subtype.
+                JsonNode replacement = Text(value) switch { "Vanilla" => new JsonObject { ["type"] = "Pack", ["id"] = "changed", ["treeSha256"] = "x", ["contentSha256"] = "y", ["importReceiptSha256"] = "z" }, "Pack" => new JsonObject { ["type"] = "Vanilla" }, "Apply" => new JsonObject { ["type"] = "Rollback", ["correlation"] = part["correlation"].DeepClone() }, _ => new JsonObject { ["type"] = "Apply", ["correlation"] = pool["correlation"].DeepClone() } };
+                JsonNode parent = bad["expected"]; foreach (var k in path.SkipLast(2)) parent = Child(parent, k); Set(parent, path[^2], replacement);
+            }
+            else
+            {
+                JsonNode replacement = value == null ? pool[key].DeepClone() : key switch {
+                    "phase" => JsonValue.Create(Text(value) == "IDLE" ? "ARMED" : "IDLE"),
+                    "state" => JsonValue.Create(Text(value) == "CLEAR" ? "ARMED" : "CLEAR"),
+                    "mode" => JsonValue.Create(Text(value) == "OFF" ? "ON" : "OFF"),
+                    "operation" => JsonValue.Create(Text(value) == "MODE_ON" ? "MODE_OFF" : "MODE_ON"),
+                    "skinStamp" => JsonValue.Create(Text(value) == "7" ? "8" : "7"),
+                    _ => value.GetValueKind() is JsonValueKind.True or JsonValueKind.False ? JsonValue.Create(!Bool(value)) : JsonValue.Create(Text(value) + "changed") };
+                Set(part, key, replacement);
+            }
+            Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad));
+        }
+        for (var i = 0; i < c["expected"].AsArray().Count; i++)
+        {
+            var omitted = c.DeepClone().AsObject(); omitted["expected"].AsArray().RemoveAt(i); Assert.Throws<FixtureFormatError>(() => Verify(omitted));
+            if (c["expected"][i]["commands"].AsArray().Count > 0) { var bad = c.DeepClone().AsObject(); bad["expected"][i]["commands"] = new JsonArray(); Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Verify(bad)); }
+        }
+        }
+        Assert.Equal(2440,observed);
+    }
+
 }

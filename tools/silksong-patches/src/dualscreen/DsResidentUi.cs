@@ -254,6 +254,190 @@ public sealed class DsResidentUi
         return path;
     }
 
+    public sealed class HudRoot
+    {
+        public string Key;
+        public DsHudRole Role;
+        public Transform Root;
+        public Component Driver;
+    }
+
+    public sealed class HudSources
+    {
+        public GameCameras Cameras;
+        public HUDCamera Camera;
+        public GameObject Gameplay;
+        public PlayMakerFSM Slide;
+        public SilkSpool Spool;
+        public HudRoot[] Roots;
+        public bool OwnsCurrentRig(GameCameras cameras, HUDCamera camera)
+        {
+            if (Cameras != cameras || Camera != camera || camera == null ||
+                Gameplay != camera.GameplayChild || Slide != cameras.hudCanvasSlideOut ||
+                Spool != cameras.silkSpool) return false;
+            foreach (var root in Roots) if (root.Root == null || root.Driver == null) return false;
+            return true;
+        }
+    }
+
+    HudSources _hudSources;
+    GameCameras _hudCameras;
+    HUDCamera _hudCamera;
+    GameObject _hudGameplay;
+    PlayMakerFSM _hudSlide;
+    SilkSpool _hudSpool;
+    float _nextHudProbe;
+
+    // The combat HUD is instantiated at runtime, not present in the cached
+    // static HUD art bundle. Discover typed owners, never screenshot-derived paths.
+    // The exact serialized fields below were inspected in 1.0.29980 managed code.
+    public bool TryGetHudSources(out HudSources sources)
+    {
+        sources = null;
+        var cameras = GameCameras.SilentInstance;
+        var camera = cameras != null && cameras.hudCamera != null
+            ? cameras.hudCamera.GetComponent<HUDCamera>() : null;
+        var gameplay = camera != null ? camera.GameplayChild : null;
+        var slide = cameras != null ? cameras.hudCanvasSlideOut : null;
+        var spool = cameras != null ? cameras.silkSpool : null;
+        bool changed = _hudCameras != cameras || _hudCamera != camera ||
+            _hudGameplay != gameplay || _hudSlide != slide || _hudSpool != spool;
+        if (changed)
+        {
+            _hudSources = null;
+            _nextHudProbe = 0f;
+            _hudCameras = cameras; _hudCamera = camera; _hudGameplay = gameplay;
+            _hudSlide = slide; _hudSpool = spool;
+        }
+        if (_hudSources != null && !_hudSources.OwnsCurrentRig(cameras, camera))
+        { _hudSources = null; _nextHudProbe = 0f; }
+        if (Time.unscaledTime < _nextHudProbe)
+        { sources = _hudSources; return sources != null; }
+        _nextHudProbe = Time.unscaledTime + 0.5f;
+        if (gameplay == null || slide == null || spool == null ||
+            !slide.transform.IsChildOf(gameplay.transform)) return false;
+        try
+        {
+            // Include our cached routed roots in the typed search: once routed,
+            // they intentionally no longer descend from the native slide owner.
+            var scopes = new List<Transform> { slide.transform };
+            if (_hudSources != null)
+                foreach (var root in _hudSources.Roots) scopes.Add(root.Root);
+            var roots = new List<HudRoot>();
+            var health = new HashSet<Transform>();
+            Component healthDriver = null;
+            foreach (var fsm in HudComponents<PlayMakerFSM>(scopes))
+                if (fsm.FsmName == "health_display" &&
+                    fsm.GetComponentInChildren<tk2dSprite>(true) != null)
+                { health.Add(fsm.transform); healthDriver = fsm; }
+            Transform healthRoot = null;
+            foreach (var candidate in health) healthRoot = CommonHudRoot(healthRoot, candidate);
+            if (healthRoot == null || healthRoot == slide.transform)
+                throw new InvalidOperationException("missing or ambiguous health_display tk2d subtree");
+            roots.Add(new HudRoot { Key = "health", Role = DsHudRole.Health,
+                Root = healthRoot, Driver = healthDriver });
+            roots.Add(new HudRoot { Key = "silk", Role = DsHudRole.Silk, Driver = spool,
+                Root = HudVisualRoot(spool, "chunkParent", "capR", "capRAnchored", "seg1",
+                    "bindNotch", "silkFailedAnimator", "spoolParent", "activeParent", "brokenParent",
+                    "cursedParent", "cursedAnimator", "silkFinalCutsceneBurst", "act3EndingParent",
+                    "act3EndingBarScaler", "act3EndingBarInverseScalers") });
+            foreach (var counter in HudComponents<CurrencyCounter>(scopes))
+            {
+                var kind = (CurrencyType)HudField(counter, "currencyType");
+                if (kind != CurrencyType.Money && kind != CurrencyType.Shard) continue;
+                roots.Add(new HudRoot { Key = "currency-" + kind,
+                    Role = kind == CurrencyType.Money ? DsHudRole.Money : DsHudRole.Shards,
+                    Driver = counter, Root = HudVisualRoot(counter, "icon", "geoTextMesh", "subTextMesh",
+                        "addTextMesh", "limitTextMesh", "fadeGroup", "rollerFade", "amountLayoutGroup", "failAnimator") });
+            }
+            foreach (var bind in HudComponents<BindOrbHudFrame>(scopes))
+                roots.Add(new HudRoot { Key = "bind", Role = DsHudRole.Bind, Driver = bind,
+                    Root = HudVisualRoot(bind, "changeParticle", "hunterV2Bar", "hunterV3BarA",
+                        "hunterV3BarB", "hunterV3ExtraHitEffect", "reaperModeEffect") });
+            foreach (var tool in HudComponents<ToolHudIcon>(scopes))
+                roots.Add(new HudRoot { Key = "tool-" + HudField(tool, "binding"),
+                    Role = DsHudRole.Tool, Driver = tool,
+                    Root = HudVisualRoot(tool, "icon", "radialImage", "radialImageBg", "templateNotch",
+                        "animator", "skillZapIcon") });
+            // Reject unrelated/common container expansion before the routing state
+            // validates all essential role counts, uniqueness and independence.
+            foreach (var root in roots)
+                if (root.Root == null || root.Root == slide.transform || root.Root == gameplay.transform)
+                    throw new InvalidOperationException("non-independent HUD visual dependencies: " + root.Key);
+            roots.Sort((a, b) => string.CompareOrdinal(a.Key, b.Key));
+            bool same = _hudSources != null && _hudSources.Roots.Length == roots.Count;
+            if (same)
+                for (int i = 0; i < roots.Count; i++)
+                    if (_hudSources.Roots[i].Root != roots[i].Root || _hudSources.Roots[i].Driver != roots[i].Driver ||
+                        _hudSources.Roots[i].Key != roots[i].Key) { same = false; break; }
+            if (!same)
+                _hudSources = new HudSources { Cameras = cameras, Camera = camera, Gameplay = gameplay,
+                    Slide = slide, Spool = spool, Roots = roots.ToArray() };
+            sources = _hudSources;
+            return true;
+        }
+        catch (Exception e)
+        {
+            _hudSources = null;
+            CapabilityGap("live-hud", e.GetType().Name + ": " + e.Message);
+            return false;
+        }
+    }
+
+    static List<T> HudComponents<T>(List<Transform> scopes) where T : Component
+    {
+        var result = new List<T>();
+        var seen = new HashSet<int>();
+        foreach (var scope in scopes)
+        {
+            if (scope == null) continue;
+            foreach (var component in scope.GetComponentsInChildren<T>(true))
+                if (component != null && seen.Add(component.GetInstanceID())) result.Add(component);
+        }
+        return result;
+    }
+
+    static object HudField(Component driver, string name)
+    {
+        for (Type type = driver.GetType(); type != null; type = type.BaseType)
+        {
+            var field = type.GetField(name, BindingFlags.Public | PrivateInstance | BindingFlags.DeclaredOnly);
+            if (field != null) return field.GetValue(driver);
+        }
+        throw new MissingFieldException(driver.GetType().Name, name);
+    }
+
+    static Transform HudVisualRoot(Component driver, params string[] fields)
+    {
+        Transform root = driver.transform;
+        foreach (string field in fields)
+        {
+            object value = HudField(driver, field);
+            var array = value as Array;
+            if (array != null)
+                foreach (object element in array) root = IncludeHudVisual(root, element);
+            else root = IncludeHudVisual(root, value);
+        }
+        return root;
+    }
+
+    static Transform IncludeHudVisual(Transform root, object value)
+    {
+        var component = value as Component;
+        var go = value as GameObject;
+        var visual = component != null ? component.transform : go != null ? go.transform : null;
+        if (visual == null || !visual.gameObject.scene.IsValid()) return root;
+        return CommonHudRoot(root, visual);
+    }
+
+    static Transform CommonHudRoot(Transform a, Transform b)
+    {
+        if (a == null) return b;
+        for (var at = a; at != null; at = at.parent)
+            if (b == at || b.IsChildOf(at)) return at;
+        throw new InvalidOperationException("HUD dependencies do not share a live root");
+    }
+
     public void Forget()
     {
         _paneList = null;
