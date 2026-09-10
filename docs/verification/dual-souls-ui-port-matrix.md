@@ -1,8 +1,10 @@
 # Dual Souls UI source-to-source port matrix
 
-> **Current execution authority:** The 2026-09-08 current execution override
-> below resumes Silksong host work and supersedes the historical device-first
-> order. Earlier unpassed evidence and source-object design requirements remain.
+> **Current execution authority:** The 2026-09-10 visible-HUD corrective
+> authority in the specification and recovery override in the plan supersede
+> the 2026-09-08 host-first override and historical H4/H5/H6 prerequisites.
+> Earlier evidence remains preserved, but no host-only result accepts a visible
+> Silksong feature.
 
 Date: 2026-08-31
 
@@ -16,6 +18,44 @@ This matrix prevents the production work from substituting a separately
 authored surface for the approved port. `RETAIN` below means reusable low-level
 evidence or infrastructure. It never means that the current authored
 composition satisfies the target.
+
+## Task99 signed live result — 2026-09-10 corrective reset
+
+Candidate `f56defa5f3c7701cdd0adbb565eec2493e1a46ee`, signed by dry-run
+`34525989598`, installed update-compatibly and rebuilt exact Linux Silksong
+`1.0.29980`. APK SHA-256 is
+`43332fa22bf209bba0397e6072cde91a39daec503ae381cca0704e21ca76dd79`;
+the pinned signer matched and no release was published.
+
+The first ordinary-gameplay capture invalidates Task99 Batch A acceptance:
+
+| Required visible row | Result | Evidence | Consequence |
+| --- | --- | --- | --- |
+| Primary gameplay display has no health/Silk/currency/loadout HUD | **FAIL** | `tools/shared-patches-tests/obj/task99-device-checkpoint-20260910/32-new-game-158s.png` | Native health and Silk remain at the primary top-left |
+| Lower display carries live health | **FAIL** | `tools/shared-patches-tests/obj/task99-device-checkpoint-20260910/33-first-gameplay-lower.png` | No health visualization is present |
+| Lower display carries live Silk and currency | **FAIL** | Same lower capture | Neither semantic group is present |
+| Lower display carries current Crest/Tool status | **FAIL** | Same lower capture | Only text tabs and ornaments are visible |
+| Silksong composition matches Hollow Knight hierarchy/density | **FAIL** | Primary/lower pair above against the Hollow Knight HUD definition | The result is a sparse authored shell, not the populated Dual Souls companion |
+| Exact game launches through current transport | **PASS, infrastructure only** | `23-current-game-launch-60s.png`; version `1.0.29980` | Does not offset any HUD failure |
+
+The former Task99 SPEC PASS, QUALITY PASS and fresh-main PASS are retained only
+as source/host diagnostics. They no longer mean that HUD or page composition is
+accepted. `DsPortHud.cs` and `DsPortHudState.cs` remain `REWRITE_PORT`, not
+accepted HUD implementations. Any matrix text below describing accepted HUD
+state is historical and superseded by this section.
+
+The active gate is plan V0–V5: pin one bounded Hollow Knight reference, route the
+four minimum essential native Silksong groups directly, inventory every
+additional source-proven or runtime-observed Silksong HUD mechanic, integrate
+those groups into the same Hollow Knight-derived status/loadout/context regions,
+run focused regressions and the exact compile, then immediately repeat the
+signed two-display gameplay capture. The four named groups are a baseline, not
+an exhaustive Silksong feature list; actual additional mechanics may not be
+omitted or left in a second primary-screen UI, and speculative mechanics may not
+be invented. No H4/H5/H6 closure, page work, Mods work, skin work, generalized
+framework, or large golden expansion may precede that gate. A disposable new
+game was created in profile slot 3 for validation and must be the only save
+removed before final APK delivery.
 
 ## Task99 residual6 font-owner handoff — 2026-09-09 19:41 UTC
 
@@ -446,12 +486,13 @@ Required work may move between named stages only by updating this matrix and
 the plan together. It may not be silently removed or called complete because
 the lower display renders.
 
-## 2026-09-08 current execution override
+## Historical 2026-09-08 execution override — superseded 2026-09-10
 
 Historical PARKED/DEFERRED and H5/H6 dependency entries above describe the
-former execution order. Silksong host work is now **RESUMED** under Tasks99–102,
-as specified by the matching execution addendum in
-`docs/superpowers/plans/2026-09-01-hollow-knight-first-dual-souls.md`.
+former execution order. The 2026-09-08 override resumed Silksong host work under
+Tasks99–102, as specified by the matching historical execution addendum in
+`docs/superpowers/plans/2026-09-01-hollow-knight-first-dual-souls.md`. The
+2026-09-10 corrective authority now supersedes this sequence.
 
 | Current work | Owner | Host acceptance condition |
 | --- | --- | --- |
@@ -475,11 +516,15 @@ later source changes. H3 remains a bounded Mods capability slice, not full
 gameplay Mods parity. Shared extraction occurs with the concrete second consumer
 and targeted regression, not as a blocking framework milestone.
 
-No live-device gate precedes these host batches. Packaging/source-image
-activation, devices/ADB/emulators, signing/release/publication, commits/pushes,
-cleanup and upstream-visible actions remain excluded. Historical DELETE_AFTER
-rows are future dispositions, not current deletion authorization. Old cores,
-goldens and evidence remain preserved.
+The old boundary excluded a live-device gate before those host batches and also
+excluded packaging/source-image activation, devices/ADB/emulators,
+signing/release/publication, commits/pushes, cleanup and upstream-visible
+actions. That exclusion does not apply to the V3–V4 integrated Android gate, its
+dry-run signing candidate, or the exact-commit push to the user's fork. A new
+thread/session-specific device lease is still required before ADB or physical-
+device work; no public release or upstream interaction is authorized.
+Historical DELETE_AFTER rows are future dispositions, not current deletion
+authorization. Old cores, goldens and evidence remain preserved.
 
 ### Task99 Batch B partial implementation checkpoint
 

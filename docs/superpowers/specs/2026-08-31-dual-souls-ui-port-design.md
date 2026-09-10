@@ -20,6 +20,95 @@ interface. Hollow Knight defines the design pattern. Silksong supplies its own
 resident sprites, fonts, labels, data, and additional feature content inside
 that pattern.
 
+## 2026-09-10 corrective authority — visible HUD first
+
+This section supersedes any stage ordering, addendum, host-complete label, review
+result, or deferral that would postpone visible Silksong HUD parity behind H4,
+H5, H6, page completeness, Mods, skins, generalized lifecycle work, or larger
+host matrices. Those activities are paused as prerequisites. Existing work and
+evidence are retained, but none may block the shortest correction of the live
+HUD.
+
+Signed candidate `f56defa5f3c7701cdd0adbb565eec2493e1a46ee` failed the first
+production requirement on the AYN Thor. In ordinary new-game gameplay,
+`32-new-game-158s.png` shows Silksong's health and Silk HUD still at the
+primary display's top-left, while `33-first-gameplay-lower.png` shows only an
+otherwise empty ornamental tab shell on the lower display. This invalidates
+all prior claims that Task99 Batch A, its SPEC review, its QUALITY review, or
+fresh-main host verification accepted the functional HUD. Their ownership and
+compilation evidence remains useful only as nonvisual diagnostic evidence.
+
+The immediate milestone is deliberately narrow:
+
+1. keep SilksongAndroid's proven display-1 transport;
+2. remove Silksong's live health, Silk, currency, and equipped Crest/Tool HUD
+   from the primary gameplay composition;
+3. route those same native objects and their existing drivers into the
+   corresponding Hollow Knight lower-HUD regions;
+4. present the Hollow Knight region hierarchy, scale, density, and spacing with
+   Silksong-native art and values; and
+5. restore the native primary relationships on full disable, display loss,
+   native pause/inventory ownership, scene replacement, and teardown.
+
+Health, Silk, currency, and equipped Crest/Tool state are the minimum known live
+HUD groups, not an assertion that Hollow Knight exhausts Silksong's mechanics.
+During this correction, inventory the actual Silksong HUD hierarchy and cached
+managed APIs for every additional persistent or contextual mechanic that owns a
+native HUD presentation. Integrate each source-proven or runtime-observed group
+into the nearest Hollow Knight-derived status, loadout, prompt, or contextual
+region using the same framing, spacing, typography, modal ordering, and
+primary-cleanup rules. Do not leave a second Silksong HUD on display 0, omit a
+real mechanic because Hollow Knight lacks it, or invent speculative mechanics
+that the running game and source do not establish.
+
+Use the most direct implementation supported by the two games' shared Unity UI
+model. Do not introduce a new shared framework, synthetic HUD, generalized
+resource protocol, speculative prefab admission system, exhaustive golden
+matrix, or unrelated H4/H5/H6 closure to accomplish this milestone. Reuse the
+existing concrete Hollow Knight layout constants and composition order where
+the direct-display transport permits it; adapt only the concrete Silksong root
+names, component types, and semantic values that actually differ.
+
+This milestone passes only with one evidence bundle. All Silksong captures,
+state-change observations, and lifecycle evidence must come from the same signed
+correction commit and ordinary gameplay state. The Hollow Knight visual oracle
+may reuse an earlier exact-build capture only when its game version, app commit,
+and capture provenance are recorded. The bundle must contain:
+
+- a Hollow Knight lower-HUD reference capture identifying its live HUD region,
+  frame/content region, tab row, and clean primary display;
+- a Silksong primary capture with no health, Silk, currency, or loadout HUD at
+  the top-left or elsewhere on display 0;
+- a Silksong lower capture visibly containing live health, Silk, currency, and
+  current Crest/Tool information in the corresponding Hollow Knight regions;
+- an inventory showing every additional source-proven or runtime-observed
+  Silksong HUD mechanic and a capture of each currently reachable presentation
+  integrated into the same design rather than left on display 0;
+- a side-by-side comparison showing equivalent hierarchy, information density,
+  scale, and spacing rather than merely shared ornament styling;
+- one bounded state-change observation proving that native HUD drivers still
+  update the routed objects; and
+- pause/resume plus teardown restoration evidence.
+
+A compile, source contract, fake-node test, renderer existence check, empty
+frame, tab shell, or statement that Unity/GPU behavior is unproved cannot pass
+or defer any item above. Before the signed device gate, host tests are limited
+to regressions directly needed for root discovery, routing, native-driver
+preservation, restoration, and the exact failure being corrected. Test count
+is not a progress metric.
+
+Creating one disposable new-game save for this device validation is authorized.
+Record its exact profile slot and remove only that test save before delivering
+the functional APK; never clear package data or remove unrelated user saves.
+No assistant-driven movement, jump, attack, collection, or progression is
+required for the HUD gate.
+
+Only after this visible HUD milestone passes may work continue, in order, to
+Inventory, Crest/Tools, Tasks, Journal, Map and overlays. Each is then accepted
+as a small visible vertical slice before Mods or skins resume. A page's host
+ownership machinery does not count as page completion without a populated,
+usable lower-display capture.
+
 ## Reference and technology boundary
 
 The visual and behavioral reference is `igawa6/dualsouls` commit

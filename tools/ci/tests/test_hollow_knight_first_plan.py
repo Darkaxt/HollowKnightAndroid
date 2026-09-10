@@ -17,15 +17,19 @@ def read(path):
 
 
 class HollowKnightFirstPlanTests(unittest.TestCase):
-    def test_authority_requires_the_hollow_knight_reference_before_silksong(self):
+    def test_corrective_authority_requires_bounded_reference_not_h5(self):
         spec = read(SPEC)
-        self.assertIn("DSUI-00 — Establish the executable Hollow Knight reference first", spec)
-        self.assertIn("No further Silksong composition implementation may advance", spec)
-        for required in ("HUD", "pages", "Mods persistence", "skin scanning/application/rotation"):
-            self.assertIn(required, spec)
+        plan = read(PLAN)
+        self.assertIn("2026-09-10 corrective authority — visible HUD first", spec)
+        self.assertIn("supersedes any stage ordering", spec)
+        self.assertIn("one evidence bundle", spec)
+        self.assertIn("exact-build capture", spec)
+        self.assertIn("source-proven or runtime-observed", spec)
+        self.assertIn("H4/H5/H6 are not prerequisites", plan)
+        self.assertIn("V0–V5 is the active queue", plan)
         self.assertIn(PLAN.name, spec)
 
-    def test_execution_order_is_reference_then_extraction_then_silksong(self):
+    def test_historical_stage_order_is_preserved_but_v0_v5_is_current(self):
         plan = read(PLAN)
         stages = [
             "## Stage H1:",
@@ -40,12 +44,16 @@ class HollowKnightFirstPlanTests(unittest.TestCase):
         ]
         offsets = [plan.index(stage) for stage in stages]
         self.assertEqual(sorted(offsets), offsets)
-        self.assertLess(plan.index("complete Hollow Knight Dual Souls companion"),
-                        plan.index("Extract shared contracts"))
-        self.assertLess(plan.index("Extract shared contracts"),
-                        plan.index("Resume the Silksong resident-object port"))
+        active = plan.split(
+            "### 2026-09-10 Task99 recovery override — stop building around the missing HUD",
+            1,
+        )[1].split("### Task99: functional HUD and native companion pages", 1)[0]
+        active_steps = [active.index(f"**V{number} —") for number in range(6)]
+        self.assertEqual(sorted(active_steps), active_steps)
+        self.assertIn("complete\n  Hollow Knight Mods, skins, topology and H5 closure are not prerequisites", active)
+        self.assertIn("Do not advance to native pages while the live HUD gate is red", active)
 
-    def test_historical_silksong_deferral_is_preserved_but_host_override_is_current(self):
+    def test_historical_silksong_deferral_is_preserved_but_hud_override_is_current(self):
         old_plan = read(OLD_PLAN)
         matrix = read(MATRIX)
         traceability = read(TRACEABILITY)
@@ -56,18 +64,21 @@ class HollowKnightFirstPlanTests(unittest.TestCase):
         self.assertIn("Silksong adaptation", traceability)
         self.assertIn("stays parked", traceability)
         self.assertIn("| Dual Souls composition port | `IN-PROGRESS` |", matrix)
-        # Preserve the historical gate and unpassed evidence, but do not turn it
-        # into a current implementation stop after the explicit host addendum.
-        current = matrix.split("## 2026-09-08 current execution override", 1)[1]
-        self.assertIn("Silksong host work is now **RESUMED**", current)
+        current = matrix.split("## Task99 signed live result — 2026-09-10 corrective reset", 1)[1]
+        self.assertIn("first ordinary-gameplay capture invalidates Task99 Batch A acceptance", current)
+        self.assertIn("plan V0–V5", current)
+        self.assertIn("H4/H5/H6 closure", current)
+        self.assertIn("host-only result accepts a visible", matrix)
+        historical = matrix.split(
+            "## Historical 2026-09-08 execution override — superseded 2026-09-10",
+            1,
+        )[1]
         for owner in ("Task99 Batch A", "Task99 Batch B", "Task100", "Task101", "Task102"):
-            self.assertIn(owner, current)
-        self.assertIn("does not prove Unity driver behavior or visual fit", current)
-        self.assertIn("No live-device gate precedes these host batches", current)
-        self.assertIn("current deletion authorization", current)
-        plan = read(PLAN)
-        self.assertIn("## 2026-09-08 execution addendum — Silksong host continuation", plan)
-        self.assertIn("### Task99: functional HUD and native companion pages", plan)
+            self.assertIn(owner, historical)
+        self.assertIn("does not prove Unity driver behavior or visual fit", historical)
+        self.assertIn("does not apply to the V3–V4 integrated Android gate", historical)
+        self.assertIn("Historical DELETE_AFTER rows are future dispositions", historical)
+        self.assertIn("## 2026-09-08 execution addendum — Silksong host continuation", read(PLAN))
 
     def test_every_public_authority_links_the_new_plan(self):
         for document in (UNIFIED_SPEC, OLD_PLAN, MATRIX, README):
@@ -81,21 +92,20 @@ class HollowKnightFirstPlanTests(unittest.TestCase):
         self.assertIn("tracked_deferrals = 0", plan)
         self.assertIn("update the README", plan)
 
-    def test_every_device_pass_forbids_gameplay_and_save_state_hosts(self):
+    def test_corrective_device_gate_allows_bounded_gameplay_with_safety_guards(self):
         plan = read(PLAN)
         spec = read(SPEC)
-        self.assertIn("Every device cycle from H2 through release", plan)
-        self.assertIn("An in-game room or save is not a permitted validation host", plan)
-        self.assertIn("already-loaded gameplay", plan)
-        self.assertIn("device passes neither read nor write game saves", plan)
-        self.assertIn("device switching does not open or mutate a user save", plan)
-        self.assertIn("Every remaining reference-device pass", spec)
-        self.assertIn("enter or reuse an in-game room", spec)
-        self.assertIn("save reads/writes prevented", spec)
-        for document in (plan, spec):
-            self.assertNotIn("minimum unmoving static scene needed", document)
-            self.assertNotIn("already-present static state", document)
+        self.assertIn("Capture both physical displays in ordinary gameplay", plan)
+        self.assertIn("disposable test slot", plan)
+        self.assertIn("thread/session-specific device lease", plan)
+        self.assertIn("delete only the recorded test slot", plan)
+        self.assertIn("Creating one disposable new-game save", spec)
+        self.assertIn("remove only that test save", spec)
+        self.assertIn("No assistant-driven movement, jump, attack", spec)
+        self.assertIn("ordinary gameplay state", spec)
 
+        # Retain the former synthetic-only gate text and traceability as historical
+        # evidence, but do not let it override the dated corrective authority.
         traceability = read(TRACEABILITY)
         gate4 = next(
             line for line in traceability.splitlines()

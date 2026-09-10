@@ -1,9 +1,9 @@
 # Hollow Knight-First Dual Souls Implementation Plan
 
-> **Current execution authority:** The 2026-09-08 Silksong host-continuation
-> addendum below supersedes this document's historical authorization and
-> H5/H6/device-first ordering for current host work. Earlier evidence and
-> unchecked device rows remain preserved, not passed.
+> **Current execution authority:** The 2026-09-10 Task99 recovery override and
+> matching specification authority supersede the 2026-09-08 host-continuation
+> order. V0–V5 is the active queue; H4/H5/H6 are not prerequisites, and
+> host-only evidence cannot accept the HUD.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:subagent-driven-development` (recommended) or
@@ -929,11 +929,11 @@ the installed app, and smoke-test both profiles. Close the running game.
 | H1 | DSUI-00/02/10 | `IMPLEMENTED / DEVICE-PARTIAL` | No implementation blocker; one tracked physical detach/true single-display deferral must close by H5 | 49/49 shared tests, 78/78 Python tests, both exact compiles, signed run `33494317664`, update-preserving Thor transport and pause/resume captures |
 | H2 | DSUI-00/01/02/07/10 | `SOURCE/HOST-COMPLETE / PHYSICAL-BATCHED` | Source/host implementation is complete at `00627e3`. The locked clip-safe label/teardown recheck and H1 topology observation remain unpassed and are batched into the complete Hollow Knight candidate, not a signed micro-candidate | Historical signed evidence remains recorded above. The final H2 correction passes 32 focused contracts, 122 Android tests, 58 shared tests, 38 bundle-surgery tests, 112 Python tests, and an exact 226,816-byte patch; no later Android/device/emulator/ADB/signing/live validation occurred |
 | H3 | DSUI-00/05/09/10 | `HOST-COMPLETE / TRACKED-DEFERRALS` | No H3 host blocker through authority/state-core checkpoint `fix: unify Hollow Knight flash authority`; `HKMOD-001`–`HKMOD-018` remain visible, disabled tracked deferrals for Final managed-rewrite remediation. This is not full Mods parity or device acceptance | 89/89 focused Mods/state-core tests, 143/143 complete shared tests, 47/47 Hollow Knight reference/source contracts, and 53/53 combined source/docs contracts; exact Hollow Knight compile with 0 errors, 1 pre-existing `CS0649` warning, 2 entry points, 271,360-byte DLL; exact Silksong compile with 53 sources and 10 entry points; prohibited production scan clean. Executable state tests cover display loss, single-display master authority, per-field native reconciliation, release/Vanilla restoration, idempotence, and fresh replacement bindings. Only the process policy restores tracked state; direct-display teardown clears only legacy publisher state and presenter teardown does not touch process policy. H3 creates no signed build; H4 follows on the same branch, then the complete H3/H4 slice receives one future explicitly authorized device gate |
-| H4 | DSUI-00/05/09/10 | `PENDING` | Scanner, application, rotation, rollback | Host pack matrix plus controlled Thor death/respawn-state injection proof; no gameplay testing |
-| H5 | DSUI-00–10 | `PENDING` | Hollow Knight blockers and deferrals must both reach zero | Clean host and complete Thor reference matrix |
-| H6 | DSUI-02/09/10 | `PENDING` | Shared extraction must preserve accepted H5 behavior | Shared boundary tests plus unchanged H5 regression |
-| S1 | DSUI-01–10 | `DEFERRED` | Depends on H5 and H6 | Validated probe, module RED/GREEN, both compiles, side-by-side captures |
-| S2 | DSUI-04/05/09/10 | `DEFERRED` | Depends on S1 | Silksong Mods/skin effect and persistence matrix |
+| H4 | DSUI-00/05/09/10 | `PAUSED / NOT A PREREQUISITE` | None for Task99 HUD recovery | Preserve existing scanner/application/rotation work; do not expand it before visible Silksong HUD/pages |
+| H5 | DSUI-00–10 | `PARTIAL REFERENCE / NOT A PREREQUISITE` | None for Task99 HUD recovery | Use one bounded Hollow Knight lower-HUD reference capture; complete Mods/skins/topology closure is deferred |
+| H6 | DSUI-02/09/10 | `SUPERSEDED AS A PROJECT` | None | Extract only a concrete seam when a working second consumer requires it; no generalized extraction gate |
+| S1 | DSUI-01–10 | `IN-PROGRESS / LIVE HUD FAILED` | Task99 V0–V5 visible HUD recovery | Signed commit `f56defa5` leaves the native HUD on display 0 and an empty shell on display 1; host acceptance is withdrawn |
+| S2 | DSUI-04/05/09/10 | `BLOCKED BY VISIBLE HUD/PAGES` | Pass Task99 HUD and page slices first | Existing host work is preserved; no further Mods/skin implementation before visible companion parity |
 | F1 | All | `PENDING` | Zero blockers/deferrals across both games | Switching, update/rollback, signed fresh-download proof |
 
 No stage passes merely because code compiles or something renders on display
@@ -963,6 +963,99 @@ disabled gameplay rows. The retained final acceptance artifact is
 SHA-256 `cd72d5757ba7cca8a6833e8dc0e11640b60aa33804f56e6a499944335818ff5d`.
 These documentation and subsequent implementation changes establish a new
 source baseline; they do not extend that historical freeze or its test credit.
+
+### 2026-09-10 Task99 recovery override — stop building around the missing HUD
+
+This override supersedes the Task99 batch order below and every H4/H5/H6
+prerequisite for the current correction. It implements the corrective authority
+in the specification. Historical implementation notes remain evidence, not the
+active work queue.
+
+The signed/current-source Thor result is **FAIL**:
+
+- primary `32-new-game-158s.png`: Silksong's health and Silk HUD remains at the
+  top-left of the gameplay display;
+- lower `33-first-gameplay-lower.png`: only a sparse ornamental shell and text
+  tabs render; health, Silk, currency and Crest/Tool status are absent.
+
+Therefore Task99 Batch A is not functionally complete. Its prior SPEC PASS,
+QUALITY PASS, fresh-main PASS and accepted-HUD wording are withdrawn for product
+acceptance. They prove only that the current routing/state code compiles and
+passes its own host model.
+
+#### Active work order
+
+- [ ] **V0 — Pin one visual reference, not all of H5.** Capture or reuse one
+  exact Hollow Knight gameplay pair showing the clean primary display and the
+  populated lower companion. Record its exact game version, app commit and
+  capture provenance, then mark the lower live-HUD rectangle, central content
+  rectangle and tab/status rows. This is a bounded visual reference; complete
+  Hollow Knight Mods, skins, topology and H5 closure are not prerequisites.
+- [ ] **V1 — Route the four essential live groups directly.** Using the existing
+  Silksong direct-display host and the concrete Hollow Knight frame geometry,
+  route the same live Silksong health, Silk, currency and equipped Crest/Tool
+  objects into those lower-display regions. Preserve their current native
+  components and drivers. Remove them from display 0 by ownership-preserving
+  reparenting/re-layering, not by drawing copies or hiding a separate clone.
+  These four groups are the minimum visible baseline, not a claim that Silksong
+  has no additional HUD mechanics. In the same pass, inventory the real
+  Silksong HUD hierarchy and managed APIs for additional persistent/contextual
+  mechanic presentations; map each proven group into the nearest Hollow
+  Knight-derived region instead of leaving a separate display-0 HUD. Do not
+  speculate beyond actual source/runtime evidence. Rewrite or delete
+  `DsPortHud` logic that merely records slot state without producing this
+  result. Do not work on pages, Map, overlays, Mods, skins or a new abstraction
+  during V1.
+- [ ] **V2 — Run only correction-focused host checks.** Add the smallest RED
+  regressions that prove exact runtime root discovery, successful mutation of
+  all four groups, display-0 removal, display-1 layer/slot assignment, late
+  native-driver reassertion and restoration. Use exact cached Silksong managed
+  metadata rather than permissive invented nodes. Bind the HUD-mechanic
+  inventory to concrete owner/component identities and classify every actual
+  group as routed, contextual, or unavailable in the current early-game state;
+  no discovered group may silently disappear. Run the focused suite and exact
+  Silksong compile; run Hollow Knight compile only if shared/HK source was
+  changed. Do not expand test/golden counts or close unrelated matrices.
+- [ ] **V3 — Run the signed visible gate immediately.** Commit and push the
+  focused correction to the user's fork, build that exact commit with the
+  persistent signing identity, update-install it without clearing app data,
+  rebuild only the invalidated Silksong generation, and open the recorded
+  disposable test slot. Capture both physical displays in ordinary gameplay.
+  The gate fails if any essential primary HUD remains, any essential lower HUD
+  group is absent, or any currently reachable source/runtime-proven additional
+  HUD presentation is absent from its mapped lower-display region, fails to
+  update through its native driver, or remains anywhere in a separate display-0
+  layout. It also fails if the lower hierarchy/density/scale is not recognizably
+  the Hollow Knight companion. Compilation or log evidence cannot override the
+  images.
+- [ ] **V4 — Observe one native update and lifecycle cycle.** Without assistant
+  movement/jump/attack, use an available passive/current-state update or ask the
+  user for one bounded direct action. Prove the routed native HUD changes, then
+  prove pause/resume and teardown restore ownership without duplication.
+- [ ] **V5 — Review and publish the corrected checkpoint.** Only after V3 and V4
+  pass, run independent SPEC then QUALITY review over the correction and its
+  images. Any review-driven implementation change invalidates the signed gate:
+  commit and push the change, rebuild that exact commit, and repeat V3/V4 before
+  acceptance. When review and signed evidence agree, retain the accepted commit
+  on the user's fork and create the next signed candidate. Keep the disposable
+  test save until the complete device pass no longer needs it; before delivering
+  the functional APK, delete only the recorded test slot.
+
+#### Hard stop conditions
+
+Do not advance to native pages while the live HUD gate is red. Do not advance to
+Task100 Mods or Task101 skins until the HUD and then each required page has a
+populated lower-display device capture. Tasks39–41, 56–57, 79, 81, 84 and 90–91
+are preserved but paused; none is a prerequisite for this route. An unsupported
+hypothetical prefab, exhaustive lifecycle matrix, full H4 catalog protocol or
+full H5 reference closure cannot interrupt V0–V5.
+
+After V5, resume Task99 as visible vertical slices in this order: Inventory,
+Crest/Tools, Tasks, Journal, Map, then overlays. For each slice: direct resident
+object reuse, focused host regression, exact compile, one lower-display capture,
+and correction before moving to the next. Existing host-heavy implementations
+may be simplified or replaced when they do not produce the required visible
+result.
 
 ### Task99: functional HUD and native companion pages
 
@@ -1334,13 +1427,19 @@ they neither block unrelated host work nor count as implemented behavior.
 
 ### Current operational boundary
 
-No ADB, physical-device, emulator, signing, release workflow, or live Android
-testing until explicit approval. No packaging/source-image integration activation,
-commits, pushes, merges, cleanup or upstream-visible action involving
-`igawa6/dualsouls`. No native addresses, IL2CPP offsets, process scanning,
-injected `PlayerData` fields or save edits. Local source reading/adaptation is
-allowed with provenance/notices preserved. Preserve old cores, goldens and
-evidence. Earlier broader authorization text is historical, not permission.
+The V3 exact-commit fork push, dry-run persistent-identity signing candidate and
+V3–V4 integrated Android gate are required by the 2026-09-10 recovery override;
+they are not prohibited by the older host-only boundary. Before any new ADB or
+physical-device action, obtain a thread/session-specific device lease and wait
+for the user to prepare the device. No unrelated device work, public release,
+merge, cleanup or upstream-visible action is authorized. Commits and pushes go
+only to the user's `fork`; never push, open a PR, create an issue, comment or
+otherwise interact with `igawa6/dualsouls`.
+
+No native addresses, IL2CPP offsets, process scanning, injected `PlayerData`
+fields or save edits. Local source reading/adaptation is allowed with
+provenance/notices preserved. Preserve old cores, goldens and evidence. Earlier
+broader authorization text is historical, not permission.
 
 Use offline cached inputs, no downloads or restores, commands at most 180 seconds
 and each build/test subprocess wait at most 175 seconds. Use task-owned fresh
