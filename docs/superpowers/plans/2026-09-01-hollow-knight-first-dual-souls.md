@@ -1383,7 +1383,7 @@ mutation, device/publication/source activation, save edits or cleanup; commands
 
 ### Tasks100–102: reachable Mods, shared skins and combined host acceptance
 
-- [ ] **Task100.** Reuse shared `tools/shared-patches/src/Mods/` controller,
+- [x] **Task100.** Reuse shared `tools/shared-patches/src/Mods/` controller,
   persistence and presenter logic. Extract `TweakSession.cs` from
   `HollowKnightModsSession.cs` only with its actual second consumer; retain
   guarded initialization/restoration and the existing 60-ready-tick retry.
@@ -1396,6 +1396,12 @@ mutation, device/publication/source activation, save edits or cleanup; commands
   explicitly unavailable, not claimed as full Mods parity. Test default-off,
   baseline restoration/reset, initialization retry, rebuild/hotplug ownership,
   unavailable actions and HK/SS persistence isolation.
+  **Host-complete/device-deferred at `41bb3cdd4ea9c9d63c526353355f77bbb9d24b58`.**
+  Shared lifecycle, exact four typed bindings, startup reachability, native-resident
+  `DsPortFrame` presentation, consumer detach, restoration retry/owner replacement,
+  and no production `DsShell` route are source/host proven. Exact evidence and the
+  device boundary are recorded in
+  `docs/verification/evidence/task100-silksong-mods-41bb3cd/completion.json`.
 - [ ] **Task101.** Share existing bounded Kotlin import/library/UI algorithms
   through a closed immutable HK/SS catalog/profile definition. Thread it through
   catalog, library codec/store, object builder, canonical manifest, tree verifier,

@@ -58,3 +58,21 @@ profile isolation, and rendered unified launcher, but it cannot execute the
 ARM64 Unity player or reproduce the Thor's physical display 1. Production
 modal rendering, touch containment, real effects, and process-exit/relaunch
 persistence therefore remain device gates rather than inferred passes.
+
+## Task100 production reachability checkpoint
+
+Task100 replaces the dormant authored-shell route with a process-owned
+`SilksongModsRuntime` and production `DsPortMods` presentation. Bootstrap starts
+Mods before the dual-screen-enabled early return, so settings, initialization and
+restoration retry do not depend on display 1. The presenter uses the accepted
+`DsPortFrame.ModsAnchor`, native resident pane labels/fleurs and the shared
+`TweakMenuModel`; detach removes its gesture consumer and owned visuals without
+disposing the process session.
+
+The source-backed capability boundary remains exactly the same four rows above.
+Typed actions require the current `GameManager`, gameplay scene, `PlayerData` and
+`HeroController`; unavailable state fails closed. Shared controller/session tests
+cover default-off profile isolation, reset, apply retry, restoration retry and
+owner replacement. Exact source manifests, compile receipts and the unproved
+device boundary are recorded in
+`docs/verification/evidence/task100-silksong-mods-41bb3cd/completion.json`.

@@ -1,4 +1,5 @@
 import hashlib
+import json
 import pathlib
 import subprocess
 import tempfile
@@ -285,6 +286,33 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertNotIn("new DsShell", bootstrap + port)
         self.assertNotIn("DsModsScreen", bootstrap + port + presenter)
         self.assertIn("new DsModsScreen", shell)
+
+    def test_task100_receipt_is_bound_to_committed_compile_sources(self):
+        evidence = REPO_ROOT / "docs" / "verification" / "evidence" / "task100-silksong-mods-41bb3cd"
+        receipt = json.loads((evidence / "completion.json").read_text(encoding="utf-8"))
+
+        self.assertEqual("HOST_COMPLETE_DEVICE_DEFERRED", receipt["status"])
+        self.assertRegex(receipt["sourceCommit"], r"^[0-9a-f]{40}$")
+        self.assertEqual(4, len(receipt["exactSilksongBindings"]))
+        self.assertIn("device UI and interaction acceptance remains deferred", receipt["evidenceBoundary"])
+        for compile_receipt in receipt["managedCompiles"].values():
+            manifest_path = REPO_ROOT / compile_receipt["sourceManifest"]
+            manifest = manifest_path.read_bytes()
+            entries = manifest.decode("utf-8").splitlines()
+            self.assertEqual(compile_receipt["compiledSourceCount"], len(entries))
+            self.assertEqual(compile_receipt["sourceManifestSha256"], hashlib.sha256(manifest).hexdigest())
+            self.assertEqual(0, compile_receipt["errors"])
+            self.assertIn("--no-restore", compile_receipt["command"])
+            self.assertIn("--no-incremental", compile_receipt["command"])
+            for entry in entries:
+                digest, relative_path = entry.split("  ", 1)
+                historical = subprocess.run(
+                    ["git", "-C", str(REPO_ROOT), "show",
+                     f"{receipt['sourceCommit']}:{relative_path}"],
+                    check=True,
+                    capture_output=True,
+                ).stdout
+                self.assertEqual(digest, hashlib.sha256(historical).hexdigest())
 
     def test_second_screen_uses_the_live_native_pane_font_source(self):
         resident = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsResidentUi.cs").read_text(encoding="utf-8")
