@@ -1424,7 +1424,7 @@ mutation, device/publication/source activation, save edits or cleanup; commands
   Test foreign profiles/catalogs, identical pack IDs across games, startup-selection
   changes, selected/pending protection, mode changes, duplicate/hazard events,
   prompt matching acknowledgments, next death before polling and owner replacement.
-  **Host-complete/device-deferred at `1791586`, superseding `4320c7f`.** Exact SS
+  **Host-complete/device-deferred at `90fd450`, superseding `1791586`.** Exact SS
   1.0.29980 managed input SHA-256
   `1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d`
   remains pinned; the canonical death bridge remains byte-idempotent at SHA-256
@@ -1441,18 +1441,18 @@ mutation, device/publication/source activation, save edits or cleanup; commands
   cannot survive a claimed ROTATE transition. A restore-complete retirement wait
   now transports that fact from session to controller: JNI/Kotlin observations
   publish vanilla/no active pack immediately while preserving the frozen successor
-  retry. Unavailable-target waits that genuinely retain old character visuals and
-  failed restoration continue to report the truthful old active identity. A
-  changed/cleared durable Kotlin
+  retry, including when sparse/live-subset discovery appends omission diagnostics.
+  Unavailable-target waits that genuinely retain old character visuals and failed
+  restoration continue to report the truthful old active identity. A changed/cleared durable Kotlin
   `rotationRun` supersedes impossible local cancellation state. After save
   redirection, UIMsg rewriting and Mods weaving, production runs a second structural
   death-bridge verifier before IL2CPP and atomically records the final assembly hash
   plus `structural-v1` result in completion provenance. Exact stripped-helper and
-  moved-call mutations fail closed. The quality checkpoint passes 1,578 shared,
-  116 launcher, 150 Python and 40 BundleSurgery tests; compiles 83 Silksong sources
+  moved-call mutations fail closed. The quality checkpoint passes 1,579 shared,
+  104 selected launcher, 151 Python and 40 BundleSurgery tests; compiles 83 Silksong sources
   with 14 entry points and the exact Hollow Knight 1.5.12620 consumer with two.
   Evidence is retained in
-  `docs/verification/evidence/task101-observation-fix-1791586/`. Android bundle
+  `docs/verification/evidence/task101-publish-fix-90fd450/`. Android bundle
   identity/parity, sampled material appearance, Scythe/Shaman shaders,
   crest/fallback visuals, HUD effects, device resource pressure, death/respawn
   visuals and lifecycle, and persistence interaction remain device-only deferrals.

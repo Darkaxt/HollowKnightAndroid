@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "task": "Task101-QUALITY-PUBLISH-DECORATION-REMEDIATION",
+  "status": "HOST_COMPLETE_DEVICE_DEFERRED",
+  "baseCommit": "d65d815",
+  "sourceCommit": "90fd450fab9a1412e21c4c0917f6c7837b00f360",
+  "supersedes": "docs/verification/evidence/task101-observation-fix-1791586/completion.json",
+  "scope": "Preserve restored-visual authority when Silksong runtime publication appends sparse/live-target omission diagnostics",
+  "rootCause": "SilksongSkinRuntime.Publish reconstructed SkinApplyResult with status, detail and unsupported targets but omitted PreviousVisualsRestored, allowing the controller to retain stale active pack identity during deferred resource retirement.",
+  "remediation": {
+    "contract": "The omission-decorated result copies PreviousVisualsRestored. The instance publication path delegates to the exact host-testable publication overload used by the integrated regression.",
+    "integratedRegression": "HollowKnightSkinRuntimeTests.Silksong_publish_with_omissions_clears_retired_identity_and_preserves_successor_retry",
+    "proves": [
+      "omission diagnostics remain published",
+      "restore-complete retirement publishes null active pack and tree",
+      "repeated delayed-release polling allocates no successor",
+      "the frozen successor retries and publishes after release confirmation"
+    ],
+    "reconstructionAudit": "All production SkinApplyResult decoration reconstructions were checked; Silksong omission publication and session retirement diagnostics both copy PreviousVisualsRestored. The Python production contract pins both call sites."
+  },
+  "testRuns": [
+    {
+      "name": "shared-managed-suite",
+      "passed": 1579,
+      "failed": 0,
+      "skipped": 0,
+      "log": "shared-tests.log",
+      "logSha256": "4f3eb1e2b95fb836a0507fdd67aca80152b94e2eb86995c174f9fedbb11d40f4"
+    },
+    {
+      "name": "launcher-task101-selected",
+      "passed": 104,
+      "failed": 0,
+      "skipped": 0,
+      "classes": 11,
+      "log": "launcher-tests.log",
+      "logSha256": "b03b80277ab197b1ebaa04350d97e1d6714391d07b8bdac96972c04127962895"
+    },
+    {
+      "name": "python-production-contracts",
+      "passed": 151,
+      "failed": 0,
+      "skipped": 0,
+      "log": "python-contracts.log",
+      "logSha256": "08171401a0b81abcea0c28762e05a29e6410c928faf0d5d1e0f5a944b670d470"
+    },
+    {
+      "name": "bundle-surgery-suite",
+      "passed": 40,
+      "failed": 0,
+      "skipped": 0,
+      "log": "bundle-surgery-tests.log",
+      "logSha256": "569a393adbcd86682dda7fee30aa93114d66dbec7c1073e1348f0cbbb35dc2ef"
+    }
+  ],
+  "managedCompiles": {
+    "silksong": {
+      "assemblyCSharpSha256": "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d",
+      "compiledSourceCount": 83,
+      "entryPointCount": 14,
+      "errors": 0,
+      "log": "silksong-managed-compile.log",
+      "logSha256": "bb2a7e0c40f68031cae33cdb3ea80900f7b9928d60b83b1b0f630a1843fa67ad"
+    },
+    "hollowKnight": {
+      "gameVersion": "1.5.12620",
+      "outputBytes": 763904,
+      "entryPointCount": 2,
+      "warnings": 1,
+      "errors": 0,
+      "log": "hollow-knight-managed-compile.log",
+      "logSha256": "c1e1b4a2395b3e61939212e396dc9dd1e6df1cd8b618f9ddeb702aae3fbe04b2"
+    }
+  },
+  "binaryProvenance": {
+    "unchangedFrom": "docs/verification/evidence/task101-observation-fix-1791586/completion.json",
+    "canonicalDeathBridgeSha256": "86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e",
+    "postDeathUiMessageFinalSha256": "fee81c9bfee10dea307373b167f717d0b4aa5811c2e849ef9a4cf98c7804a2a0"
+  },
+  "sourceManifest": "source-manifest.sha256",
+  "sourceManifestEntries": 17,
+  "sourceManifestSha256": "4a5d8398e2c7f3134767ca91e16857e5d01d6c5e9adc8bde93ea0ebf3fe34997",
+  "prohibitedWorkPerformed": [],
+  "deviceDeferrals": [
+    "Android bundle identity and managed parity",
+    "Unity renderer, GPU and shader appearance",
+    "live JNI lifecycle",
+    "physical-device resource pressure and death/respawn behavior"
+  ],
+  "evidenceBoundary": "The integrated host regression proves the managed publication/controller/session observation and retry contract. Exact compiles prove source compatibility, not live Android or Unity behavior."
+}
