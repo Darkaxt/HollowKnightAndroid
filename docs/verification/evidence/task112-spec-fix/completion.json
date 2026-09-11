@@ -1,12 +1,12 @@
 {
-  "scope": "Task112 corrected native Map ownership and exact SkillGetMsg legal acknowledgment",
+  "scope": "Task112 corrected native Map ownership, property-block precedence, cold-text lifecycle isolation, and exact SkillGetMsg legal acknowledgment",
   "gameVersion": "Linux Silksong 1.0.29980",
-  "sourceCommit": "a41143c78ba05505842985163770002a51a800e0",
-  "sourceTree": "4f3aaa27cf53f8d8f9a70c81071bc4ba93f796de",
+  "sourceCommit": "155de3125003fa547316f1cc6843c70dd4d2e9df",
+  "sourceTree": "65c864ea2bde961dbc29821ac280f72ec72a0f0c",
   "cwd": "D:\\Temp\\HollowKnightAndroid-h1",
   "reviewedSourceCount": 83,
   "reviewedSourceManifest": "docs/verification/evidence/task112-spec-fix/reviewed-source-manifest.sha256",
-  "reviewedSourceManifestSha256": "e2e7cab7f2a4360478c79a9f5ce9f07e493c409a46d44848e6b959aa286d90a2",
+  "reviewedSourceManifestSha256": "b0802e9c236198f1eb738b12dd0e0ac6a28709c6322ad0babbd0fab44d436b49",
   "injectorSourceCount": 12,
   "injectorSourceManifest": "docs/verification/evidence/task112-spec-fix/injector-source-manifest.sha256",
   "injectorSourceManifestSha256": "2536b5bb2ed402d294204181bbe65e198018178a99fbf436f6b5fe23e3d1d01f",
@@ -25,16 +25,16 @@
       "tools/shared-patches-tests/obj/task112-spec-fix-final/managed/bin",
       "--nologo"
     ],
-    "startUtc": "2026-09-11T01:34:46Z",
-    "endUtc": "2026-09-11T01:34:49Z",
+    "startUtc": "2026-09-11T02:30:45Z",
+    "endUtc": "2026-09-11T02:30:47Z",
     "exitCode": 0,
     "warnings": 7,
     "errors": 0,
     "compiledSourceCount": 68,
-    "compiledSourceManifestSha256": "c76ebbf60fac669e2c3d54c3404d9d286360ead575e7d209da0d1bc945852adb",
+    "compiledSourceManifestSha256": "fb65e92ca61a60082a8a87faffbb7d276e4b790c7409cda7e6b378cef63eea03",
     "sourceManifest": "docs/verification/evidence/task112-spec-fix/source-manifest.sha256",
     "output": "tools/shared-patches-tests/obj/task112-spec-fix-final/managed/bin/PatchCheck.dll",
-    "outputSha256": "5d91ac109ac8a39bc31c9176bea094c36561aba07008d32e3111c6907c3681f1",
+    "outputSha256": "0eeb8405da584ab04857edf83dba45f4d40943810f94622aef916f4d2128da3d",
     "log": "docs/verification/evidence/task112-spec-fix/compiler.log"
   },
   "legalAcknowledgementBridge": {
@@ -128,14 +128,15 @@
         "-m",
         "unittest",
         "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_native_map_failed_partial_build_blocks_replacement_until_exact_retry",
-        "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_native_map_preserves_renderer_and_every_indexed_material_property_block",
+        "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_native_map_preserves_renderer_and_only_present_indexed_property_blocks",
         "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_native_map_outgoing_ticks_poll_freshness_refresh_donors_and_retire_stale_graph",
         "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_native_map_composes_cloned_renderer_hierarchy_directly_on_display_one",
+        "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_map_cold_generation_stays_inactive_and_publishes_renderer_only_state",
         "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_skill_get_routes_exact_registered_instance_without_progression_replay",
         "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_registered_native_message_companion_dismissal_rewrites_only_armed_wait"
       ],
       "exitCode": 0,
-      "passed": 6,
+      "passed": 7,
       "failed": 0,
       "skipped": 0,
       "log": "docs/verification/evidence/task112-spec-fix/focused-python.log"
@@ -149,11 +150,11 @@
         "--TestCaseFilter:FullyQualifiedName~SilksongPortSelectionTests|FullyQualifiedName~SilksongPortOverlayTests"
       ],
       "exitCode": 0,
-      "passed": 255,
+      "passed": 258,
       "failed": 0,
       "skipped": 0,
       "log": "docs/verification/evidence/task112-spec-fix/focused-shared-fresh.log",
-      "assemblySha256": "14b6c1d7e2740ebe429e8fab17511e5d91ff883ecbac1c95e9dcafe000517dad"
+      "assemblySha256": "bc4ec132810051d2b18c09659b54d4f537d2ad9c8d15eee66edb3251a313b9bd"
     },
     {
       "name": "full-python",
@@ -164,7 +165,7 @@
         "tools.ci.tests.test_dual_souls_ui_port"
       ],
       "exitCode": 0,
-      "passed": 119,
+      "passed": 120,
       "failed": 0,
       "skipped": 0,
       "log": "docs/verification/evidence/task112-spec-fix/full-python.log"
@@ -177,11 +178,11 @@
         "tools/shared-patches-tests/obj/task112-spec-fix-final/shared-tests/bin/SharedPatches.Tests.dll"
       ],
       "exitCode": 0,
-      "passed": 1526,
+      "passed": 1529,
       "failed": 0,
       "skipped": 0,
       "log": "docs/verification/evidence/task112-spec-fix/full-shared-fresh.log",
-      "assemblySha256": "14b6c1d7e2740ebe429e8fab17511e5d91ff883ecbac1c95e9dcafe000517dad"
+      "assemblySha256": "bc4ec132810051d2b18c09659b54d4f537d2ad9c8d15eee66edb3251a313b9bd"
     },
     {
       "name": "bundle-surgery",
@@ -249,16 +250,16 @@
       "tools/shared-patches-tests/obj/task112-spec-fix-final/shared-tests/bin",
       "--nologo"
     ],
-    "startUtc": "2026-09-11T01:54:38Z",
-    "endUtc": "2026-09-11T01:54:45Z",
+    "startUtc": "2026-09-11T02:30:55Z",
+    "endUtc": "2026-09-11T02:30:58Z",
     "exitCode": 0,
     "warnings": 0,
     "errors": 0,
     "sourceCount": 87,
     "sourceManifest": "docs/verification/evidence/task112-spec-fix/shared-tests-source-manifest.sha256",
-    "sourceManifestSha256": "2a755f98402f7af06fcf69a7b70bad41a7e10c21305bc596ec229192f3bc9d2c",
+    "sourceManifestSha256": "03a22a6903bcb17c3905adaeaf264726917f61d3224fca7d26385610f371eae8",
     "output": "tools/shared-patches-tests/obj/task112-spec-fix-final/shared-tests/bin/SharedPatches.Tests.dll",
-    "outputSha256": "14b6c1d7e2740ebe429e8fab17511e5d91ff883ecbac1c95e9dcafe000517dad",
+    "outputSha256": "bc4ec132810051d2b18c09659b54d4f537d2ad9c8d15eee66edb3251a313b9bd",
     "log": "docs/verification/evidence/task112-spec-fix/shared-tests-build.log"
   }
 }
