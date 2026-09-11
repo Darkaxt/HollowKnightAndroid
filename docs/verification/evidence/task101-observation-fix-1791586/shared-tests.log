@@ -1,0 +1,5 @@
+  SharedPatches.Tests -> D:\Temp\HollowKnightAndroid-h1\tools\shared-patches-tests\bin\Release\net8.0\SharedPatches.Tests.dll
+Test run for D:\Temp\HollowKnightAndroid-h1\tools\shared-patches-tests\bin\Release\net8.0\SharedPatches.Tests.dll (.NETCoreApp,Version=v8.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:  1578, Skipped:     0, Total:  1578, Duration: 54 s - SharedPatches.Tests.dll (net8.0)

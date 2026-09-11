@@ -1,0 +1,99 @@
+{
+  "schema": 1,
+  "task": "Task101-QUALITY-OBSERVATION-REMEDIATION",
+  "status": "HOST_COMPLETE_DEVICE_DEFERRED",
+  "baseCommit": "800a48f343ef2d3edf407f59acea5f0c5ec3d2ba",
+  "sourceCommit": "17915868d02c18792886e721b871505832001675",
+  "supersedes": "docs/verification/evidence/task101-quality-fix-4320c7f/completion.json",
+  "scope": "Clear stale published active skin identity after a memory-bound session has restored visuals and is waiting for deferred resource retirement",
+  "rootCause": "SkinApplyStatus.AwaitingTargets represented both an unavailable-target wait that retained valid old visuals and a restore-complete retirement wait with no active visuals. SkinRuntimeSession knew which state existed, but SkinApplyResult did not transport that fact, so SkinLibraryRuntimeController retained and published its old activeId and activeTree.",
+  "remediation": {
+    "contract": "SkinApplyResult.PreviousVisualsRestored explicitly marks restore-complete waits. SkinRuntimeSession sets it on the memory-pressure restore result and every subsequent retirement-barrier result while CurrentPack is null, and preserves it through retirement diagnostics. SkinLibraryRuntimeController clears activeId, activeTree and activeMode immediately when that flag is observed while retaining the pending candidate and direct retry state.",
+    "retainedBehavior": [
+      "AwaitingTargets with genuinely retained old character visuals keeps the old active identity",
+      "OFF successful restoration publishes no active identity",
+      "ON-to-ROTATE memory pressure publishes vanilla/no active pack until retirement completes",
+      "RestoreFailed retains the old active identity because rollback can leave it genuinely active",
+      "Delayed retirement performs no successor allocation and retries the frozen candidate"
+    ],
+    "integratedRegression": "HollowKnightSkinRuntimeTests.Controller_publishes_vanilla_identity_while_memory_bound_successor_awaits_retirement",
+    "integratedCases": ["ON-to-ON", "ON-to-ROTATE"]
+  },
+  "testRuns": [
+    {
+      "name": "shared-managed-suite",
+      "command": "dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --no-restore",
+      "passed": 1578,
+      "failed": 0,
+      "skipped": 0,
+      "log": "shared-tests.log",
+      "logSha256": "2fbef304b2651f890de088af8bc169f9b080f591698efe92970ae8f273568116"
+    },
+    {
+      "name": "launcher-task101-selected",
+      "command": "Gradle 8.11 --offline --no-daemon :app:testDebugUnitTest with 11 Task101 profile/build/runtime/library/UI classes",
+      "passed": 116,
+      "failed": 0,
+      "skipped": 0,
+      "log": "launcher-tests.log",
+      "logSha256": "9de6fafb25ef90a4a28c809fced8774608bd19304c04de95ed3bf3a1395ecf99"
+    },
+    {
+      "name": "python-production-contracts",
+      "command": "python -m unittest tools.ci.tests.test_profile_mod_pipeline tools.ci.tests.test_dual_souls_ui_port tools.ci.tests.test_hollow_knight_first_plan",
+      "passed": 150,
+      "failed": 0,
+      "skipped": 0,
+      "log": "python-contracts.log",
+      "logSha256": "c3db88a380d75383b6a3caea3aafaa8bea3e552b192498522cc266eb94a04b1a"
+    },
+    {
+      "name": "bundle-surgery-suite",
+      "command": "dotnet test tools/bundle-surgery-tests/BundleSurgery.Tests.csproj -c Release --no-restore",
+      "passed": 40,
+      "failed": 0,
+      "skipped": 0,
+      "log": "bundle-surgery-tests.log",
+      "logSha256": "569a393adbcd86682dda7fee30aa93114d66dbec7c1073e1348f0cbbb35dc2ef"
+    }
+  ],
+  "managedCompiles": {
+    "silksong": {
+      "assemblyCSharpSha256": "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d",
+      "compiledSourceCount": 83,
+      "entryPointCount": 14,
+      "errors": 0,
+      "log": "silksong-managed-compile.log",
+      "logSha256": "7b0ad67b0a3056e9e0826342b83d2c39efa5ea95c8d09894fd09e1863dbeaf0b"
+    },
+    "hollowKnight": {
+      "gameVersion": "1.5.12620",
+      "assemblyCSharpSha256": "5c84b8e59dd669c48db1fc426541d0d96643f59d35a72534b21fead7c96a3086",
+      "outputBytes": 763904,
+      "entryPointCount": 2,
+      "warnings": 1,
+      "errors": 0,
+      "log": "hollow-knight-managed-compile.log",
+      "logSha256": "a88be98ca2e04e119ded7557f483b955b34cc3f1aa01b51e8e5185f36db53ce1"
+    }
+  },
+  "binaryProvenance": {
+    "bundleSurgeryToolSha256": "bb059ab5726c141800473951a78a41520f472ed823efcf7cc0e7db0481f25a8c",
+    "canonicalDeathBridgeSha256": "86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e",
+    "postDeathUiMessageFinalSha256": "fee81c9bfee10dea307373b167f717d0b4aa5811c2e849ef9a4cf98c7804a2a0",
+    "finalStructuralVerification": "passed",
+    "log": "death-bridge-exact.log",
+    "logSha256": "db51e8e3d0c688f7890dd72b553941532a7f444a20bad11cd67b3afef247103b"
+  },
+  "sourceManifest": "source-manifest.sha256",
+  "sourceManifestEntries": 17,
+  "sourceManifestSha256": "17f7a7476e1be2deeb0e49fffb7c64ab99c304c3f163bba2fc864077e9072676",
+  "prohibitedWorkPerformed": [],
+  "deviceDeferrals": [
+    "Android bundle identity and managed parity",
+    "Unity renderer, GPU and shader appearance",
+    "live JNI lifecycle",
+    "physical-device resource pressure and death/respawn behavior"
+  ],
+  "evidenceBoundary": "The integrated controller/session test proves observation identity, delayed-release accounting, retry and successor publication on host fakes. Exact managed compiles and rewrite verification prove source and binary compatibility, not Android runtime acceptance."
+}

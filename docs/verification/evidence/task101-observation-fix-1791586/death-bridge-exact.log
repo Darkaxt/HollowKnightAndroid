@@ -1,0 +1,7 @@
+  injected exact post-normalization HeroController.Die normal-death occurrence bridge
+  verified executable strict-death bridge: normalized nonlethal, memory, cinematic/control, permadeath, demo terminal, duplicate, hazard, and unstable guards
+  injected one armed UIMsgBase companion dismissal wait bridge
+  verified final executable strict-death bridge after all managed rewrites
+1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d */d/Temp/task101-observation-cli/managed/original.dll
+86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e */d/Temp/task101-observation-cli/managed/bridged.dll
+fee81c9bfee10dea307373b167f717d0b4aa5811c2e849ef9a4cf98c7804a2a0 */d/Temp/task101-observation-cli/managed/final.dll
