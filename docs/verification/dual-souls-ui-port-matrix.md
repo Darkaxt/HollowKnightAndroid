@@ -80,18 +80,18 @@ fake host display visibility. The exact cached compile is host/source evidence
 only; visible scale, clipping, ordering, and native activation remain device
 gates.
 
-Tracked small evidence is
+Tracked evidence is
 `docs/verification/task99-hud-29980-evidence.json`. It records both exact source
-bundle hashes, the concrete census, the 64-source compile-manifest algorithm and
-hash, and the honest host/device boundary. Final compile command:
-`dotnet build tools/shared-patches-tests/obj/task99-journal-continuation-20260908/ss-project/PatchCheck.csproj --no-restore -c Release -p:UseSharedCompilation=false -nodeReuse:false --output tools/shared-patches-tests/obj/task99-hud-correction-20260911/final-compile/bin --nologo`.
-The post-amend receipt/log are
-`tools/shared-patches-tests/obj/task99-hud-correction-20260911/final-compile/completion.json`
-and `compiler.log`; the receipt records UTC start/end, exit code, `0 errors / 7
-existing warnings`, output SHA-256, compiled-manifest SHA-256, and the exact
-amended `git rev-parse HEAD`. The literal self commit ID cannot be embedded in
-its own tracked tree, so the post-commit receipt is authoritative for that
-field. The failed stale project is preserved separately at
+bundle hashes, the concrete census, the 68-source compile-manifest algorithm and
+SHA-256 `c45edc286bc2a19f78c2e77e00f44832797974621ac148b1f72af7b0ed701fd4`,
+and the honest host/device boundary. The forced compile command was:
+`dotnet build tools/shared-patches-tests/obj/task99-journal-continuation-20260908/ss-project/PatchCheck.csproj --no-restore --no-incremental -c Release -p:UseSharedCompilation=false -nodeReuse:false --output tools/shared-patches-tests/obj/task99-hud-correction-20260911/master-776c8fa-rebuild/bin --nologo`.
+Tracked receipt, source manifest and compiler log are under
+`docs/verification/evidence/task99-hud-master-776c8fa/`. The receipt records UTC
+start/end, exit code 0, `0 errors / 7 existing warnings`, output SHA-256
+`b01415179b20821010d5ef9a51d53c3fa149820a4dafb4b1632af38f68ed0b98`, and exact
+compiled source HEAD `776c8fa30a6ca161e8ee2522f485cf8d339b9025`. This evidence-only follow-up
+changes no compiled source. The failed stale project remains preserved at
 `tools/shared-patches-tests/obj/task99-hud-correction-20260911/stale-cached-project/compiler.log`
 (exit 1, 0 warnings, 3 missing-source errors) and receives no compile credit.
 

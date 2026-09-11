@@ -82,13 +82,17 @@
     "sha256OfConcatenatedEntries": "c45edc286bc2a19f78c2e77e00f44832797974621ac148b1f72af7b0ed701fd4"
   },
   "finalCompile": {
-    "command": "dotnet build tools/shared-patches-tests/obj/task99-journal-continuation-20260908/ss-project/PatchCheck.csproj --no-restore -c Release -p:UseSharedCompilation=false -nodeReuse:false --output tools/shared-patches-tests/obj/task99-hud-correction-20260911/final-compile/bin --nologo",
-    "receipt": "tools/shared-patches-tests/obj/task99-hud-correction-20260911/final-compile/completion.json",
-    "log": "tools/shared-patches-tests/obj/task99-hud-correction-20260911/final-compile/compiler.log",
-    "headAuthority": "The receipt is written after the final local amend and records git rev-parse HEAD. The tracked file cannot embed its own commit object ID.",
+    "command": "dotnet build tools/shared-patches-tests/obj/task99-journal-continuation-20260908/ss-project/PatchCheck.csproj --no-restore --no-incremental -c Release -p:UseSharedCompilation=false -nodeReuse:false --output tools/shared-patches-tests/obj/task99-hud-correction-20260911/master-776c8fa-rebuild/bin --nologo",
+    "receipt": "docs/verification/evidence/task99-hud-master-776c8fa/completion.json",
+    "sourceManifest": "docs/verification/evidence/task99-hud-master-776c8fa/source-manifest.sha256",
+    "log": "docs/verification/evidence/task99-hud-master-776c8fa/compiler.log",
+    "head": "776c8fa30a6ca161e8ee2522f485cf8d339b9025",
+    "startUtc": "2026-09-11T00:26:18.325077+00:00",
+    "endUtc": "2026-09-11T00:26:22.306859+00:00",
+    "exitCode": 0,
     "expectedWarnings": 7,
     "expectedErrors": 0,
-    "expectedPatchCheckDllSha256": "73bcc429de6301d09e899ccf21f3f5a8c1d1a585e9e0963f83f4e94a235e101d"
+    "expectedPatchCheckDllSha256": "b01415179b20821010d5ef9a51d53c3fa149820a4dafb4b1632af38f68ed0b98"
   },
   "staleCachedProjectFailure": {
     "project": "tools/shared-patches-tests/obj/task99-hud-20260908T154833Z/ss-project/PatchCheck.csproj",

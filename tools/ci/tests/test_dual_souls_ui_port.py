@@ -1810,7 +1810,24 @@ static class Program
             [0, 1, 0], evidence["exactInventory"]["Extras"]["AnimatorByChild"]
         )
         self.assertIn("do not prove Unity rendering", evidence["evidenceBoundary"])
-        self.assertIn("final local amend", evidence["finalCompile"]["headAuthority"])
+        final_compile = evidence["finalCompile"]
+        self.assertEqual("776c8fa30a6ca161e8ee2522f485cf8d339b9025", final_compile["head"])
+        self.assertEqual(0, final_compile["exitCode"])
+        self.assertEqual(7, final_compile["expectedWarnings"])
+        self.assertEqual(0, final_compile["expectedErrors"])
+        receipt = json.loads(read(REPO_ROOT / final_compile["receipt"]))
+        for field in ("head", "exitCode"):
+            self.assertEqual(final_compile[field], receipt[field])
+        self.assertEqual(final_compile["expectedWarnings"], receipt["warnings"])
+        self.assertEqual(final_compile["expectedErrors"], receipt["errors"])
+        self.assertEqual(final_compile["expectedPatchCheckDllSha256"], receipt["outputSha256"])
+        self.assertEqual(evidence["compileManifest"]["sourceCount"], receipt["compiledSourceCount"])
+        self.assertEqual(
+            evidence["compileManifest"]["sha256OfConcatenatedEntries"],
+            receipt["compiledSourceManifestSha256"],
+        )
+        self.assertTrue((REPO_ROOT / final_compile["sourceManifest"]).is_file())
+        self.assertTrue((REPO_ROOT / final_compile["log"]).is_file())
         self.assertEqual(3, evidence["staleCachedProjectFailure"]["errors"])
 
         project = REPO_ROOT / evidence["compileManifest"]["project"]
@@ -1820,11 +1837,13 @@ static class Program
             path = pathlib.Path(included)
             relative = path.relative_to(REPO_ROOT).as_posix()
             entries.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {relative}\n")
+        manifest = "".join(entries)
         self.assertEqual(evidence["compileManifest"]["sourceCount"], len(entries))
         self.assertEqual(
             evidence["compileManifest"]["sha256OfConcatenatedEntries"],
-            hashlib.sha256("".join(entries).encode()).hexdigest(),
+            hashlib.sha256(manifest.encode()).hexdigest(),
         )
+        self.assertEqual(manifest, read(REPO_ROOT / evidence["finalCompile"]["sourceManifest"]))
 
     def test_hud_restoration_precedes_every_composition_destruction(self):
         frame = read(PORT_FRAME)
