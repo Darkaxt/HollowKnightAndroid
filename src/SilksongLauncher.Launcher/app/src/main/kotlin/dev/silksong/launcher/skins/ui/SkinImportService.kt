@@ -130,7 +130,9 @@ internal class CoordinatorSkinImportService private constructor(
             profile: GameProfile,
             receipts: SkinReceiptSummaryReader = SkinReceiptSummaryReader.unavailable,
         ): SkinImportService {
-            require(SkinLibraryService.isVisible(profile)) { "Imports require the exact Hollow Knight profile" }
+            require(profile.id == "hollow-knight") {
+                "Legacy coordinator imports are Hollow Knight-only; Silksong uses its profile-bound library importer"
+            }
             return CoordinatorSkinImportService(receipts)
         }
     }

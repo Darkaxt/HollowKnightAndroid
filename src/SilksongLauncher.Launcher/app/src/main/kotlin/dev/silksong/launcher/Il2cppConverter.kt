@@ -77,6 +77,11 @@ object Il2cppConverter {
         "task105-v1;game=1.0.29980;tail=1886e0884a720b0b53412e04f912fb6d7c31d7c9da9cd365e9ac6b85fc4bc179;order=post-save-pre-mod"
     private const val UI_MESSAGE_DISMISS_MARKER = "uimsg-bridge.properties"
     private const val UI_MESSAGE_DISMISS_PART_SUFFIX = ".uimsg-bridge.part"
+    private const val SILKSONG_DEATH_SCHEMA = "1"
+    internal const val SILKSONG_DEATH_ALGORITHM =
+        "task101-v1;game=1.0.29980;assembly=1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d;order=pre-save-pre-mod"
+    private const val SILKSONG_DEATH_MARKER = "silksong-death-bridge.properties"
+    private const val SILKSONG_DEATH_PART_SUFFIX = ".silksong-death-bridge.part"
     private val SHA256 = Regex("^[0-9a-f]{64}$")
 
     /** How often the output directory is counted while il2cpp works. */
@@ -144,6 +149,9 @@ object Il2cppConverter {
 
     internal fun uiMessageDismissMarker(root: File): File =
         File(root, UI_MESSAGE_DISMISS_MARKER)
+
+    internal fun silksongDeathBridgeMarker(root: File): File =
+        File(root, SILKSONG_DEATH_MARKER)
 
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -220,6 +228,50 @@ object Il2cppConverter {
         SHA256.matches(assetSha256) &&
             recordedUiMessageDismissToolSha256(root) == assetSha256
 
+    private fun silksongDeathBridgeProperties(root: File): Properties? = runCatching {
+        Properties().apply { silksongDeathBridgeMarker(root).reader().use(::load) }
+    }.getOrNull()
+
+    internal fun recordSilksongDeathBridgeProvenance(
+        root: File,
+        surgery: File,
+        assembly: File,
+        inputSha256: String,
+    ) {
+        if (!SHA256.matches(inputSha256) || surgery.length() <= 0 || assembly.length() <= 0) {
+            throw IOException("invalid Silksong death bridge provenance inputs")
+        }
+        val marker = silksongDeathBridgeMarker(root)
+        val part = File(root, "${marker.name}.part")
+        part.delete()
+        part.writeText(buildString {
+            append("schema=").append(SILKSONG_DEATH_SCHEMA).append('\n')
+            append("algorithm=").append(SILKSONG_DEATH_ALGORITHM).append('\n')
+            append("inputSha256=").append(inputSha256).append('\n')
+            append("bridgeAssemblySha256=").append(sha256(assembly)).append('\n')
+            append("toolSha256=").append(sha256(surgery)).append('\n')
+        })
+        try {
+            Files.move(part.toPath(), marker.toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
+        } catch (error: Exception) {
+            part.delete()
+            throw IOException("could not commit Silksong death bridge provenance", error)
+        }
+    }
+
+    internal fun hasSilksongDeathBridgeProvenance(root: File): Boolean {
+        val values = silksongDeathBridgeProperties(root) ?: return false
+        val input = values.getProperty("inputSha256") ?: return false
+        val output = values.getProperty("bridgeAssemblySha256") ?: return false
+        val tool = values.getProperty("toolSha256") ?: return false
+        val surgery = File(root, "bundle-surgery/BundleSurgery.dll")
+        return values.getProperty("schema") == SILKSONG_DEATH_SCHEMA &&
+            values.getProperty("algorithm") == SILKSONG_DEATH_ALGORITHM &&
+            input == "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d" &&
+            SHA256.matches(output) && SHA256.matches(tool) && surgery.isFile &&
+            surgery.length() > 0 && sha256(surgery) == tool
+    }
+
     /**
      * What a finished conversion looks like, as a string.
      *
@@ -230,7 +282,9 @@ object Il2cppConverter {
     private fun completionSignature(root: File): String {
         val bridge = uiMessageDismissMarker(root)
         val bridgeHash = if (bridge.isFile) sha256(bridge) else "missing"
-        return "${cppDir(root).list()?.size ?: 0}:${metadata(root).length()}:$bridgeHash"
+        val deathBridge = silksongDeathBridgeMarker(root)
+        val deathBridgeHash = if (deathBridge.isFile) sha256(deathBridge) else "missing"
+        return "${cppDir(root).list()?.size ?: 0}:${metadata(root).length()}:$bridgeHash:$deathBridgeHash"
     }
 
     private fun hasCompletionSignature(root: File): Boolean =
@@ -282,6 +336,7 @@ object Il2cppConverter {
         assets: android.content.res.AssetManager? = null,
     ): Boolean {
         if (!hasUiMessageDismissProvenance(root)) return true
+        if (profile.id == "silksong" && !hasSilksongDeathBridgeProvenance(root)) return true
         if (assets != null) {
             val currentTool = runCatching { PlayerImage.surgeryAssetSha256(assets) }.getOrNull()
                 ?: return true
@@ -369,6 +424,8 @@ object Il2cppConverter {
         send(Progress("Preparing the converter", -1f, "assemblies"))
         var assemblies = stageAssemblies(bcl, engine, managed, PackageCompiler.outputDir(root), asmDir(root))
         LauncherLog.log("il2cpp input: ${assemblies.size} assemblies")
+
+        if (profile.id == "silksong") bridgeSilksongNormalDeath(context, root)
 
         if (PackageCompiler.requiresSaveIo(profile)) redirectSaveCalls(context, root)
 
@@ -624,6 +681,44 @@ object Il2cppConverter {
             Files.move(part.toPath(), target.toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
         } catch (error: Exception) {
             throw IOException("could not atomically replace staged ${target.name}", error)
+        }
+    }
+
+    internal suspend fun rewriteStagedSilksongNormalDeath(
+        root: File,
+        surgery: File,
+        replace: (File, File) -> Unit = ::atomicReplaceStaged,
+        runRewrite: suspend (input: File, output: File) -> Unit,
+    ) {
+        val assembly = File(asmDir(root), "Assembly-CSharp.dll")
+        if (!assembly.isFile || assembly.length() <= 0) throw IOException("no staged Assembly-CSharp.dll for Silksong death bridge")
+        if (!surgery.isFile || surgery.length() <= 0) throw IOException("no BundleSurgery.dll for Silksong death bridge")
+        val marker = silksongDeathBridgeMarker(root)
+        val markerPart = File(root, "${marker.name}.part")
+        for (stale in listOf(marker, markerPart)) if (stale.exists() && !stale.delete())
+            throw IOException("could not invalidate stale Silksong death bridge provenance: $stale")
+        val output = File(assembly.parentFile, assembly.name + SILKSONG_DEATH_PART_SUFFIX)
+        if (output.exists() && !output.delete()) throw IOException("could not remove stale Silksong death bridge output: $output")
+        val inputSha256 = sha256(assembly)
+        try {
+            runRewrite(assembly, output)
+            if (!output.isFile || output.length() <= 0) throw IOException("Silksong death bridge produced no rewritten assembly")
+            val managedImage = output.inputStream().use { it.read() == 'M'.code && it.read() == 'Z'.code }
+            if (!managedImage) throw IOException("Silksong death bridge produced an invalid managed assembly")
+            replace(output, assembly)
+            recordSilksongDeathBridgeProvenance(root, surgery, assembly, inputSha256)
+        } finally {
+            output.delete()
+        }
+    }
+
+    private suspend fun bridgeSilksongNormalDeath(context: android.content.Context, root: File) {
+        val surgery = PlayerImage.stageSurgery(root, context.assets)
+        rewriteStagedSilksongNormalDeath(root, surgery) { input, output ->
+            PlayerImage.run(surgery, context,
+                listOf("bridge-silksong-normal-death", input.absolutePath, output.absolutePath)) {
+                line -> LauncherLog.log("Silksong death bridge: ${line.trim()}")
+            }
         }
     }
 

@@ -1,5 +1,6 @@
 #if UNITY_ANDROID && !UNITY_EDITOR
 using DualSouls.Mods;
+using DualSouls.Skins.Silksong.Runtime;
 using UnityEngine;
 
 namespace DualSouls.Mods.Silksong
@@ -17,6 +18,8 @@ namespace DualSouls.Mods.Silksong
 
         public static SilksongModsRuntime Current { get; private set; }
         public TweakSession Session { get; private set; }
+        public SilksongSkinRuntime Skins { get; private set; }
+        SilksongSkinLibrary skinLibrary;
 
         public static void EnsureStarted()
         {
@@ -56,12 +59,16 @@ namespace DualSouls.Mods.Silksong
                 () => new SilksongTweakAdapter(api),
                 new PlayerPrefsTweakStore(),
                 VisibleRows);
+            Skins = SilksongSkinRuntime.Current ?? new SilksongSkinRuntime();
+            skinLibrary = new SilksongSkinLibrary(Skins);
             Current = this;
             DontDestroyOnLoad(gameObject);
         }
 
         void Update()
         {
+            if (Skins != null) Skins.Tick();
+            if (skinLibrary != null) skinLibrary.Tick();
             TweakSession session = Session;
             if (session != null) session.Tick();
         }
@@ -69,17 +76,33 @@ namespace DualSouls.Mods.Silksong
         void OnDestroy()
         {
             if (!ReferenceEquals(Current, this)) return;
+            if (skinLibrary != null) { skinLibrary.Dispose(); skinLibrary = null; }
 
             TweakSession session = Session;
             Session = null;
             Current = null;
-            if (session == null) return;
-
-            session.Dispose();
-            if (!session.TeardownComplete)
+            try
             {
-                Debug.LogError("[Silksong Mods] restoration pending; retained for retry: " + session.LastError);
-                SilksongModsRestorePump.Create(session);
+                if (session != null)
+                {
+                    session.Dispose();
+                    if (!session.TeardownComplete)
+                    {
+                        Debug.LogError("[Silksong Mods] restoration pending; retained for retry: " + session.LastError);
+                        SilksongModsRestorePump.Create(session);
+                    }
+                }
+            }
+            finally
+            {
+                if (Skins != null)
+                {
+                    try { Skins.Dispose(); Skins = null; }
+                    catch (System.Exception error)
+                    {
+                        Debug.LogError("[Silksong skins] teardown blocked; exact owner retained for restore retry: " + error);
+                    }
+                }
             }
         }
     }

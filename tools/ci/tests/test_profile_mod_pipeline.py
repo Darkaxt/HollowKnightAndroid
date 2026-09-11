@@ -297,6 +297,20 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertNotIn("DsModsScreen", bootstrap + port + presenter)
         self.assertIn("new DsModsScreen", shell)
 
+    def test_silksong_skin_runtime_is_process_owned_independent_of_direct_display(self):
+        runtime = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" / "SilksongModsRuntime.cs").read_text(encoding="utf-8")
+        bootstrap = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DualScreenV2.cs").read_text(encoding="utf-8")
+        bootstrap_body = bootstrap[bootstrap.index("static void Bootstrap()") : bootstrap.index("public static bool ShouldRun()")]
+
+        self.assertLess(bootstrap_body.index("SilksongModsRuntime.EnsureStarted()"), bootstrap_body.index("ShouldRun()"))
+        self.assertIn("public SilksongSkinRuntime Skins", runtime)
+        self.assertIn("new SilksongSkinRuntime()", runtime)
+        self.assertIn("new SilksongSkinLibrary(Skins)", runtime)
+        self.assertIn("Skins.Tick()", runtime)
+        self.assertIn("skinLibrary.Tick()", runtime)
+        self.assertIn("skinLibrary.Dispose()", runtime)
+        self.assertIn("Skins.Dispose()", runtime)
+
     def test_task100_receipt_is_bound_to_committed_compile_sources(self):
         evidence = REPO_ROOT / "docs" / "verification" / "evidence" / "task100-quality-c3f61f5"
         receipt = json.loads((evidence / "completion.json").read_text(encoding="utf-8"))

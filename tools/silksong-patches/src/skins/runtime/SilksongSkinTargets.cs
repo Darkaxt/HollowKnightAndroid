@@ -53,7 +53,7 @@ namespace DualSouls.Skins.Silksong.Runtime
         public static IReadOnlyList<SilksongSkinTarget> All => targets;
         public static readonly SkinRuntimeRules RuntimeRules = new SkinRuntimeRules("silksong", 11,
             IsSupported, (mode, path) => TryGetByPath(path, out var target) &&
-                (mode == "ON" || mode == "ROTATE" && !target.IsHud));
+                (mode == "ON" || mode == "ROTATE" && !target.IsHud), restoreBeforeRotation: true);
 
         public static bool IsSupported(string path) => path != null && byPath.ContainsKey(path);
         public static bool TryGetByPath(string path, out SilksongSkinTarget target) =>

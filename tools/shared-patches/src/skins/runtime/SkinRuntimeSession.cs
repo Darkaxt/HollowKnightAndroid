@@ -14,13 +14,15 @@ namespace DualSouls.Skins.Runtime
         readonly Func<string, string, bool> allows;
         public string ProfileId { get; }
         public int MappingLimit { get; }
+        public bool RestoreBeforeRotation { get; }
         public SkinRuntimeRules(string profileId, int mappingLimit, Func<string, bool> isSupported,
-            Func<string, string, bool> allows)
+            Func<string, string, bool> allows, bool restoreBeforeRotation = false)
         {
             if (string.IsNullOrWhiteSpace(profileId)) throw new ArgumentException("Profile ID is required.", nameof(profileId));
             if (mappingLimit < 1 || mappingLimit > 4096) throw new ArgumentOutOfRangeException(nameof(mappingLimit));
             ProfileId = profileId;
             MappingLimit = mappingLimit;
+            RestoreBeforeRotation = restoreBeforeRotation;
             this.isSupported = isSupported ?? throw new ArgumentNullException(nameof(isSupported));
             this.allows = allows ?? throw new ArgumentNullException(nameof(allows));
         }

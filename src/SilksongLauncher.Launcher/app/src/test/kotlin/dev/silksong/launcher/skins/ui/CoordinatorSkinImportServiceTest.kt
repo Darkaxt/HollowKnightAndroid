@@ -28,12 +28,7 @@ class CoordinatorSkinImportServiceTest {
         val result = service.prepare(SkinImportInput.SelectedFile("x") { opened = true; error("opened") })
         assertEquals(SkinImportCode.DURABILITY_UNAVAILABLE, (result as SkinResult.Error).code)
         assertFalse(opened)
-        val silksong = CoordinatorSkinImportService.forHostTests(SilksongProfile)
-        assertEquals(
-            SkinImportCode.DURABILITY_UNAVAILABLE,
-            (silksong.prepare(SkinImportInput.SelectedFile("ss") { opened = true; error("opened") }) as SkinResult.Error).code,
-        )
-        assertFalse(opened)
+        assertThrows(IllegalArgumentException::class.java) { CoordinatorSkinImportService.forHostTests(SilksongProfile) }
     }
 
     @Test fun `scoped singleton owns one copy and closes its private owner after import`() = withBinding {

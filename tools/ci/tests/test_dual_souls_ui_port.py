@@ -35,6 +35,7 @@ PORT_FRAME_STATE = DUALSCREEN_SOURCES / "DsPortFrameState.cs"
 PORT_HUD = DUALSCREEN_SOURCES / "DsPortHud.cs"
 PORT_HUD_STATE = DUALSCREEN_SOURCES / "DsPortHudState.cs"
 UI_MSG_DISMISS_REWRITE = REPO_ROOT / "tools" / "bundle-surgery" / "RedirectUIMsgDismiss.cs"
+SILKSONG_DEATH_REWRITE = REPO_ROOT / "tools" / "bundle-surgery" / "BridgeSilksongNormalDeath.cs"
 BUNDLE_SURGERY_PROGRAM = REPO_ROOT / "tools" / "bundle-surgery" / "Program.cs"
 IL2CPP_CONVERTER = REPO_ROOT / "src" / "SilksongLauncher.Launcher" / "app" / "src" / "main" / "kotlin" / "dev" / "silksong" / "launcher" / "Il2cppConverter.kt"
 
@@ -235,6 +236,26 @@ def shell_acceptance_violations(source: str):
 
 
 class DualSoulsUiPortContractTest(unittest.TestCase):
+    def test_exact_silksong_normal_death_bridge_is_in_the_production_conversion_path(self):
+        self.assertTrue(SILKSONG_DEATH_REWRITE.is_file(), "Task101 Cecil death bridge is missing")
+        rewrite = read(SILKSONG_DEATH_REWRITE)
+        program = read(BUNDLE_SURGERY_PROGRAM)
+        converter = read(IL2CPP_CONVERTER)
+        for token in (
+            '"HeroController"', '"<Die>d__1101"', '"MoveNext"', '"PlayerDead"',
+            '"__dsNormalDeathOccurrence"', '"__dsNormalDeathHero"', '"__dsNormalDeathManager"',
+            '"DsRecordNormalDeath"', "PINNED_ASSEMBLY_SHA256", "AlreadyRewritten",
+            "RequireExactDieShape", "PermadeathModes", "DemoHelper", "MaxDeathCount",
+            "HasFinishedEnteringScene", "IsInSceneTransition", "IsLoadingSceneTransition",
+        ):
+            self.assertIn(token, rewrite)
+        self.assertIn('"bridge-silksong-normal-death"', program)
+        self.assertIn("BridgeSilksongNormalDeath.Run(args[1], args[2])", program)
+        self.assertIn("bridgeSilksongNormalDeath(context, root)", converter)
+        self.assertIn('"bridge-silksong-normal-death"', converter)
+        self.assertLess(converter.index("bridgeSilksongNormalDeath(context, root)"),
+                        converter.index("bridgeUiMessageDismissal(context, root)"))
+
     def test_registered_native_message_companion_dismissal_rewrites_only_armed_wait(self):
         self.assertTrue(UI_MSG_DISMISS_REWRITE.is_file(), "Task105 Cecil rewrite is missing")
         rewrite = read(UI_MSG_DISMISS_REWRITE)

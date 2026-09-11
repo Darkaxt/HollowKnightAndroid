@@ -30,6 +30,33 @@ public class HollowKnightSkinLibraryTests
         Assert.Equal("Failed", observed.Status);
     }
 
+    [Fact] public void Silksong_pending_rotation_restores_before_frozen_successor_and_retries_failed_restore()
+    {
+        var rules = new SkinRuntimeRules("silksong", 11, _ => true, (_, __) => true,
+            restoreBeforeRotation: true);
+        var request = Request(); request.ProfileId = "silksong";
+        var actions = new List<string>();
+        var failRestore = true;
+        var controller = new SkinLibraryRuntimeController(rules, () => request,
+            pack => { actions.Add("apply:" + pack.Id); return new SkinApplyResult(SkinApplyStatus.Applied); },
+            () => {
+                actions.Add("restore");
+                if (failRestore) return new SkinApplyResult(SkinApplyStatus.RestoreFailed);
+                return new SkinApplyResult(SkinApplyStatus.Restored);
+            }, _ => { }, null, _ => true);
+        controller.Tick();
+        request.Mode = "ROTATE";
+        request.PackId = "b";
+        request.TreeSha256 = new string('c', 64);
+        request.PendingOccurrence = 1;
+        controller.Tick();
+        Assert.Equal(new[] { "apply:a", "restore" }, actions);
+
+        failRestore = false;
+        controller.Tick();
+        Assert.Equal(new[] { "apply:a", "restore", "restore", "apply:b" }, actions);
+    }
+
     [Fact] public void OnAndRotateReuseImmutablePackAndOffRestoresOnce()
     {
         var request = Request(); var applied = new List<SkinPack>(); int restores = 0;
