@@ -38,6 +38,7 @@ UI_MSG_DISMISS_REWRITE = REPO_ROOT / "tools" / "bundle-surgery" / "RedirectUIMsg
 SILKSONG_DEATH_REWRITE = REPO_ROOT / "tools" / "bundle-surgery" / "BridgeSilksongNormalDeath.cs"
 SILKSONG_DEATH_ADAPTER = REPO_ROOT / "tools" / "silksong-patches" / "src" / "skins" / "runtime" / "SilksongSkinDeathAdapter.cs"
 SILKSONG_SKIN_LIBRARY = REPO_ROOT / "tools" / "silksong-patches" / "src" / "skins" / "runtime" / "SilksongSkinLibrary.cs"
+SILKSONG_SKIN_RUNTIME = REPO_ROOT / "tools" / "silksong-patches" / "src" / "skins" / "runtime" / "SilksongSkinRuntime.cs"
 BUNDLE_SURGERY_PROGRAM = REPO_ROOT / "tools" / "bundle-surgery" / "Program.cs"
 IL2CPP_CONVERTER = REPO_ROOT / "src" / "SilksongLauncher.Launcher" / "app" / "src" / "main" / "kotlin" / "dev" / "silksong" / "launcher" / "Il2cppConverter.kt"
 SKIN_RUNTIME_BRIDGE = REPO_ROOT / "src" / "SilksongLauncher.Launcher" / "app" / "src" / "main" / "kotlin" / "dev" / "silksong" / "launcher" / "runtime" / "SkinLibraryRuntimeBridge.kt"
@@ -264,6 +265,8 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         self.assertIn("BridgeSilksongNormalDeath.Run(args[1], args[2])", program)
         self.assertIn('"verify-silksong-normal-death"', program)
         self.assertIn("BridgeSilksongNormalDeath.Verify(args[1])", program)
+        self.assertIn('"verify-silksong-normal-death-final"', program)
+        self.assertIn("BridgeSilksongNormalDeath.VerifyFinal(args[1])", program)
         self.assertLess(rewrite.index("assembly.Write(staging)"),
                         rewrite.index("RequireCanonicalOutput(staging)"))
         self.assertLess(rewrite.index("RequireCanonicalOutput(staging)"),
@@ -271,10 +274,17 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         self.assertIn("bridgeSilksongNormalDeath(context, root)", converter)
         self.assertIn('"bridge-silksong-normal-death"', converter)
         self.assertIn('listOf("verify-silksong-normal-death", output.absolutePath)', converter)
+        self.assertIn('listOf("verify-silksong-normal-death-final", assembly.absolutePath)', converter)
+        self.assertIn("finalAssemblySha256", converter)
+        self.assertIn("finalVerification=structural-v1", converter)
         self.assertIn("SILKSONG_DEATH_REWRITTEN_SHA256", converter)
         self.assertLess(converter.index("runVerify(output)"), converter.index("replace(output, assembly)"))
         self.assertLess(converter.index("bridgeSilksongNormalDeath(context, root)"),
                         converter.index("bridgeUiMessageDismissal(context, root)"))
+        self.assertLess(converter.index("Mods.weave(context, root"),
+                        converter.index("verifyFinalSilksongNormalDeath(context, root)"))
+        self.assertLess(converter.index("verifyFinalSilksongNormalDeath(context, root)"),
+                        converter.index("prepareTool(deploy)"))
         for token in ("HeroesFieldName", "ManagersFieldName", "TokensFieldName",
                       "tokens[index] != occurrence", "MaxPendingOccurrences = 32",
                       "PendingCancellations", "AcknowledgeCancellation"):
@@ -283,6 +293,25 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         self.assertIn("fun cancelDeath(run: String, occurrence: Long)", runtime_bridge)
         self.assertIn("store.cancelDeath(run, occurrence)", runtime_bridge)
         self.assertIn("internal fun cancelDeath(", store)
+
+    def test_silksong_pending_owner_poll_uses_cached_sources_not_hierarchy_traversal(self):
+        runtime = read(SILKSONG_SKIN_RUNTIME)
+        tick = csharp_method_body(runtime, r"public\s+void\s+Tick\s*\(\s*\)")
+        capture = csharp_method_body(runtime, r"List<OwnedCollection>\s+CaptureHudCollections\s*\(\s*\)")
+        self.assertIn("ownerRefresh.ShouldPoll", tick)
+        self.assertIn("RefreshOwnerIdentity()", tick)
+        self.assertNotIn("GetComponentsInChildren", tick)
+        self.assertNotIn("GetComponentsInChildren", capture)
+        self.assertIn("hudOwners.Animators", capture)
+        self.assertIn("hudOwners.Sprites", capture)
+
+    def test_silksong_texture_retirement_waits_for_unity_fake_null_without_tracking_growth(self):
+        runtime = read(SILKSONG_SKIN_RUNTIME)
+        decoder = csharp_method_body(runtime, r"sealed\s+class\s+UnityDecoder\s*:\s*ISkinTextureDecoder")
+        self.assertNotIn("Dictionary<", decoder)
+        self.assertNotIn("released[", decoder)
+        self.assertIn("() => texture == null", decoder)
+        self.assertIn("UObject.Destroy(texture)", decoder)
 
     def test_registered_native_message_companion_dismissal_rewrites_only_armed_wait(self):
         self.assertTrue(UI_MSG_DISMISS_REWRITE.is_file(), "Task105 Cecil rewrite is missing")

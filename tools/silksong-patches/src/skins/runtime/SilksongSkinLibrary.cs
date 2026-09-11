@@ -151,7 +151,11 @@ namespace DualSouls.Skins.Silksong.Runtime
             if (request == null || request.ProfileId != SilksongSkinTargets.RuntimeRules.ProfileId) return request;
             bool changed = false;
             var cancellations = death.PendingCancellations;
-            if (cancellations.Count > 0 && request.RotationRun != death.Run) return null;
+            if (cancellations.Count > 0 && request.RotationRun != death.Run)
+            {
+                if (!Consume(request)) return null;
+                return request;
+            }
             foreach (long occurrence in cancellations)
             {
                 if (!cancelOccurrence(death.Run, occurrence)) return null;

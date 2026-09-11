@@ -67,6 +67,73 @@ public sealed class Task101SpecRegressionTests
     }
 
     [Fact]
+    public void Pending_owner_replacement_forces_one_bounded_visual_refresh_then_reaches_stable_ready()
+    {
+        var state = new SilksongOwnerRefreshState(1f);
+        var first = new SilksongOwnerIdentityStamp(new object[] { new object(), new object(), new object() });
+        var replacement = new SilksongOwnerIdentityStamp(new object[] { new object(), new object(), new object() });
+        var frame = new SilksongDeathFrame { Frame = 1, Hero = new object(), Manager = new object(),
+            HudOwners = new object(), Gameplay = true, Playing = true, AcceptingInput = true };
+        var death = new SilksongSkinDeathAdapter(() => frame);
+        death.Configure("ROTATE", "run");
+
+        Assert.True(state.ShouldPoll(0));
+        Assert.True(state.Update(first));
+        Assert.True(state.VisualRefreshRequired(normalRefreshAllowed: false));
+        state.MarkVisualRefresh();
+        Assert.True(state.VisualCurrent);
+
+        frame.BridgeOccurrence = 1;
+        frame.BridgeOccurrences = new[] { new SilksongDeathOccurrence(1, frame.Hero, frame.Manager) };
+        frame.Dead = true;
+        death.Tick();
+        death.Configure("ROTATE", "run", lastDeath: 1, pendingOccurrence: 1);
+        frame.HudOwners = new object();
+        frame.Dead = false;
+        frame.HeroInPosition = true;
+        frame.SceneComplete = true;
+        frame.Frame++;
+        Assert.True(state.ShouldPoll(1));
+        Assert.True(state.Update(replacement));
+        Assert.True(state.VisualRefreshRequired(normalRefreshAllowed: false));
+        state.MarkVisualRefresh();
+        frame.TargetsAvailable = state.VisualCurrent;
+        death.Tick();
+        frame.Frame++;
+        death.Tick();
+
+        Assert.True(death.Ready);
+        Assert.Equal(2, state.IdentityPollCount);
+        Assert.Equal(2, state.VisualRefreshCount);
+    }
+
+    [Fact]
+    public void Steady_pending_owner_polling_is_throttled_without_hierarchy_refresh_growth()
+    {
+        var state = new SilksongOwnerRefreshState(1f);
+        var identity = new SilksongOwnerIdentityStamp(new object[] { new object(), new object() });
+        var captures = 0;
+        var visualRefreshes = 0;
+        for (var frame = 0; frame < 240; frame++)
+        {
+            var now = frame / 60f;
+            if (!state.ShouldPoll(now)) continue;
+            captures++;
+            state.Update(identity);
+            if (state.VisualRefreshRequired(normalRefreshAllowed: false))
+            {
+                visualRefreshes++;
+                state.MarkVisualRefresh();
+            }
+        }
+
+        Assert.Equal(4, captures);
+        Assert.Equal(4, state.IdentityPollCount);
+        Assert.Equal(1, visualRefreshes);
+        Assert.Equal(1, state.VisualRefreshCount);
+    }
+
+    [Fact]
     public void Pending_skin_teardown_retries_and_blocks_replacement_without_losing_owner()
     {
         var session = new FailingSkinTeardown();

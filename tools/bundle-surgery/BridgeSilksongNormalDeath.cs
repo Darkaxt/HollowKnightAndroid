@@ -60,6 +60,22 @@ internal static class BridgeSilksongNormalDeath
         }
     }
 
+    public static int VerifyFinal(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) throw new InvalidOperationException("final managed assembly input is missing");
+            RequireStructuralOutput(path);
+            Console.WriteLine("  verified final executable strict-death bridge after all managed rewrites");
+            return 0;
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine("  final Silksong normal-death verification failed closed: " + error.Message);
+            return 1;
+        }
+    }
+
     public static int Run(string inputPath, string outputPath)
     {
         try
@@ -123,6 +139,16 @@ internal static class BridgeSilksongNormalDeath
             new ReaderParameters { AssemblyResolver = resolver });
         if (!AlreadyRewritten(RequireExactDieShape(assembly.MainModule)))
             throw new InvalidOperationException("canonical strict death bridge is absent");
+    }
+
+    internal static void RequireStructuralOutput(string path)
+    {
+        var resolver = new DefaultAssemblyResolver();
+        resolver.AddSearchDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        using var assembly = AssemblyDefinition.ReadAssembly(path,
+            new ReaderParameters { AssemblyResolver = resolver });
+        if (!AlreadyRewritten(RequireExactDieShape(assembly.MainModule)))
+            throw new InvalidOperationException("exact structural strict death bridge is absent");
     }
 
     static void RequireDistinctPaths(string inputPath, string outputPath)

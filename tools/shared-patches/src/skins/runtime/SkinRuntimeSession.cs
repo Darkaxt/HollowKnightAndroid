@@ -225,29 +225,40 @@ namespace DualSouls.Skins.Runtime
             if (pack.Textures.Count > rules.MappingLimit)
                 return new SkinApplyResult(SkinApplyStatus.Rejected, "Pack mapping count exceeds the launched profile bound.");
             if (cancellation.IsCancellationRequested) return new SkinApplyResult(SkinApplyStatus.Cancelled);
-            mode = pack.Mode; // desired policy also governs retries/rebinds after an awaiting apply
             Reap();
-            if (ReferenceEquals(pack, CurrentPack)) return Refresh();
+            if (retired.Count > 0)
+                return WithRetirement(new SkinApplyResult(SkinApplyStatus.AwaitingTargets,
+                    "Prior skin resources are still retiring; successor allocation is deferred."));
+            if (ReferenceEquals(pack, CurrentPack) && pack.Mode == mode) return Refresh();
             var unsupported = pack.Textures.Keys.Where(x => !rules.IsSupported(x)).ToList();
             var candidate = new Dictionary<string, SkinTexture>(StringComparer.OrdinalIgnoreCase);
             try
             {
                 cancellation.ThrowIfCancellationRequested();
                 var files = new Dictionary<string, PngFile>(StringComparer.Ordinal);
-                long peak = AccountedBytes;
-                foreach (var pair in pack.Textures.Where(x => rules.Allows(mode, x.Key)))
+                long candidatePeak = 0;
+                foreach (var pair in pack.Textures.Where(x => rules.Allows(pack.Mode, x.Key)))
                 {
                     cancellation.ThrowIfCancellationRequested();
                     string path = Path.Combine(pack.Root, pair.Value);
                     if (files.ContainsKey(path)) continue;
                     var file = Inspect(path);
-                    peak = checked(peak + file.Length + (long)file.Width * file.Height * 8);
-                    if (peak > memoryLimit) throw new InvalidDataException("Owned decoded/encoded memory admission exceeded.");
+                    candidatePeak = checked(candidatePeak + file.Length + (long)file.Width * file.Height * 8);
+                    if (candidatePeak > memoryLimit) throw new InvalidDataException("Owned decoded/encoded memory admission exceeded.");
                     files.Add(path, file);
                 }
+                if (CurrentPack != null && checked(AccountedBytes + candidatePeak) > memoryLimit)
+                {
+                    var restoration = TryRestore();
+                    if (restoration.Status != SkinApplyStatus.Restored && restoration.Status != SkinApplyStatus.Unchanged)
+                        return restoration;
+                    return WithRetirement(new SkinApplyResult(SkinApplyStatus.AwaitingTargets,
+                        "Previous visuals restored; successor waits for confirmed resource retirement."));
+                }
+                mode = pack.Mode;
                 encodedAdmission = files.Values.Sum(x => x.Length);
                 var decoded = new Dictionary<string, SkinTexture>(StringComparer.Ordinal);
-                foreach (var pair in pack.Textures.Where(x => rules.Allows(mode, x.Key)))
+                foreach (var pair in pack.Textures.Where(x => rules.Allows(pack.Mode, x.Key)))
                 {
                     cancellation.ThrowIfCancellationRequested();
                     string path = Path.Combine(pack.Root, pair.Value);
@@ -266,7 +277,7 @@ namespace DualSouls.Skins.Runtime
                     else candidate.Add(pair.Key, texture);
                     cancellation.ThrowIfCancellationRequested();
                 }
-                var result = Change(candidate, false, cancellation, unsupported);
+                var result = Change(candidate, false, cancellation, unsupported, pack.Mode);
                 if (result.Status == SkinApplyStatus.Applied || result.Status == SkinApplyStatus.Unchanged)
                 {
                     var previous = current.Values.Distinct().ToList(); current = candidate; CurrentPack = pack;
@@ -291,13 +302,13 @@ namespace DualSouls.Skins.Runtime
             if (disposed || blocked) return new SkinApplyResult(SkinApplyStatus.Blocked);
             if (CurrentPack == null) return WithRetirement(new SkinApplyResult(SkinApplyStatus.Unchanged));
             return WithRetirement(Change(current.Where(x => rules.Allows(mode, x.Key)).ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase),
-                false, default, CurrentPack.Textures.Keys.Where(x => !rules.IsSupported(x))));
+                false, default, CurrentPack.Textures.Keys.Where(x => !rules.IsSupported(x)), mode));
         }
 
         public SkinApplyResult TryRestore()
         {
             Reap();
-            var result = Change(new Dictionary<string, SkinTexture>(), true, default, null);
+            var result = Change(new Dictionary<string, SkinTexture>(), true, default, null, mode);
             if (result.Status == SkinApplyStatus.Restored || result.Status == SkinApplyStatus.Unchanged)
             {
                 var release = current.Values.Concat(held).Distinct().ToList();
@@ -308,7 +319,7 @@ namespace DualSouls.Skins.Runtime
         }
 
         SkinApplyResult Change(IReadOnlyDictionary<string, SkinTexture> desired, bool restoring,
-            CancellationToken cancellation, IEnumerable<string> unsupported)
+            CancellationToken cancellation, IEnumerable<string> unsupported, string requestedMode)
         {
             var undo = new List<(SkinSlot Slot, object Value)>();
             var nextOriginals = originals.Where(x => x.Key.IsAlive()).ToDictionary(x => x.Key, x => x.Value);
@@ -335,14 +346,14 @@ namespace DualSouls.Skins.Runtime
                     writes[slot] = replacement;
                 }
                 bool waiting = !restoring && writes.Count == 0;
-                if (waiting && mode != "ROTATE")
+                if (waiting && requestedMode != "ROTATE")
                     return new SkinApplyResult(SkinApplyStatus.AwaitingTargets, "No requested targets are currently available.", unsupported);
                 // No character target yet: retain working character visuals, but restore excluded
                 // environment now. A later refresh must not reapply the previous full-pack policy.
                 var activeOriginals = nextOriginals.Where(x => writes.ContainsKey(x.Key) ||
-                    (waiting && rules.Allows(mode, x.Key.Target))).ToDictionary(x => x.Key, x => x.Value);
+                    (waiting && rules.Allows(requestedMode, x.Key.Target))).ToDictionary(x => x.Key, x => x.Value);
                 foreach (var original in nextOriginals)
-                    if (!writes.ContainsKey(original.Key) && !(waiting && rules.Allows(mode, original.Key.Target)))
+                    if (!writes.ContainsKey(original.Key) && !(waiting && rules.Allows(requestedMode, original.Key.Target)))
                         writes.Add(original.Key, original.Value);
                 AddInventoryConsumerWrites(slots, writes, nextOriginals, activeOriginals);
                 cancellation.ThrowIfCancellationRequested(); // commit is synchronous; no mid-frame yielding

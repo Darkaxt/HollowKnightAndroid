@@ -2,6 +2,7 @@ package dev.silksong.launcher.skins.catalog
 
 import dev.silksong.launcher.profiles.GameProfiles
 import dev.silksong.launcher.skins.contracts.DecodeResult
+import dev.silksong.launcher.skins.contracts.SkinImportCode
 import dev.silksong.launcher.skins.contracts.SkinResult
 import dev.silksong.launcher.skins.fixtures.RawZipFixture
 import dev.silksong.launcher.skins.fixtures.TinyPngFixture
@@ -21,6 +22,7 @@ import org.junit.Rule
 import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.util.zip.CRC32
 
 class SilksongSkinProfileTest {
     @get:Rule val temp = TemporaryFolder()
@@ -37,6 +39,19 @@ class SilksongSkinProfileTest {
         "Assets/Collections/HUD Cln Data/atlas0.png",
         "Assets/Collections/HUD Extras Cln Data/atlas0.png",
     )
+    private val expectedDimensions = mapOf(
+        expected[0] to SkinTextureDimensions(2048, 2048),
+        expected[1] to SkinTextureDimensions(2048, 4096),
+        expected[2] to SkinTextureDimensions(2048, 2048),
+        expected[3] to SkinTextureDimensions(2048, 2048),
+        expected[4] to SkinTextureDimensions(2048, 4096),
+        expected[5] to SkinTextureDimensions(2048, 2048),
+        expected[6] to SkinTextureDimensions(2048, 4096),
+        expected[7] to SkinTextureDimensions(1024, 2048),
+        expected[8] to SkinTextureDimensions(1024, 2048),
+        expected[9] to SkinTextureDimensions(4096, 4096),
+        expected[10] to SkinTextureDimensions(512, 1024),
+    )
 
     @Test
     fun closedProfilesExposeIndependentExactCatalogAuthorities() {
@@ -49,6 +64,8 @@ class SilksongSkinProfileTest {
         assertEquals("1.0.29980", ss.gameVersion)
         assertEquals(11, ss.pathCount)
         assertEquals(expected, ss.paths)
+        assertEquals(expectedDimensions, ss.textureDimensions)
+        assertTrue(hk.textureDimensions.isEmpty())
         assertNotEquals(hk.assetName, ss.assetName)
         assertNotEquals(hk.catalogId, ss.catalogId)
         assertNotEquals(hk.sha256, ss.sha256)
@@ -113,7 +130,7 @@ class SilksongSkinProfileTest {
         val store = SkinLibraryStore(SkinPaths(profileRoot), catalog = silksongCatalog())
         val decoder = PngDecoder { _, info -> SkinResult.Ok(DecodeResult(info.width, info.height, info.width.toLong() * info.height)) }
         val archive = RawZipFixture.build(listOf(
-            RawZipFixture.Entry("Scarlet/${expected[0]}".toByteArray(), TinyPngFixture.rgba()),
+            RawZipFixture.Entry("Scarlet/${expected[0]}".toByteArray(), declaredRgba(2048, 2048)),
             RawZipFixture.Entry("Scarlet/Knight.png".toByteArray(), TinyPngFixture.rgba()),
         )).bytes
         val importer = SkinLibraryImporter(store, decoder)
@@ -136,6 +153,67 @@ class SilksongSkinProfileTest {
         assertEquals(setOf(expected[0]), textures.keys)
         assertFalse(textures.keys.any { it.endsWith("Knight.png") && !it.contains("Hornet") })
         assertEquals(10, expected.count { it !in textures })
+    }
+
+    @Test
+    fun silksongNormalizerAcceptsExactDimensionsAcrossEveryDimensionClass() {
+        val representatives = listOf(expected[0], expected[1], expected[7], expected[9], expected[10])
+        val profileRoot = temp.newFolder("exact-dimensions", "profiles", "silksong")
+        val store = SkinLibraryStore(SkinPaths(profileRoot), catalog = silksongCatalog())
+        val decoder = PngDecoder { _, info ->
+            SkinResult.Ok(DecodeResult(info.width, info.height, info.width.toLong() * info.height))
+        }
+        val archive = RawZipFixture.build(representatives.map { path ->
+            val dimensions = expectedDimensions.getValue(path)
+            RawZipFixture.Entry("Exact/$path".toByteArray(), declaredRgba(dimensions.width, dimensions.height))
+        }).bytes
+
+        val prepared = SkinLibraryImporter(store, decoder)
+            .prepare(SkinImportInput.SelectedFile("exact.zip") { archive.inputStream() })
+        assertTrue(prepared is SkinResult.Ok)
+        val candidates = (prepared as SkinResult.Ok).value.candidates
+        assertEquals(1, candidates.size)
+        assertTrue(candidates.toString(), candidates.single().candidateKey != null)
+    }
+
+    @Test
+    fun silksongNormalizerRejectsMismatchAcrossEveryDimensionClass() {
+        val representatives = listOf(expected[0], expected[1], expected[7], expected[9], expected[10])
+        representatives.forEachIndexed { index, path ->
+            val profileRoot = temp.newFolder("mismatch-$index", "profiles", "silksong")
+            val store = SkinLibraryStore(SkinPaths(profileRoot), catalog = silksongCatalog())
+            val decoder = PngDecoder { _, info ->
+                SkinResult.Ok(DecodeResult(info.width, info.height, info.width.toLong() * info.height))
+            }
+            val dimensions = expectedDimensions.getValue(path)
+            val archive = RawZipFixture.build(listOf(
+                RawZipFixture.Entry(
+                    "Mismatch/$path".toByteArray(),
+                    declaredRgba(dimensions.width - 1, dimensions.height),
+                ),
+            )).bytes
+
+            val prepared = SkinLibraryImporter(store, decoder)
+                .prepare(SkinImportInput.SelectedFile("mismatch-$index.zip") { archive.inputStream() })
+            assertTrue(prepared is SkinResult.Ok)
+            val rejection = (prepared as SkinResult.Ok).value.candidates.single()
+            assertEquals("$path: $rejection", SkinImportCode.PNG_INVALID, rejection.code)
+        }
+    }
+
+    private fun declaredRgba(width: Int, height: Int): ByteArray {
+        val bytes = TinyPngFixture.rgba()
+        fun writeU32(offset: Int, value: Int) {
+            bytes[offset] = (value ushr 24).toByte()
+            bytes[offset + 1] = (value ushr 16).toByte()
+            bytes[offset + 2] = (value ushr 8).toByte()
+            bytes[offset + 3] = value.toByte()
+        }
+        writeU32(16, width)
+        writeU32(20, height)
+        val crc = CRC32().apply { update(bytes, 12, 17) }.value.toInt()
+        writeU32(29, crc)
+        return bytes
     }
 
     private fun silksongCatalog(): CatalogPathSet {

@@ -139,6 +139,55 @@ public sealed class SilksongSkinLibraryTests
         Assert.Equal(0, cancelledRuns);
     }
 
+    [Theory]
+    [InlineData("ROTATE", "replacement-run")]
+    [InlineData("OFF", null)]
+    public void Durable_run_change_discards_impossible_local_cancellation_and_polling_recovers(
+        string nextMode, string nextRun)
+    {
+        var frame = Frame();
+        var firstHero = frame.Hero;
+        var death = new SilksongSkinDeathAdapter(() => frame);
+        var request = Request("a");
+        var applies = new List<string>();
+        var cancellationCalls = 0;
+        var restores = 0;
+        using var library = new SilksongSkinLibrary(() => request,
+            pack => { applies.Add(pack.Id); return new SkinApplyResult(SkinApplyStatus.Applied); },
+            () => { restores++; return new SkinApplyResult(SkinApplyStatus.Restored); },
+            _ => true, () => new SkinApplyResult(SkinApplyStatus.Unchanged), death,
+            (_, occurrence) => {
+                request.LastDeath = occurrence;
+                request.PendingOccurrence = occurrence;
+                return true;
+            }, (_, __) => { cancellationCalls++; return true; }, _ => true);
+
+        library.Tick(0);
+        frame.BridgeOccurrence = 1;
+        frame.BridgeOccurrences = new[] { new SilksongDeathOccurrence(1, firstHero, frame.Manager) };
+        frame.Dead = true;
+        frame.Frame++;
+        library.Tick(1);
+        frame.Hero = new object();
+        frame.Frame++;
+        library.Tick(1.1f);
+        Assert.Equal(new long[] { 1 }, death.PendingCancellations);
+
+        request.Mode = nextMode;
+        request.RotationRun = nextRun;
+        request.PendingOccurrence = 0;
+        request.LastDeath = 0;
+        request.PackId = "replacement";
+        request.TreeSha256 = new string('d', 64);
+        library.Tick(2);
+
+        Assert.Equal(nextRun, death.Run);
+        Assert.Empty(death.PendingCancellations);
+        Assert.Equal(0, cancellationCalls);
+        if (nextMode == "OFF") Assert.True(restores > 0);
+        else Assert.Contains("replacement", applies);
+    }
+
     [Fact]
     public void Second_normal_death_waits_while_first_apply_is_pending_then_confirms_in_order()
     {

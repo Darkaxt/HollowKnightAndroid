@@ -28,7 +28,7 @@ namespace DualSouls.Skins.Runtime
         SkinPack cached, cachedRotation;
         string cachedTree, activeId, activeTree, activeMode, preparedRun;
         long preparedOccurrence;
-        bool restored, restoreRequired, pendingRestored;
+        bool restored, restoreRequired, pendingRestored, awaitingApply;
         public SkinLibraryRuntimeController(SkinRuntimeRules rules, Func<SkinLibraryRequest> read,
             Func<SkinPack, SkinApplyResult> apply, Func<SkinApplyResult> restore,
             Action<SkinLibraryObservation> report, Func<SkinApplyResult> observe = null,
@@ -110,7 +110,9 @@ namespace DualSouls.Skins.Runtime
             if (request.Mode == "ROTATE" && cachedRotation == null)
                 cachedRotation = new SkinPack(request.PackId, request.Root, request.Textures, "ROTATE");
             SkinApplyResult result;
-            if (activeId == request.PackId && activeTree == request.TreeSha256 && activeMode == request.Mode && !restored)
+            bool directApply = !(activeId == request.PackId && activeTree == request.TreeSha256 &&
+                activeMode == request.Mode && !restored && !awaitingApply);
+            if (!directApply)
                 result = observe?.Invoke() ?? new SkinApplyResult(SkinApplyStatus.Unchanged);
             else
             {
@@ -118,8 +120,10 @@ namespace DualSouls.Skins.Runtime
                 restored = false; activeMode = null;
                 result = apply(request.Mode == "ROTATE" ? cachedRotation : cached);
             }
+            if (directApply) awaitingApply = result.Status == SkinApplyStatus.AwaitingTargets;
             if (result.Status == SkinApplyStatus.Applied || result.Status == SkinApplyStatus.Unchanged)
-            { restored = false; activeId = request.PackId; activeTree = request.TreeSha256; activeMode = request.Mode; }
+            {
+                awaitingApply = false; restored = false; activeId = request.PackId; activeTree = request.TreeSha256; activeMode = request.Mode; }
             return result;
         }
 

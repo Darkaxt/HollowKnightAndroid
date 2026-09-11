@@ -21,6 +21,11 @@ namespace DualSouls.Skins.Silksong.Runtime
             public tk2dSprite Sprite;
             public HeroAnimationController Animation;
             public tk2dSpriteAnimation DefaultLibrary;
+            public tk2dSpriteAnimation CurrentLibrary;
+            public tk2dSpriteAnimation WindyLibrary;
+            public HeroControllerConfig Config;
+            public tk2dSpriteAnimation CrestLibrary;
+            public tk2dSpriteCollectionData SpriteCollection;
         }
         sealed class HudOwners
         {
@@ -31,6 +36,8 @@ namespace DualSouls.Skins.Silksong.Runtime
             public PlayMakerFSM SlideOut;
             public SilkSpool Spool;
             public HudCanvas Canvas;
+            public tk2dSpriteAnimator[] Animators;
+            public tk2dSprite[] Sprites;
         }
 
         sealed class OwnedCollection
@@ -48,12 +55,13 @@ namespace DualSouls.Skins.Silksong.Runtime
 
         readonly UnityDecoder decoder = new UnityDecoder();
         readonly SkinRuntimeSession session;
+        readonly SilksongOwnerRefreshState ownerRefresh = new SilksongOwnerRefreshState(1f);
         readonly List<string> omissions = new List<string>();
         HeroOwners heroOwners;
         HudOwners hudOwners;
+        GameManager ownerManager;
         SilksongCollectionOwnerStamp collectionOwnerStamp;
         SkinPack requested;
-        float nextRefresh;
         bool disposed;
 
         public static SilksongSkinRuntime Current { get; private set; }
@@ -64,9 +72,8 @@ namespace DualSouls.Skins.Silksong.Runtime
         internal object HudOwnerIdentity => hudOwners;
         internal bool DeathTargetsAvailable(HeroController hero, GameManager manager) => !disposed &&
             hero != null && manager != null && heroOwners != null && hudOwners != null &&
-            ReferenceEquals(heroOwners, CaptureHeroOwners(heroOwners)) && ReferenceEquals(heroOwners.Hero, hero) &&
-            ReferenceEquals(hudOwners, CaptureHudOwners(hudOwners)) && collectionOwnerStamp != null &&
-            collectionOwnerStamp.Equals(CaptureOwnerStamp());
+            ReferenceEquals(heroOwners.Hero, hero) && ReferenceEquals(ownerManager, manager) &&
+            collectionOwnerStamp != null && ownerRefresh.VisualCurrent;
 
         public SilksongSkinRuntime()
         {
@@ -81,20 +88,21 @@ namespace DualSouls.Skins.Silksong.Runtime
         public SkinApplyResult TryApply(SkinPack pack, CancellationToken cancellation = default)
         {
             requested = pack;
+            RefreshOwnerIdentity();
             return Publish(session.TryApply(pack, cancellation));
         }
         public SkinApplyResult TryRestore() => Publish(session.TryRestore());
 
         public void Tick()
         {
-            if (disposed || Time.unscaledTime < nextRefresh) return;
-            nextRefresh = Time.unscaledTime + 1f;
-            if (RefreshAllowed != null && !RefreshAllowed()) return;
-            Publish(session.Refresh());
+            if (disposed || !ownerRefresh.ShouldPoll(Time.unscaledTime)) return;
+            RefreshOwnerIdentity();
+            bool normalRefresh = RefreshAllowed == null || RefreshAllowed();
+            if (ownerRefresh.VisualRefreshRequired(normalRefresh)) Publish(session.Refresh());
         }
 
-        void SceneChanged(Scene scene, LoadSceneMode mode) { nextRefresh = 0f; }
-        void SceneUnloaded(Scene scene) { nextRefresh = 0f; }
+        void SceneChanged(Scene scene, LoadSceneMode mode) { ownerRefresh.InvalidateVisuals(); }
+        void SceneUnloaded(Scene scene) { ownerRefresh.InvalidateVisuals(); }
 
         SkinApplyResult Publish(SkinApplyResult result)
         {
@@ -110,8 +118,7 @@ namespace DualSouls.Skins.Silksong.Runtime
         IReadOnlyList<SkinSlot> Discover()
         {
             omissions.Clear();
-            heroOwners = CaptureHeroOwners(heroOwners);
-            hudOwners = CaptureHudOwners(hudOwners);
+            RefreshOwnerIdentity();
             var characterCollections = CaptureCharacterCollections();
             var hudCollections = CaptureHudCollections();
             var allCollections = characterCollections.Concat(hudCollections).ToList();
@@ -153,6 +160,8 @@ namespace DualSouls.Skins.Silksong.Runtime
                 foreach (var instance in admitted)
                     slots.AddRange(slotByCollection[instance.CollectionIdentity]);
             }
+            if (ownerRefresh.HasCurrentIdentity) ownerRefresh.MarkVisualRefresh();
+            else ownerRefresh.InvalidateVisuals();
             return slots;
         }
 
@@ -161,11 +170,10 @@ namespace DualSouls.Skins.Silksong.Runtime
             var result = new List<OwnedCollection>();
             if (heroOwners == null) return result;
             AddLibrary(result, heroOwners.DefaultLibrary);
-            AddLibrary(result, heroOwners.Animator.Library);
-            AddLibrary(result, WindyLibraryField?.GetValue(heroOwners.Animation) as tk2dSpriteAnimation);
-            var config = ConfigField?.GetValue(heroOwners.Animation) as HeroControllerConfig;
-            AddLibrary(result, config == null ? null : CrestLibraryField?.GetValue(config) as tk2dSpriteAnimation);
-            AddCollection(result, heroOwners.Sprite, heroOwners.Sprite.Collection);
+            AddLibrary(result, heroOwners.CurrentLibrary);
+            AddLibrary(result, heroOwners.WindyLibrary);
+            AddLibrary(result, heroOwners.CrestLibrary);
+            AddCollection(result, heroOwners.Sprite, heroOwners.SpriteCollection);
             return result;
         }
 
@@ -173,13 +181,10 @@ namespace DualSouls.Skins.Silksong.Runtime
         {
             var result = new List<OwnedCollection>();
             if (hudOwners == null) return result;
-            foreach (var root in new[] { hudOwners.GameplayChild, hudOwners.Spool.gameObject })
-            {
-                foreach (var animator in root.GetComponentsInChildren<tk2dSpriteAnimator>(true))
-                    if (animator != null) AddLibrary(result, animator.Library);
-                foreach (var sprite in root.GetComponentsInChildren<tk2dSprite>(true))
-                    if (sprite != null) AddCollection(result, sprite, sprite.Collection);
-            }
+            foreach (var animator in hudOwners.Animators)
+                if (animator != null) AddLibrary(result, animator.Library);
+            foreach (var sprite in hudOwners.Sprites)
+                if (sprite != null) AddCollection(result, sprite, sprite.Collection);
             return result;
         }
 
@@ -203,9 +208,6 @@ namespace DualSouls.Skins.Silksong.Runtime
                 ReferenceEquals(x.Collection, instance))) return;
             result.Add(new OwnedCollection { Owner = owner, Collection = instance });
         }
-
-        SilksongCollectionOwnerStamp CaptureOwnerStamp() =>
-            OwnerStamp(CaptureCharacterCollections().Concat(CaptureHudCollections()));
 
         static SilksongCollectionOwnerStamp OwnerStamp(IEnumerable<OwnedCollection> collections) =>
             new SilksongCollectionOwnerStamp(collections.Select(x => new SilksongCollectionInstance(
@@ -261,6 +263,34 @@ namespace DualSouls.Skins.Silksong.Runtime
             return true;
         }
 
+        bool RefreshOwnerIdentity()
+        {
+            heroOwners = CaptureHeroOwners(heroOwners);
+            hudOwners = CaptureHudOwners(hudOwners);
+            ownerManager = GameManager.instance;
+            if (heroOwners == null || hudOwners == null || ownerManager == null)
+                return ownerRefresh.Update(null);
+            var identities = new List<object> { heroOwners.Hero, heroOwners.Renderer, heroOwners.Animator,
+                heroOwners.Sprite, heroOwners.Animation, ownerManager, hudOwners.Cameras, hudOwners.Camera,
+                hudOwners.HudCamera, hudOwners.GameplayChild, hudOwners.SlideOut, hudOwners.Spool, hudOwners.Canvas };
+            foreach (var identity in new object[] { heroOwners.DefaultLibrary, heroOwners.CurrentLibrary,
+                heroOwners.WindyLibrary, heroOwners.Config, heroOwners.CrestLibrary, heroOwners.SpriteCollection })
+                if (identity != null) identities.Add(identity);
+            foreach (var animator in hudOwners.Animators)
+            {
+                if (animator == null) return ownerRefresh.Update(null);
+                identities.Add(animator);
+                if (animator.Library != null) identities.Add(animator.Library);
+            }
+            foreach (var sprite in hudOwners.Sprites)
+            {
+                if (sprite == null) return ownerRefresh.Update(null);
+                identities.Add(sprite);
+                if (sprite.Collection != null && sprite.Collection.inst != null) identities.Add(sprite.Collection.inst);
+            }
+            return ownerRefresh.Update(new SilksongOwnerIdentityStamp(identities));
+        }
+
         static HeroOwners CaptureHeroOwners(HeroOwners existing)
         {
             var hero = HeroController.SilentInstance;
@@ -270,11 +300,22 @@ namespace DualSouls.Skins.Silksong.Runtime
             var sprite = hero.GetComponent<tk2dSprite>();
             var animation = hero.GetComponent<HeroAnimationController>();
             if (renderer == null || animator == null || sprite == null || animation == null) return null;
+            var currentLibrary = animator.Library;
+            var windyLibrary = WindyLibraryField?.GetValue(animation) as tk2dSpriteAnimation;
+            var config = ConfigField?.GetValue(animation) as HeroControllerConfig;
+            var crestLibrary = config == null ? null : CrestLibraryField?.GetValue(config) as tk2dSpriteAnimation;
+            var spriteCollection = sprite.Collection == null ? null : sprite.Collection.inst;
             if (existing != null && ReferenceEquals(existing.Hero, hero) && ReferenceEquals(existing.Renderer, renderer) &&
                 ReferenceEquals(existing.Animator, animator) && ReferenceEquals(existing.Sprite, sprite) &&
-                ReferenceEquals(existing.Animation, animation)) return existing;
+                ReferenceEquals(existing.Animation, animation) && ReferenceEquals(existing.CurrentLibrary, currentLibrary) &&
+                ReferenceEquals(existing.WindyLibrary, windyLibrary) && ReferenceEquals(existing.Config, config) &&
+                ReferenceEquals(existing.CrestLibrary, crestLibrary) && ReferenceEquals(existing.SpriteCollection, spriteCollection))
+                return existing;
+            bool sameHero = existing != null && ReferenceEquals(existing.Hero, hero);
             return new HeroOwners { Hero = hero, Renderer = renderer, Animator = animator, Sprite = sprite,
-                Animation = animation, DefaultLibrary = animator.Library };
+                Animation = animation, DefaultLibrary = sameHero ? existing.DefaultLibrary : currentLibrary,
+                CurrentLibrary = currentLibrary, WindyLibrary = windyLibrary, Config = config,
+                CrestLibrary = crestLibrary, SpriteCollection = spriteCollection };
         }
 
         static HudOwners CaptureHudOwners(HudOwners existing)
@@ -285,16 +326,22 @@ namespace DualSouls.Skins.Silksong.Runtime
             var gameplay = hudCamera != null ? hudCamera.GameplayChild : null;
             var slide = cameras != null ? cameras.hudCanvasSlideOut : null;
             var spool = cameras != null ? cameras.silkSpool : null;
-            var canvases = gameplay != null ? gameplay.GetComponentsInChildren<HudCanvas>(true) : Array.Empty<HudCanvas>();
-            if (cameras == null || camera == null || hudCamera == null || gameplay == null || slide == null || spool == null || canvases.Length != 1)
+            if (cameras == null || camera == null || hudCamera == null || gameplay == null || slide == null || spool == null)
                 return null;
-            var canvas = canvases[0];
             if (existing != null && ReferenceEquals(existing.Cameras, cameras) && ReferenceEquals(existing.Camera, camera) &&
                 ReferenceEquals(existing.HudCamera, hudCamera) && ReferenceEquals(existing.GameplayChild, gameplay) &&
                 ReferenceEquals(existing.SlideOut, slide) && ReferenceEquals(existing.Spool, spool) &&
-                ReferenceEquals(existing.Canvas, canvas)) return existing;
+                existing.Canvas != null && existing.Animators != null && existing.Animators.All(x => x != null) &&
+                existing.Sprites != null && existing.Sprites.All(x => x != null))
+                return existing;
+            var canvases = gameplay.GetComponentsInChildren<HudCanvas>(true);
+            if (canvases.Length != 1) return null;
+            var roots = new[] { gameplay, spool.gameObject };
+            var animators = roots.SelectMany(x => x.GetComponentsInChildren<tk2dSpriteAnimator>(true)).ToArray();
+            var sprites = roots.SelectMany(x => x.GetComponentsInChildren<tk2dSprite>(true)).ToArray();
+            var canvas = canvases[0];
             return new HudOwners { Cameras = cameras, Camera = camera, HudCamera = hudCamera, GameplayChild = gameplay,
-                SlideOut = slide, Spool = spool, Canvas = canvas };
+                SlideOut = slide, Spool = spool, Canvas = canvas, Animators = animators, Sprites = sprites };
         }
 
         static T RequireLive<T>(object value) where T : UObject
@@ -325,7 +372,6 @@ namespace DualSouls.Skins.Silksong.Runtime
 
         sealed class UnityDecoder : ISkinTextureDecoder
         {
-            readonly Dictionary<Texture2D, bool> released = new Dictionary<Texture2D, bool>();
             public SkinTexture Decode(byte[] bytes, int width, int height)
             {
                 var texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
@@ -333,11 +379,9 @@ namespace DualSouls.Skins.Silksong.Runtime
                 bool decoded;
                 try { decoded = ImageConversion.LoadImage(texture, bytes, false); }
                 catch (Exception) { decoded = false; }
-                released.Add(texture, false);
                 return new SkinTexture(texture, texture.width, texture.height, () => {
                     if (texture != null) UObject.Destroy(texture);
-                    released[texture] = true;
-                }, () => texture == null || released[texture], decoded);
+                }, () => texture == null, decoded);
             }
         }
     }

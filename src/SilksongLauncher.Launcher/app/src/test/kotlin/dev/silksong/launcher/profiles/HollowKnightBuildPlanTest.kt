@@ -122,6 +122,13 @@ class HollowKnightBuildPlanTest {
             root, surgery, assembly,
             "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d",
         )
+        assertFalse(Il2cppConverter.hasSilksongDeathBridgeProvenance(root))
+        runBlocking {
+            Il2cppConverter.verifyFinalStagedSilksongNormalDeath(root, surgery) { verified ->
+                assertEquals(assembly, verified)
+            }
+        }
+        assertTrue(Il2cppConverter.hasSilksongDeathBridgeProvenance(root, sha256(assembly)))
         Il2cppConverter.markComplete(root)
         assertTrue(Il2cppConverter.isComplete(root))
 
@@ -250,10 +257,10 @@ class HollowKnightBuildPlanTest {
         assertTrue(assembly.readBytes().contentEquals(rewritten))
         val marker = Il2cppConverter.silksongDeathBridgeMarker(root).readText()
         assertTrue(marker.contains("algorithm=${Il2cppConverter.SILKSONG_DEATH_ALGORITHM}"))
-        assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("task101-v3"))
+        assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("task101-v4"))
         assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("site=post-normalization"))
         assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("owners=ring32"))
-        assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("verify=canonical"))
+        assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("verify=canonical+final-structural"))
         assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("rewritten=86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e"))
         assertTrue(marker.contains("inputSha256=${sha256(original)}"))
         assertTrue(marker.contains("bridgeAssemblySha256=${sha256(rewritten)}"))
@@ -313,6 +320,35 @@ class HollowKnightBuildPlanTest {
     }
 
     @Test
+    fun `final Silksong death verification failure clears provisional provenance and blocks completion`() = runBlocking {
+        val root = temp.newFolder("death-bridge-final-failure")
+        File(Il2cppConverter.cppDir(root), "complete.cpp").apply { parentFile.mkdirs(); writeText("// complete") }
+        Il2cppConverter.metadata(root).apply { parentFile.mkdirs(); writeBytes(byteArrayOf(1)) }
+        val assembly = File(Il2cppConverter.asmDir(root), "Assembly-CSharp.dll").apply {
+            parentFile.mkdirs(); writeBytes(byteArrayOf(0x4d, 0x5a, 1, 2))
+        }
+        val surgery = File(root, "bundle-surgery/BundleSurgery.dll").apply {
+            parentFile.mkdirs(); writeBytes(byteArrayOf(3, 4, 5))
+        }
+        Il2cppConverter.recordUiMessageDismissProvenance(root, surgery, assembly, sha256(byteArrayOf(7)))
+        Il2cppConverter.recordSilksongDeathBridgeProvenance(
+            root, surgery, assembly,
+            "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d",
+        )
+
+        val failure = runCatching {
+            Il2cppConverter.verifyFinalStagedSilksongNormalDeath(root, surgery) {
+                throw java.io.IOException("final structural verification failed")
+            }
+        }.exceptionOrNull()
+
+        assertTrue(failure is java.io.IOException)
+        assertFalse(Il2cppConverter.silksongDeathBridgeMarker(root).exists())
+        Il2cppConverter.markComplete(root)
+        assertTrue(Il2cppConverter.isStale(silksong, root))
+    }
+
+    @Test
     fun `Silksong death bridge runner failure preserves staged input and clears provenance`() = runBlocking {
         val root = temp.newFolder("death-bridge-failure")
         val original = byteArrayOf(0x4d, 0x5a, 1, 2)
@@ -364,6 +400,9 @@ class HollowKnightBuildPlanTest {
             root, surgery, assembly,
             "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d",
         )
+        runBlocking {
+            Il2cppConverter.verifyFinalStagedSilksongNormalDeath(root, surgery) { }
+        }
 
         Il2cppConverter.markComplete(root)
         assertTrue(Il2cppConverter.isPresent(root))

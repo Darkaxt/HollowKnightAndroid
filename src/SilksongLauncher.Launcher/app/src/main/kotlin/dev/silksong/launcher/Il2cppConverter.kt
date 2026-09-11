@@ -77,9 +77,9 @@ object Il2cppConverter {
         "task105-v1;game=1.0.29980;tail=1886e0884a720b0b53412e04f912fb6d7c31d7c9da9cd365e9ac6b85fc4bc179;order=post-save-pre-mod"
     private const val UI_MESSAGE_DISMISS_MARKER = "uimsg-bridge.properties"
     private const val UI_MESSAGE_DISMISS_PART_SUFFIX = ".uimsg-bridge.part"
-    private const val SILKSONG_DEATH_SCHEMA = "1"
+    private const val SILKSONG_DEATH_SCHEMA = "2"
     internal const val SILKSONG_DEATH_ALGORITHM =
-        "task101-v3;game=1.0.29980;assembly=1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d;rewritten=86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e;site=post-normalization;owners=ring32;verify=canonical;order=pre-save-pre-mod"
+        "task101-v4;game=1.0.29980;assembly=1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d;rewritten=86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e;site=post-normalization;owners=ring32;verify=canonical+final-structural;order=pre-save-through-post-mod"
     private const val SILKSONG_DEATH_REWRITTEN_SHA256 =
         "86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e"
     private const val SILKSONG_DEATH_MARKER = "silksong-death-bridge.properties"
@@ -261,17 +261,70 @@ object Il2cppConverter {
         }
     }
 
-    internal fun hasSilksongDeathBridgeProvenance(root: File): Boolean {
+    internal suspend fun verifyFinalStagedSilksongNormalDeath(
+        root: File,
+        surgery: File,
+        runVerify: suspend (assembly: File) -> Unit,
+    ) {
+        val provisional = silksongDeathBridgeProperties(root)
+            ?: throw IOException("Silksong death bridge has no provisional provenance")
+        val input = provisional.getProperty("inputSha256") ?: ""
+        val bridge = provisional.getProperty("bridgeAssemblySha256") ?: ""
+        val tool = provisional.getProperty("toolSha256") ?: ""
+        if (provisional.getProperty("schema") != SILKSONG_DEATH_SCHEMA ||
+            provisional.getProperty("algorithm") != SILKSONG_DEATH_ALGORITHM ||
+            !SHA256.matches(input) || !SHA256.matches(bridge) || !SHA256.matches(tool) ||
+            !surgery.isFile || surgery.length() <= 0 || sha256(surgery) != tool
+        ) throw IOException("Silksong death bridge provisional provenance is invalid")
+        val assembly = File(asmDir(root), "Assembly-CSharp.dll")
+        if (!assembly.isFile || assembly.length() <= 0) {
+            throw IOException("no final staged Assembly-CSharp.dll for Silksong death verification")
+        }
+        val finalHash = sha256(assembly)
+        val marker = silksongDeathBridgeMarker(root)
+        if (!marker.delete()) throw IOException("could not invalidate provisional Silksong death provenance")
+        try {
+            runVerify(assembly)
+            if (!assembly.isFile || assembly.length() <= 0 || sha256(assembly) != finalHash) {
+                throw IOException("final Silksong death verification input changed during verification")
+            }
+            val part = File(root, "${marker.name}.part")
+            part.delete()
+            part.writeText(buildString {
+                append("schema=").append(SILKSONG_DEATH_SCHEMA).append('\n')
+                append("algorithm=").append(SILKSONG_DEATH_ALGORITHM).append('\n')
+                append("inputSha256=").append(input).append('\n')
+                append("bridgeAssemblySha256=").append(bridge).append('\n')
+                append("finalAssemblySha256=").append(finalHash).append('\n')
+                append("finalVerification=structural-v1\n")
+                append("toolSha256=").append(tool).append('\n')
+            })
+            Files.move(part.toPath(), marker.toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
+        } catch (error: Exception) {
+            File(root, "${marker.name}.part").delete()
+            marker.delete()
+            throw error
+        }
+    }
+
+    internal fun hasSilksongDeathBridgeProvenance(
+        root: File,
+        expectedBridgeSha256: String = SILKSONG_DEATH_REWRITTEN_SHA256,
+    ): Boolean {
         val values = silksongDeathBridgeProperties(root) ?: return false
         val input = values.getProperty("inputSha256") ?: return false
         val output = values.getProperty("bridgeAssemblySha256") ?: return false
+        val finalOutput = values.getProperty("finalAssemblySha256") ?: return false
         val tool = values.getProperty("toolSha256") ?: return false
         val surgery = File(root, "bundle-surgery/BundleSurgery.dll")
+        val assembly = File(asmDir(root), "Assembly-CSharp.dll")
         return values.getProperty("schema") == SILKSONG_DEATH_SCHEMA &&
             values.getProperty("algorithm") == SILKSONG_DEATH_ALGORITHM &&
+            values.getProperty("finalVerification") == "structural-v1" &&
             input == "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d" &&
-            output == SILKSONG_DEATH_REWRITTEN_SHA256 && SHA256.matches(tool) && surgery.isFile &&
-            surgery.length() > 0 && sha256(surgery) == tool
+            output == expectedBridgeSha256 && SHA256.matches(expectedBridgeSha256) && SHA256.matches(finalOutput) &&
+            SHA256.matches(tool) && surgery.isFile && surgery.length() > 0 && sha256(surgery) == tool &&
+            assembly.isFile && assembly.length() > 0 && sha256(assembly) == finalOutput
     }
 
     /**
@@ -463,6 +516,8 @@ object Il2cppConverter {
                 LauncherLog.log("il2cpp input after weaving: ${assemblies.size} assemblies")
             }
         }
+
+        if (profile.id == "silksong") verifyFinalSilksongNormalDeath(context, root)
 
         prepareTool(deploy)
 
@@ -744,6 +799,20 @@ object Il2cppConverter {
                 }
             },
         )
+    }
+
+    private suspend fun verifyFinalSilksongNormalDeath(
+        context: android.content.Context,
+        root: File,
+    ) {
+        val surgery = PlayerImage.stageSurgery(root, context.assets)
+        verifyFinalStagedSilksongNormalDeath(root, surgery) { assembly ->
+            PlayerImage.run(
+                surgery,
+                context,
+                listOf("verify-silksong-normal-death-final", assembly.absolutePath),
+            ) { line -> LauncherLog.log("Final Silksong death verification: ${line.trim()}") }
+        }
     }
 
     internal suspend fun rewriteStagedUiMessageDismissal(

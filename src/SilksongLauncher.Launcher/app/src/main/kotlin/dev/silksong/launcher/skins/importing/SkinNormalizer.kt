@@ -218,6 +218,22 @@ class SkinNormalizer(
                     reject(SkinImportCode.LIMIT_EXCEEDED, "Extracted texture exceeds declared or bounded size")
                 }
                 val inspected = inspect(temporary, length)
+                val dimensionMismatch = mapping.textures.asSequence()
+                    .filter { (_, source) -> source.centralIndex == entry.centralIndex }
+                    .mapNotNull { (target, _) ->
+                        catalog.profile.textureDimensions[target]?.takeUnless { dimensions ->
+                            inspected.width == dimensions.width && inspected.height == dimensions.height
+                        }?.let { dimensions -> target to dimensions }
+                    }
+                    .firstOrNull()
+                if (dimensionMismatch != null) {
+                    cleanupFile(temporary, stagingOwner)
+                    val (target, dimensions) = dimensionMismatch
+                    reject(
+                        SkinImportCode.PNG_INVALID,
+                        "Texture dimensions for $target must be ${dimensions.width}x${dimensions.height}",
+                    )
+                }
                 val decoded = when (val result = decoder.decodeAndRelease(temporary, inspected)) {
                     is SkinResult.Error -> {
                         cleanupFile(temporary, stagingOwner)

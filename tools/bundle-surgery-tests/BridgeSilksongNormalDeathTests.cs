@@ -23,4 +23,21 @@ public sealed class BridgeSilksongNormalDeathTests
             Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public void Final_structural_verifier_rejects_a_managed_image_without_the_exact_bridge()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "dualsouls-death-final-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string output = Path.Combine(root, "Assembly-CSharp.dll");
+        try
+        {
+            File.WriteAllBytes(output, new byte[] { (byte)'M', (byte)'Z', 1, 2, 3 });
+            Assert.ThrowsAny<Exception>(() => BridgeSilksongNormalDeath.RequireStructuralOutput(output));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
 }

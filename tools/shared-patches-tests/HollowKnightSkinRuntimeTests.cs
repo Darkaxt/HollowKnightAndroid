@@ -136,6 +136,91 @@ public sealed class HollowKnightSkinRuntimeTests
     }
 
     [Fact]
+    public void Full_pack_change_restores_and_waits_for_release_before_successor_allocation()
+    {
+        var targets = Enumerable.Range(0, 11).Select(index => "T" + index + ".png").ToArray();
+        var rules = new SkinRuntimeRules("silksong", 11, targets.Contains,
+            (mode, target) => mode == "ON" || mode == "ROTATE" && Array.IndexOf(targets, target) < 9,
+            restoreBeforeRotation: true);
+        var rig = new Rig(2300, rules);
+        foreach (var target in targets) rig.Add(target);
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGNQSlv1HxkzkC4AAJHIIxEb9L/kAAAAAElFTkSuQmCC");
+        var first = rig.Pack("full-a", "ON", png, targets);
+        var second = rig.Pack("full-b", "ON", png, targets);
+
+        Assert.Equal(SkinApplyStatus.Applied, rig.Session.TryApply(first).Status);
+        rig.Loader.DelayedRelease = true;
+        var waiting = rig.Session.TryApply(second);
+
+        Assert.Equal(SkinApplyStatus.AwaitingTargets, waiting.Status);
+        Assert.All(rig.Slots, slot => Assert.Same(slot.Original, slot.Value));
+        Assert.Null(rig.Session.CurrentPack);
+        Assert.Equal(11, rig.Loader.Created.Count);
+        Assert.Equal(1408, rig.Session.AccountedBytes);
+        Assert.Equal(SkinApplyStatus.AwaitingTargets, rig.Session.TryApply(second).Status);
+        Assert.Equal(11, rig.Loader.Created.Count);
+
+        foreach (var texture in rig.Loader.Created) texture.Released = true;
+        Assert.Equal(SkinApplyStatus.Applied, rig.Session.TryApply(second).Status);
+        Assert.Equal(22, rig.Loader.Created.Count);
+    }
+
+    [Fact]
+    public void Full_on_to_rotate_restores_hud_and_does_not_claim_new_mode_before_release()
+    {
+        var targets = Enumerable.Range(0, 11).Select(index => "T" + index + ".png").ToArray();
+        var rules = new SkinRuntimeRules("silksong", 11, targets.Contains,
+            (mode, target) => mode == "ON" || mode == "ROTATE" && Array.IndexOf(targets, target) < 9,
+            restoreBeforeRotation: true);
+        var rig = new Rig(2300, rules);
+        foreach (var target in targets) rig.Add(target);
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGNQSlv1HxkzkC4AAJHIIxEb9L/kAAAAAElFTkSuQmCC");
+        var on = rig.Pack("full", "ON", png, targets);
+        var rotate = rig.Pack("full", "ROTATE", png, targets);
+
+        Assert.Equal(SkinApplyStatus.Applied, rig.Session.TryApply(on).Status);
+        rig.Loader.DelayedRelease = true;
+        Assert.Equal(SkinApplyStatus.AwaitingTargets, rig.Session.TryApply(rotate).Status);
+        Assert.Same(rig.Slots[9].Original, rig.Slots[9].Value);
+        Assert.Same(rig.Slots[10].Original, rig.Slots[10].Value);
+        Assert.Null(rig.Session.CurrentPack);
+        Assert.Equal(11, rig.Loader.Created.Count);
+        Assert.Equal(SkinApplyStatus.AwaitingTargets, rig.Session.TryApply(rotate).Status);
+        Assert.Equal(11, rig.Loader.Created.Count);
+
+        foreach (var texture in rig.Loader.Created) texture.Released = true;
+        Assert.Equal(SkinApplyStatus.Applied, rig.Session.TryApply(rotate).Status);
+        Assert.NotSame(rig.Slots[0].Original, rig.Slots[0].Value);
+        Assert.Same(rig.Slots[9].Original, rig.Slots[9].Value);
+        Assert.Equal(20, rig.Loader.Created.Count);
+    }
+
+    [Fact]
+    public void Repeated_delayed_retirement_cycles_do_not_allocate_successors_or_grow_accounting()
+    {
+        var rig = new Rig(160); rig.Add("Knight.png"); rig.Add("Sprint.png");
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg==");
+        var first = rig.Pack("a", "ON", png, "Knight.png", "Sprint.png");
+        var second = rig.Pack("b", "ON", png, "Knight.png", "Sprint.png");
+        Assert.Equal(SkinApplyStatus.Applied, rig.Session.TryApply(first).Status);
+        rig.Loader.DelayedRelease = true;
+        Assert.Equal(SkinApplyStatus.AwaitingTargets, rig.Session.TryApply(second).Status);
+        var charged = rig.Session.AccountedBytes;
+
+        for (var retry = 0; retry < 20; retry++)
+        {
+            Assert.Equal(SkinApplyStatus.AwaitingTargets, rig.Session.TryApply(second).Status);
+            Assert.Equal(charged, rig.Session.AccountedBytes);
+            Assert.Equal(2, rig.Loader.Created.Count);
+            Assert.All(rig.Loader.Created, texture => Assert.Equal(1, texture.ReleaseCount));
+        }
+
+        foreach (var texture in rig.Loader.Created) texture.Released = true;
+        Assert.Equal(SkinApplyStatus.Applied, rig.Session.TryApply(second).Status);
+        Assert.Equal(2, rig.Session.AccountedBytes / 8);
+    }
+
+    [Fact]
     public void Postdecode_dimensions_must_equal_preflight_dimensions()
     {
         var rig = new Rig(); rig.Add("Knight.png"); rig.Loader.WrongDimensions = true;
@@ -923,28 +1008,30 @@ public sealed class HollowKnightSkinRuntimeTests
         public readonly List<SkinSlot> ExtraSlots = new List<SkinSlot>();
         public readonly Loader Loader = new Loader();
         public readonly SkinRuntimeSession Session;
-        public Rig(long budget = 512L * 1024 * 1024)
+        public Rig(long budget = 512L * 1024 * 1024, SkinRuntimeRules rules = null)
         {
             Session = new SkinRuntimeSession(Loader,
                 () => Slots.Where(x => x.Alive).Select(x => x.Binding()).Concat(ExtraSlots).ToList(), budget,
-                HollowKnightSkinPolicy.RuntimeRules);
+                rules ?? HollowKnightSkinPolicy.RuntimeRules);
             Loader.OnRelease = handle => Assert.DoesNotContain(Slots.Where(x => x.Alive), x => ReferenceEquals(x.Value, handle));
         }
         public Slot Add(string target, object original = null, Func<SkinTexture, object, object> prepare = null)
         {
             var slot = new Slot(target, original ?? new object(), prepare); Slots.Add(slot); return slot;
         }
-        public SkinPack Pack(string id, params string[] targets)
+        public SkinPack Pack(string id, params string[] targets) => Pack(id, "ON",
+            Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg=="), targets);
+        public SkinPack Pack(string id, string mode, byte[] png, params string[] targets)
         {
             var root = Path.Combine(AppContext.BaseDirectory, "runtime-fixtures", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(root); var files = new Dictionary<string, string>();
             for (int i = 0; i < targets.Length; i++)
             {
                 var name = i + ".png";
-                File.WriteAllBytes(Path.Combine(root, name), Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg=="));
+                File.WriteAllBytes(Path.Combine(root, name), png);
                 files.Add(targets[i], name);
             }
-            return new SkinPack(id, root, files);
+            return new SkinPack(id, root, files, mode);
         }
     }
     sealed class Slot

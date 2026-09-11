@@ -4,6 +4,13 @@ import dev.silksong.launcher.profiles.GameProfile
 import dev.silksong.launcher.profiles.HollowKnightProfile
 import dev.silksong.launcher.profiles.SilksongProfile
 
+/** Exact decoded atlas authority for one canonical target. */
+data class SkinTextureDimensions(val width: Int, val height: Int) {
+    init {
+        require(width > 0 && height > 0)
+    }
+}
+
 /** Closed, immutable per-game skin schema authority. */
 class SkinCatalogProfile internal constructor(
     val profileId: String,
@@ -12,10 +19,12 @@ class SkinCatalogProfile internal constructor(
     val catalogId: String,
     val sha256: String,
     paths: List<String>,
+    textureDimensions: Map<String, SkinTextureDimensions>,
     private val expectedPathCount: Int,
     val legacyMigrationAllowed: Boolean,
 ) {
     val paths: List<String> = paths.toList()
+    val textureDimensions: Map<String, SkinTextureDimensions> = textureDimensions.toMap()
     val pathCount: Int get() = expectedPathCount
 
     init {
@@ -23,6 +32,8 @@ class SkinCatalogProfile internal constructor(
         require(expectedPathCount > 0 && (paths.isEmpty() || paths.size == expectedPathCount))
         require(paths.toSet().size == paths.size)
         require(paths.all(::safeCanonicalPath))
+        require(textureDimensions.keys.all { it in paths })
+        require(textureDimensions.isEmpty() || textureDimensions.keys == paths.toSet())
         require(sha256.matches(Regex("[0-9a-f]{64}")))
         require(legacyMigrationAllowed == (profileId == "hollow-knight"))
     }
@@ -47,6 +58,22 @@ object SkinCatalogProfiles {
         "Assets/Collections/HUD Extras Cln Data/atlas0.png",
     )
 
+    private val silksongDimensions = listOf(
+        2048 to 2048,
+        2048 to 4096,
+        2048 to 2048,
+        2048 to 2048,
+        2048 to 4096,
+        2048 to 2048,
+        2048 to 4096,
+        1024 to 2048,
+        1024 to 2048,
+        4096 to 4096,
+        512 to 1024,
+    ).mapIndexed { index, (width, height) ->
+        silksongPaths[index] to SkinTextureDimensions(width, height)
+    }.toMap()
+
     val HollowKnight = SkinCatalogProfile(
         HollowKnightProfile.id,
         HollowKnightProfile.currentGameVersion,
@@ -54,6 +81,7 @@ object SkinCatalogProfiles {
         HollowKnightCatalogPaths.CATALOG_ID,
         HollowKnightCatalogPaths.SHA256,
         emptyList(),
+        emptyMap(),
         expectedPathCount = 205,
         legacyMigrationAllowed = true,
     )
@@ -64,6 +92,7 @@ object SkinCatalogProfiles {
         SilksongCatalogPaths.CATALOG_ID,
         SilksongCatalogPaths.SHA256,
         silksongPaths,
+        silksongDimensions,
         expectedPathCount = 11,
         legacyMigrationAllowed = false,
     )
