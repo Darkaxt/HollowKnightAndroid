@@ -1157,7 +1157,7 @@ class SetupActivity : Activity() {
                         }
 
                         BuildStage.ConvertIl2Cpp -> {
-                            if (!Il2cppConverter.isPresent(out) ||
+                            if (!Il2cppConverter.isPresent(profile, out) ||
                                 Il2cppConverter.isStale(profile, out, mods, assets)
                             ) {
                                 Il2cppConverter.convert(
@@ -1174,6 +1174,7 @@ class SetupActivity : Activity() {
 
                         BuildStage.CompileNative -> {
                             NativeBuild.build(
+                                profile,
                                 unity,
                                 tools,
                                 out,

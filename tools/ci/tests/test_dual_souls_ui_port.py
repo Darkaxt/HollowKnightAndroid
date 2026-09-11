@@ -388,6 +388,26 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
             self.assertIn(token, rewrite)
         self.assertNotIn("var tail = new HashSet<Instruction>()", rewrite)
 
+    def test_ui_message_bridge_is_silksong_only_in_shared_conversion_path(self):
+        converter = read(IL2CPP_CONVERTER)
+        self.assertIn(
+            'internal fun requiresUiMessageDismissal(profile: GameProfile): Boolean =',
+            converter,
+        )
+        self.assertIn('profile.id == "silksong"', converter)
+        self.assertIn(
+            'if (requiresUiMessageDismissal(profile)) bridgeUiMessageDismissal(context, root)',
+            converter,
+        )
+        self.assertIn(
+            'if (requiresUiMessageDismissal(profile) && !hasUiMessageDismissProvenance(root))',
+            converter,
+        )
+        self.assertIn(
+            'if (requiresUiMessageDismissal(profile) && assets != null)',
+            converter,
+        )
+
     def test_native_map_failed_partial_build_blocks_replacement_until_exact_retry(self):
         source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
         self.assertIn("DsPortMapPartialGraph<Source>", source)

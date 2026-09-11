@@ -86,6 +86,9 @@ object Il2cppConverter {
     private const val SILKSONG_DEATH_PART_SUFFIX = ".silksong-death-bridge.part"
     private val SHA256 = Regex("^[0-9a-f]{64}$")
 
+    internal fun requiresUiMessageDismissal(profile: GameProfile): Boolean =
+        profile.id == "silksong"
+
     /** How often the output directory is counted while il2cpp works. */
     private const val PROGRESS_POLL_MS = 2_000L
 
@@ -354,15 +357,15 @@ object Il2cppConverter {
      * incremental and re-generated C++ is byte-identical, so almost nothing is
      * rebuilt -- and it is the direction to be wrong in.
      */
-    fun isComplete(root: File): Boolean =
-        uiMessageDismissMarker(root).isFile &&
-            hasUiMessageDismissProvenance(root) &&
+    fun isComplete(profile: GameProfile, root: File): Boolean =
+        (!requiresUiMessageDismissal(profile) ||
+            (uiMessageDismissMarker(root).isFile && hasUiMessageDismissProvenance(root))) &&
             runCatching { completionMarker(root).readText().trim() }.getOrNull() == COMPLETE &&
             hasCompletionSignature(root) &&
             metadata(root).length() > 0 &&
             cppDir(root).listFiles()?.any { it.name.endsWith(".cpp") } == true
 
-    fun isPresent(root: File): Boolean = isComplete(root)
+    fun isPresent(profile: GameProfile, root: File): Boolean = isComplete(profile, root)
 
     /**
      * Whether the conversion is older than what it was made from.
@@ -390,9 +393,9 @@ object Il2cppConverter {
         mods: File? = null,
         assets: android.content.res.AssetManager? = null,
     ): Boolean {
-        if (!hasUiMessageDismissProvenance(root)) return true
+        if (requiresUiMessageDismissal(profile) && !hasUiMessageDismissProvenance(root)) return true
         if (profile.id == "silksong" && !hasSilksongDeathBridgeProvenance(root)) return true
-        if (assets != null) {
+        if (requiresUiMessageDismissal(profile) && assets != null) {
             val currentTool = runCatching { PlayerImage.surgeryAssetSha256(assets) }.getOrNull()
                 ?: return true
             if (!uiMessageDismissToolMatches(root, currentTool)) return true
@@ -484,7 +487,7 @@ object Il2cppConverter {
 
         if (PackageCompiler.requiresSaveIo(profile)) redirectSaveCalls(context, root)
 
-        bridgeUiMessageDismissal(context, root)
+        if (requiresUiMessageDismissal(profile)) bridgeUiMessageDismissal(context, root)
 
         // The chainloader, run here rather than at game startup: this is the
         // last moment the game exists as IL, so it is the only moment a

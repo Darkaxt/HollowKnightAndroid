@@ -105,6 +105,25 @@ class HollowKnightBuildPlanTest {
     }
 
     @Test
+    fun `Hollow Knight conversion cache does not require the Silksong message bridge`() {
+        val root = temp.newFolder("hollow-knight-conversion-cache")
+        File(Il2cppConverter.cppDir(root), "complete.cpp").apply {
+            parentFile.mkdirs()
+            writeText("// complete")
+        }
+        Il2cppConverter.metadata(root).apply {
+            parentFile.mkdirs()
+            writeBytes(byteArrayOf(1))
+        }
+        Il2cppConverter.markComplete(root)
+
+        assertTrue(Il2cppConverter.isComplete(hollowKnight, root))
+        assertFalse(Il2cppConverter.isComplete(silksong, root))
+        assertFalse(Il2cppConverter.isStale(hollowKnight, root))
+        assertTrue(Il2cppConverter.isStale(silksong, root))
+    }
+
+    @Test
     fun `classic conversion reads its source without requiring in-place writes`() {
         assertFalse(DepotLocation.requiresWritableContent(hollowKnight))
         assertTrue(DepotLocation.requiresWritableContent(silksong))
@@ -123,7 +142,7 @@ class HollowKnightBuildPlanTest {
         }
 
         Il2cppConverter.markComplete(root)
-        assertFalse(Il2cppConverter.isComplete(root))
+        assertFalse(Il2cppConverter.isComplete(silksong, root))
         Il2cppConverter.invalidateCompletion(root)
         Il2cppConverter.recordUiMessageDismissProvenance(root, surgery, assembly, sha256(byteArrayOf(7)))
         Il2cppConverter.recordSilksongDeathBridgeProvenance(
@@ -138,16 +157,16 @@ class HollowKnightBuildPlanTest {
         }
         assertTrue(Il2cppConverter.hasSilksongDeathBridgeProvenance(root, sha256(assembly)))
         Il2cppConverter.markComplete(root)
-        assertTrue(Il2cppConverter.isComplete(root))
+        assertTrue(Il2cppConverter.isComplete(silksong, root))
 
         assembly.writeBytes(byteArrayOf(0x4d, 0x5a, 9))
-        assertFalse(Il2cppConverter.isComplete(root))
+        assertFalse(Il2cppConverter.isComplete(silksong, root))
         assembly.writeBytes(byteArrayOf(0x4d, 0x5a, 1, 2))
-        assertTrue(Il2cppConverter.isComplete(root))
+        assertTrue(Il2cppConverter.isComplete(silksong, root))
         surgery.writeBytes(byteArrayOf(8))
-        assertFalse(Il2cppConverter.isComplete(root))
+        assertFalse(Il2cppConverter.isComplete(silksong, root))
         surgery.writeBytes(byteArrayOf(3, 4, 5))
-        assertTrue(Il2cppConverter.isComplete(root))
+        assertTrue(Il2cppConverter.isComplete(silksong, root))
         assertTrue(
             Il2cppConverter.uiMessageDismissToolMatches(
                 root,
@@ -162,7 +181,7 @@ class HollowKnightBuildPlanTest {
         )
 
         Il2cppConverter.uiMessageDismissMarker(root).writeText("algorithm=old\n")
-        assertFalse(Il2cppConverter.isComplete(root))
+        assertFalse(Il2cppConverter.isComplete(silksong, root))
     }
 
     @Test
@@ -413,30 +432,30 @@ class HollowKnightBuildPlanTest {
         }
 
         Il2cppConverter.markComplete(root)
-        assertTrue(Il2cppConverter.isPresent(root))
-        assertTrue(Il2cppConverter.isComplete(root))
+        assertTrue(Il2cppConverter.isPresent(silksong, root))
+        assertTrue(Il2cppConverter.isComplete(silksong, root))
 
         val unexpected = File(Il2cppConverter.cppDir(root), "unexpected.cpp").apply {
             writeText("// tree changed after completion")
         }
-        assertFalse(Il2cppConverter.isPresent(root))
+        assertFalse(Il2cppConverter.isPresent(silksong, root))
         assertTrue(unexpected.delete())
-        assertTrue(Il2cppConverter.isPresent(root))
+        assertTrue(Il2cppConverter.isPresent(silksong, root))
 
         Il2cppConverter.metadata(root).writeBytes(byteArrayOf(1, 2))
-        assertFalse(Il2cppConverter.isComplete(root))
+        assertFalse(Il2cppConverter.isComplete(silksong, root))
         Il2cppConverter.metadata(root).writeBytes(byteArrayOf(1))
-        assertTrue(Il2cppConverter.isComplete(root))
+        assertTrue(Il2cppConverter.isComplete(silksong, root))
 
         Il2cppConverter.invalidateCompletion(root)
         File(Il2cppConverter.cppDir(root), "partial.cpp").writeText("// overwritten partial tree")
-        assertFalse(Il2cppConverter.isPresent(root))
+        assertFalse(Il2cppConverter.isPresent(silksong, root))
 
         File(root, "${Il2cppConverter.completionMarker(root).name}.part").writeText("complete")
-        assertFalse(Il2cppConverter.isPresent(root))
+        assertFalse(Il2cppConverter.isPresent(silksong, root))
 
         Il2cppConverter.markComplete(root)
-        assertTrue(Il2cppConverter.isPresent(root))
+        assertTrue(Il2cppConverter.isPresent(silksong, root))
         assertFalse(File(root, "${Il2cppConverter.completionMarker(root).name}.part").exists())
     }
 

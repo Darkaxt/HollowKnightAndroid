@@ -23,6 +23,7 @@
 
 package dev.silksong.launcher
 
+import dev.silksong.launcher.profiles.GameProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -60,6 +61,7 @@ object NativeBuild {
      * will go -- several gigabytes, so external storage.
      */
     fun build(
+        profile: GameProfile,
         unity: File,
         toolchain: File,
         root: File,
@@ -75,7 +77,7 @@ object NativeBuild {
             // all of them, and this step has no way to infer what is missing.
             // The completion markers reject that tree before the expensive
             // compile; --no-undefined at link time remains the final guard.
-            if (!Il2cppConverter.isComplete(root)) {
+            if (!Il2cppConverter.isComplete(profile, root)) {
                 throw IOException(
                     "the conversion did not finish, so there is no complete set of sources to " +
                         "compile. It has to run again before this can.",
