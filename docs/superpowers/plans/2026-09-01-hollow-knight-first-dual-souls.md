@@ -1396,15 +1396,17 @@ mutation, device/publication/source activation, save edits or cleanup; commands
   explicitly unavailable, not claimed as full Mods parity. Test default-off,
   baseline restoration/reset, initialization retry, rebuild/hotplug ownership,
   unavailable actions and HK/SS persistence isolation.
-  **Host-complete/device-deferred at `0c422bca2cbbb568c0dcb857f110a88700c0c836`.**
+  **Host-complete/device-deferred at `c3f61f5b3ac0b212a31a424e9ea556f8683cde3d`.**
   Shared lifecycle, exact four typed bindings, startup reachability, native-resident
   `DsPortFrame` presentation, consumer detach, restoration retry/owner replacement,
-  and no production `DsShell` route are source/host proven. The corrected executable
-  regressions prove that initial capture failure performs no invalid restore and that
-  failed HK teardown retains its exact process owner, pumps retry, and blocks runtime
-  replacement. Exact evidence and the device boundary are recorded in
-  `docs/verification/evidence/task100-spec-fix-0c422bc/completion.json`; this
-  supersedes the incomplete `task100-silksong-mods-41bb3cd` checkpoint.
+  and no production `DsShell` route are source/host proven. Executable regressions
+  prove that initial capture performs no invalid restore, failed HK teardown retains
+  its exact process owner and blocks replacement, permanent apply rejection commits
+  a recoverable disabled state after restoration, sustained restore failures retain
+  bounded diagnostics, and unchanged Mods model/layout stamps skip TMP repaint while
+  all relevant changes invalidate it. Exact evidence and the device boundary are in
+  `docs/verification/evidence/task100-quality-c3f61f5/completion.json`; this
+  supersedes `task100-spec-fix-0c422bc`.
 - [ ] **Task101.** Share existing bounded Kotlin import/library/UI algorithms
   through a closed immutable HK/SS catalog/profile definition. Thread it through
   catalog, library codec/store, object builder, canonical manifest, tree verifier,

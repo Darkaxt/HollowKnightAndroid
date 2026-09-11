@@ -74,8 +74,12 @@ Typed actions require the current `GameManager`, gameplay scene, `PlayerData` an
 `HeroController`; unavailable state fails closed. Shared controller/session tests
 cover default-off profile isolation, reset, apply retry, restoration retry and
 owner replacement. Executable regressions additionally prove that failed initial
-capture never attempts restoration and that an exact failed Hollow Knight teardown
-owner blocks replacement until retry succeeds. Exact source manifests, compile
+capture never attempts restoration, an exact failed Hollow Knight teardown owner
+blocks replacement until retry succeeds, permanent enabled-apply rejection commits
+a recoverable disabled state only after restoration, and sustained restoration
+failure keeps a bounded current diagnostic. `DsPortMods` uses shared model and
+layout/geometry paint stamps, retaining its live labels and touch hit boxes without
+per-frame TMP generation when stamps are unchanged. Exact source manifests, compile
 receipts and the unproved device boundary are recorded in
-`docs/verification/evidence/task100-spec-fix-0c422bc/completion.json`, which
-supersedes the incomplete `task100-silksong-mods-41bb3cd` receipt.
+`docs/verification/evidence/task100-quality-c3f61f5/completion.json`, which
+supersedes `task100-spec-fix-0c422bc`.

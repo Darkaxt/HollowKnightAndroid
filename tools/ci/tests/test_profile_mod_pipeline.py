@@ -298,18 +298,18 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertIn("new DsModsScreen", shell)
 
     def test_task100_receipt_is_bound_to_committed_compile_sources(self):
-        evidence = REPO_ROOT / "docs" / "verification" / "evidence" / "task100-spec-fix-0c422bc"
+        evidence = REPO_ROOT / "docs" / "verification" / "evidence" / "task100-quality-c3f61f5"
         receipt = json.loads((evidence / "completion.json").read_text(encoding="utf-8"))
 
         self.assertEqual("HOST_COMPLETE_DEVICE_DEFERRED", receipt["status"])
         self.assertRegex(receipt["sourceCommit"], r"^[0-9a-f]{40}$")
         self.assertEqual(
-            "docs/verification/evidence/task100-silksong-mods-41bb3cd/completion.json",
+            "docs/verification/evidence/task100-spec-fix-0c422bc/completion.json",
             receipt["supersedes"],
         )
         self.assertEqual(4, len(receipt["exactSilksongBindings"]))
         self.assertIn("device UI and interaction acceptance remains deferred", receipt["evidenceBoundary"])
-        self.assertEqual(2, len(receipt["redGreen"]))
+        self.assertEqual(3, len(receipt["redGreen"]))
         for regression in receipt["redGreen"]:
             self.assertIn("executableTest", regression["green"])
             self.assertEqual(1, regression["green"]["passed"])

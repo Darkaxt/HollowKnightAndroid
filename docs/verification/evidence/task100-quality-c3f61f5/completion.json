@@ -1,0 +1,137 @@
+{
+  "schema": 1,
+  "task": "Task100",
+  "status": "HOST_COMPLETE_DEVICE_DEFERRED",
+  "sourceCommit": "c3f61f5b3ac0b212a31a424e9ea556f8683cde3d",
+  "supersedes": "docs/verification/evidence/task100-spec-fix-0c422bc/completion.json",
+  "scope": "Task100 process-session fail-closed recovery, bounded restoration diagnostics, and dirty-stamped production Silksong Mods painting",
+  "redGreen": [
+    {
+      "name": "permanent-enabled-apply-rejection",
+      "red": "PermanentPersistedApplyFailureCommitsDisabledStateAndAllowsResetRecovery failed because the buffered master=0 write was cleared and persisted master remained 1",
+      "green": {
+        "executableTest": "SharedPatches.Tests.TweakSessionTests.PermanentPersistedApplyFailureCommitsDisabledStateAndAllowsResetRecovery",
+        "passed": 1,
+        "failed": 0
+      }
+    },
+    {
+      "name": "bounded-restoration-diagnostic",
+      "red": "SustainedRestorationFailureKeepsBoundedDiagnosticAndEventuallyRecovers failed because every retry appended another restoration suffix to LastError",
+      "green": {
+        "executableTest": "SharedPatches.Tests.TweakSessionTests.SustainedRestorationFailureKeepsBoundedDiagnosticAndEventuallyRecovers",
+        "passed": 1,
+        "failed": 0
+      }
+    },
+    {
+      "name": "dirty-stamped-mods-paint",
+      "red": "ModelAndLayoutStampsSkipSteadyPaintAndInvalidateEveryRenderedChange failed compilation because shared model and layout revision paint stamps did not exist",
+      "green": {
+        "executableTest": "SharedPatches.Tests.TweakPresenterTests.ModelAndLayoutStampsSkipSteadyPaintAndInvalidateEveryRenderedChange",
+        "passed": 1,
+        "failed": 0
+      }
+    }
+  ],
+  "testRuns": [
+    {
+      "name": "quality-regressions",
+      "command": "dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj --no-restore --filter FullyQualifiedName~PermanentPersistedApplyFailureCommitsDisabledStateAndAllowsResetRecovery|FullyQualifiedName~SustainedRestorationFailureKeepsBoundedDiagnosticAndEventuallyRecovers|FullyQualifiedName~ModelAndLayoutStampsSkipSteadyPaintAndInvalidateEveryRenderedChange --logger console;verbosity=minimal",
+      "passed": 3,
+      "failed": 0,
+      "log": "docs/verification/evidence/task100-quality-c3f61f5/quality-regressions.log",
+      "logSha256": "85e8f86f6df3f3a50def3f04790b122a9e221d51856d57dfe3c477f335a73d23"
+    },
+    {
+      "name": "focused-shared",
+      "command": "dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj --no-restore --filter FullyQualifiedName~TweakControllerTests|FullyQualifiedName~TweakSessionTests|FullyQualifiedName~TweakMenuModelTests|FullyQualifiedName~TweakPresenterTests|FullyQualifiedName~HollowKnightModsSessionTests|FullyQualifiedName~SilksongTweakAdapterTests --logger console;verbosity=minimal",
+      "passed": 80,
+      "failed": 0,
+      "log": "docs/verification/evidence/task100-quality-c3f61f5/focused-shared.log",
+      "logSha256": "01a52df7b75f21df88c2004c23d2c1d22046d89f915f7fb9113a2ec938ae6fe4"
+    },
+    {
+      "name": "full-shared",
+      "command": "dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj --no-restore --logger console;verbosity=minimal",
+      "passed": 1543,
+      "failed": 0,
+      "log": "docs/verification/evidence/task100-quality-c3f61f5/full-shared.log",
+      "logSha256": "fa06832b363f5475ac83fddd123e23aa83749c6bb324856efb0c2fc155341fe4"
+    },
+    {
+      "name": "profile-mod-python",
+      "command": "python tools/ci/tests/test_profile_mod_pipeline.py",
+      "passed": 20,
+      "failed": 0,
+      "log": "docs/verification/evidence/task100-quality-c3f61f5/profile-mod-python.log",
+      "logSha256": "223eea3034484401bb8504e6b774c42beaf24383ae95ffe51f23aab09cb1cf2c"
+    },
+    {
+      "name": "dual-souls-python",
+      "command": "python tools/ci/tests/test_dual_souls_ui_port.py",
+      "passed": 120,
+      "failed": 0,
+      "log": "docs/verification/evidence/task100-quality-c3f61f5/dual-souls-python.log",
+      "logSha256": "bb96e4a1876b8d4de3ac6e144e8dd8718059ba61e480e0eb11e5116426ea1139"
+    },
+    {
+      "name": "hollow-knight-reference-python",
+      "command": "python tools/ci/tests/test_hollow_knight_reference_port.py",
+      "passed": 48,
+      "failed": 0,
+      "log": "docs/verification/evidence/task100-quality-c3f61f5/hk-reference-python.log",
+      "logSha256": "36d41d9520dd18ba3fc970bdfcf2a7196d3aedfb874e83de1ad245af819d9ac7"
+    },
+    {
+      "name": "hollow-knight-plan-python",
+      "command": "python tools/ci/tests/test_hollow_knight_first_plan.py",
+      "passed": 6,
+      "failed": 0,
+      "log": "docs/verification/evidence/task100-quality-c3f61f5/hk-plan-python.log",
+      "logSha256": "ba9882e9ac323861c4e47fd88f712e12a56b4bd76a6d541faec02026dfe5f209"
+    }
+  ],
+  "managedCompiles": {
+    "silksong": {
+      "gameVersion": "Linux Silksong 1.0.29980",
+      "assemblyCSharpSha256": "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d",
+      "command": "dotnet build tools/shared-patches-tests/obj/task100-quality/ss-project/PatchCheck.csproj --no-restore --no-incremental -c Release -p:UseSharedCompilation=false -nodeReuse:false --output tools/shared-patches-tests/obj/task100-quality/ss-bin --nologo",
+      "compiledSourceCount": 72,
+      "compileProjectSnapshot": "docs/verification/evidence/task100-quality-c3f61f5/silksong-compile-project.csproj",
+      "compileProjectSha256": "6acbc4986270f7b8e93fc3cb570d84555ad449f903ac8c1f96a0028280783ca2",
+      "sourceManifest": "docs/verification/evidence/task100-quality-c3f61f5/silksong-source-manifest.sha256",
+      "sourceManifestSha256": "dc1433fa9d544db06897f9923b184debdaaa25202a6793c24ee03524b0149334",
+      "warnings": 7,
+      "errors": 0,
+      "outputBytes": 645632,
+      "outputSha256": "ee281c37d75dd909203cd0f1464ca3a23eb77b54943c7d90a6b039458abac7a2",
+      "log": "docs/verification/evidence/task100-quality-c3f61f5/silksong-compile.log",
+      "logSha256": "01c3f9c150ec4b3f475fb34d8bc93167ec4af71db877884bc0c26bc53af09b21"
+    },
+    "hollowKnight": {
+      "gameVersion": "Hollow Knight 1.5.12620",
+      "assemblyCSharpSha256": "5c84b8e59dd669c48db1fc426541d0d96643f59d35a72534b21fead7c96a3086",
+      "command": "dotnet build tools/hollow-knight-patches/HollowKnightPatches.csproj --no-restore --no-incremental -c Release -p:UseSharedCompilation=false -nodeReuse:false -p:HollowKnightManaged=D:/Temp/dualsouls-hk-12620/Hollow Knight/hollow_knight_Data/Managed -p:UnityManaged=D:/Temp/dualsouls-unity-player/android/Variations/il2cpp/Managed --output tools/shared-patches-tests/obj/task100-quality/hk-bin --nologo",
+      "compiledSourceCount": 64,
+      "compileProjectSource": "tools/hollow-knight-patches/HollowKnightPatches.csproj",
+      "compileProjectSnapshot": "docs/verification/evidence/task100-quality-c3f61f5/hollow-knight-compile-project.csproj",
+      "compileProjectSha256": "ae5c12a6e1af6f7521f85e93266f824964d6eb5df1481459a7cb7a7559e9435c",
+      "sourceManifest": "docs/verification/evidence/task100-quality-c3f61f5/hollow-knight-source-manifest.sha256",
+      "sourceManifestSha256": "b2a3a231e63abfc5370abeeab9f4371301c043a5d76ec49e1245ef4415e1e35b",
+      "warnings": 1,
+      "errors": 0,
+      "outputBytes": 759808,
+      "outputSha256": "2153fbe317f39575367be74371ef10f40b42fd0dfbf40b02cb61e000833e1d53",
+      "log": "docs/verification/evidence/task100-quality-c3f61f5/hollow-knight-compile.log",
+      "logSha256": "bedd2189a62d6f34e044e1ee0753d7dedfe36ec62531533d85afeeb88dff2ae0"
+    }
+  },
+  "exactSilksongBindings": [
+    "CheatManager.Invincibility",
+    "CheatManager.IsSilkDrainDisabled plus HeroController.RefillSilkToMaxSilent()",
+    "CheatManager.NailDamage = NailDamageStates.InstaKill",
+    "CheatManager.CanChangeEquipsAnywhere"
+  ],
+  "evidenceBoundary": "Host tests and exact managed compiles prove source behavior and wiring only. They do not prove Unity display-1 pixels, touch fit, real gameplay effects, Android lifecycle, or device interaction; all device UI and interaction acceptance remains deferred."
+}
