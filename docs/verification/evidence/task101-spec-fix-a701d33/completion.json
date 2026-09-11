@@ -1,0 +1,148 @@
+{
+  "schema": 1,
+  "task": "Task101-SPEC-REMEDIATION-2",
+  "status": "HOST_COMPLETE_DEVICE_DEFERRED",
+  "baseCommit": "d3add0799b99f55769b27e2bb380da5714702048",
+  "sourceCommit": "a701d3319cb2dc929e848cb8e7677e6d18e9c4f7",
+  "supersedes": "docs/verification/evidence/task101-spec-fix-bcf3508/completion.json",
+  "scope": "Canonical BundleSurgery and launcher death-rewrite verification plus bounded ordered per-occurrence hero/manager ownership and stale-only cancellation",
+  "managedAuthority": {
+    "platform": "Linux",
+    "gameVersion": "1.0.29980",
+    "assemblyCSharpSha256": "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d",
+    "rewrittenAssemblySha256": "86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e",
+    "idempotentSecondOutputSha256": "86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e",
+    "postDeathUiMessageAssemblySha256": "fee81c9bfee10dea307373b167f717d0b4aa5811c2e849ef9a4cf98c7804a2a0",
+    "classifierFingerprintSha256": "816e58334b5f6ba6de252ef20cb7a71aff1b41bca720fa577ca9babf17ee2fd2",
+    "recorderFingerprintSha256": "2195f14702bd92bdd84a58ba38b653299c76bafb4588ffa03d4aa8a7d46751d3",
+    "bundleSurgeryToolSha256": "4fd2fbe8b780899cd1cfede050ad42e6848e062720faa5420ed57feadda9d5e6",
+    "rewriteTarget": "HeroController/<Die>d__1101::MoveNext",
+    "classificationSite": "post-duplicate-guard/post-memory-normalization",
+    "ownerTransport": "32-slot hero/manager/token ring committed before occurrence publication",
+    "originalDriftSha256": "c1761d1c8b1965837862d73aff19b4c35547581865e2d5a6eadcc4b94a45162a",
+    "freshRewriteSelfVerifiedBeforePublication": true,
+    "launcherPinnedShaVerifiedBeforeReplacement": true,
+    "launcherCanonicalCommandVerifiedBeforeReplacement": true,
+    "idempotentByteEqual": true,
+    "originalDriftRejected": true,
+    "bridgedUnrelatedDriftRejected": true,
+    "rejectedOutputsAbsent": true
+  },
+  "remediations": [
+    {
+      "id": "T101-SPEC-9",
+      "claim": "A fresh death rewrite is published only after exact rewritten SHA-256 and canonical strict-death IL verification; the launcher repeats both checks before replacing its staged assembly.",
+      "executableEvidence": [
+        "BridgeSilksongNormalDeathTests.Fresh_rewrite_output_must_match_canonical_identity_before_publication",
+        "HollowKnightBuildPlanTest arbitrary-image and verifier-failure regressions",
+        "production-link Python ordering contract",
+        "fresh rewrite, verify, and byte-idempotent second pass"
+      ],
+      "logs": [
+        "docs/verification/evidence/task101-spec-fix-a701d33/bundle-surgery.log",
+        "docs/verification/evidence/task101-spec-fix-a701d33/launcher-tests.log",
+        "docs/verification/evidence/task101-spec-fix-a701d33/python-contracts.log",
+        "docs/verification/evidence/task101-spec-fix-a701d33/death-bridge-canonical.log"
+      ]
+    },
+    {
+      "id": "T101-SPEC-10",
+      "claim": "Counter jumps retain exact ordered hero/manager ownership; replacing stale H1 cancels only H1 while valid H2 remains queued and processes normally; retained cancellation pressure is bounded and overflow fails closed.",
+      "executableEvidence": [
+        "SilksongSkinDeathAdapterTests.Counter_jump_retains_distinct_per_occurrence_owners_in_order",
+        "SilksongSkinDeathAdapterTests.Owner_replacement_cancels_only_stale_active_death_and_retains_newer_death",
+        "SilksongSkinDeathAdapterTests.Unacknowledged_stale_cancellations_count_toward_bounded_overflow",
+        "SilksongSkinLibraryTests.Stale_first_owner_is_cancelled_without_losing_replacement_owner_death",
+        "SkinLibraryStoreTest and SkinLibraryRuntimeBridgeTest exact cancellation promotion regressions"
+      ],
+      "logs": [
+        "docs/verification/evidence/task101-spec-fix-a701d33/shared-tests.log",
+        "docs/verification/evidence/task101-spec-fix-a701d33/launcher-tests.log",
+        "docs/verification/evidence/task101-spec-fix-a701d33/python-contracts.log"
+      ]
+    }
+  ],
+  "testRuns": [
+    {
+      "name": "shared-managed-suite",
+      "command": "dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj --no-restore --logger console;verbosity=minimal",
+      "passed": 1569,
+      "failed": 0,
+      "skipped": 0,
+      "log": "docs/verification/evidence/task101-spec-fix-a701d33/shared-tests.log",
+      "logSha256": "b8691377a63de29a23b4386dd12ef730c6ff18b2ff26abda0ecd15ce52b7cf74"
+    },
+    {
+      "name": "launcher-task101-selected",
+      "command": "Gradle 8.11 --offline --no-daemon --rerun-tasks :app:testDebugUnitTest with the 11 Task101 catalog/profile/build/runtime/library/UI classes",
+      "passed": 101,
+      "failed": 0,
+      "skipped": 0,
+      "log": "docs/verification/evidence/task101-spec-fix-a701d33/launcher-tests.log",
+      "logSha256": "6f3efe210bacb8d396a3c61491d564ddf282ce645193adcc016e3472d6ae1462"
+    },
+    {
+      "name": "python-production-contracts",
+      "command": "python test_profile_mod_pipeline.py; python test_dual_souls_ui_port.py; python test_hollow_knight_first_plan.py",
+      "passed": 148,
+      "failed": 0,
+      "skipped": 0,
+      "log": "docs/verification/evidence/task101-spec-fix-a701d33/python-contracts.log",
+      "logSha256": "7101c20cc3f63d0ff0c32c0a380d187360f9a9b87b0adffe626eab84d117900f"
+    },
+    {
+      "name": "bundle-surgery-suite",
+      "command": "dotnet build tools/bundle-surgery/BundleSurgery.csproj -c Release --no-restore --no-incremental; dotnet test tools/bundle-surgery-tests/BundleSurgery.Tests.csproj --no-restore",
+      "passed": 39,
+      "failed": 0,
+      "skipped": 0,
+      "log": "docs/verification/evidence/task101-spec-fix-a701d33/bundle-surgery.log",
+      "logSha256": "17a25e4807782cb898f6b841f92673d25a58247a3a3a383c83d8af2ccf4a5fae"
+    }
+  ],
+  "managedCompiles": {
+    "silksong": {
+      "assemblyCSharpSha256": "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d",
+      "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/silksong-patches/check.ps1 -Depot <exact-1.0.29980-managed> -Player <android-player-managed>",
+      "compiledSourceCount": 82,
+      "entryPointCount": 14,
+      "errors": 0,
+      "log": "docs/verification/evidence/task101-spec-fix-a701d33/silksong-managed-compile.log",
+      "logSha256": "4834b192a47955186f68413cb71428eb69a82790ebbb8eed7541eae19e8ba19b"
+    },
+    "hollowKnight": {
+      "gameVersion": "1.5.12620",
+      "assemblyCSharpSha256": "5c84b8e59dd669c48db1fc426541d0d96643f59d35a72534b21fead7c96a3086",
+      "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/hollow-knight-patches/check.ps1 -Depot <exact-1.5.12620-managed> -Player <android-player-managed>",
+      "entryPointCount": 2,
+      "outputBytes": 762880,
+      "warnings": 1,
+      "errors": 0,
+      "log": "docs/verification/evidence/task101-spec-fix-a701d33/hollow-knight-managed-compile.log",
+      "logSha256": "6ecbe0ddf4a71c386a382b5cd280a7740da2553829e95df038a0f08488168ff1"
+    }
+  },
+  "rewriteChecks": {
+    "canonicalLog": "docs/verification/evidence/task101-spec-fix-a701d33/death-bridge-canonical.log",
+    "canonicalLogSha256": "d6e259d48df6faafa9d7183f62e192a686d186dea1d7a094881f865127d94729",
+    "originalDriftLog": "docs/verification/evidence/task101-spec-fix-a701d33/death-bridge-original-drift.log",
+    "originalDriftLogSha256": "2ea56127649ab896a5af76a65f40a9e16e2325add74125f730e82e7e0417a5b7",
+    "bridgedDriftLog": "docs/verification/evidence/task101-spec-fix-a701d33/death-bridge-bridged-drift.log",
+    "bridgedDriftLogSha256": "2e41b2ed3845e19914ae9b56e693a121665b9b1d7f6a258bf9531d25130f7106"
+  },
+  "sourceManifest": "docs/verification/evidence/task101-spec-fix-a701d33/source-manifest.sha256",
+  "sourceManifestEntries": 58,
+  "sourceManifestSha256": "a78f67f387bd975b61fab061ae0da7ca54692578e9d05af709dafe20ff75c2ac",
+  "deviceDeferrals": [
+    "Android bundle identity and managed parity",
+    "sampled material appearance",
+    "Scythe and Shaman shader behavior",
+    "crest and fallback visuals",
+    "HUD effects",
+    "resource pressure",
+    "death and respawn visuals and lifecycle",
+    "persistence interaction"
+  ],
+  "prohibitedWorkPerformed": [],
+  "evidenceBoundary": "Executable host behavior, production-link contracts, exact managed compiles, and deterministic managed rewrite checks prove the listed host behavior and wiring. They do not prove Android bundle parity, Unity renderer/GPU/shader appearance, live JNI lifecycle, resource pressure, death/respawn visuals, or persistence interaction acceptance."
+}

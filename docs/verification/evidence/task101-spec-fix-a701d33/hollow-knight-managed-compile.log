@@ -1,0 +1,13 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+D:\Temp\HollowKnightAndroid-h1\tools\hollow-knight-patches\src\dualsouls\HKDualScreen.Bottom.Frame.cs(731,72): warning CS0649: Field 'HKDualScreen.slideStartCamPos' is never assigned to, and will always have its default value [D:\Temp\HollowKnightAndroid-h1\tools\hollow-knight-patches\HollowKnightPatches.csproj]
+  HollowKnightPatches -> D:\Temp\dualsouls-hk-patch-check-6eba26cf0b7b44f98140c41b3e12f4c9\HollowKnightPatches.dll
+
+Build succeeded.
+
+D:\Temp\HollowKnightAndroid-h1\tools\hollow-knight-patches\src\dualsouls\HKDualScreen.Bottom.Frame.cs(731,72): warning CS0649: Field 'HKDualScreen.slideStartCamPos' is never assigned to, and will always have its default value [D:\Temp\HollowKnightAndroid-h1\tools\hollow-knight-patches\HollowKnightPatches.csproj]
+    1 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:02.26
+[check] OK - HollowKnightPatches.dll 762880 bytes; 2 entry point(s)

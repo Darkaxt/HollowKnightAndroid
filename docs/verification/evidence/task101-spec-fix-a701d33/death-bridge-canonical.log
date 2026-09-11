@@ -1,0 +1,7 @@
+  injected exact post-normalization HeroController.Die normal-death occurrence bridge
+  verified executable strict-death bridge: normalized nonlethal, memory, cinematic/control, permadeath, demo terminal, duplicate, hazard, and unstable guards
+  exact Silksong normal-death bridge already present; copied unchanged
+1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d *D:\Temp\task101-second-spec-evidence\Assembly-CSharp.dll
+86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e *D:\Temp\task101-second-spec-evidence\Assembly-CSharp.bridged.dll
+86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e *D:\Temp\task101-second-spec-evidence\Assembly-CSharp.second.dll
+idempotentByteEqual=true

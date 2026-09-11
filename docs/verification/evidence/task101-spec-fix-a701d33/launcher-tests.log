@@ -1,0 +1,141 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.11/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build
+WARNING: We recommend using a newer Android Gradle plugin to use compileSdk = 36
+
+This Android Gradle plugin (8.7.3) was tested up to compileSdk = 35.
+
+You are strongly encouraged to update your project to use a newer
+Android Gradle plugin that has been tested with compileSdk = 36.
+
+If you are already using the latest version of the Android Gradle plugin,
+you may need to wait until a newer version with support for compileSdk = 36 is available.
+
+For more information refer to the compatibility table:
+https://d.android.com/r/tools/api-level-support
+
+To suppress this warning, add/update
+    android.suppressUnsupportedCompileSdk=36
+to this project's gradle.properties.
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preDebugBuild
+> Task :app:generateDebugResValues
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:javaPreCompileDebug
+> Task :app:preDebugUnitTestBuild
+> Task :app:writeDebugAarMetadata
+> Task :app:parseDebugLocalResources
+> Task :app:checkDebugUnitTestAarMetadata
+> Task :app:generateDebugRFile
+> Task :app:compileDebugLibraryResources
+> Task :app:generateDebugUnitTestResValues
+> Task :app:mapDebugUnitTestSourceSetPaths
+> Task :app:generateDebugUnitTestResources
+> Task :app:mergeDebugUnitTestResources
+> Task :app:extractDeepLinksDebug
+
+> Task :app:processDebugManifest
+D:\Temp\HollowKnightAndroid-h1\src\SilksongLauncher.Launcher\app\src\main\AndroidManifest.xml:54:5-128:19 Warning:
+	application@android:name was tagged at AndroidManifest.xml:54 to replace other declarations but no other declaration present
+
+> Task :app:processDebugUnitTestManifest
+D:\Temp\HollowKnightAndroid-h1\tools\shared-patches-tests\obj\task95-main-20260908T112913Z\kotlin-build\intermediates\tmp\manifest\test\debug\tempFile1ProcessTestManifest826370225947997437.xml:7:5-9:19 Warning:
+	application@android:name was tagged at tempFile1ProcessTestManifest826370225947997437.xml:7 to replace other declarations but no other declaration present
+
+> Task :app:processDebugUnitTestResources
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:mergeDebugShaders
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets
+> Task :app:generateDebugUnitTestAssets UP-TO-DATE
+> Task :app:packageDebugAssets
+> Task :app:mergeDebugUnitTestAssets
+> Task :app:packageDebugUnitTestForUnitTest
+> Task :app:generateDebugUnitTestConfig
+
+> Task :app:compileDebugKotlin
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/GameCardView.kt:42:14 'var isChecked: Boolean' is deprecated. Deprecated in Java.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/skins/core/SkinSessionCore.kt:93:17 Expression under 'when' is never equal to null.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/skins/ui/SkinsActivity.kt:73:88 'fun onBackPressed(): Unit' is deprecated. Deprecated in Java.
+
+> Task :app:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:bundleLibCompileToJarDebug
+> Task :app:bundleLibRuntimeToJarDebug
+> Task :app:processDebugJavaRes
+
+> Task :app:compileDebugUnitTestKotlin
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/build/GenerationPublisherTest.kt:173:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/build/GenerationPublisherTest.kt:189:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/build/GenerationPublisherTest.kt:218:56 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/build/ProfileBuildCoordinatorTest.kt:48:21 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/build/ProfileBuildCoordinatorTest.kt:66:21 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/build/ProfileBuildCoordinatorTest.kt:78:29 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/build/ProfileBuildCoordinatorTest.kt:105:21 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/build/ProfileBuildCoordinatorTest.kt:130:29 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/build/ProfileBuildCoordinatorTest.kt:169:29 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:108:68 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:109:48 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:111:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:114:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:159:17 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:162:17 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:182:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:185:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:206:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:209:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:230:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:233:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:268:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:271:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:294:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:297:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:320:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:323:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:342:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:346:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:350:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:354:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/profiles/HollowKnightBuildPlanTest.kt:491:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/runtime/GameProcessStartupTest.kt:196:37 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/runtime/GameProcessStartupTest.kt:198:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/runtime/GameProcessStartupTest.kt:222:17 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/runtime/GameProcessStartupTest.kt:226:17 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/runtime/ProductionLauncherRuntimeTest.kt:78:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/runtime/ProductionLauncherRuntimeTest.kt:108:44 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/runtime/ProductionLauncherRuntimeTest.kt:110:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/runtime/ProductionLauncherRuntimeTest.kt:142:44 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/runtime/ProductionLauncherRuntimeTest.kt:144:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/runtime/ProductionLauncherRuntimeTest.kt:172:58 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/runtime/ProductionLauncherRuntimeTest.kt:174:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/runtime/ProductionLauncherRuntimeTest.kt:179:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/runtime/ProductionLauncherRuntimeTest.kt:205:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/runtime/ProductionLauncherRuntimeTest.kt:209:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/skins/catalog/SilksongSkinProfileTest.kt:98:9 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/skins/quota/SkinQuotaRetentionTest.kt:419:46 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/skins/quota/SkinQuotaRetentionTest.kt:420:65 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/skins/quota/SkinQuotaRetentionTest.kt:422:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/skins/quota/SkinQuotaRetentionTest.kt:577:63 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/skins/quota/SkinQuotaRetentionTest.kt:615:23 Java type mismatch: inferred type is 'java.io.File?', but 'java.io.File' was expected.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/skins/registry/SkinImportCoordinatorTest.kt:398:56 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/skins/registry/SkinImportCoordinatorTest.kt:991:33 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'java.io.File?'.
+w: file:///D:/Temp/HollowKnightAndroid-h1/src/SilksongLauncher.Launcher/app/src/test/kotlin/dev/silksong/launcher/skins/ui/AndroidSkinDocumentProviderTest.kt:54:51 Type argument for reified type parameter 'T' was inferred to the intersection of ['kotlin.Comparable<*>' & 'java.io.Serializable']. Reification of an intersection type results in the common supertype being used. This may lead to subtle issues and an explicit type argument is encouraged. This will become an error in a future release.
+
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDebugUnitTestJavaRes
+> Task :app:testDebugUnitTest
+
+BUILD SUCCESSFUL in 6m 54s
+31 actionable tasks: 31 executed
+dev.silksong.launcher.profiles.HollowKnightBuildPlanTest: tests=19 failures=0 errors=0 skipped=0
+dev.silksong.launcher.runtime.GameProcessStartupTest: tests=9 failures=0 errors=0 skipped=0
+dev.silksong.launcher.runtime.SkinLibraryRuntimeBridgeTest: tests=8 failures=0 errors=0 skipped=0
+dev.silksong.launcher.skins.catalog.HollowKnightCatalogPathsTest: tests=2 failures=0 errors=0 skipped=0
+dev.silksong.launcher.skins.catalog.SilksongSkinProfileTest: tests=6 failures=0 errors=0 skipped=0
+dev.silksong.launcher.skins.library.SkinLibraryDocumentTest: tests=5 failures=0 errors=0 skipped=0
+dev.silksong.launcher.skins.library.SkinLibraryImporterTest: tests=10 failures=0 errors=0 skipped=0
+dev.silksong.launcher.skins.library.SkinLibraryStoreTest: tests=18 failures=0 errors=0 skipped=0
+dev.silksong.launcher.skins.ui.CoordinatorSkinImportServiceTest: tests=3 failures=0 errors=0 skipped=0
+dev.silksong.launcher.skins.ui.SkinLibraryServiceTest: tests=13 failures=0 errors=0 skipped=0
+dev.silksong.launcher.skins.ui.SkinsActivityTest: tests=8 failures=0 errors=0 skipped=0
+TOTAL: tests=101 failures=0 errors=0 skipped=0

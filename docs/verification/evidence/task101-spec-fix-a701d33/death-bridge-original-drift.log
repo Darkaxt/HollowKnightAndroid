@@ -1,0 +1,4 @@
+  Silksong normal-death rewrite failed closed: Assembly-CSharp.dll differs from pinned 1.0.29980: c1761d1c8b1965837862d73aff19b4c35547581865e2d5a6eadcc4b94a45162a
+exit=1
+c1761d1c8b1965837862d73aff19b4c35547581865e2d5a6eadcc4b94a45162a *D:/Temp/task101-second-spec-evidence/Assembly-CSharp.original-drift.dll
+rejectedOutputAbsent=true

@@ -1424,19 +1424,25 @@ mutation, device/publication/source activation, save edits or cleanup; commands
   Test foreign profiles/catalogs, identical pack IDs across games, startup-selection
   changes, selected/pending protection, mode changes, duplicate/hazard events,
   prompt matching acknowledgments, next death before polling and owner replacement.
-  **Host-complete/device-deferred at `bcf3508`, superseding `0b92f4d`.** Exact SS
+  **Host-complete/device-deferred at `a701d33`, superseding `bcf3508`.** Exact SS
   1.0.29980 managed input SHA-256
   `1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d`
   is pinned by an exact post-guard/post-normalization classifier and a canonical,
   byte-idempotent rewrite with SHA-256
-  `37cd088f4de464b4cc7b01b193ac294a3dfeb282d1fa1757a653215d514db634`.
+  `86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e`.
+  BundleSurgery verifies that exact SHA and canonical bridge IL before publishing
+  every fresh output. The launcher independently checks the pinned rewritten SHA
+  and invokes canonical verification before replacing its staged assembly.
   Original drift and unrelated drift after the bridge are rejected without output.
   Closed eleven-target profile/storage/import/JNI authority, exact multi-instance
   collection/material admission, all sparse omissions, atomic apply/restore,
-  retry-owned teardown, bounded ordered death retention, restore-before-frozen-
-  successor rotation, two consecutive stable PLAYING frames, and profile-aware
-  launcher output are executable-host tested. Evidence is retained in
-  `docs/verification/evidence/task101-spec-fix-bcf3508/`. Android bundle
+  retry-owned teardown, a 32-slot ordered hero/manager/token occurrence ring,
+  stale-occurrence-only cancellation, restore-before-frozen-successor rotation,
+  two consecutive stable PLAYING frames, and profile-aware launcher output are
+  executable-host tested. Counter jumps preserve distinct owners, H1 replacement
+  cancels only H1 while H2 remains queued, and bounded overflow fails closed.
+  Evidence is retained in
+  `docs/verification/evidence/task101-spec-fix-a701d33/`. Android bundle
   identity/parity, sampled material appearance, Scythe/Shaman shaders,
   crest/fallback visuals, HUD effects, resource pressure, death/respawn visuals
   and lifecycle, and persistence interaction remain genuine device-only deferrals.
