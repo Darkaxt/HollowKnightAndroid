@@ -1,5 +1,7 @@
 package dev.silksong.launcher.skins.library
 
+import dev.silksong.launcher.skins.catalog.SkinCatalogPaths
+import dev.silksong.launcher.skins.catalog.SkinCatalogProfiles
 import dev.silksong.launcher.skins.contracts.SkinResult
 import dev.silksong.launcher.skins.fixtures.PinnedCatalogFixture
 import dev.silksong.launcher.skins.storage.SkinPaths
@@ -16,6 +18,16 @@ class SkinLibraryStoreTest {
     private fun store(): SkinLibraryStore {
         PinnedCatalogFixture.load()
         return SkinLibraryStore(SkinPaths(File(temporary.root, "profiles/hollow-knight").apply { mkdirs() }))
+    }
+    private fun silksongStore(): SkinLibraryStore {
+        val profile = SkinCatalogProfiles.Silksong
+        val file = listOf(
+            File("../../../docs/superpowers/specs/data/${profile.assetName}"),
+            File("../../docs/superpowers/specs/data/${profile.assetName}"),
+            File("docs/superpowers/specs/data/${profile.assetName}"),
+        ).map(File::getAbsoluteFile).first(File::isFile)
+        val catalog = (file.inputStream().use { SkinCatalogPaths.load(profile, it) } as SkinResult.Ok).value
+        return SkinLibraryStore(SkinPaths(File(temporary.root, "profiles/silksong").apply { mkdirs() }), catalog = catalog)
     }
     @Test fun `fresh authority is atomically created OFF without legacy registry`() {
         val store = store(); val document = store.read().required()
@@ -123,15 +135,33 @@ class SkinLibraryStoreTest {
         val pending = store.confirmDeath(run, 1).required()
         assertEquals("a", pending.selectedPackId); assertEquals("b", pending.pendingPackId)
         assertEquals(pending, store.confirmDeath(run, 1).required())
-        assertEquals(pending, store.confirmDeath(run, 2).required()) // another callback cannot replace frozen work
+        val queued = store.confirmDeath(run, 2).required()
+        assertEquals(listOf(2L), queued.queuedDeathOccurrences)
+        assertEquals("b", queued.pendingPackId)
         assertTrue(store.remove("b") is SkinResult.Error); assertTrue(store.remove("a") is SkinResult.Error)
         assertFalse(store.finishRotation("0".repeat(64), run, 1, "b", pending.packs[1].treeSha256))
-        assertEquals(pending, store.read().required())
-        assertTrue(store.finishRotation(store.configurationIdentity(pending), run, 1, "b", pending.packs[1].treeSha256))
-        val completed = store.read().required(); assertEquals("b", completed.selectedPackId); assertNull(completed.pendingPackId)
-        assertEquals(completed, store.confirmDeath(run, 1).required())
-        assertEquals("c", store.confirmDeath(run, 2).required().pendingPackId)
+        assertEquals(queued, store.read().required())
+        assertTrue(store.finishRotation(store.configurationIdentity(queued), run, 1, "b", pending.packs[1].treeSha256))
+        val promoted = store.read().required()
+        assertEquals("b", promoted.selectedPackId)
+        assertEquals(2L, promoted.lastDeath)
+        assertEquals("c", promoted.pendingPackId)
+        assertTrue(promoted.queuedDeathOccurrences.isEmpty())
+        assertEquals(promoted, store.confirmDeath(run, 1).required())
+        assertEquals(promoted, store.confirmDeath(run, 2).required())
     }
+    @Test fun `death backlog is durably bounded and overflow fails closed`() {
+        val store = rotationStore(listOf("a", "b", "c"))
+        val run = requireNotNull(store.startRuntime().required().rotationRun)
+        store.confirmDeath(run, 1).required()
+        for (occurrence in 2L..(SkinLibraryCodec.MAX_QUEUED_DEATHS + 1L))
+            assertTrue(store.confirmDeath(run, occurrence) is SkinResult.Ok)
+        val before = store.read().required()
+        assertEquals(SkinLibraryCodec.MAX_QUEUED_DEATHS, before.queuedDeathOccurrences.size)
+        assertTrue(store.confirmDeath(run, SkinLibraryCodec.MAX_QUEUED_DEATHS + 2L) is SkinResult.Error)
+        assertEquals(before, store.read().required())
+    }
+
     @Test fun `ordered zero one outside ring and wrap behavior is explicit`() {
         for ((ring, selected, expected) in listOf(Triple(emptyList(),"a",null), Triple(listOf("a"),"a",null),
             Triple(listOf("b"),"a","b"), Triple(listOf("c","b"),"a","c"), Triple(listOf("c","b"),"b","c"))) {
@@ -163,6 +193,15 @@ class SkinLibraryStoreTest {
         val packs = listOf("a","b","c").map { LibraryPack(it,it,"Unknown",it.repeat(64),it.repeat(64),it.repeat(64)) }
         File(store.paths.root,"library.json").writeBytes(SkinLibraryCodec.encode(SkinLibraryDocument(LibraryMode.ROTATE,selected,packs,ring)))
         return store
+    }
+
+    @Test fun `missing runtime observation instruction names the owning profile`() {
+        val hollowKnight = store().lastObservation(SkinLibraryDocument())
+        val silksong = silksongStore().lastObservation(SkinLibraryDocument())
+        assertTrue(hollowKnight.contains("launch Hollow Knight"))
+        assertFalse(hollowKnight.contains("Silksong"))
+        assertTrue(silksong.contains("launch Silksong"))
+        assertFalse(silksong.contains("Hollow Knight"))
     }
 
     @Test fun `independent store instances merge eligibility updates instead of overwriting snapshots`() {

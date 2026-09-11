@@ -6,6 +6,7 @@ using System;
 using System.Collections;
 using DualSouls.DualScreen;
 using DualSouls.Mods.Silksong;
+using DualSouls.Skins.Silksong.Runtime;
 using UnityEngine;
 
 [DefaultExecutionOrder(10000)]
@@ -37,11 +38,14 @@ public class DualScreenV2 : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
     {
-        SilksongModsRuntime.EnsureStarted();
-        if (!ShouldRun() || !ReferenceEquals(Instance, null) || DsHudReleasePump.BlocksReplacement) return;
-        var go = new GameObject("__DualScreenV2__");
-        DontDestroyOnLoad(go);
-        go.AddComponent<DualScreenV2>();
+        SilksongProcessStartup.Run(
+            SilksongModsRuntime.EnsureStarted,
+            () => ShouldRun() && ReferenceEquals(Instance, null) && !DsHudReleasePump.BlocksReplacement,
+            () => {
+                var go = new GameObject("__DualScreenV2__");
+                DontDestroyOnLoad(go);
+                go.AddComponent<DualScreenV2>();
+            });
     }
 
     public static bool ShouldRun()

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System.Reflection;
 using UnityEngine;
@@ -7,21 +8,6 @@ using GlobalEnums;
 
 namespace DualSouls.Skins.Silksong.Runtime
 {
-    public sealed class SilksongDeathClassification
-    {
-        public bool NonLethal, MemoryForcedNonLethal, Permadeath, DemoTerminal, DuplicateDie,
-            Hazard, Paused, Cinematic, Transitioning, Loading;
-        public bool Gameplay = true;
-    }
-
-    public static class SilksongDeathBridgePolicy
-    {
-        public static bool IsStrictNormal(SilksongDeathClassification value) => value != null &&
-            !value.NonLethal && !value.MemoryForcedNonLethal && !value.Permadeath &&
-            !value.DemoTerminal && !value.DuplicateDie && !value.Hazard && !value.Paused &&
-            !value.Cinematic && value.Gameplay && !value.Transitioning && !value.Loading;
-    }
-
     public sealed class SilksongDeathFrame
     {
         public object Hero, Manager, HudOwners, BridgeHero, BridgeManager;
@@ -34,7 +20,16 @@ namespace DualSouls.Skins.Silksong.Runtime
     // owner occurrence and waits for a separately sampled, stable respawn.
     public sealed class SilksongSkinDeathAdapter : IDisposable
     {
+        sealed class PendingDeath
+        {
+            public long Occurrence;
+            public object Hero, Manager;
+        }
+
+        public const int MaxPendingOccurrences = 32;
         readonly Func<SilksongDeathFrame> sample;
+        readonly System.Collections.Generic.Queue<PendingDeath> backlog =
+            new System.Collections.Generic.Queue<PendingDeath>();
         long observedBridge = -1, sampledFrame = -1;
         int stableFrames;
         object deathHero, deathManager, stableHero, stableManager, stableHud;
@@ -43,6 +38,18 @@ namespace DualSouls.Skins.Silksong.Runtime
         public string Run { get; private set; }
         public long Occurrence { get; private set; }
         public bool Recorded { get; private set; }
+        public int PendingOccurrences => backlog.Count;
+        public bool BacklogFaulted { get; private set; }
+        public IReadOnlyList<long> PendingBridgeOccurrences
+        {
+            get
+            {
+                var result = new List<long>();
+                if (Occurrence > 0 && !Recorded) result.Add(Occurrence);
+                foreach (var item in backlog) result.Add(item.Occurrence);
+                return result.AsReadOnly();
+            }
+        }
         public bool Ready
         {
             get
@@ -66,43 +73,40 @@ namespace DualSouls.Skins.Silksong.Runtime
             var next = mode == "ROTATE" && !string.IsNullOrEmpty(run) ? run : null;
             if (!string.Equals(Run, next, StringComparison.Ordinal))
             {
-                ClearOccurrence();
+                ClearAll();
                 Run = next;
                 observedBridge = sample().BridgeOccurrence;
             }
-            if (Run == null) return;
-            if (Occurrence > 0 && lastDeath == Occurrence)
+            if (Run == null || BacklogFaulted) return;
+            if (pendingOccurrence > 0)
             {
+                if (Occurrence == 0 || Occurrence != pendingOccurrence || lastDeath != Occurrence)
+                {
+                    FailBacklog();
+                    return;
+                }
                 if (!Recorded) stableFrames = 0;
                 Recorded = true;
-                if (pendingOccurrence == 0) ClearOccurrence();
+                return;
             }
-            if (pendingOccurrence > 0 && Occurrence != pendingOccurrence)
-                ClearOccurrence();
+            while (Occurrence > 0 && lastDeath >= Occurrence)
+            {
+                ClearActive();
+                ActivateNext();
+            }
         }
 
         public void Tick()
         {
-            if (disposed || Run == null) return;
+            if (disposed || Run == null || BacklogFaulted) return;
             var frame = sample();
-            if (frame.BridgeOccurrence > observedBridge)
-            {
-                observedBridge = frame.BridgeOccurrence;
-                if (Occurrence == 0 && frame.BridgeOccurrence > 0 &&
-                    frame.BridgeHero != null && frame.BridgeManager != null &&
-                    ReferenceEquals(frame.Hero, frame.BridgeHero) && ReferenceEquals(frame.Manager, frame.BridgeManager))
-                {
-                    Occurrence = frame.BridgeOccurrence;
-                    deathHero = frame.BridgeHero;
-                    deathManager = frame.BridgeManager;
-                    Recorded = false;
-                    stableFrames = 0;
-                }
-            }
+            CaptureOccurrences(frame);
+            if (BacklogFaulted) return;
+            ActivateNext();
             if (Occurrence == 0) return;
             if (!Recorded && !SameDeathOwners(frame))
             {
-                ClearOccurrence();
+                FailBacklog();
                 return;
             }
             if (frame.Frame == sampledFrame) return;
@@ -120,6 +124,35 @@ namespace DualSouls.Skins.Silksong.Runtime
             stableHud = frame.HudOwners;
         }
 
+        void CaptureOccurrences(SilksongDeathFrame frame)
+        {
+            if (frame == null || frame.BridgeOccurrence <= observedBridge) return;
+            long delta = frame.BridgeOccurrence - observedBridge;
+            int occupied = backlog.Count + (Occurrence == 0 ? 0 : 1);
+            if (observedBridge < 0 || delta > MaxPendingOccurrences - occupied ||
+                frame.BridgeHero == null || frame.BridgeManager == null ||
+                !ReferenceEquals(frame.Hero, frame.BridgeHero) || !ReferenceEquals(frame.Manager, frame.BridgeManager))
+            {
+                FailBacklog();
+                return;
+            }
+            for (long occurrence = observedBridge + 1; occurrence <= frame.BridgeOccurrence; occurrence++)
+                backlog.Enqueue(new PendingDeath { Occurrence = occurrence,
+                    Hero = frame.BridgeHero, Manager = frame.BridgeManager });
+            observedBridge = frame.BridgeOccurrence;
+        }
+
+        void ActivateNext()
+        {
+            if (Occurrence != 0 || backlog.Count == 0 || BacklogFaulted) return;
+            var next = backlog.Dequeue();
+            Occurrence = next.Occurrence;
+            deathHero = next.Hero;
+            deathManager = next.Manager;
+            Recorded = false;
+            stableFrames = 0;
+        }
+
         bool SameDeathOwners(SilksongDeathFrame frame) =>
             ReferenceEquals(frame.Hero, deathHero) && ReferenceEquals(frame.Manager, deathManager);
 
@@ -129,7 +162,7 @@ namespace DualSouls.Skins.Silksong.Runtime
             !frame.Transitioning && !frame.Loading && frame.AcceptingInput &&
             !frame.ControlRelinquished && frame.TargetsAvailable;
 
-        void ClearOccurrence()
+        void ClearActive()
         {
             Occurrence = 0;
             Recorded = false;
@@ -137,10 +170,24 @@ namespace DualSouls.Skins.Silksong.Runtime
             deathHero = deathManager = stableHero = stableManager = stableHud = null;
         }
 
+        void FailBacklog()
+        {
+            ClearActive();
+            backlog.Clear();
+            BacklogFaulted = true;
+        }
+
+        void ClearAll()
+        {
+            ClearActive();
+            backlog.Clear();
+            BacklogFaulted = false;
+        }
+
         public void Dispose()
         {
             if (disposed) return;
-            ClearOccurrence();
+            ClearAll();
             Run = null;
             disposed = true;
         }

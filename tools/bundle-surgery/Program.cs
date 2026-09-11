@@ -58,6 +58,7 @@ internal static class Program
             Console.Error.WriteLine("  redirect-file-replace <Assembly-CSharp.dll> <SilksongIo.dll> — point the game's File.Replace calls at SafeIo (fixes saving where ReplaceFile is unsupported)");
             Console.Error.WriteLine("  bridge-ui-message-dismiss <Assembly-CSharp.dll> <patched.dll> — add an exact-instance companion request to UIMsgBase.DoMsg's native wait");
             Console.Error.WriteLine("  bridge-silksong-normal-death <Assembly-CSharp.dll> <patched.dll> — publish exact normal HeroController.Die occurrences");
+            Console.Error.WriteLine("  verify-silksong-normal-death <patched.dll>         — verify canonical strict-death bridge identity and IL");
             Console.Error.WriteLine("  retarget-tree <src-dir> <dst-dir>               — extract-vulkan-android over a whole bundle tree, in parallel, resumable");
             Console.Error.WriteLine("  retarget-classic-tree <source-root> <output-root> <profile-manifest.json> <report.json>");
             Console.Error.WriteLine("  manifest-classic-tree <source-root> <report.json>");
@@ -76,6 +77,7 @@ internal static class Program
             "redirect-file-replace" when args.Length >= 3 => RedirectFileReplace.Run(args[1], args[2]),
             "bridge-ui-message-dismiss" when args.Length == 3 => RedirectUIMsgDismiss.Run(args[1], args[2]),
             "bridge-silksong-normal-death" when args.Length == 3 => BridgeSilksongNormalDeath.Run(args[1], args[2]),
+            "verify-silksong-normal-death" when args.Length == 2 => BridgeSilksongNormalDeath.Verify(args[1]),
             "retarget-tree" when args.Length >= 3 => RetargetTree(args[1], args[2]),
             "manifest-classic-tree" when args.Length == 3 =>
                 ClassicTreeCommands.Manifest(args[1], args[2]),

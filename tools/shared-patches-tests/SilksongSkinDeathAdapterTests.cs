@@ -5,31 +5,6 @@ using Xunit;
 public sealed class SilksongSkinDeathAdapterTests
 {
     [Fact]
-    public void Strict_normal_policy_excludes_every_non_normal_route_and_unstable_context()
-    {
-        Assert.True(SilksongDeathBridgePolicy.IsStrictNormal(new SilksongDeathClassification()));
-        Action<SilksongDeathClassification>[] exclusions = {
-            x => x.NonLethal = true,
-            x => x.MemoryForcedNonLethal = true,
-            x => x.Permadeath = true,
-            x => x.DemoTerminal = true,
-            x => x.DuplicateDie = true,
-            x => x.Hazard = true,
-            x => x.Paused = true,
-            x => x.Cinematic = true,
-            x => x.Gameplay = false,
-            x => x.Transitioning = true,
-            x => x.Loading = true,
-        };
-        foreach (var exclude in exclusions)
-        {
-            var classification = new SilksongDeathClassification();
-            exclude(classification);
-            Assert.False(SilksongDeathBridgePolicy.IsStrictNormal(classification));
-        }
-    }
-
-    [Fact]
     public void Bridge_occurrence_requires_same_owner_before_confirmation()
     {
         var frame = StableFrame();
@@ -54,6 +29,7 @@ public sealed class SilksongSkinDeathAdapterTests
         frame.Dead = true;
         frame.HeroInPosition = false;
         frame.SceneComplete = false;
+        frame.BridgeOccurrence = 7;
         var adapter = new SilksongSkinDeathAdapter(() => frame);
         adapter.Configure("ROTATE", "run");
         frame.BridgeOccurrence = 8;
@@ -111,6 +87,82 @@ public sealed class SilksongSkinDeathAdapterTests
         Assert.Equal(0, adapter.Occurrence);
         adapter.Tick();
         Assert.Equal(0, adapter.Occurrence);
+    }
+
+    [Fact]
+    public void Bridge_backlog_preserves_death_before_poll_in_strict_order()
+    {
+        var frame = StableFrame();
+        var adapter = new SilksongSkinDeathAdapter(() => frame);
+        adapter.Configure("ROTATE", "run");
+        frame.BridgeOccurrence = 2;
+        frame.BridgeHero = frame.Hero;
+        frame.BridgeManager = frame.Manager;
+
+        adapter.Tick();
+        Assert.Equal(1, adapter.Occurrence);
+        Assert.Equal(1, adapter.PendingOccurrences);
+
+        adapter.Configure("ROTATE", "run", lastDeath: 1, pendingOccurrence: 0);
+        Assert.Equal(2, adapter.Occurrence);
+        Assert.Equal(0, adapter.PendingOccurrences);
+    }
+
+    [Fact]
+    public void Bridge_backlog_retains_death_while_first_successor_is_pending()
+    {
+        var frame = StableFrame();
+        var adapter = new SilksongSkinDeathAdapter(() => frame);
+        adapter.Configure("ROTATE", "run");
+        frame.BridgeHero = frame.Hero;
+        frame.BridgeManager = frame.Manager;
+        frame.BridgeOccurrence = 1;
+        adapter.Tick();
+        adapter.Configure("ROTATE", "run", lastDeath: 1, pendingOccurrence: 1);
+
+        frame.BridgeOccurrence = 2;
+        adapter.Tick();
+        Assert.Equal(1, adapter.Occurrence);
+        Assert.Equal(1, adapter.PendingOccurrences);
+
+        adapter.Configure("ROTATE", "run", lastDeath: 1, pendingOccurrence: 0);
+        Assert.Equal(2, adapter.Occurrence);
+    }
+
+    [Fact]
+    public void Bridge_backlog_retires_every_occurrence_already_acknowledged_without_a_successor()
+    {
+        var frame = StableFrame();
+        var adapter = new SilksongSkinDeathAdapter(() => frame);
+        adapter.Configure("ROTATE", "run");
+        frame.BridgeHero = frame.Hero;
+        frame.BridgeManager = frame.Manager;
+        frame.BridgeOccurrence = 3;
+        adapter.Tick();
+        Assert.Equal(new long[] { 1, 2, 3 }, adapter.PendingBridgeOccurrences);
+
+        adapter.Configure("ROTATE", "run", lastDeath: 3, pendingOccurrence: 0);
+
+        Assert.Equal(0, adapter.Occurrence);
+        Assert.Empty(adapter.PendingBridgeOccurrences);
+        Assert.Equal(0, adapter.PendingOccurrences);
+    }
+
+    [Fact]
+    public void Bridge_backlog_overflow_fails_closed_without_skipping_to_latest()
+    {
+        var frame = StableFrame();
+        var adapter = new SilksongSkinDeathAdapter(() => frame);
+        adapter.Configure("ROTATE", "run");
+        frame.BridgeHero = frame.Hero;
+        frame.BridgeManager = frame.Manager;
+        frame.BridgeOccurrence = SilksongSkinDeathAdapter.MaxPendingOccurrences + 1;
+
+        adapter.Tick();
+
+        Assert.True(adapter.BacklogFaulted);
+        Assert.Equal(0, adapter.Occurrence);
+        Assert.Equal(0, adapter.PendingOccurrences);
     }
 
     static SilksongDeathFrame StableFrame() => new SilksongDeathFrame {

@@ -1,5 +1,6 @@
 package dev.silksong.launcher.skins.ui
 
+import dev.silksong.launcher.R
 import dev.silksong.launcher.profiles.GameProfile
 import dev.silksong.launcher.profiles.ProfilePaths
 import dev.silksong.launcher.skins.catalog.SkinCatalogProfiles
@@ -16,6 +17,18 @@ import dev.silksong.launcher.skins.registry.SkinRegistryStore
 import dev.silksong.launcher.skins.storage.SkinImportReceiptRepository
 import dev.silksong.launcher.skins.storage.SkinPaths
 import java.io.File
+
+internal data class SkinProfilePresentation(val title: Int, val guidance: Int) {
+    companion object {
+        fun require(profile: GameProfile): SkinProfilePresentation = when (profile.id) {
+            "hollow-knight" -> SkinProfilePresentation(R.string.skins_title_hollow_knight,
+                R.string.skins_guidance_hollow_knight)
+            "silksong" -> SkinProfilePresentation(R.string.skins_title_silksong,
+                R.string.skins_guidance_silksong)
+            else -> error("Unsupported skin presentation profile")
+        }
+    }
+}
 
 /** Display data only: no registry document, staging paths, mode payload or mutation capability. */
 internal data class SkinPackRow(

@@ -126,6 +126,16 @@ namespace DualSouls.Skins.Silksong.Runtime
         {
             if (disposed) return;
             death.Tick();
+            if (death.BacklogFaulted)
+            {
+                string run = death.Run;
+                if (run != null && cancel(run))
+                {
+                    death.Configure("OFF", null);
+                    pending = false;
+                }
+                return;
+            }
             if (now < nextPoll) return;
             nextPoll = now + 1f;
             controller.Tick();
@@ -135,9 +145,13 @@ namespace DualSouls.Skins.Silksong.Runtime
         {
             var request = read();
             if (!Consume(request)) return request;
-            if (death.Occurrence > 0 && !death.Recorded)
+            var occurrences = death.PendingBridgeOccurrences;
+            foreach (long occurrence in occurrences)
             {
-                if (!confirm(death.Run, death.Occurrence)) return null;
+                if (!confirm(death.Run, occurrence)) return null;
+            }
+            if (occurrences.Count > 0)
+            {
                 request = read();
                 if (!Consume(request)) return null;
             }

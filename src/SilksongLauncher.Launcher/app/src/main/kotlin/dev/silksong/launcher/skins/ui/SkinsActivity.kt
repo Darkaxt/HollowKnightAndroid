@@ -31,6 +31,9 @@ class SkinsActivity : Activity() {
         profile = SelectedGameStore(this).get()
         if (!SkinLibraryService.isVisible(profile)) { retained?.close(); finish(); return }
         setContentView(R.layout.activity_skins)
+        val presentation = SkinProfilePresentation.require(profile)
+        findViewById<TextView>(R.id.skins_title).setText(presentation.title)
+        findViewById<TextView>(R.id.skins_availability).setText(presentation.guidance)
         packs = findViewById(R.id.skins_packs)
         val application = applicationContext
         val binding = hostBinding

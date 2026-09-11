@@ -263,12 +263,17 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         runtime = runtime_path.read_text(encoding="utf-8")
         presenter = presenter_path.read_text(encoding="utf-8")
         bootstrap_body = bootstrap[bootstrap.index("static void Bootstrap()") : bootstrap.index("public static bool ShouldRun()")]
-        self.assertLess(bootstrap_body.index("SilksongModsRuntime.EnsureStarted()"), bootstrap_body.index("ShouldRun()"))
+        self.assertIn("SilksongProcessStartup.Run(", bootstrap_body)
+        self.assertLess(bootstrap_body.index("SilksongModsRuntime.EnsureStarted"), bootstrap_body.index("ShouldRun()"))
         self.assertIn("Current != null || _creating", runtime)
         self.assertIn("new TweakSession", runtime)
         self.assertIn("new SilksongTweakAdapter", runtime)
         self.assertIn("new PlayerPrefsTweakStore", runtime)
         self.assertIn("SilksongModsRestorePump.BlocksReplacement", runtime)
+        self.assertIn("SilksongSkinRestorePump.BlocksReplacement", runtime)
+        self.assertIn("new PendingSkinTeardown()", runtime)
+        self.assertIn("_pending.TryRetain(session)", runtime)
+        self.assertIn("SilksongSkinRestorePump.Create(skins)", runtime)
         self.assertIn("if (!session.TeardownComplete)", runtime)
         self.assertIn("new PendingTweakTeardown()", runtime)
         self.assertIn("_pending.TryRetain(session)", runtime)
@@ -302,14 +307,16 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         bootstrap = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DualScreenV2.cs").read_text(encoding="utf-8")
         bootstrap_body = bootstrap[bootstrap.index("static void Bootstrap()") : bootstrap.index("public static bool ShouldRun()")]
 
-        self.assertLess(bootstrap_body.index("SilksongModsRuntime.EnsureStarted()"), bootstrap_body.index("ShouldRun()"))
+        self.assertIn("SilksongProcessStartup.Run(", bootstrap_body)
+        self.assertLess(bootstrap_body.index("SilksongModsRuntime.EnsureStarted"), bootstrap_body.index("ShouldRun()"))
         self.assertIn("public SilksongSkinRuntime Skins", runtime)
         self.assertIn("new SilksongSkinRuntime()", runtime)
         self.assertIn("new SilksongSkinLibrary(Skins)", runtime)
         self.assertIn("Skins.Tick()", runtime)
         self.assertIn("skinLibrary.Tick()", runtime)
         self.assertIn("skinLibrary.Dispose()", runtime)
-        self.assertIn("Skins.Dispose()", runtime)
+        self.assertIn("skins.Dispose()", runtime)
+        self.assertIn("SilksongSkinRestorePump.Create(skins)", runtime)
 
     def test_task100_receipt_is_bound_to_committed_compile_sources(self):
         evidence = REPO_ROOT / "docs" / "verification" / "evidence" / "task100-quality-c3f61f5"

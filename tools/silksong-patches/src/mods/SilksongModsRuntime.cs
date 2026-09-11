@@ -1,5 +1,6 @@
 #if UNITY_ANDROID && !UNITY_EDITOR
 using DualSouls.Mods;
+using DualSouls.Skins.Runtime;
 using DualSouls.Skins.Silksong.Runtime;
 using UnityEngine;
 
@@ -23,7 +24,8 @@ namespace DualSouls.Mods.Silksong
 
         public static void EnsureStarted()
         {
-            if (Current != null || _creating || SilksongModsRestorePump.BlocksReplacement) return;
+            if (Current != null || _creating || SilksongModsRestorePump.BlocksReplacement ||
+                SilksongSkinRestorePump.BlocksReplacement) return;
 
             _creating = true;
             GameObject runtimeObject = null;
@@ -81,6 +83,8 @@ namespace DualSouls.Mods.Silksong
             TweakSession session = Session;
             Session = null;
             Current = null;
+            var skins = Skins;
+            Skins = null;
             try
             {
                 if (session != null)
@@ -95,15 +99,50 @@ namespace DualSouls.Mods.Silksong
             }
             finally
             {
-                if (Skins != null)
+                if (skins != null)
                 {
-                    try { Skins.Dispose(); Skins = null; }
+                    try { skins.Dispose(); }
                     catch (System.Exception error)
                     {
                         Debug.LogError("[Silksong skins] teardown blocked; exact owner retained for restore retry: " + error);
+                        SilksongSkinRestorePump.Create(skins);
                     }
                 }
             }
+        }
+    }
+
+    public sealed class SilksongSkinRestorePump : MonoBehaviour
+    {
+        static SilksongSkinRestorePump _owner;
+        readonly PendingSkinTeardown _pending = new PendingSkinTeardown();
+
+        public static bool BlocksReplacement => _owner != null && _owner._pending.BlocksReplacement;
+
+        public static void Create(SilksongSkinRuntime session)
+        {
+            if (session == null || session.TeardownComplete) return;
+            if (_owner != null)
+            {
+                _owner._pending.TryRetain(session);
+                return;
+            }
+            var restoreObject = new GameObject("__SilksongSkinRestoreOwner__");
+            DontDestroyOnLoad(restoreObject);
+            var pump = restoreObject.AddComponent<SilksongSkinRestorePump>();
+            if (!pump._pending.TryRetain(session))
+            {
+                Destroy(restoreObject);
+                return;
+            }
+            _owner = pump;
+        }
+
+        void Update()
+        {
+            if (!_pending.Tick()) return;
+            if (ReferenceEquals(_owner, this)) _owner = null;
+            Destroy(gameObject);
         }
     }
 

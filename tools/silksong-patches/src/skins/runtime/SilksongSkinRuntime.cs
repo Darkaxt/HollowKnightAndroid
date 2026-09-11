@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using DualSouls.Skins.Runtime;
 using UnityEngine;
@@ -10,7 +11,7 @@ using UObject = UnityEngine.Object;
 
 namespace DualSouls.Skins.Silksong.Runtime
 {
-    public sealed class SilksongSkinRuntime : IDisposable
+    public sealed class SilksongSkinRuntime : IDisposable, ISkinTeardownSession
     {
         sealed class HeroOwners
         {
@@ -19,6 +20,7 @@ namespace DualSouls.Skins.Silksong.Runtime
             public tk2dSpriteAnimator Animator;
             public tk2dSprite Sprite;
             public HeroAnimationController Animation;
+            public tk2dSpriteAnimation DefaultLibrary;
         }
         sealed class HudOwners
         {
@@ -31,23 +33,40 @@ namespace DualSouls.Skins.Silksong.Runtime
             public HudCanvas Canvas;
         }
 
+        sealed class OwnedCollection
+        {
+            public object Owner;
+            public tk2dSpriteCollectionData Collection;
+        }
+
+        static readonly FieldInfo WindyLibraryField = typeof(HeroAnimationController).GetField("windyAnimLib",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        static readonly FieldInfo ConfigField = typeof(HeroAnimationController).GetField("config",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        static readonly FieldInfo CrestLibraryField = typeof(HeroControllerConfig).GetField("heroAnimOverrideLib",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
         readonly UnityDecoder decoder = new UnityDecoder();
         readonly SkinRuntimeSession session;
         readonly List<string> omissions = new List<string>();
         HeroOwners heroOwners;
         HudOwners hudOwners;
+        SilksongCollectionOwnerStamp collectionOwnerStamp;
         SkinPack requested;
         float nextRefresh;
         bool disposed;
 
         public static SilksongSkinRuntime Current { get; private set; }
         public SkinApplyResult LastResult { get; private set; } = new SkinApplyResult(SkinApplyStatus.Unchanged);
+        public bool TeardownComplete => disposed;
+        public string LastError { get; private set; } = "";
         public Func<bool> RefreshAllowed { get; set; }
         internal object HudOwnerIdentity => hudOwners;
         internal bool DeathTargetsAvailable(HeroController hero, GameManager manager) => !disposed &&
             hero != null && manager != null && heroOwners != null && hudOwners != null &&
             ReferenceEquals(heroOwners, CaptureHeroOwners(heroOwners)) && ReferenceEquals(heroOwners.Hero, hero) &&
-            ReferenceEquals(hudOwners, CaptureHudOwners(hudOwners));
+            ReferenceEquals(hudOwners, CaptureHudOwners(hudOwners)) && collectionOwnerStamp != null &&
+            collectionOwnerStamp.Equals(CaptureOwnerStamp());
 
         public SilksongSkinRuntime()
         {
@@ -93,46 +112,110 @@ namespace DualSouls.Skins.Silksong.Runtime
             omissions.Clear();
             heroOwners = CaptureHeroOwners(heroOwners);
             hudOwners = CaptureHudOwners(hudOwners);
-            var collections = Resources.FindObjectsOfTypeAll<tk2dSpriteCollectionData>()
-                .Where(x => x != null && !string.IsNullOrEmpty(x.spriteCollectionName))
-                .Select(x => x.inst)
-                .Where(x => x != null)
-                .Distinct()
-                .GroupBy(x => x.spriteCollectionName, StringComparer.Ordinal)
-                .ToDictionary(x => x.Key, x => x.ToList(), StringComparer.Ordinal);
+            var characterCollections = CaptureCharacterCollections();
+            var hudCollections = CaptureHudCollections();
+            var allCollections = characterCollections.Concat(hudCollections).ToList();
+            collectionOwnerStamp = OwnerStamp(allCollections);
             var slots = new List<SkinSlot>();
-            IEnumerable<SilksongSkinTarget> wanted = requested == null
-                ? SilksongSkinTargets.All
-                : SilksongSkinTargets.All.Where(x => requested.Textures.ContainsKey(x.CanonicalPath));
-            foreach (var target in wanted)
+            var requestedTargets = requested == null ? Array.Empty<string>() : requested.Textures.Keys;
+
+            foreach (var target in SilksongSkinTargets.All)
             {
                 if (target.IsHud ? hudOwners == null : heroOwners == null)
                 {
                     omissions.Add(target.CanonicalPath + " (persistent owner unavailable)");
                     continue;
                 }
-                if (!collections.TryGetValue(target.CollectionName, out var candidates) || candidates.Count == 0)
+                var owned = (target.IsHud ? hudCollections : characterCollections)
+                    .Where(x => x.Collection != null && string.Equals(x.Collection.spriteCollectionName,
+                        target.CollectionName, StringComparison.Ordinal)).ToList();
+                var instances = new List<SilksongCollectionInstance>();
+                var slotByCollection = new Dictionary<object, List<SkinSlot>>(ReferenceComparer.Instance);
+                foreach (var item in owned)
                 {
-                    omissions.Add(target.CanonicalPath + " (collection missing)");
-                    continue;
+                    if (!slotByCollection.TryGetValue(item.Collection, out var bindings))
+                    {
+                        TryAdmit(target, item.Collection, out bindings, out var failure);
+                        slotByCollection[item.Collection] = bindings;
+                        instances.Add(new SilksongCollectionInstance(target.CollectionName,
+                            item.Owner, item.Collection, failure));
+                    }
+                    else
+                    {
+                        instances.Add(new SilksongCollectionInstance(target.CollectionName,
+                            item.Owner, item.Collection, instances.First(x =>
+                                ReferenceEquals(x.CollectionIdentity, item.Collection)).Failure));
+                    }
                 }
-                var admitted = new List<List<SkinSlot>>();
-                var failures = new List<string>();
-                foreach (var collection in candidates)
-                {
-                    if (TryAdmit(target, collection, out var bindings, out var failure)) admitted.Add(bindings);
-                    else failures.Add(failure);
-                }
-                if (admitted.Count != 1)
-                {
-                    omissions.Add(target.CanonicalPath + (admitted.Count > 1
-                        ? " (ambiguous admitted collections)"
-                        : " (" + string.Join(", ", failures.Distinct()) + ")"));
-                    continue;
-                }
-                slots.AddRange(admitted[0]);
+                var plan = SilksongCollectionPlan.Build(new[] { target }, requestedTargets, instances);
+                omissions.AddRange(plan.Omissions);
+                if (!plan.Bindings.TryGetValue(target.CanonicalPath, out var admitted)) continue;
+                foreach (var instance in admitted)
+                    slots.AddRange(slotByCollection[instance.CollectionIdentity]);
             }
             return slots;
+        }
+
+        List<OwnedCollection> CaptureCharacterCollections()
+        {
+            var result = new List<OwnedCollection>();
+            if (heroOwners == null) return result;
+            AddLibrary(result, heroOwners.DefaultLibrary);
+            AddLibrary(result, heroOwners.Animator.Library);
+            AddLibrary(result, WindyLibraryField?.GetValue(heroOwners.Animation) as tk2dSpriteAnimation);
+            var config = ConfigField?.GetValue(heroOwners.Animation) as HeroControllerConfig;
+            AddLibrary(result, config == null ? null : CrestLibraryField?.GetValue(config) as tk2dSpriteAnimation);
+            AddCollection(result, heroOwners.Sprite, heroOwners.Sprite.Collection);
+            return result;
+        }
+
+        List<OwnedCollection> CaptureHudCollections()
+        {
+            var result = new List<OwnedCollection>();
+            if (hudOwners == null) return result;
+            foreach (var root in new[] { hudOwners.GameplayChild, hudOwners.Spool.gameObject })
+            {
+                foreach (var animator in root.GetComponentsInChildren<tk2dSpriteAnimator>(true))
+                    if (animator != null) AddLibrary(result, animator.Library);
+                foreach (var sprite in root.GetComponentsInChildren<tk2dSprite>(true))
+                    if (sprite != null) AddCollection(result, sprite, sprite.Collection);
+            }
+            return result;
+        }
+
+        static void AddLibrary(List<OwnedCollection> result, tk2dSpriteAnimation library)
+        {
+            if (library == null || library.clips == null) return;
+            foreach (var clip in library.clips)
+            {
+                if (clip == null || clip.frames == null) continue;
+                foreach (var frame in clip.frames)
+                    if (frame != null) AddCollection(result, library, frame.spriteCollection);
+            }
+        }
+
+        static void AddCollection(List<OwnedCollection> result, object owner,
+            tk2dSpriteCollectionData collection)
+        {
+            if (owner == null || collection == null) return;
+            var instance = collection.inst;
+            if (instance == null || result.Any(x => ReferenceEquals(x.Owner, owner) &&
+                ReferenceEquals(x.Collection, instance))) return;
+            result.Add(new OwnedCollection { Owner = owner, Collection = instance });
+        }
+
+        SilksongCollectionOwnerStamp CaptureOwnerStamp() =>
+            OwnerStamp(CaptureCharacterCollections().Concat(CaptureHudCollections()));
+
+        static SilksongCollectionOwnerStamp OwnerStamp(IEnumerable<OwnedCollection> collections) =>
+            new SilksongCollectionOwnerStamp(collections.Select(x => new SilksongCollectionInstance(
+                x.Collection.spriteCollectionName ?? "", x.Owner, x.Collection, null)));
+
+        sealed class ReferenceComparer : IEqualityComparer<object>
+        {
+            public static readonly ReferenceComparer Instance = new ReferenceComparer();
+            public new bool Equals(object left, object right) => ReferenceEquals(left, right);
+            public int GetHashCode(object value) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(value);
         }
 
         bool TryAdmit(SilksongSkinTarget target, tk2dSpriteCollectionData collection,
@@ -166,7 +249,7 @@ namespace DualSouls.Skins.Silksong.Runtime
             {
                 var captured = material;
                 bindings.Add(new SkinSlot(captured, "mainTexture", target.CanonicalPath,
-                    () => captured != null && collection != null && OwnersStillMatch(target),
+                    () => captured != null && collection != null,
                     () => captured.mainTexture,
                     value => captured.mainTexture = RequireLive<Texture>(value),
                     (skin, _) => {
@@ -177,10 +260,6 @@ namespace DualSouls.Skins.Silksong.Runtime
             }
             return true;
         }
-
-        bool OwnersStillMatch(SilksongSkinTarget target) => target.IsHud
-            ? ReferenceEquals(hudOwners, CaptureHudOwners(hudOwners))
-            : ReferenceEquals(heroOwners, CaptureHeroOwners(heroOwners));
 
         static HeroOwners CaptureHeroOwners(HeroOwners existing)
         {
@@ -194,7 +273,8 @@ namespace DualSouls.Skins.Silksong.Runtime
             if (existing != null && ReferenceEquals(existing.Hero, hero) && ReferenceEquals(existing.Renderer, renderer) &&
                 ReferenceEquals(existing.Animator, animator) && ReferenceEquals(existing.Sprite, sprite) &&
                 ReferenceEquals(existing.Animation, animation)) return existing;
-            return new HeroOwners { Hero = hero, Renderer = renderer, Animator = animator, Sprite = sprite, Animation = animation };
+            return new HeroOwners { Hero = hero, Renderer = renderer, Animator = animator, Sprite = sprite,
+                Animation = animation, DefaultLibrary = animator.Library };
         }
 
         static HudOwners CaptureHudOwners(HudOwners existing)
@@ -224,14 +304,23 @@ namespace DualSouls.Skins.Silksong.Runtime
             return result;
         }
 
-        public void Dispose()
+        public void TickTeardown()
         {
             if (disposed) return;
-            session.Dispose();
+            session.TickTeardown();
+            LastError = session.LastError;
+            if (!session.TeardownComplete) return;
             SceneManager.sceneLoaded -= SceneChanged;
             SceneManager.sceneUnloaded -= SceneUnloaded;
             disposed = true;
+            LastError = "";
             if (ReferenceEquals(Current, this)) Current = null;
+        }
+
+        public void Dispose()
+        {
+            TickTeardown();
+            if (!disposed) throw new InvalidOperationException(LastError);
         }
 
         sealed class UnityDecoder : ISkinTextureDecoder

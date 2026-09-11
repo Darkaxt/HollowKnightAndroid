@@ -79,7 +79,9 @@ object Il2cppConverter {
     private const val UI_MESSAGE_DISMISS_PART_SUFFIX = ".uimsg-bridge.part"
     private const val SILKSONG_DEATH_SCHEMA = "1"
     internal const val SILKSONG_DEATH_ALGORITHM =
-        "task101-v1;game=1.0.29980;assembly=1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d;order=pre-save-pre-mod"
+        "task101-v2;game=1.0.29980;assembly=1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d;rewritten=37cd088f4de464b4cc7b01b193ac294a3dfeb282d1fa1757a653215d514db634;site=post-normalization;order=pre-save-pre-mod"
+    private const val SILKSONG_DEATH_REWRITTEN_SHA256 =
+        "37cd088f4de464b4cc7b01b193ac294a3dfeb282d1fa1757a653215d514db634"
     private const val SILKSONG_DEATH_MARKER = "silksong-death-bridge.properties"
     private const val SILKSONG_DEATH_PART_SUFFIX = ".silksong-death-bridge.part"
     private val SHA256 = Regex("^[0-9a-f]{64}$")
@@ -268,7 +270,7 @@ object Il2cppConverter {
         return values.getProperty("schema") == SILKSONG_DEATH_SCHEMA &&
             values.getProperty("algorithm") == SILKSONG_DEATH_ALGORITHM &&
             input == "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d" &&
-            SHA256.matches(output) && SHA256.matches(tool) && surgery.isFile &&
+            output == SILKSONG_DEATH_REWRITTEN_SHA256 && SHA256.matches(tool) && surgery.isFile &&
             surgery.length() > 0 && sha256(surgery) == tool
     }
 

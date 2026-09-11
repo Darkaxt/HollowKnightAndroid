@@ -1,5 +1,6 @@
 package dev.silksong.launcher.skins.ui
 
+import dev.silksong.launcher.R
 import dev.silksong.launcher.profiles.HollowKnightProfile
 import dev.silksong.launcher.profiles.SilksongProfile
 import dev.silksong.launcher.skins.contracts.SkinImportCode
@@ -32,6 +33,13 @@ class SkinLibraryServiceTest {
     @Test fun `both closed game profiles expose their own skin library`() {
         assertTrue(SkinLibraryService.isVisible(HollowKnightProfile))
         assertTrue(SkinLibraryService.isVisible(SilksongProfile))
+    }
+
+    @Test fun `closed profiles select independent title and guidance resources`() {
+        assertEquals(SkinProfilePresentation(R.string.skins_title_hollow_knight,
+            R.string.skins_guidance_hollow_knight), SkinProfilePresentation.require(HollowKnightProfile))
+        assertEquals(SkinProfilePresentation(R.string.skins_title_silksong,
+            R.string.skins_guidance_silksong), SkinProfilePresentation.require(SilksongProfile))
     }
 
     @Test fun `unsupported profile never invokes snapshot authority`() {

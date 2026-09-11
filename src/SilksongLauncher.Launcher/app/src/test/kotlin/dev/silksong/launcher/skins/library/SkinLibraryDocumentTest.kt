@@ -37,7 +37,9 @@ class SkinLibraryDocumentTest {
         val decoded = runCatching { SkinLibraryCodec.decode(extended.toString().toByteArray()) }
         assertTrue("Bounded rotation extension must decode: ${decoded.exceptionOrNull()}", decoded.isSuccess)
         assertEquals(extended, com.google.gson.JsonParser.parseString(SkinLibraryCodec.encode(decoded.getOrThrow()).toString(Charsets.UTF_8)))
-        val old = com.google.gson.JsonParser.parseString(legacy).asJsonObject.apply { remove("rotationRun"); remove("lastDeath"); remove("pendingPackId") }
+        val old = com.google.gson.JsonParser.parseString(legacy).asJsonObject.apply {
+            remove("rotationRun"); remove("lastDeath"); remove("pendingPackId"); remove("queuedDeathOccurrences")
+        }
         assertEquals("a", SkinLibraryCodec.decode(old.toString().toByteArray()).selectedPackId)
         for ((key, value) in listOf("lastDeath" to "-1", "pendingPackId" to "\"missing\"", "rotationRun" to "\"bad\"")) {
             val bad = extended.deepCopy().apply { add(key, com.google.gson.JsonParser.parseString(value)) }

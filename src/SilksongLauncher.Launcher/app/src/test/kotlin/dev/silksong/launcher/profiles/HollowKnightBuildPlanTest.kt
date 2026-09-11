@@ -238,6 +238,10 @@ class HollowKnightBuildPlanTest {
         }
         assertTrue(assembly.readBytes().contentEquals(rewritten))
         val marker = Il2cppConverter.silksongDeathBridgeMarker(root).readText()
+        assertTrue(marker.contains("algorithm=${Il2cppConverter.SILKSONG_DEATH_ALGORITHM}"))
+        assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("task101-v2"))
+        assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("site=post-normalization"))
+        assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("rewritten=37cd088f4de464b4cc7b01b193ac294a3dfeb282d1fa1757a653215d514db634"))
         assertTrue(marker.contains("inputSha256=${sha256(original)}"))
         assertTrue(marker.contains("bridgeAssemblySha256=${sha256(rewritten)}"))
         assertTrue(marker.contains("toolSha256=${sha256(byteArrayOf(3, 4, 5))}"))

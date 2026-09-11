@@ -8,9 +8,11 @@ import android.net.Uri
 import android.os.Looper
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import dev.silksong.launcher.R
 import dev.silksong.launcher.profiles.HollowKnightProfile
+import dev.silksong.launcher.profiles.SilksongProfile
 import dev.silksong.launcher.profiles.SelectedGameStore
 import dev.silksong.launcher.skins.contracts.*
 import dev.silksong.launcher.skins.importing.SkinImportInput
@@ -204,6 +206,32 @@ class SkinsActivityTest {
         assertTrue(mapping["path"].asString.matches(Regex("assets/[a-z2-7]{52}")))
         assertTrue(java.io.File(wire["root"].asString,mapping["path"].asString).isFile)
     }
+    @Test fun `skin surface title and guidance are bound to selected game profile`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        fun text(profile: dev.silksong.launcher.profiles.GameProfile): Pair<String, String> {
+            SelectedGameStore(context).set(profile)
+            val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
+            return try {
+                controller.get().findViewById<TextView>(R.id.skins_title).text.toString() to
+                    controller.get().findViewById<TextView>(R.id.skins_availability).text.toString()
+            } finally { controller.pause().stop().destroy() }
+        }
+
+        val hollowKnight = text(HollowKnightProfile)
+        assertTrue(hollowKnight.first.contains("Hollow Knight"))
+        assertTrue(hollowKnight.second.contains("CustomKnight"))
+        assertTrue(hollowKnight.second.lowercase().contains("launch hollow knight"))
+
+        val silksong = text(SilksongProfile)
+        assertTrue(silksong.first.contains("Silksong"))
+        assertFalse(silksong.first.contains("Hollow Knight"))
+        assertFalse(silksong.second.contains("CustomKnight"))
+        assertFalse(silksong.second.contains("not enabled"))
+        assertFalse(silksong.second.contains("launch Hollow Knight"))
+        assertTrue(silksong.second.contains("11"))
+        assertTrue(silksong.second.contains("death rotation"))
+    }
+
     @Test fun `status read error does not claim that no changes were made`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         assertFalse(context.getString(R.string.skins_read_error, "ERROR", "refresh failed").contains("No changes were made"))

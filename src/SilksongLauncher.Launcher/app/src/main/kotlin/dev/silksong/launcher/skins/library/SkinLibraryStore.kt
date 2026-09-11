@@ -32,7 +32,7 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
     internal fun startRuntime(): SkinResult<SkinLibraryDocument> = changeRotation { renewRotation(it) }
     private fun renewRotation(value: SkinLibraryDocument) = value.copy(
         rotationRun = if (value.mode == LibraryMode.ROTATE) UUID.randomUUID().toString().replace("-", "") else null,
-        lastDeath = 0, pendingPackId = null)
+        lastDeath = 0, pendingPackId = null, queuedDeathOccurrences = emptyList())
     private fun changeRotation(action: (SkinLibraryDocument) -> SkinLibraryDocument): SkinResult<SkinLibraryDocument> = locked(nonblocking = true) {
         val old = readLocked(); val next = action(old); SkinLibraryCodec.validate(next)
         if (old != next) commit(next)
@@ -40,13 +40,18 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
     }
     internal fun confirmDeath(run: String, occurrence: Long): SkinResult<SkinLibraryDocument> = changeRotation { value ->
         require(value.mode == LibraryMode.ROTATE && value.rotationRun == run && occurrence > 0) { "Death belongs to a retired rotation run" }
-        if (occurrence <= value.lastDeath || value.pendingPackId != null) value
-        else {
-            val ring = value.eligiblePackIds
-            val index = ring.indexOf(value.selectedPackId)
-            val next = if (ring.isEmpty()) null else ring[if (index < 0) 0 else (index + 1) % ring.size]
-            value.copy(lastDeath = occurrence, pendingPackId = next.takeUnless { it == value.selectedPackId })
-        }
+        if (occurrence <= value.lastDeath || occurrence in value.queuedDeathOccurrences) value
+        else if (value.pendingPackId != null) {
+            require(value.queuedDeathOccurrences.size < SkinLibraryCodec.MAX_QUEUED_DEATHS) { "Death rotation backlog is full" }
+            require(occurrence > (value.queuedDeathOccurrences.lastOrNull() ?: value.lastDeath)) { "Death occurrence order changed" }
+            value.copy(queuedDeathOccurrences = value.queuedDeathOccurrences + occurrence)
+        } else activateOccurrence(value, occurrence)
+    }
+    private fun activateOccurrence(value: SkinLibraryDocument, occurrence: Long): SkinLibraryDocument {
+        val ring = value.eligiblePackIds
+        val index = ring.indexOf(value.selectedPackId)
+        val next = if (ring.isEmpty()) null else ring[if (index < 0) 0 else (index + 1) % ring.size]
+        return value.copy(lastDeath = occurrence, pendingPackId = next.takeUnless { it == value.selectedPackId })
     }
     internal fun cancelRotation(run: String): SkinResult<SkinLibraryDocument> = changeRotation { value ->
         if (value.rotationRun == run) renewRotation(value) else value
@@ -55,7 +60,10 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
         changeRotation { value ->
             require(configurationIdentity(value) == config && value.rotationRun == run && value.lastDeath == occurrence &&
                 value.pendingPackId == id && value.packs.single { it.id == id }.treeSha256 == tree) { "Applied successor belongs to retired configuration" }
-            value.copy(selectedPackId = id, pendingPackId = null) // lastDeath survives completion: duplicates remain no-ops
+            val completed = value.copy(selectedPackId = id, pendingPackId = null)
+            val nextOccurrence = completed.queuedDeathOccurrences.firstOrNull()
+            if (nextOccurrence == null) completed
+            else activateOccurrence(completed.copy(queuedDeathOccurrences = completed.queuedDeathOccurrences.drop(1)), nextOccurrence)
         } is SkinResult.Ok
 
     fun read(nonblocking: Boolean = false): SkinResult<SkinLibraryDocument> = locked(nonblocking) { SkinResult.Ok(readLocked()) }
@@ -233,7 +241,7 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
         } is SkinResult.Ok
     internal fun lastObservation(document: SkinLibraryDocument): String {
         val file = File(paths.root, "library.observation.json")
-        if (!fs.exists(file)) return "No game-process report yet; launch Hollow Knight, then refresh"
+        if (!fs.exists(file)) return "No game-process report yet; launch ${if (profileId == "silksong") "Silksong" else "Hollow Knight"}, then refresh"
         return try {
             val value = SkinLibraryCodec.strictJson(boundedRead(file, 16384), 16384).asJsonObject
             val status = value["status"].asString; require(status in OBSERVATION_STATUSES)

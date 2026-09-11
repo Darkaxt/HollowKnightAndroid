@@ -168,7 +168,7 @@ namespace DualSouls.Skins.Runtime
         }
     }
 
-    public sealed class SkinRuntimeSession : IDisposable
+    public sealed class SkinRuntimeSession : IDisposable, ISkinTeardownSession
     {
         const long EncodedLimit = 16L * 1024 * 1024;
         readonly ISkinTextureDecoder decoder;
@@ -186,6 +186,8 @@ namespace DualSouls.Skins.Runtime
         string retirementError = "", mode = "ON";
         public SkinPack CurrentPack { get; private set; }
         public int SkinStamp { get; private set; }
+        public bool TeardownComplete => disposed;
+        public string LastError { get; private set; } = "";
         public long AccountedBytes => checked(AllTextures().Sum(x => x.AccountedBytes) + scratchBytes);
         public SkinRuntimeSession(ISkinTextureDecoder decoder, Func<IReadOnlyList<SkinSlot>> discover,
             long memoryLimit, SkinRuntimeRules rules)
@@ -444,13 +446,24 @@ namespace DualSouls.Skins.Runtime
             return retirementError.Length == 0 ? result : new SkinApplyResult(result.Status,
                 result.Detail + "; Resource retirement pending: " + retirementError, result.UnsupportedTargets);
         }
-        public void Dispose()
+        public void TickTeardown()
         {
             if (disposed) return;
             var result = TryRestore();
-            if (result.Status == SkinApplyStatus.RestoreFailed || retired.Count > 0 || auxiliary.Count > 0)
-                throw new InvalidOperationException("Skin teardown retains resources; retry after restoration/destruction completes: " + result.Detail);
+            if (result.Status == SkinApplyStatus.RestoreFailed || result.Status == SkinApplyStatus.Blocked ||
+                retired.Count > 0 || auxiliary.Count > 0)
+            {
+                LastError = "Skin teardown retains resources; retry after restoration/destruction completes: " + result.Detail;
+                return;
+            }
+            LastError = "";
             disposed = true;
+        }
+
+        public void Dispose()
+        {
+            TickTeardown();
+            if (!disposed) throw new InvalidOperationException(LastError);
         }
 
         sealed class PngFile { public long Length; public int Width, Height; public byte[] Header; }

@@ -81,6 +81,56 @@ public sealed class SilksongSkinLibraryTests
         Assert.Equal(0, confirms);
     }
 
+    [Fact]
+    public void Second_normal_death_waits_while_first_apply_is_pending_then_confirms_in_order()
+    {
+        var frame = Frame();
+        var death = new SilksongSkinDeathAdapter(() => frame);
+        var request = Request("a");
+        var confirmed = new List<long>();
+        using var library = new SilksongSkinLibrary(() => request,
+            _ => new SkinApplyResult(SkinApplyStatus.Applied),
+            () => new SkinApplyResult(SkinApplyStatus.Restored),
+            observation => {
+                if (observation.PendingOccurrence > 0 && observation.Status == "Applied")
+                    request.PendingOccurrence = 0;
+                return true;
+            }, () => new SkinApplyResult(SkinApplyStatus.Unchanged), death,
+            (_, occurrence) => {
+                confirmed.Add(occurrence);
+                request.LastDeath = occurrence;
+                request.PendingOccurrence = occurrence;
+                request.PackId = occurrence == 1 ? "b" : "a";
+                return true;
+            }, _ => true);
+
+        library.Tick(0);
+        frame.BridgeHero = frame.Hero;
+        frame.BridgeManager = frame.Manager;
+        frame.BridgeOccurrence = 1;
+        frame.Dead = true;
+        frame.Frame++;
+        library.Tick(1);
+        Assert.Equal(new long[] { 1 }, confirmed);
+
+        frame.BridgeOccurrence = 2;
+        frame.Frame++;
+        library.Tick(1.1f);
+        Assert.Equal(new long[] { 1 }, confirmed);
+
+        frame.Dead = false;
+        frame.HeroInPosition = true;
+        frame.SceneComplete = true;
+        frame.Frame++;
+        library.Tick(1.2f);
+        frame.Frame++;
+        library.Tick(1.3f);
+        library.Tick(2);
+        library.Tick(3);
+
+        Assert.Equal(new long[] { 1, 2 }, confirmed);
+    }
+
     static SkinLibraryRequest Request(string id) => new SkinLibraryRequest {
         ProfileId = "silksong", ConfigSha256 = new string('a', 64), Mode = "ROTATE",
         PackId = id, TreeSha256 = new string('b', 64), Root = Environment.CurrentDirectory,

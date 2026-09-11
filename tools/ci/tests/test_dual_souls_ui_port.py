@@ -2154,7 +2154,7 @@ static class Program
         self.assertIn("DsHudReleasePump.Create(_releaseState)", source)
         bootstrap = csharp_method_body(source, r"static\s+void\s+Bootstrap\s*\(\s*\)")
         self.assertIn("DsHudReleasePump.BlocksReplacement", bootstrap)
-        self.assertIn("!ReferenceEquals(Instance, null)", bootstrap)
+        self.assertIn("ReferenceEquals(Instance, null)", bootstrap)
         for method in ("Update", "LateUpdate", "RequestActivation", "OnDisplaysUpdated", "OnApplicationPause"):
             body = csharp_method_body(source, rf"void\s+{method}\s*\([^)]*\)")
             self.assertIn("!_releaseState.CanRoute", body)

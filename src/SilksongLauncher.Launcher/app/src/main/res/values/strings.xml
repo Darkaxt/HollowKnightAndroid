@@ -23,8 +23,10 @@
     <string name="action_logs">View logs</string>
     <string name="action_mods">Mods</string>
     <string name="action_skins">Skins</string>
-    <string name="skins_title">Hollow Knight · Skins</string>
-    <string name="skins_binding_unavailable">Import ordinary CustomKnight ZIPs, select one pack, and choose OFF → ON → ROTATE → OFF. ON and ROTATE currently apply the selected pack; death rotation is not enabled yet. Published bytes remain retained and count against import capacity.</string>
+    <string name="skins_title_hollow_knight">Hollow Knight · Skins</string>
+    <string name="skins_title_silksong">Silksong · Skins</string>
+    <string name="skins_guidance_hollow_knight">Import ordinary CustomKnight ZIPs, select one pack, and choose OFF → ON → ROTATE → OFF. Launch Hollow Knight to apply the selection. ROTATE advances after an admitted normal death. Published bytes remain retained and count against import capacity.</string>
+    <string name="skins_guidance_silksong">Import a Silksong skin ZIP containing any of the 11 exact catalog targets, select one pack, and choose OFF → ON → ROTATE → OFF. ON applies all supplied character and HUD targets; death rotation advances the nine character targets after an admitted normal death while the two persistent HUD targets remain ON-only. Missing targets remain original and are reported.</string>
     <string name="skins_library_status">Requested mode: %1$s\nSelected pack: %2$s\nEligibility order: %3$s\n%4$s\nConfiguration is not proof of current visuals. The game retries busy or failed operations.</string>
     <string name="skins_recover_off">Turn OFF / recover configuration</string>
     <string name="skins_remove">Remove %1$s from library</string>

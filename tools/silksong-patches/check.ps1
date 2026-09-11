@@ -167,6 +167,10 @@ $proc = Start-Process dotnet `
                   '-p:UseSharedCompilation=false' `
     -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"
 
+# Windows PowerShell 5.1 lazily opens the process handle. A short-lived child can
+# exit before WaitForExit observes it, leaving ExitCode null unless the handle is
+# acquired while the child is still live.
+$null = $proc.Handle
 $proc.WaitForExit()
 $exitCode = $proc.ExitCode
 

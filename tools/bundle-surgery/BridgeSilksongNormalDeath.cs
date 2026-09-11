@@ -9,12 +9,16 @@ internal static class BridgeSilksongNormalDeath
 {
     internal const string PINNED_GAME_VERSION = "1.0.29980";
     internal const string PINNED_ASSEMBLY_SHA256 = "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d";
+    internal const string PINNED_REWRITTEN_ASSEMBLY_SHA256 = "37cd088f4de464b4cc7b01b193ac294a3dfeb282d1fa1757a653215d514db634";
     const string StateMachineName = "<Die>d__1101";
     const string OccurrenceName = "__dsNormalDeathOccurrence";
     const string HeroName = "__dsNormalDeathHero";
     const string ManagerName = "__dsNormalDeathManager";
-    const string HelperName = "DsRecordNormalDeath";
-    const string PinnedHelperSha256 = "ac2d03869b623aba238b2bb58867e3d2a906f194933e47a197b0c09eafa3ef3e";
+    const string EligibleName = "__dsNormalDeathEligible";
+    const string ClassifierName = "DsClassifyNormalDeath";
+    const string RecorderName = "DsRecordNormalDeath";
+    const string PinnedClassifierSha256 = "205c3ecd96f7a3cff0bd4076a61273479c7a9867a624f4fd3249ea8b9d8a27d4";
+    const string PinnedRecorderSha256 = "f0f00da1c0ed44f07a800a767349b1ae6bba669ee7ef8e1d266bbea83e125b19";
 
     sealed class DieShape
     {
@@ -24,7 +28,42 @@ internal static class BridgeSilksongNormalDeath
         public required TypeDefinition StateMachine;
         public required MethodDefinition MoveNext;
         public required FieldDefinition HeroManager;
+        public required FieldDefinition NonLethal;
+        public required VariableDefinition MemoryScene;
+        public required Instruction NormalizedBranch;
+        public required Instruction NormalizedSite;
         public required Instruction NativeStart;
+    }
+
+    sealed class BridgeMembers
+    {
+        public required MethodDefinition Classifier;
+        public required MethodDefinition Recorder;
+        public required FieldDefinition Eligible;
+    }
+
+    public static int Verify(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) throw new InvalidOperationException("managed assembly input is missing");
+            string hash = FileSha256(path);
+            if (hash != PINNED_REWRITTEN_ASSEMBLY_SHA256)
+                throw new InvalidOperationException("rewritten assembly differs from canonical identity: " + hash);
+            var resolver = new DefaultAssemblyResolver();
+            resolver.AddSearchDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+            using var assembly = AssemblyDefinition.ReadAssembly(path,
+                new ReaderParameters { AssemblyResolver = resolver });
+            if (!AlreadyRewritten(RequireExactDieShape(assembly.MainModule)))
+                throw new InvalidOperationException("canonical strict death bridge is absent");
+            Console.WriteLine("  verified executable strict-death bridge: normalized nonlethal, memory, cinematic/control, permadeath, demo terminal, duplicate, hazard, and unstable guards");
+            return 0;
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine("  Silksong normal-death verification failed closed: " + error.Message);
+            return 1;
+        }
     }
 
     public static int Run(string inputPath, string outputPath)
@@ -42,17 +81,19 @@ internal static class BridgeSilksongNormalDeath
             var shape = RequireExactDieShape(assembly.MainModule);
             if (AlreadyRewritten(shape))
             {
+                if (!string.Equals(inputHash, PINNED_REWRITTEN_ASSEMBLY_SHA256, StringComparison.Ordinal))
+                    throw new InvalidOperationException("already-bridged Silksong assembly differs from canonical rewritten identity: " + inputHash);
                 File.Copy(inputPath, outputPath, false);
                 Console.WriteLine("  exact Silksong normal-death bridge already present; copied unchanged");
                 return 0;
             }
-            if (HasAnyBridgeMember(shape.Manager))
+            if (HasAnyBridgeMember(shape))
                 throw new InvalidOperationException("partial or foreign Silksong normal-death bridge is present");
             if (!string.Equals(inputHash, PINNED_ASSEMBLY_SHA256, StringComparison.Ordinal))
                 throw new InvalidOperationException($"Assembly-CSharp.dll differs from pinned {PINNED_GAME_VERSION}: {inputHash}");
 
-            var helper = InjectBridge(shape);
-            RewriteMoveNext(shape, helper);
+            var bridge = InjectBridge(shape);
+            RewriteMoveNext(shape, bridge);
             if (!AlreadyRewritten(shape))
                 throw new InvalidOperationException("in-memory Silksong normal-death bridge did not verify");
 
@@ -71,7 +112,7 @@ internal static class BridgeSilksongNormalDeath
             {
                 if (File.Exists(staging)) File.Delete(staging);
             }
-            Console.WriteLine("  injected exact HeroController.Die normal-death occurrence bridge");
+            Console.WriteLine("  injected exact post-normalization HeroController.Die normal-death occurrence bridge");
             return 0;
         }
         catch (Exception error)
@@ -128,66 +169,118 @@ internal static class BridgeSilksongNormalDeath
             throw new InvalidOperationException("normal PlayerDead ownership site changed");
         var heroManagerDefinition = hero.Fields.SingleOrDefault(x => x.Name == "gm" && x.FieldType.FullName == manager.FullName)
             ?? throw new InvalidOperationException("HeroController manager owner field changed");
+        var nonLethal = state.Fields.SingleOrDefault(x => x.Name == "nonLethal" &&
+            x.FieldType.MetadataType == MetadataType.Boolean)
+            ?? throw new InvalidOperationException("normalized nonLethal iterator field changed");
+        var isMemory = RequireMethod(manager, "IsMemoryScene", module.TypeSystem.Boolean.FullName, 0);
+        var memoryCalls = moveNext.Body.Instructions.Where(x =>
+            (x.OpCode.Code == Code.Call || x.OpCode.Code == Code.Callvirt) &&
+            x.Operand is MethodReference method && method.FullName == isMemory.FullName).ToList();
+        if (memoryCalls.Count != 1) throw new InvalidOperationException("exact memory normalization call changed");
+        var memoryStore = memoryCalls[0].Next;
+        var memoryLocal = StoredVariable(memoryStore, moveNext.Body)
+            ?? throw new InvalidOperationException("memory normalization local changed");
+        var memoryLoad = memoryStore.Next;
+        var normalizedBranch = memoryLoad?.Next;
+        var assignmentStart = normalizedBranch?.Next;
+        var assignmentStore = assignmentStart?.Next?.Next;
+        var normalizedSite = moveNext.Body.Instructions.SkipWhile(x => !ReferenceEquals(x, normalizedBranch))
+            .FirstOrDefault(x => x.OpCode.Code == Code.Ldarg_0 && x.Next?.OpCode.Code == Code.Ldfld &&
+                x.Next.Operand is FieldReference field && field.FullName == nonLethal.FullName &&
+                (x.Next.Next?.OpCode.Code == Code.Brfalse || x.Next.Next?.OpCode.Code == Code.Brfalse_S));
+        if (LoadedVariable(memoryLoad, moveNext.Body) != memoryLocal || normalizedBranch?.OpCode.Code != Code.Brfalse_S ||
+            normalizedBranch.Operand is not Instruction branchTarget || normalizedSite == null ||
+            assignmentStart?.OpCode.Code != Code.Ldarg_0 || assignmentStart.Next?.OpCode.Code != Code.Ldc_I4_1 ||
+            assignmentStore?.OpCode.Code != Code.Stfld || assignmentStore.Operand is not FieldReference assignedField ||
+            assignedField.FullName != nonLethal.FullName || !ReferenceEquals(assignmentStore.Next, branchTarget))
+            throw new InvalidOperationException("post-guard nonLethal/memory normalization site changed");
         return new DieShape { Module = module, Hero = hero, Manager = manager, StateMachine = state,
-            MoveNext = moveNext, HeroManager = heroManagerDefinition, NativeStart = nativeStart };
+            MoveNext = moveNext, HeroManager = heroManagerDefinition, NonLethal = nonLethal,
+            MemoryScene = memoryLocal, NormalizedBranch = normalizedBranch, NormalizedSite = normalizedSite,
+            NativeStart = nativeStart };
     }
 
-    static bool HasAnyBridgeMember(TypeDefinition manager) => manager.Fields.Any(x =>
+    static bool HasAnyBridgeMember(DieShape shape) => shape.Manager.Fields.Any(x =>
             x.Name == OccurrenceName || x.Name == HeroName || x.Name == ManagerName) ||
-        manager.Methods.Any(x => x.Name == HelperName);
+        shape.Manager.Methods.Any(x => x.Name == RecorderName || x.Name == ClassifierName) ||
+        shape.StateMachine.Fields.Any(x => x.Name == EligibleName);
 
     static bool AlreadyRewritten(DieShape shape)
     {
-        if (!HasAnyBridgeMember(shape.Manager)) return false;
+        if (!HasAnyBridgeMember(shape)) return false;
         var occurrence = shape.Manager.Fields.SingleOrDefault(x => x.Name == OccurrenceName &&
             x.IsPublic && x.IsStatic && x.FieldType.MetadataType == MetadataType.Int64);
         var hero = shape.Manager.Fields.SingleOrDefault(x => x.Name == HeroName && x.IsPublic && x.IsStatic &&
             x.FieldType.FullName == shape.Hero.FullName);
         var manager = shape.Manager.Fields.SingleOrDefault(x => x.Name == ManagerName && x.IsPublic && x.IsStatic &&
             x.FieldType.FullName == shape.Manager.FullName);
-        var helper = shape.Manager.Methods.SingleOrDefault(x => x.Name == HelperName && x.IsPublic && x.IsStatic &&
-            x.ReturnType.MetadataType == MetadataType.Void && x.Parameters.Count == 2 &&
+        var eligible = shape.StateMachine.Fields.SingleOrDefault(x => x.Name == EligibleName && !x.IsStatic &&
+            x.FieldType.MetadataType == MetadataType.Boolean);
+        var classifier = shape.Manager.Methods.SingleOrDefault(x => x.Name == ClassifierName && x.IsPublic && x.IsStatic &&
+            x.ReturnType.MetadataType == MetadataType.Boolean && x.Parameters.Count == 4 &&
             x.Parameters[0].ParameterType.FullName == shape.Hero.FullName &&
-            x.Parameters[1].ParameterType.FullName == shape.Manager.FullName && x.HasBody);
-        if (occurrence == null || hero == null || manager == null || helper == null)
+            x.Parameters[1].ParameterType.FullName == shape.Manager.FullName &&
+            x.Parameters[2].ParameterType.MetadataType == MetadataType.Boolean &&
+            x.Parameters[3].ParameterType.MetadataType == MetadataType.Boolean && x.HasBody);
+        var recorder = shape.Manager.Methods.SingleOrDefault(x => x.Name == RecorderName && x.IsPublic && x.IsStatic &&
+            x.ReturnType.MetadataType == MetadataType.Void && x.Parameters.Count == 3 &&
+            x.Parameters[0].ParameterType.FullName == shape.Hero.FullName &&
+            x.Parameters[1].ParameterType.FullName == shape.Manager.FullName &&
+            x.Parameters[2].ParameterType.MetadataType == MetadataType.Boolean && x.HasBody);
+        if (occurrence == null || hero == null || manager == null || eligible == null || classifier == null || recorder == null)
             throw new InvalidOperationException("Silksong normal-death bridge members are incomplete");
-        RequireHelperFingerprint(helper);
-        var calls = shape.MoveNext.Body.Instructions.Where(x =>
-            (x.OpCode.Code == Code.Call || x.OpCode.Code == Code.Callvirt) &&
-            x.Operand is MethodReference method && method.Name == HelperName &&
-            method.DeclaringType.FullName == shape.Manager.FullName).ToList();
-        if (calls.Count != 1 || !ReferenceEquals(calls[0].Next, shape.NativeStart) ||
-            calls[0].Previous?.OpCode.Code != Code.Ldfld ||
-            calls[0].Previous?.Previous?.OpCode.Code != Code.Ldloc_1 ||
-            calls[0].Previous?.Previous?.Previous?.OpCode.Code != Code.Ldloc_1)
-            throw new InvalidOperationException("Silksong normal-death bridge call site is incomplete or moved");
+        RequireFingerprint(classifier, PinnedClassifierSha256, "classifier");
+        RequireFingerprint(recorder, PinnedRecorderSha256, "recorder");
+
+        var classifierCalls = Calls(shape.MoveNext, ClassifierName, shape.Manager.FullName);
+        var recorderCalls = Calls(shape.MoveNext, RecorderName, shape.Manager.FullName);
+        if (classifierCalls.Count != 1 || classifierCalls[0].Next?.OpCode.Code != Code.Stfld ||
+            classifierCalls[0].Next.Operand is not FieldReference eligibilityStore || eligibilityStore.FullName != eligible.FullName ||
+            !ReferenceEquals(classifierCalls[0].Next.Next, shape.NormalizedSite) ||
+            LoadedVariable(classifierCalls[0].Previous, shape.MoveNext.Body) != shape.MemoryScene ||
+            classifierCalls[0].Previous?.Previous?.OpCode.Code != Code.Ldfld ||
+            classifierCalls[0].Previous.Previous.Operand is not FieldReference nonLethal || nonLethal.FullName != shape.NonLethal.FullName ||
+            classifierCalls[0].Previous.Previous.Previous?.OpCode.Code != Code.Ldarg_0 ||
+            classifierCalls[0].Previous.Previous.Previous.Previous?.OpCode.Code != Code.Ldfld ||
+            classifierCalls[0].Previous.Previous.Previous.Previous.Operand is not FieldReference gm || gm.FullName != shape.HeroManager.FullName ||
+            classifierCalls[0].Previous.Previous.Previous.Previous.Previous?.OpCode.Code != Code.Ldloc_1 ||
+            classifierCalls[0].Previous.Previous.Previous.Previous.Previous.Previous?.OpCode.Code != Code.Ldloc_1 ||
+            classifierCalls[0].Previous.Previous.Previous.Previous.Previous.Previous.Previous?.OpCode.Code != Code.Ldarg_0)
+            throw new InvalidOperationException("post-normalization Silksong death classifier call site is incomplete or moved");
+        if (recorderCalls.Count != 1 || !ReferenceEquals(recorderCalls[0].Next, shape.NativeStart) ||
+            recorderCalls[0].Previous?.OpCode.Code != Code.Ldfld ||
+            recorderCalls[0].Previous.Operand is not FieldReference eligibilityLoad || eligibilityLoad.FullName != eligible.FullName ||
+            recorderCalls[0].Previous.Previous?.OpCode.Code != Code.Ldarg_0 ||
+            recorderCalls[0].Previous.Previous.Previous?.OpCode.Code != Code.Ldfld ||
+            recorderCalls[0].Previous.Previous.Previous.Operand is not FieldReference recorderGm || recorderGm.FullName != shape.HeroManager.FullName ||
+            recorderCalls[0].Previous.Previous.Previous.Previous?.OpCode.Code != Code.Ldloc_1 ||
+            recorderCalls[0].Previous.Previous.Previous.Previous.Previous?.OpCode.Code != Code.Ldloc_1)
+            throw new InvalidOperationException("Silksong normal-death recorder call site is incomplete or moved");
         return true;
     }
 
-    static MethodDefinition InjectBridge(DieShape shape)
+    static List<Instruction> Calls(MethodDefinition owner, string name, string declaringType) =>
+        owner.Body.Instructions.Where(x => (x.OpCode.Code == Code.Call || x.OpCode.Code == Code.Callvirt) &&
+            x.Operand is MethodReference method && method.Name == name && method.DeclaringType.FullName == declaringType).ToList();
+
+    static BridgeMembers InjectBridge(DieShape shape)
     {
         var occurrence = new FieldDefinition(OccurrenceName, FieldAttributes.Public | FieldAttributes.Static,
             shape.Module.TypeSystem.Int64);
         var heroField = new FieldDefinition(HeroName, FieldAttributes.Public | FieldAttributes.Static, shape.Hero);
         var managerField = new FieldDefinition(ManagerName, FieldAttributes.Public | FieldAttributes.Static, shape.Manager);
+        var eligible = new FieldDefinition(EligibleName, FieldAttributes.Private, shape.Module.TypeSystem.Boolean);
         shape.Manager.Fields.Add(occurrence);
         shape.Manager.Fields.Add(heroField);
         shape.Manager.Fields.Add(managerField);
-        var helper = new MethodDefinition(HelperName,
-            MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.HideBySig,
-            shape.Module.TypeSystem.Void);
-        helper.Parameters.Add(new ParameterDefinition("hero", ParameterAttributes.None, shape.Hero));
-        helper.Parameters.Add(new ParameterDefinition("manager", ParameterAttributes.None, shape.Manager));
-        helper.Body.InitLocals = true;
-        var maxDeaths = new VariableDefinition(shape.Module.TypeSystem.Int32);
-        helper.Body.Variables.Add(maxDeaths);
-        shape.Manager.Methods.Add(helper);
+        shape.StateMachine.Fields.Add(eligible);
 
         var gameState = RequireType(shape.Module, "GlobalEnums.GameState");
         var perma = RequireType(shape.Module, "GlobalEnums.PermadeathModes");
         int playing = EnumValue(gameState, "PLAYING");
-        int dead = EnumValue(perma, "Dead");
+        int permaOff = EnumValue(perma, "Off");
         var playerData = RequireType(shape.Module, "PlayerData");
+        var heroStates = RequireType(shape.Module, "HeroControllerStates");
         var demoHelper = RequireType(shape.Module, "DemoHelper");
         var demo = RequireType(shape.Module, "GlobalSettings.Demo");
         var managerPlayerData = RequireField(shape.Manager, "playerData", playerData.FullName);
@@ -201,51 +294,119 @@ internal static class BridgeSilksongNormalDeath
         var paused = RequireField(shape.Manager, "isPaused", shape.Module.TypeSystem.Boolean.FullName);
         var heroSilent = RequireMethod(shape.Hero, "get_SilentInstance", shape.Hero.FullName, 0);
         var managerSilent = RequireMethod(shape.Manager, "get_SilentInstance", shape.Manager.FullName, 0);
+        var canInput = RequireMethod(shape.Hero, "CanInput", shape.Module.TypeSystem.Boolean.FullName, 0);
+        var relinquished = RequireField(shape.Hero, "controlReqlinquished", shape.Module.TypeSystem.Boolean.FullName);
+        var heroState = RequireField(shape.Hero, "cState", heroStates.FullName);
+        var dead = RequireField(heroStates, "dead", shape.Module.TypeSystem.Boolean.FullName);
+        var hazardDeath = RequireField(heroStates, "hazardDeath", shape.Module.TypeSystem.Boolean.FullName);
+        var hazardRespawning = RequireField(heroStates, "hazardRespawning", shape.Module.TypeSystem.Boolean.FullName);
         var isDemo = RequireMethod(demoHelper, "get_IsDemoMode", shape.Module.TypeSystem.Boolean.FullName, 0);
         var demoMax = RequireMethod(demo, "get_MaxDeathCount", shape.Module.TypeSystem.Int32.FullName, 0);
 
-        var il = helper.Body.GetILProcessor();
-        var demoDone = Instruction.Create(OpCodes.Nop);
-        var ret = Instruction.Create(OpCodes.Ret);
-        void Add(Instruction instruction) => il.Append(instruction);
-        Add(Instruction.Create(OpCodes.Ldarg_0)); Add(Instruction.Create(OpCodes.Brfalse, ret));
-        Add(Instruction.Create(OpCodes.Ldarg_1)); Add(Instruction.Create(OpCodes.Brfalse, ret));
-        Add(Instruction.Create(OpCodes.Call, heroSilent)); Add(Instruction.Create(OpCodes.Ldarg_0));
-        Add(Instruction.Create(OpCodes.Ceq)); Add(Instruction.Create(OpCodes.Brfalse, ret));
-        Add(Instruction.Create(OpCodes.Call, managerSilent)); Add(Instruction.Create(OpCodes.Ldarg_1));
-        Add(Instruction.Create(OpCodes.Ceq)); Add(Instruction.Create(OpCodes.Brfalse, ret));
-        Add(Instruction.Create(OpCodes.Ldarg_1)); Add(Instruction.Create(OpCodes.Callvirt, gameStateGetter));
-        Add(Instruction.Create(OpCodes.Ldc_I4, playing)); Add(Instruction.Create(OpCodes.Bne_Un, ret));
-        Add(Instruction.Create(OpCodes.Ldarg_1)); Add(Instruction.Create(OpCodes.Ldfld, paused)); Add(Instruction.Create(OpCodes.Brtrue, ret));
-        Add(Instruction.Create(OpCodes.Ldarg_1)); Add(Instruction.Create(OpCodes.Callvirt, gameplay)); Add(Instruction.Create(OpCodes.Brfalse, ret));
-        Add(Instruction.Create(OpCodes.Ldarg_1)); Add(Instruction.Create(OpCodes.Callvirt, finished)); Add(Instruction.Create(OpCodes.Brfalse, ret));
-        Add(Instruction.Create(OpCodes.Ldarg_1)); Add(Instruction.Create(OpCodes.Callvirt, transitioning)); Add(Instruction.Create(OpCodes.Brtrue, ret));
-        Add(Instruction.Create(OpCodes.Ldarg_1)); Add(Instruction.Create(OpCodes.Callvirt, loading)); Add(Instruction.Create(OpCodes.Brtrue, ret));
-        Add(Instruction.Create(OpCodes.Ldarg_1)); Add(Instruction.Create(OpCodes.Ldfld, managerPlayerData));
-        Add(Instruction.Create(OpCodes.Ldfld, permaField)); Add(Instruction.Create(OpCodes.Ldc_I4, dead)); Add(Instruction.Create(OpCodes.Beq, ret));
-        Add(Instruction.Create(OpCodes.Call, isDemo)); Add(Instruction.Create(OpCodes.Brfalse, demoDone));
-        Add(Instruction.Create(OpCodes.Call, demoMax)); Add(Instruction.Create(OpCodes.Stloc, maxDeaths));
-        Add(Instruction.Create(OpCodes.Ldloc, maxDeaths)); Add(Instruction.Create(OpCodes.Ldc_I4_0)); Add(Instruction.Create(OpCodes.Ble, demoDone));
-        Add(Instruction.Create(OpCodes.Ldarg_1)); Add(Instruction.Create(OpCodes.Ldfld, deathCount)); Add(Instruction.Create(OpCodes.Ldc_I4_1));
-        Add(Instruction.Create(OpCodes.Add)); Add(Instruction.Create(OpCodes.Ldloc, maxDeaths)); Add(Instruction.Create(OpCodes.Bge, ret));
-        Add(demoDone);
-        Add(Instruction.Create(OpCodes.Ldsfld, occurrence)); Add(Instruction.Create(OpCodes.Ldc_I8, long.MaxValue)); Add(Instruction.Create(OpCodes.Beq, ret));
-        Add(Instruction.Create(OpCodes.Ldarg_0)); Add(Instruction.Create(OpCodes.Stsfld, heroField));
-        Add(Instruction.Create(OpCodes.Ldarg_1)); Add(Instruction.Create(OpCodes.Stsfld, managerField));
-        Add(Instruction.Create(OpCodes.Ldsfld, occurrence)); Add(Instruction.Create(OpCodes.Ldc_I4_1));
-        Add(Instruction.Create(OpCodes.Conv_I8)); Add(Instruction.Create(OpCodes.Add)); Add(Instruction.Create(OpCodes.Stsfld, occurrence));
-        Add(ret);
-        return helper;
+        var classifier = new MethodDefinition(ClassifierName,
+            MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.HideBySig,
+            shape.Module.TypeSystem.Boolean);
+        classifier.Parameters.Add(new ParameterDefinition("hero", ParameterAttributes.None, shape.Hero));
+        classifier.Parameters.Add(new ParameterDefinition("manager", ParameterAttributes.None, shape.Manager));
+        classifier.Parameters.Add(new ParameterDefinition("normalizedNonLethal", ParameterAttributes.None, shape.Module.TypeSystem.Boolean));
+        classifier.Parameters.Add(new ParameterDefinition("memoryForced", ParameterAttributes.None, shape.Module.TypeSystem.Boolean));
+        classifier.Body.InitLocals = true;
+        var classifierMaxDeaths = new VariableDefinition(shape.Module.TypeSystem.Int32);
+        classifier.Body.Variables.Add(classifierMaxDeaths);
+        shape.Manager.Methods.Add(classifier);
+        var cil = classifier.Body.GetILProcessor();
+        var classifierDemoDone = Instruction.Create(OpCodes.Nop);
+        var classifierFalse = Instruction.Create(OpCodes.Ldc_I4_0);
+        var classifierRet = Instruction.Create(OpCodes.Ret);
+        void C(Instruction instruction) => cil.Append(instruction);
+        C(Instruction.Create(OpCodes.Ldarg_0)); C(Instruction.Create(OpCodes.Brfalse, classifierFalse));
+        C(Instruction.Create(OpCodes.Ldarg_1)); C(Instruction.Create(OpCodes.Brfalse, classifierFalse));
+        C(Instruction.Create(OpCodes.Ldarg_2)); C(Instruction.Create(OpCodes.Brtrue, classifierFalse));
+        C(Instruction.Create(OpCodes.Ldarg_3)); C(Instruction.Create(OpCodes.Brtrue, classifierFalse));
+        C(Instruction.Create(OpCodes.Call, heroSilent)); C(Instruction.Create(OpCodes.Ldarg_0)); C(Instruction.Create(OpCodes.Ceq)); C(Instruction.Create(OpCodes.Brfalse, classifierFalse));
+        C(Instruction.Create(OpCodes.Call, managerSilent)); C(Instruction.Create(OpCodes.Ldarg_1)); C(Instruction.Create(OpCodes.Ceq)); C(Instruction.Create(OpCodes.Brfalse, classifierFalse));
+        C(Instruction.Create(OpCodes.Ldarg_1)); C(Instruction.Create(OpCodes.Callvirt, gameStateGetter)); C(Instruction.Create(OpCodes.Ldc_I4, playing)); C(Instruction.Create(OpCodes.Bne_Un, classifierFalse));
+        C(Instruction.Create(OpCodes.Ldarg_1)); C(Instruction.Create(OpCodes.Ldfld, paused)); C(Instruction.Create(OpCodes.Brtrue, classifierFalse));
+        C(Instruction.Create(OpCodes.Ldarg_1)); C(Instruction.Create(OpCodes.Callvirt, gameplay)); C(Instruction.Create(OpCodes.Brfalse, classifierFalse));
+        C(Instruction.Create(OpCodes.Ldarg_1)); C(Instruction.Create(OpCodes.Callvirt, finished)); C(Instruction.Create(OpCodes.Brfalse, classifierFalse));
+        C(Instruction.Create(OpCodes.Ldarg_1)); C(Instruction.Create(OpCodes.Callvirt, transitioning)); C(Instruction.Create(OpCodes.Brtrue, classifierFalse));
+        C(Instruction.Create(OpCodes.Ldarg_1)); C(Instruction.Create(OpCodes.Callvirt, loading)); C(Instruction.Create(OpCodes.Brtrue, classifierFalse));
+        C(Instruction.Create(OpCodes.Ldarg_1)); C(Instruction.Create(OpCodes.Ldfld, managerPlayerData)); C(Instruction.Create(OpCodes.Ldfld, permaField)); C(Instruction.Create(OpCodes.Ldc_I4, permaOff)); C(Instruction.Create(OpCodes.Bne_Un, classifierFalse));
+        C(Instruction.Create(OpCodes.Ldarg_0)); C(Instruction.Create(OpCodes.Ldfld, relinquished)); C(Instruction.Create(OpCodes.Brtrue, classifierFalse));
+        C(Instruction.Create(OpCodes.Ldarg_0)); C(Instruction.Create(OpCodes.Callvirt, canInput)); C(Instruction.Create(OpCodes.Brfalse, classifierFalse));
+        foreach (var stateFlag in new[] { dead, hazardDeath, hazardRespawning })
+        { C(Instruction.Create(OpCodes.Ldarg_0)); C(Instruction.Create(OpCodes.Ldfld, heroState)); C(Instruction.Create(OpCodes.Ldfld, stateFlag)); C(Instruction.Create(OpCodes.Brtrue, classifierFalse)); }
+        C(Instruction.Create(OpCodes.Call, isDemo)); C(Instruction.Create(OpCodes.Brfalse, classifierDemoDone));
+        C(Instruction.Create(OpCodes.Call, demoMax)); C(Instruction.Create(OpCodes.Stloc, classifierMaxDeaths));
+        C(Instruction.Create(OpCodes.Ldloc, classifierMaxDeaths)); C(Instruction.Create(OpCodes.Ldc_I4_0)); C(Instruction.Create(OpCodes.Ble, classifierDemoDone));
+        C(Instruction.Create(OpCodes.Ldarg_1)); C(Instruction.Create(OpCodes.Ldfld, deathCount)); C(Instruction.Create(OpCodes.Ldc_I4_1)); C(Instruction.Create(OpCodes.Add)); C(Instruction.Create(OpCodes.Ldloc, classifierMaxDeaths)); C(Instruction.Create(OpCodes.Bge, classifierFalse));
+        C(classifierDemoDone); C(Instruction.Create(OpCodes.Ldc_I4_1)); C(classifierRet); C(classifierFalse); C(Instruction.Create(OpCodes.Ret));
+
+        var recorder = new MethodDefinition(RecorderName,
+            MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.HideBySig,
+            shape.Module.TypeSystem.Void);
+        recorder.Parameters.Add(new ParameterDefinition("hero", ParameterAttributes.None, shape.Hero));
+        recorder.Parameters.Add(new ParameterDefinition("manager", ParameterAttributes.None, shape.Manager));
+        recorder.Parameters.Add(new ParameterDefinition("eligible", ParameterAttributes.None, shape.Module.TypeSystem.Boolean));
+        shape.Manager.Methods.Add(recorder);
+        var ril = recorder.Body.GetILProcessor();
+        var recorderRet = Instruction.Create(OpCodes.Ret);
+        void R(Instruction instruction) => ril.Append(instruction);
+        R(Instruction.Create(OpCodes.Ldarg_2)); R(Instruction.Create(OpCodes.Brfalse, recorderRet));
+        R(Instruction.Create(OpCodes.Ldarg_0)); R(Instruction.Create(OpCodes.Brfalse, recorderRet));
+        R(Instruction.Create(OpCodes.Ldarg_1)); R(Instruction.Create(OpCodes.Brfalse, recorderRet));
+        R(Instruction.Create(OpCodes.Call, heroSilent)); R(Instruction.Create(OpCodes.Ldarg_0)); R(Instruction.Create(OpCodes.Ceq)); R(Instruction.Create(OpCodes.Brfalse, recorderRet));
+        R(Instruction.Create(OpCodes.Call, managerSilent)); R(Instruction.Create(OpCodes.Ldarg_1)); R(Instruction.Create(OpCodes.Ceq)); R(Instruction.Create(OpCodes.Brfalse, recorderRet));
+        R(Instruction.Create(OpCodes.Ldarg_1)); R(Instruction.Create(OpCodes.Callvirt, gameStateGetter)); R(Instruction.Create(OpCodes.Ldc_I4, playing)); R(Instruction.Create(OpCodes.Bne_Un, recorderRet));
+        R(Instruction.Create(OpCodes.Ldarg_1)); R(Instruction.Create(OpCodes.Ldfld, paused)); R(Instruction.Create(OpCodes.Brtrue, recorderRet));
+        R(Instruction.Create(OpCodes.Ldarg_1)); R(Instruction.Create(OpCodes.Callvirt, gameplay)); R(Instruction.Create(OpCodes.Brfalse, recorderRet));
+        R(Instruction.Create(OpCodes.Ldarg_1)); R(Instruction.Create(OpCodes.Callvirt, finished)); R(Instruction.Create(OpCodes.Brfalse, recorderRet));
+        R(Instruction.Create(OpCodes.Ldarg_1)); R(Instruction.Create(OpCodes.Callvirt, transitioning)); R(Instruction.Create(OpCodes.Brtrue, recorderRet));
+        R(Instruction.Create(OpCodes.Ldarg_1)); R(Instruction.Create(OpCodes.Callvirt, loading)); R(Instruction.Create(OpCodes.Brtrue, recorderRet));
+        R(Instruction.Create(OpCodes.Ldarg_1)); R(Instruction.Create(OpCodes.Ldfld, managerPlayerData)); R(Instruction.Create(OpCodes.Ldfld, permaField)); R(Instruction.Create(OpCodes.Ldc_I4, permaOff)); R(Instruction.Create(OpCodes.Bne_Un, recorderRet));
+        R(Instruction.Create(OpCodes.Ldsfld, occurrence)); R(Instruction.Create(OpCodes.Ldc_I8, long.MaxValue)); R(Instruction.Create(OpCodes.Beq, recorderRet));
+        R(Instruction.Create(OpCodes.Ldarg_0)); R(Instruction.Create(OpCodes.Stsfld, heroField));
+        R(Instruction.Create(OpCodes.Ldarg_1)); R(Instruction.Create(OpCodes.Stsfld, managerField));
+        R(Instruction.Create(OpCodes.Ldsfld, occurrence)); R(Instruction.Create(OpCodes.Ldc_I4_1)); R(Instruction.Create(OpCodes.Conv_I8)); R(Instruction.Create(OpCodes.Add)); R(Instruction.Create(OpCodes.Stsfld, occurrence));
+        R(recorderRet);
+        return new BridgeMembers { Classifier = classifier, Recorder = recorder, Eligible = eligible };
     }
 
-    static void RewriteMoveNext(DieShape shape, MethodDefinition helper)
+    static void RewriteMoveNext(DieShape shape, BridgeMembers bridge)
     {
         var il = shape.MoveNext.Body.GetILProcessor();
+        var classifyStart = Instruction.Create(OpCodes.Ldarg_0);
+        il.InsertBefore(shape.NormalizedSite, classifyStart);
+        il.InsertBefore(shape.NormalizedSite, Instruction.Create(OpCodes.Ldloc_1));
+        il.InsertBefore(shape.NormalizedSite, Instruction.Create(OpCodes.Ldloc_1));
+        il.InsertBefore(shape.NormalizedSite, Instruction.Create(OpCodes.Ldfld, shape.HeroManager));
+        il.InsertBefore(shape.NormalizedSite, Instruction.Create(OpCodes.Ldarg_0));
+        il.InsertBefore(shape.NormalizedSite, Instruction.Create(OpCodes.Ldfld, shape.NonLethal));
+        il.InsertBefore(shape.NormalizedSite, Instruction.Create(OpCodes.Ldloc, shape.MemoryScene));
+        il.InsertBefore(shape.NormalizedSite, Instruction.Create(OpCodes.Call, bridge.Classifier));
+        il.InsertBefore(shape.NormalizedSite, Instruction.Create(OpCodes.Stfld, bridge.Eligible));
+        shape.NormalizedBranch.Operand = classifyStart;
+
         il.InsertBefore(shape.NativeStart, Instruction.Create(OpCodes.Ldloc_1));
         il.InsertBefore(shape.NativeStart, Instruction.Create(OpCodes.Ldloc_1));
         il.InsertBefore(shape.NativeStart, Instruction.Create(OpCodes.Ldfld, shape.HeroManager));
-        il.InsertBefore(shape.NativeStart, Instruction.Create(OpCodes.Call, helper));
+        il.InsertBefore(shape.NativeStart, Instruction.Create(OpCodes.Ldarg_0));
+        il.InsertBefore(shape.NativeStart, Instruction.Create(OpCodes.Ldfld, bridge.Eligible));
+        il.InsertBefore(shape.NativeStart, Instruction.Create(OpCodes.Call, bridge.Recorder));
     }
+
+    static VariableDefinition? StoredVariable(Instruction? instruction, MethodBody body) => instruction?.OpCode.Code switch
+    {
+        Code.Stloc_0 => body.Variables[0], Code.Stloc_1 => body.Variables[1],
+        Code.Stloc_2 => body.Variables[2], Code.Stloc_3 => body.Variables[3],
+        Code.Stloc or Code.Stloc_S => instruction.Operand as VariableDefinition, _ => null,
+    };
+    static VariableDefinition? LoadedVariable(Instruction? instruction, MethodBody body) => instruction?.OpCode.Code switch
+    {
+        Code.Ldloc_0 => body.Variables[0], Code.Ldloc_1 => body.Variables[1],
+        Code.Ldloc_2 => body.Variables[2], Code.Ldloc_3 => body.Variables[3],
+        Code.Ldloc or Code.Ldloc_S => instruction.Operand as VariableDefinition, _ => null,
+    };
 
     static TypeDefinition RequireType(ModuleDefinition module, string fullName) =>
         module.Types.SingleOrDefault(x => x.FullName == fullName)
@@ -260,11 +421,11 @@ internal static class BridgeSilksongNormalDeath
         type.Fields.SingleOrDefault(x => x.Name == name && x.IsLiteral)?.Constant
         ?? throw new InvalidOperationException("required exact enum value is missing: " + type.FullName + "::" + name));
 
-    static void RequireHelperFingerprint(MethodDefinition helper)
+    static void RequireFingerprint(MethodDefinition helper, string expected, string label)
     {
         string actual = HelperFingerprint(helper);
-        if (actual != PinnedHelperSha256)
-            throw new InvalidOperationException("Silksong normal-death helper differs from canonical body: " + actual);
+        if (actual != expected)
+            throw new InvalidOperationException("Silksong normal-death " + label + " differs from canonical body: " + actual);
     }
 
     internal static string HelperFingerprint(MethodDefinition helper)
@@ -273,15 +434,14 @@ internal static class BridgeSilksongNormalDeath
         var indexes = instructions.Select((value, index) => (value, index)).ToDictionary(x => x.value, x => x.index);
         string Operand(object? value) => value switch
         {
-            null => "-",
-            Instruction target => "target:" + indexes[target],
+            null => "-", Instruction target => "target:" + indexes[target],
             MethodReference method => "method:" + method.FullName,
             FieldReference field => "field:" + field.FullName,
             ParameterDefinition parameter => "arg:" + parameter.Index,
             VariableDefinition variable => "local:" + variable.Index,
             _ => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "-",
         };
-        var normalized = new List<string> { "schema=task101-silksong-death-v1", "locals=" +
+        var normalized = new List<string> { "schema=task101-silksong-death-v2", "locals=" +
             string.Join(",", helper.Body.Variables.Select(x => x.VariableType.FullName)) };
         normalized.AddRange(instructions.Select((x, i) => i + "|" + x.OpCode.Code + "|" + Operand(x.Operand)));
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n", normalized)))).ToLowerInvariant();
