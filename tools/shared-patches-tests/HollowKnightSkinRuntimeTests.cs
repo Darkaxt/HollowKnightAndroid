@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using DualSouls.Skins.HollowKnight.Runtime;
 using DualSouls.Skins.Runtime;
+using DualSouls.Skins.Silksong.Runtime;
 using Xunit;
 
 public sealed class HollowKnightSkinRuntimeTests
@@ -219,6 +220,62 @@ public sealed class HollowKnightSkinRuntimeTests
         Assert.Equal("full-b", observed.ActivePackId);
         Assert.Equal(new string('c', 64), observed.ActiveTreeSha256);
         Assert.Equal(finalTextureCount, rig.Loader.Created.Count);
+    }
+
+    [Fact]
+    public void Silksong_publish_with_omissions_clears_retired_identity_and_preserves_successor_retry()
+    {
+        var targets = Enumerable.Range(0, 11).Select(index => "T" + index + ".png").ToArray();
+        var rules = new SkinRuntimeRules("silksong", 11, targets.Contains,
+            (mode, target) => mode == "ON" || mode == "ROTATE" && Array.IndexOf(targets, target) < 9,
+            restoreBeforeRotation: true);
+        var rig = new Rig(2300, rules);
+        foreach (var target in targets) rig.Add(target);
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGNQSlv1HxkzkC4AAJHIIxEb9L/kAAAAAElFTkSuQmCC");
+        var first = rig.Pack("full-a", "ON", png, targets);
+        var second = rig.Pack("full-b", "ON", png, targets);
+        var request = new SkinLibraryRequest {
+            ProfileId = "silksong", ConfigSha256 = new string('a', 64), Mode = "ON",
+            PackId = first.Id, TreeSha256 = new string('b', 64), Root = first.Root,
+            Textures = first.Textures.ToDictionary(x => x.Key, x => x.Value),
+        };
+        var omissions = new[] { "HUD/Cln.png (live collection unavailable)" };
+        var lastPublished = new SkinApplyResult(SkinApplyStatus.Unchanged);
+        SkinLibraryObservation observed = null;
+        SkinApplyResult Publish(SkinApplyResult result) =>
+            lastPublished = SilksongSkinRuntime.Publish(result, omissions);
+        var controller = new SkinLibraryRuntimeController(rules, () => request,
+            pack => Publish(rig.Session.TryApply(pack)), () => Publish(rig.Session.TryRestore()),
+            value => observed = value, () => lastPublished);
+
+        controller.Tick();
+        Assert.Equal("full-a", observed.ActivePackId);
+        rig.Loader.DelayedRelease = true;
+        request.PackId = second.Id;
+        request.TreeSha256 = new string('c', 64);
+        request.Root = second.Root;
+        request.Textures = second.Textures.ToDictionary(x => x.Key, x => x.Value);
+
+        controller.Tick();
+
+        Assert.Equal("AwaitingTargets", observed.Status);
+        Assert.Null(observed.ActivePackId);
+        Assert.Null(observed.ActiveTreeSha256);
+        Assert.True(lastPublished.PreviousVisualsRestored);
+        Assert.Contains("Omitted targets: HUD/Cln.png", lastPublished.Detail);
+        Assert.Null(rig.Session.CurrentPack);
+        Assert.Equal(11, rig.Loader.Created.Count);
+
+        controller.Tick();
+        Assert.Null(observed.ActivePackId);
+        Assert.Equal(11, rig.Loader.Created.Count);
+
+        foreach (var texture in rig.Loader.Created) texture.Released = true;
+        controller.Tick();
+        Assert.Equal("Applied", observed.Status);
+        Assert.Equal("full-b", observed.ActivePackId);
+        Assert.Equal(new string('c', 64), observed.ActiveTreeSha256);
+        Assert.Equal(22, rig.Loader.Created.Count);
     }
 
     [Fact]

@@ -1,17 +1,33 @@
-#if UNITY_ANDROID && !UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using DualSouls.Skins.Runtime;
+#if UNITY_ANDROID && !UNITY_EDITOR
 using System.Linq;
 using System.Reflection;
 using System.Threading;
-using DualSouls.Skins.Runtime;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UObject = UnityEngine.Object;
+#endif
 
 namespace DualSouls.Skins.Silksong.Runtime
 {
-    public sealed class SilksongSkinRuntime : IDisposable, ISkinTeardownSession
+    public sealed partial class SilksongSkinRuntime
+    {
+        internal static SkinApplyResult Publish(SkinApplyResult result, IReadOnlyCollection<string> omissions)
+        {
+            string omission = omissions == null || omissions.Count == 0 ? "" :
+                " Omitted targets: " + string.Join("; ", omissions);
+            return omission.Length == 0 ? result : new SkinApplyResult(result.Status,
+                (result.Detail ?? "") + omission, result.UnsupportedTargets, result.PreviousVisualsRestored);
+        }
+    }
+}
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+namespace DualSouls.Skins.Silksong.Runtime
+{
+    public sealed partial class SilksongSkinRuntime : IDisposable, ISkinTeardownSession
     {
         sealed class HeroOwners
         {
@@ -106,9 +122,7 @@ namespace DualSouls.Skins.Silksong.Runtime
 
         SkinApplyResult Publish(SkinApplyResult result)
         {
-            string omission = omissions.Count == 0 ? "" : " Omitted targets: " + string.Join("; ", omissions);
-            LastResult = omission.Length == 0 ? result : new SkinApplyResult(result.Status,
-                (result.Detail ?? "") + omission, result.UnsupportedTargets);
+            LastResult = Publish(result, omissions);
             if (LastResult.Status == SkinApplyStatus.Failed || LastResult.Status == SkinApplyStatus.RestoreFailed ||
                 LastResult.Status == SkinApplyStatus.Blocked)
                 Debug.LogWarning("[Silksong skins] " + LastResult.Status + ": " + LastResult.Detail);

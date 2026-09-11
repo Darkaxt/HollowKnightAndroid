@@ -39,6 +39,7 @@ SILKSONG_DEATH_REWRITE = REPO_ROOT / "tools" / "bundle-surgery" / "BridgeSilkson
 SILKSONG_DEATH_ADAPTER = REPO_ROOT / "tools" / "silksong-patches" / "src" / "skins" / "runtime" / "SilksongSkinDeathAdapter.cs"
 SILKSONG_SKIN_LIBRARY = REPO_ROOT / "tools" / "silksong-patches" / "src" / "skins" / "runtime" / "SilksongSkinLibrary.cs"
 SILKSONG_SKIN_RUNTIME = REPO_ROOT / "tools" / "silksong-patches" / "src" / "skins" / "runtime" / "SilksongSkinRuntime.cs"
+SKIN_RUNTIME_SESSION = REPO_ROOT / "tools" / "shared-patches" / "src" / "skins" / "runtime" / "SkinRuntimeSession.cs"
 BUNDLE_SURGERY_PROGRAM = REPO_ROOT / "tools" / "bundle-surgery" / "Program.cs"
 IL2CPP_CONVERTER = REPO_ROOT / "src" / "SilksongLauncher.Launcher" / "app" / "src" / "main" / "kotlin" / "dev" / "silksong" / "launcher" / "Il2cppConverter.kt"
 SKIN_RUNTIME_BRIDGE = REPO_ROOT / "src" / "SilksongLauncher.Launcher" / "app" / "src" / "main" / "kotlin" / "dev" / "silksong" / "launcher" / "runtime" / "SkinLibraryRuntimeBridge.kt"
@@ -312,6 +313,13 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         self.assertNotIn("released[", decoder)
         self.assertIn("() => texture == null", decoder)
         self.assertIn("UObject.Destroy(texture)", decoder)
+
+    def test_skin_result_decoration_preserves_restored_visual_authority(self):
+        runtime = read(SILKSONG_SKIN_RUNTIME)
+        session = read(SKIN_RUNTIME_SESSION)
+        self.assertIn("LastResult = Publish(result, omissions);", runtime)
+        self.assertIn("result.UnsupportedTargets, result.PreviousVisualsRestored", runtime)
+        self.assertIn("result.UnsupportedTargets,\n                result.PreviousVisualsRestored", session)
 
     def test_registered_native_message_companion_dismissal_rewrites_only_armed_wait(self):
         self.assertTrue(UI_MSG_DISMISS_REWRITE.is_file(), "Task105 Cecil rewrite is missing")
