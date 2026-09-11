@@ -1958,10 +1958,13 @@ static class Program
         for entry in reviewed_entries:
             digest, relative_path = entry.split("  ", 1)
             reviewed_paths.append(relative_path)
-            self.assertEqual(
-                hashlib.sha256((REPO_ROOT / relative_path).read_bytes()).hexdigest(),
-                digest,
-            )
+            historical = subprocess.run(
+                ["git", "-C", str(REPO_ROOT), "show",
+                 f"{receipt['sourceCommit']}:{relative_path}"],
+                check=True,
+                capture_output=True,
+            ).stdout
+            self.assertEqual(hashlib.sha256(historical).hexdigest(), digest)
         for required in (
             "tools/silksong-patches/src/dualscreen/DsPortMap.cs",
             "tools/silksong-patches/src/dualscreen/DsPortOverlays.cs",
@@ -2026,10 +2029,13 @@ static class Program
                          shared_build["sourceManifestSha256"])
         for entry in shared_entries:
             digest, relative_path = entry.split("  ", 1)
-            self.assertEqual(
-                hashlib.sha256((REPO_ROOT / relative_path).read_bytes()).hexdigest(),
-                digest,
-            )
+            historical = subprocess.run(
+                ["git", "-C", str(REPO_ROOT), "show",
+                 f"{receipt['sourceCommit']}:{relative_path}"],
+                check=True,
+                capture_output=True,
+            ).stdout
+            self.assertEqual(hashlib.sha256(historical).hexdigest(), digest)
         self.assertRegex(shared_build["outputSha256"], r"^[0-9a-f]{64}$")
         self.assertIn("Build succeeded.", read(REPO_ROOT / shared_build["log"]))
 

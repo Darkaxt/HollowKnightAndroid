@@ -8,7 +8,6 @@ using System.Collections.Generic;
 using DualSouls.Mods;
 using DualSouls.Mods.Silksong;
 using UnityEngine;
-using UnityEngine.UI;
 using PaneText = TMProOld.TextMeshPro;
 
 public sealed class DsPortMods : IDisposable
@@ -28,8 +27,11 @@ public sealed class DsPortMods : IDisposable
     TweakSession _session;
     TweakMenuModel _menu;
     RectTransform _boundAnchor;
-    RectTransform _gear;
+    GameObject _gear;
+    Mesh _gearMesh;
+    Material _gearMaterial;
     RectTransform _modal;
+    DsRendererMaskCover _ground;
     NativeLabel _title;
     NativeLabel _master;
     NativeLabel _group;
@@ -170,8 +172,12 @@ public sealed class DsPortMods : IDisposable
         if (_session != null) _session.SetPresenterAttached(false);
         _frame.SetModsOpen(false);
         DestroyModal();
-        if (_gear != null) UnityEngine.Object.Destroy(_gear.gameObject);
+        if (_gear != null) UnityEngine.Object.Destroy(_gear);
+        if (_gearMaterial != null) UnityEngine.Object.Destroy(_gearMaterial);
+        if (_gearMesh != null) UnityEngine.Object.Destroy(_gearMesh);
         _gear = null;
+        _gearMaterial = null;
+        _gearMesh = null;
         _boundAnchor = null;
     }
 
@@ -197,8 +203,49 @@ public sealed class DsPortMods : IDisposable
         RectTransform anchor = _frame.ModsAnchor;
         if (anchor == null) return;
         _boundAnchor = anchor;
-        _gear = DsWidgets.Gear(anchor, "DsPortModsGear", Color.white);
-        DsWidgets.Stretch(_gear);
+
+        _gear = new GameObject("DsPortModsGear");
+        _gear.layer = DsPresentation.CONTENT_LAYER;
+        _gear.transform.SetParent(anchor, false);
+        var filter = _gear.AddComponent<MeshFilter>();
+        var renderer = _gear.AddComponent<MeshRenderer>();
+        const int segments = 24;
+        var vertices = new Vector3[segments * 2];
+        var triangles = new int[segments * 6];
+        for (int i = 0; i < segments; i++)
+        {
+            float angle = Mathf.PI * 2f * i / segments;
+            float outer = (i & 1) == 0 ? 1f : 0.82f;
+            vertices[i * 2] = new Vector3(Mathf.Cos(angle) * 0.38f,
+                                          Mathf.Sin(angle) * 0.38f, 0f);
+            vertices[i * 2 + 1] = new Vector3(Mathf.Cos(angle) * outer,
+                                              Mathf.Sin(angle) * outer, 0f);
+            int next = (i + 1) % segments;
+            int triangle = i * 6;
+            triangles[triangle] = i * 2;
+            triangles[triangle + 1] = next * 2 + 1;
+            triangles[triangle + 2] = i * 2 + 1;
+            triangles[triangle + 3] = i * 2;
+            triangles[triangle + 4] = next * 2;
+            triangles[triangle + 5] = next * 2 + 1;
+        }
+        _gearMesh = new Mesh { name = "DsPortModsGearMesh", vertices = vertices, triangles = triangles };
+        _gearMesh.RecalculateBounds();
+        filter.sharedMesh = _gearMesh;
+        Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("UI/Default");
+        if (shader == null)
+        {
+            DetachPresentation();
+            return;
+        }
+        _gearMaterial = new Material(shader) { name = "DsPortModsGearMaterial", color = Color.white };
+        renderer.sharedMaterial = _gearMaterial;
+        renderer.sortingLayerID = 0;
+        renderer.sortingOrder = DsPortLayers.FRAME_RENDER_ORDER + 100;
+        float size = Mathf.Max(1f, Mathf.Min(anchor.rect.width, anchor.rect.height)) * 0.36f;
+        _gear.transform.localScale = new Vector3(size, size, 1f);
+        _gear.transform.localPosition = Vector3.zero;
+
         float w = Mathf.Max(1f, DsPresentation.PanelW);
         float h = Mathf.Max(1f, DsPresentation.PanelH);
         _gearHit = new Rect(w * 0.84f, h * 0.76f, w * 0.14f, h * 0.22f);
@@ -212,17 +259,12 @@ public sealed class DsPortMods : IDisposable
             DsPresentation.CONTENT_LAYER, Vector2.zero, Vector2.one);
         _modal.SetAsLastSibling();
 
-        var ground = new GameObject("DsPortModsGround");
-        ground.layer = DsPresentation.CONTENT_LAYER;
-        var groundRect = ground.AddComponent<RectTransform>();
-        groundRect.SetParent(_modal, false);
-        groundRect.anchorMin = Vector2.zero;
-        groundRect.anchorMax = Vector2.one;
-        groundRect.offsetMin = Vector2.zero;
-        groundRect.offsetMax = Vector2.zero;
-        var image = ground.AddComponent<Image>();
-        image.color = new Color(0.015f, 0.018f, 0.025f, 0.96f);
-        image.raycastTarget = false;
+        _ground = new DsRendererMaskCover(
+            _modal, "DsPortModsGround", DsPresentation.CONTENT_LAYER,
+            DsPortLayers.PAGE_RENDER_ORDER - 10);
+        _ground.SetRect(Rect.MinMaxRect(
+            -DsPresentation.PanelW * 0.46f, -DsPresentation.PanelH * 0.305f,
+             DsPresentation.PanelW * 0.46f,  DsPresentation.PanelH * 0.305f));
 
         _topOrnament = _frame.CloneModsOrnament(_modal, "DsPortModsTopFleur", true);
         _bottomOrnament = _frame.CloneModsOrnament(_modal, "DsPortModsBottomFleur", false);
@@ -411,6 +453,8 @@ public sealed class DsPortMods : IDisposable
 
     void DestroyModal()
     {
+        if (_ground != null) _ground.Dispose();
+        _ground = null;
         if (_modal != null) UnityEngine.Object.Destroy(_modal.gameObject);
         _modal = null;
         _title = null;
