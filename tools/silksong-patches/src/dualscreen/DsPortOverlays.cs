@@ -305,6 +305,7 @@ public sealed class DsPortOverlays : System.IDisposable
     readonly NativeAreaTitle _areaTitle;
     readonly NativeTutorial _tutorial;
     readonly NativePowerUp _powerUp;
+    readonly NativeSkillGet _skillGet;
     readonly NativeItems _items;
     readonly NativeLore _lore;
     bool _disposed;
@@ -320,6 +321,7 @@ public sealed class DsPortOverlays : System.IDisposable
         _areaTitle = new NativeAreaTitle(layers.Overlays);
         _tutorial = new NativeTutorial(layers.Overlays);
         _powerUp = new NativePowerUp(layers.Overlays);
+        _skillGet = new NativeSkillGet(layers.Overlays);
         _items = new NativeItems(layers.Overlays);
         _lore = new NativeLore(layers.Overlays);
     }
@@ -333,6 +335,7 @@ public sealed class DsPortOverlays : System.IDisposable
         _areaTitle.Tick(visible);
         _tutorial.Tick(visible);
         _powerUp.Tick(visible);
+        _skillGet.Tick(visible);
         _items.Tick(visible);
         _lore.Tick(visible);
         _sceneryState.Tick(visible && gameplayScenery, UnityEngine.Time.frameCount,
@@ -350,6 +353,7 @@ public sealed class DsPortOverlays : System.IDisposable
         if (_state.ConsumeGesture(visible)) return true;
         if (_tutorial.ConsumeGesture(gesture, visible)) return true;
         if (_powerUp.ConsumeGesture(gesture, visible)) return true;
+        if (_skillGet.ConsumeGesture(gesture, visible)) return true;
         if (!_items.Tick(visible) && _items.Pending) return true;
         if (!_lore.Tick(visible) && _lore.Pending) return true;
         bool dialogue = _dialogue.ConsumeGesture(gesture, visible);
@@ -361,7 +365,7 @@ public sealed class DsPortOverlays : System.IDisposable
 
     public void RestoreNative()
     {
-        if (!_disposed) DsPortOverlayRestoration.All(_dialogue.Restore, _credits.Restore, _areaTitle.Restore, _tutorial.Restore, _powerUp.Restore, _items.Restore, _lore.Restore);
+        if (!_disposed) DsPortOverlayRestoration.All(_dialogue.Restore, _credits.Restore, _areaTitle.Restore, _tutorial.Restore, _powerUp.Restore, _skillGet.Restore, _items.Restore, _lore.Restore);
     }
 
     public void Dispose()
@@ -1005,6 +1009,26 @@ public sealed class DsPortOverlays : System.IDisposable
                 NativeRegisteredMessage.LocalReference(owner, field, root, single);
             foreach (string field in new[] { "promptButtonModifier", "promptButtonModifierText", "upModifier", "downModifier" })
                 NativeRegisteredMessage.LocalReference(owner, field, root, modifier);
+        }
+        public bool Tick(bool visible) => _route.Tick(visible);
+        public bool ConsumeGesture(DsGesture gesture, bool visible) => _route.ConsumeGesture(gesture, visible);
+        public void Restore() => _route.Restore();
+    }
+
+    // SkillGetMsg.Spawn owns ToolPaneHasNew, HUD routing, the hero input blocker,
+    // Setup and completion events. Route only its already-running exact instance;
+    // native DoMsg retains progression and consumes the generation-bound request.
+    sealed class NativeSkillGet
+    {
+        readonly NativeRegisteredMessage _route;
+        public NativeSkillGet(RectTransform target)
+        { _route = new NativeRegisteredMessage(target, typeof(SkillGetMsg), Validate, "skill-get"); }
+        static void Validate(UIMsgProxy owner, Transform root)
+        {
+            foreach (string field in new[] { "crestGroup", "crestSprite", "crestGlowSprite",
+                "skillSprite", "skillGlowSprite", "skillSilhouetteSprite", "skillIconSprite",
+                "prefixText", "nameText", "descText" })
+                NativeRegisteredMessage.LocalReference(owner, field, root, true);
         }
         public bool Tick(bool visible) => _route.Tick(visible);
         public bool ConsumeGesture(DsGesture gesture, bool visible) => _route.ConsumeGesture(gesture, visible);

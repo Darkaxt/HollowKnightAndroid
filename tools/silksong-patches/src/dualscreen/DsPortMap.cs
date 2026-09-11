@@ -8,7 +8,6 @@ using Gameplay = GlobalSettings.Gameplay;
 using TeamCherry.SharedUtils;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.UI;
 using Object = UnityEngine.Object;
 #endif
 
@@ -104,7 +103,6 @@ public sealed class DsPortMapRetainedGraph<T> where T : class
     DsPortMapAuthorityToken _authority;
     DsPortPageSnapshot _snapshot;
     double _nextSnapshot;
-    int _commandBuffers;
     bool _retiring, _retirementRequired;
     public DsPortMapRetainedGraph(double interval = SnapshotIntervalSeconds)
     {
@@ -118,21 +116,18 @@ public sealed class DsPortMapRetainedGraph<T> where T : class
     public int SnapshotCount { get; private set; }
     public int ReuseCount { get; private set; }
     public int DynamicRefreshCount { get; private set; }
-    public int CommandBufferConstructionCount { get; private set; }
-    public int CommandBufferReleaseCount { get; private set; }
     public void Admit(T graph, DsPortMapAuthorityToken authority, IEnumerable<object> snapshot,
-        double now, int commandBuffers) =>
-        Admit(graph, authority, new DsPortPageSnapshot(snapshot), now, commandBuffers);
+        double now) =>
+        Admit(graph, authority, new DsPortPageSnapshot(snapshot), now);
     public void Admit(T graph, DsPortMapAuthorityToken authority, DsPortPageSnapshot snapshot,
-        double now, int commandBuffers)
+        double now)
     {
         if (_graph != null || _retiring || _retirementRequired) throw new InvalidOperationException("Map replacement requires exact prior retirement");
-        if (graph == null || snapshot == null || commandBuffers < 0 || double.IsNaN(now) || double.IsInfinity(now))
+        if (graph == null || snapshot == null || double.IsNaN(now) || double.IsInfinity(now))
             throw new ArgumentOutOfRangeException();
         _snapshot = snapshot;
         _graph = graph; _authority = authority; _nextSnapshot = now + _interval;
-        _commandBuffers = commandBuffers; ConstructionCount++;
-        CommandBufferConstructionCount += commandBuffers;
+        ConstructionCount++;
     }
     public bool TryReuse(DsPortMapAuthorityToken authority, bool immediateEligible, bool primaryShowing,
         double now, Func<IEnumerable<object>> readSnapshot, Action<T> retire, out T graph)
@@ -172,111 +167,14 @@ public sealed class DsPortMapRetainedGraph<T> where T : class
             var graph = _graph;
             retire(graph);
             _graph = null; _snapshot = null; _nextSnapshot = 0; _retirementRequired = false;
-            RetirementCount++; CommandBufferReleaseCount += _commandBuffers; _commandBuffers = 0;
+            RetirementCount++;
         }
         finally { _retiring = false; }
     }
 }
 
-public struct DsPortMapDrawKey
-{
-    public object Group;
-    public int Layer, Order, Queue, Stable;
-    public float Distance;
-}
-
-public struct DsPortMapSortSlot
-{
-    public int Binding;
-    public DsPortMapDrawKey[] Keys;
-    public int KeyCount;
-}
-
-// This exact scratch type is used by production SetupCamera. Its arrays and comparer
-// are retained at graph construction, so Reset/Add/Sort have no steady-frame setup.
-public sealed class DsPortMapSortScratch
-{
-    sealed class SlotComparer : IComparer<DsPortMapSortSlot>
-    {
-        internal static readonly SlotComparer Instance = new SlotComparer();
-        public int Compare(DsPortMapSortSlot left, DsPortMapSortSlot right)
-        {
-            int count = Math.Min(left.KeyCount, right.KeyCount);
-            for (int i = 0; i < count; i++)
-            {
-                var a = left.Keys[i]; var b = right.Keys[i];
-                if (a.Group != null && ReferenceEquals(a.Group, b.Group)) continue;
-                int value = DsPortMapTransaction.CompareDraw(a.Layer, a.Order, a.Queue, a.Distance, a.Stable,
-                    b.Layer, b.Order, b.Queue, b.Distance, b.Stable);
-                if (value != 0) return value;
-            }
-            return left.KeyCount.CompareTo(right.KeyCount);
-        }
-    }
-
-    readonly DsPortMapSortSlot[] _slots;
-    int _count;
-    public DsPortMapSortScratch(int capacity)
-    {
-        if (capacity < 0) throw new ArgumentOutOfRangeException(nameof(capacity));
-        _slots = new DsPortMapSortSlot[capacity];
-    }
-    public int Count => _count;
-    public int SortCount { get; private set; }
-    public int FrameCollectionConstructionCount => 0;
-    public int FrameClosureConstructionCount => 0;
-    public int FrameRestoreQueueConstructionCount => 0;
-    public int FrameMaterialArrayReadCount => 0;
-    public int FrameComponentQueryCount => 0;
-    public int FrameReflectionLookupCount => 0;
-    public void Reset() => _count = 0;
-    public void Add(DsPortMapSortSlot slot)
-    {
-        if (_count == _slots.Length) throw new InvalidOperationException("Map retained sort scratch capacity changed");
-        _slots[_count++] = slot;
-    }
-    public void Sort()
-    {
-        for (int root = _count / 2 - 1; root >= 0; root--) SiftDown(root, _count);
-        for (int end = _count - 1; end > 0; end--)
-        {
-            Swap(0, end); SiftDown(0, end);
-        }
-        SortCount++;
-    }
-    void SiftDown(int root, int count)
-    {
-        while (true)
-        {
-            int child = root * 2 + 1;
-            if (child >= count) return;
-            if (child + 1 < count && SlotComparer.Instance.Compare(_slots[child], _slots[child + 1]) < 0) child++;
-            if (SlotComparer.Instance.Compare(_slots[root], _slots[child]) >= 0) return;
-            Swap(root, child); root = child;
-        }
-    }
-    void Swap(int left, int right)
-    {
-        var value = _slots[left]; _slots[left] = _slots[right]; _slots[right] = value;
-    }
-    public DsPortMapSortSlot At(int index)
-    {
-        if (index < 0 || index >= _count) throw new ArgumentOutOfRangeException(nameof(index));
-        return _slots[index];
-    }
-}
-
 public static class DsPortMapTransaction
 {
-    public static int CompareDraw(int layerA, int orderA, int queueA, float distanceA, int stableA,
-        int layerB, int orderB, int queueB, float distanceB, int stableB)
-    {
-        int value = layerA.CompareTo(layerB);
-        if (value == 0) value = orderA.CompareTo(orderB);
-        if (value == 0) value = queueA.CompareTo(queueB);
-        if (value == 0) value = queueA <= 2500 ? distanceA.CompareTo(distanceB) : distanceB.CompareTo(distanceA);
-        return value != 0 ? value : stableA.CompareTo(stableB);
-    }
     // Finite GameMap.SetupMap + GameMapScene.SetMapped/SetNotMapped recipe.
     // Selector -1 means absent sprite / grey color; 0 original; 1 full sprite;
     // sprite alternatives begin at 2 and color alternatives at 1. No source cache.
@@ -375,10 +273,9 @@ public static class DsPortMapTransaction
 }
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-// Render the existing native room/pin renderers explicitly, including inactive
-// zone parents. Never activate/clone a GameMap or run its saved-marker setup.
-// This uses the native initialized visual graph; cold/stale native setup is a
-// reported capability boundary, not permission to write progress or awaken pins.
+// Compose cloned renderers from the existing native room/pin hierarchy directly
+// beneath the Map page host. Never activate/clone a GameMap or run its saved-marker
+// setup; the display-1 content camera owns the admitted clone hierarchy naturally.
 public sealed class DsPortMap : IDisposable
 {
     const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
@@ -387,9 +284,6 @@ public sealed class DsPortMap : IDisposable
     readonly DsPortMapResidency _residency = new DsPortMapResidency();
     readonly DsPortMapRetainedGraph<Source> _retained = new DsPortMapRetainedGraph<Source>();
     readonly Action<Source> _retireGraph;
-    RawImage _image;
-    RenderTexture _output;
-    Action _pendingRestore;
     Vector2 _pan;
     float _zoom = 1f, _unitsPerPixel;
     bool _ready, _eligible, _disposed;
@@ -418,24 +312,19 @@ public sealed class DsPortMap : IDisposable
         public GameMap Map;
         public RectTransform Host;
         public Camera Rooms, Decor, RoomsSource, DecorSource;
-        public CameraState RoomsState, DecorState;
         public CameraOwnerAccess RoomsAccess, DecorAccess;
-        public DrawBinding[] DrawPlan;
-        public GroupBinding[] GroupPlan;
         public DsPortMapAuthorityToken Authority;
-        public int ViewWidth, ViewHeight;
         public Transform GameplayRoot;
         public CameraRenderToMesh RoomsOwner, DecorOwner;
         public MeshRenderer RoomsQuad, DecorQuad;
         public long Epoch;
         public string Scene;
         public readonly Dictionary<Renderer, Renderer> RendererSources = new Dictionary<Renderer, Renderer>();
+        public readonly Dictionary<SortingGroup, SortingGroup> SortingGroups = new Dictionary<SortingGroup, SortingGroup>();
         public readonly Dictionary<SpriteRenderer, Room> RoomDonors = new Dictionary<SpriteRenderer, Room>();
         public readonly Dictionary<Renderer, MaterialPropertyBlock> PropertyBlocks = new Dictionary<Renderer, MaterialPropertyBlock>();
         public DsPortMapFreshness Freshness;
         public Func<IEnumerable<object>> SnapshotReader;
-        public RenderTexture PresentationActive;
-        public bool PresentationPending;
         public readonly List<Renderer> Draw = new List<Renderer>();
         public readonly List<KeyValuePair<Transform, Vector3>> Markers = new List<KeyValuePair<Transform, Vector3>>();
         public readonly Dictionary<MapPin, bool> PinOverrides = new Dictionary<MapPin, bool>();
@@ -483,42 +372,6 @@ public sealed class DsPortMap : IDisposable
         public object ReadActiveSource() => ActiveSource.GetValue(Owner);
     }
 
-    sealed class GroupBinding
-    {
-        public SortingGroup Group;
-        public Transform Donor;
-        public int Stable;
-        public bool Enabled, SortAtRoot;
-    }
-
-    struct DrawBinding
-    {
-        public Renderer Renderer;
-        public SpriteRenderer Sprite;
-        public Material Material;
-        public int Submesh, Stable;
-        public bool CorpseArrow;
-        public GroupBinding[] Groups;
-        public DsPortMapDrawKey[] Keys;
-    }
-
-    sealed class CameraState
-    {
-        public readonly Camera Camera;
-        public readonly CommandBuffer Commands;
-        public readonly DsPortMapSortScratch Scratch;
-        public readonly int[] GroupFrames, GroupQueues;
-        public int Frame;
-        public CameraState(Camera camera, int slots, int groups, DsPortMapRestoreQueue queue)
-        {
-            Camera = camera;
-            Commands = new CommandBuffer { name = "Companion native map" };
-            Scratch = new DsPortMapSortScratch(slots);
-            GroupFrames = new int[groups]; GroupQueues = new int[groups];
-            queue.Own(Commands.Release);
-        }
-    }
-
     public DsPortMap(DsPortFrame frame)
     {
         _frame = frame;
@@ -537,8 +390,6 @@ public sealed class DsPortMap : IDisposable
     }
     static object Get(object owner, string name) => RequireField(owner.GetType(), name).GetValue(owner);
     static bool Within(Transform node, Transform root) => node != null && root != null && (node == root || node.IsChildOf(root));
-    static void Attempt(Action action, List<Exception> errors)
-    { try { action(); } catch (Exception e) { errors.Add(e); } }
     void Report(Exception error)
     {
         string problem = error.GetBaseException().Message;
@@ -550,14 +401,12 @@ public sealed class DsPortMap : IDisposable
         _eligible = eligible; _ready = false;
         try
         {
-            var resident = _retained.Graph;
-            if (resident != null && resident.PresentationPending) RestorePresentation(resident);
-            _pendingRestore?.Invoke();
             if (_outgoing && KeepOutgoing()) return;
         }
         catch (Exception e) { Report(e); return; }
-        _outgoing = false; _presented = null;
-        if (_image != null) _image.enabled = false;
+        _outgoing = false;
+        if (_presented != null && _presented.Donors != null) _presented.Donors.SetActive(false);
+        _presented = null;
         try
         {
             Source source;
@@ -584,28 +433,22 @@ public sealed class DsPortMap : IDisposable
         if (!ReferenceEquals(_lastMap, source.Map)) { _lastMap = source.Map; _pan = Vector2.zero; _zoom = 1f; }
         if (!_residency.Probe(source.Map, source.Scene, source.Epoch, Time.unscaledTime)) return null;
         var lifetime = new DsPortMapRestoreQueue(); source.Queue = lifetime;
-        Action restore = () => { lifetime.Restore(); _pendingRestore = null; };
-        _pendingRestore = restore;
         try
         {
             ReadNativeDisplay(source);
-            BuildDrawPlan(source);
+            if (source.Donors == null) throw new InvalidOperationException("Map resident renderer hierarchy unavailable");
+            source.Donors.transform.SetParent(source.Host, false);
             _residency.Ready();
-            EnsureOutput(source.Host);
-            source.ViewWidth = _output.width; source.ViewHeight = _output.height;
-            source.RoomsState = new CameraState(source.Rooms, source.DrawPlan.Length, source.GroupPlan.Length, lifetime);
-            source.DecorState = new CameraState(source.Decor, source.DrawPlan.Length, source.GroupPlan.Length, lifetime);
             source.Authority = CurrentAuthority(source);
             _retained.Admit(source, source.Authority, source.Freshness.Captured,
-                Time.unscaledTime, 2);
-            _pendingRestore = null;
+                Time.unscaledTime);
             return source;
         }
         finally
         {
             // Partial construction owns no publishable graph. Its exact release
             // remains pending and therefore blocks another construction on error.
-            if (!ReferenceEquals(_retained.Graph, source)) restore();
+            if (!ReferenceEquals(_retained.Graph, source)) lifetime.Restore();
         }
     }
     bool RefreshForDraw(Source source)
@@ -620,39 +463,14 @@ public sealed class DsPortMap : IDisposable
     }
     bool Live(Source source) => source.Authority.Same(CurrentAuthority(source)) &&
         Current(source) && !PrimaryShowing(source);
-    static void RestorePresentation(Source source)
-    {
-        if (!source.PresentationPending) return;
-        RenderTexture.active = source.PresentationActive;
-        source.PresentationActive = null; source.PresentationPending = false;
-    }
     void Draw(Source source)
     {
         if (!Live(source)) { _retained.Retire(_retireGraph); return; }
         PrepareView(source);
-        source.PresentationActive = RenderTexture.active;
-        source.PresentationPending = true;
-        bool rendered = false;
-        try
-        {
-            if (Live(source))
-            {
-                Setup(source, source.RoomsState, source.DecorState);
-                if (Live(source))
-                {
-                    Graphics.ExecuteCommandBuffer(source.RoomsState.Commands);
-                    if (Live(source))
-                    {
-                        Graphics.ExecuteCommandBuffer(source.DecorState.Commands);
-                        rendered = Live(source);
-                    }
-                }
-            }
-        }
-        finally { RestorePresentation(source); }
         if (!Live(source)) { _retained.Retire(_retireGraph); return; }
-        if (!rendered) return;
-        _image.texture = _output; _image.enabled = true; _ready = true; _presented = source;
+        source.Donors.SetActive(true);
+        if (!Live(source)) { source.Donors.SetActive(false); _retained.Retire(_retireGraph); return; }
+        _ready = true; _presented = source;
     }
     Source CaptureSource()
     {
@@ -1210,10 +1028,10 @@ public sealed class DsPortMap : IDisposable
         Transform node;
         if (native == source.Map.transform)
         {
-            source.Donors = new GameObject("Native Map Renderer Donors");
+            source.Donors = new GameObject("Native Map Renderer Hierarchy");
             var root = source.Donors;
-            // One ordered resource action: a failed root/submesh retirement must
-            // block font/material disposal even though the queue drains peers.
+            // The complete renderer hierarchy is born inactive and is published
+            // only after source authority, bounds and restoration are retained.
             source.Queue.Own(() =>
             {
                 source.Text.RetireCold();
@@ -1221,11 +1039,7 @@ public sealed class DsPortMap : IDisposable
                 source.Text.Clear();
             });
             source.Donors.SetActive(false);
-            node = root.transform; node.position = native.position; node.rotation = native.rotation; node.localScale = native.lossyScale;
-            // A renderer-only TRS root cannot represent inherited shear.
-            var wanted = native.localToWorldMatrix; var actual = node.localToWorldMatrix;
-            for (int i = 0; i < 16; i++) if (Mathf.Abs(wanted[i] - actual[i]) > .0001f)
-                throw new InvalidOperationException("Map native root shear unadmitted");
+            node = root.transform;
         }
         else
         {
@@ -1234,11 +1048,23 @@ public sealed class DsPortMap : IDisposable
             node.SetParent(parent, false); node.localPosition = native.localPosition;
             node.localRotation = native.localRotation; node.localScale = native.localScale;
         }
-        node.gameObject.layer = native.gameObject.layer;
+        node.gameObject.layer = DsPresentation.CONTENT_LAYER;
+        CopySortingGroup(source, native, node, true);
         if (source.Positions.TryGetValue(native, out var position)) node.localPosition = position;
         if (source.Scales.TryGetValue(native, out var scale)) node.localScale = scale;
         source.DonorTransforms.Add(native, node);
         return node;
+    }
+    static void CopySortingGroup(Source source, Transform native, Transform node, bool track)
+    {
+        var nativeGroup = native.GetComponent<SortingGroup>();
+        if (nativeGroup == null) return;
+        var group = node.gameObject.AddComponent<SortingGroup>();
+        group.enabled = nativeGroup.enabled;
+        group.sortingLayerID = nativeGroup.sortingLayerID;
+        group.sortingOrder = nativeGroup.sortingOrder;
+        group.sortAtRoot = nativeGroup.sortAtRoot;
+        if (track) source.SortingGroups.Add(nativeGroup, group);
     }
     static Renderer OwnedRenderer(Source source, Renderer native)
     {
@@ -1259,7 +1085,9 @@ public sealed class DsPortMap : IDisposable
     static Transform CopyTemplateRenderers(Source source, GameObject template, Transform parent, Vector3 position, Quaternion rotation, Vector3 scale)
     {
         var root = new GameObject("Native " + template.name).transform;
+        root.gameObject.layer = DsPresentation.CONTENT_LAYER;
         root.SetParent(parent, false); root.localPosition = position; root.localRotation = rotation; root.localScale = scale;
+        CopySortingGroup(source, template.transform, root, false);
         var transforms = new Dictionary<Transform, Transform> { { template.transform, root } };
         Transform TemplateTransform(Transform native)
         {
@@ -1267,11 +1095,14 @@ public sealed class DsPortMap : IDisposable
             if (!Within(native, template.transform)) throw new InvalidOperationException("Map template renderer escaped donor");
             var ownedParent = TemplateTransform(native.parent);
             node = new GameObject("Native " + native.name).transform; node.SetParent(ownedParent, false);
+            node.gameObject.layer = DsPresentation.CONTENT_LAYER;
             node.localPosition = native.localPosition; node.localRotation = native.localRotation; node.localScale = native.localScale;
+            CopySortingGroup(source, native, node, false);
             transforms.Add(native, node); return node;
         }
         foreach (var renderer in template.GetComponentsInChildren<Renderer>(true))
         {
+            if (!NativeCameraAdmits(source, renderer)) continue;
             bool active = renderer.enabled;
             for (var node = renderer.transform; node != template.transform; node = node.parent) active &= node.gameObject.activeSelf;
             if (active) source.Draw.Add(CopyRenderer(source, renderer, TemplateTransform(renderer.transform)));
@@ -1287,7 +1118,7 @@ public sealed class DsPortMap : IDisposable
             target = new GameObject("Native Marker Renderer").transform;
             target.SetParent(DonorTransform(source, source.Map.transform), false);
         }
-        target.gameObject.layer = native.gameObject.layer;
+        target.gameObject.layer = DsPresentation.CONTENT_LAYER;
         Renderer donor;
         if (native is SpriteRenderer sprite)
         {
@@ -1340,8 +1171,19 @@ public sealed class DsPortMap : IDisposable
         return donor;
     }
     static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+    static bool NativeCameraAdmits(Source source, Renderer renderer)
+    {
+        bool Admits(Camera camera)
+        {
+            if ((camera.cullingMask & (1 << renderer.gameObject.layer)) == 0) return false;
+            float depth = camera.transform.InverseTransformPoint(renderer.bounds.center).z;
+            return depth >= camera.nearClipPlane && depth <= camera.farClipPlane;
+        }
+        return Admits(source.Rooms) || Admits(source.Decor);
+    }
     static bool VisibleBelow(Source source, Renderer renderer, Transform root)
     {
+        if (!NativeCameraAdmits(source, renderer)) return false;
         var worldOnly = renderer.GetComponent<DisplayOnWorldMapOnly>();
         var roomNative = renderer.GetComponent<GameMapScene>();
         if (roomNative != null && source.RoomStates.TryGetValue(roomNative, out var ownRoom))
@@ -1365,38 +1207,6 @@ public sealed class DsPortMap : IDisposable
             if (node == root) return true;
         }
     }
-    static void AdmitRenderer(Renderer renderer)
-    {
-        if (renderer.GetType() != typeof(SpriteRenderer) && renderer.GetType() != typeof(MeshRenderer))
-            throw new InvalidOperationException("Map unadmitted native renderer " + renderer.GetType().Name);
-        if (renderer.sharedMaterial == null) throw new InvalidOperationException("Map native material unavailable");
-        if (renderer is MeshRenderer)
-        {
-            var filter = renderer.GetComponent<MeshFilter>();
-            if (filter == null || filter.sharedMesh == null || filter.sharedMesh.vertexCount == 0)
-                throw new InvalidOperationException("Map native text/mesh not initialized");
-        }
-    }
-    void EnsureOutput(RectTransform host)
-    {
-        int width = Mathf.Clamp(Mathf.CeilToInt(host.rect.width), 64, 2048);
-        int height = Mathf.Clamp(Mathf.CeilToInt(host.rect.height), 64, 2048);
-        if (_output == null || _output.width != width || _output.height != height)
-        {
-            if (_output != null) { _output.Release(); Object.Destroy(_output); }
-            _output = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32) { name = "Companion native map", filterMode = FilterMode.Bilinear };
-        }
-        if (!_output.IsCreated() && !_output.Create()) throw new InvalidOperationException("Map output creation failed");
-        if (_image == null || _image.transform.parent != host)
-        {
-            if (_image != null) Object.Destroy(_image.gameObject);
-            var node = new GameObject("Native Map Output", typeof(RectTransform));
-            node.layer = DsPresentation.CONTENT_LAYER;
-            var rect = (RectTransform)node.transform; rect.SetParent(host, false);
-            rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one; rect.offsetMin = rect.offsetMax = Vector2.zero;
-            _image = node.AddComponent<RawImage>(); _image.raycastTarget = false; _image.color = Color.white; _image.enabled = false;
-        }
-    }
     static void SetMarker(Source source, Transform donor, Vector3 desired)
     {
         for (int i = 0; i < source.Markers.Count; i++)
@@ -1418,17 +1228,21 @@ public sealed class DsPortMap : IDisposable
             var native = binding.Key; var donor = binding.Value;
             if (native == null || donor == null)
                 throw new InvalidOperationException("Map retained transform binding unavailable");
-            if (native == source.Map.transform)
-            {
-                donor.position = native.position; donor.rotation = native.rotation; donor.localScale = native.lossyScale;
-            }
-            else
-            {
-                donor.localPosition = native.localPosition; donor.localRotation = native.localRotation;
-                donor.localScale = native.localScale;
-            }
+            if (native == source.Map.transform) continue;
+            donor.localPosition = native.localPosition; donor.localRotation = native.localRotation;
+            donor.localScale = native.localScale;
             if (source.Positions.TryGetValue(native, out var position)) donor.localPosition = position;
             if (source.Scales.TryGetValue(native, out var scale)) donor.localScale = scale;
+        }
+        foreach (var binding in source.SortingGroups)
+        {
+            var nativeGroup = binding.Key; var group = binding.Value;
+            if (nativeGroup == null || group == null)
+                throw new InvalidOperationException("Map retained sorting group binding unavailable");
+            group.enabled = nativeGroup.enabled;
+            group.sortingLayerID = nativeGroup.sortingLayerID;
+            group.sortingOrder = nativeGroup.sortingOrder;
+            group.sortAtRoot = nativeGroup.sortAtRoot;
         }
         foreach (var binding in source.RendererSources)
         {
@@ -1437,6 +1251,8 @@ public sealed class DsPortMap : IDisposable
                 throw new InvalidOperationException("Map retained renderer binding unavailable");
             if (!source.PropertyBlocks.TryGetValue(donor, out var block) || block == null)
                 throw new InvalidOperationException("Map retained renderer property block unavailable");
+            donor.sortingLayerID = native.sortingLayerID;
+            donor.sortingOrder = native.sortingOrder;
             if (donor is SpriteRenderer copy && native is SpriteRenderer sprite)
             {
                 copy.sprite = sprite.sprite; copy.color = sprite.color; copy.flipX = sprite.flipX; copy.flipY = sprite.flipY;
@@ -1448,170 +1264,54 @@ public sealed class DsPortMap : IDisposable
             block.Clear(); native.GetPropertyBlock(block); donor.SetPropertyBlock(block);
         }
     }
+    static void SetCorpseArrowVisible(Source source, bool visible)
+    {
+        source.CorpseArrowVisible = visible;
+        for (int i = 0; i < source.CorpseArrowDraw.Count; i++)
+            if (source.CorpseArrowDraw[i] != null) source.CorpseArrowDraw[i].enabled = visible;
+    }
     void PrepareView(Source source)
     {
-        source.Aspect = _output.width / (float)_output.height;
+        float width = source.Host.rect.width, height = source.Host.rect.height;
+        if (!Finite(width) || !Finite(height) || width <= 0 || height <= 0)
+            throw new InvalidOperationException("Map direct-composition host geometry unavailable");
+        source.Aspect = width / height;
         source.Half = Mathf.Max(source.Bounds.extents.y, source.Bounds.extents.x / source.Aspect) * 1.04f / _zoom;
         if (!Finite(source.Half) || source.Half <= 0) throw new InvalidOperationException("Map framing invalid");
         source.Center = source.Bounds.center + new Vector3(_pan.x, _pan.y, 0);
-        _unitsPerPixel = 2f * source.Half / _output.height;
-        source.CorpseArrowVisible = false;
-        if (source.CorpseRoot == null) return;
-        var marker = source.CorpseRoot.transform;
-        var desired = new Vector3(source.CorpseLocal.x, source.CorpseLocal.y, marker.localPosition.z);
-        SetMarker(source, source.CorpseDonor, desired);
-        var world = marker.parent.TransformPoint(desired);
-        DsPortMapTransaction.ProjectToViewport(world.x, world.y,
-            source.Center.x - source.Half * source.Aspect, source.Center.y - source.Half,
-            source.Center.x + source.Half * source.Aspect, source.Center.y + source.Half,
-            out float projectedX, out float projectedY);
-        if (world.x == projectedX && world.y == projectedY) return;
-        if (source.CorpseArrow != null && !Within(source.CorpseArrow.transform, marker))
-            throw new InvalidOperationException("Map native corpse arrow escaped owner");
-        world.x = projectedX; world.y = projectedY;
-        var local = marker.parent.InverseTransformPoint(world);
-        SetMarker(source, source.CorpseDonor, local);
-        // Exact native direction-to-angle consumer; only retained adapter donors
-        // move. Native initialPos, activity, quick-map and viewport stay untouched.
-        float angle = (source.CorpseLocal - (Vector2)local).DirectionToAngle();
-        SetRotation(source, source.CorpseArrowDonor, Quaternion.Euler(0, 0, angle));
-        source.CorpseArrowVisible = true;
-    }
-    void BuildDrawPlan(Source source)
-    {
-        var bindings = new List<DrawBinding>();
-        var groups = new Dictionary<SortingGroup, GroupBinding>();
-        var groupQueues = new Dictionary<GroupBinding, int>();
-        int stableGroup = 0;
-        void AddRenderer(Renderer renderer, bool corpseArrow)
+        float pixelsPerUnit = height / (2f * source.Half);
+        if (!Finite(pixelsPerUnit) || pixelsPerUnit <= 0) throw new InvalidOperationException("Map direct-composition scale unavailable");
+        _unitsPerPixel = 1f / pixelsPerUnit;
+        SetCorpseArrowVisible(source, false);
+        if (source.CorpseRoot != null)
         {
-            if (!source.RendererSources.TryGetValue(renderer, out var native))
-                throw new InvalidOperationException("Map draw lost exact renderer donor");
-            var ancestry = new List<SortingGroup>();
-            for (var node = native.transform; node != null; node = node.parent)
+            var marker = source.CorpseRoot.transform;
+            var desired = new Vector3(source.CorpseLocal.x, source.CorpseLocal.y, marker.localPosition.z);
+            SetMarker(source, source.CorpseDonor, desired);
+            var local = source.Donors.transform.InverseTransformPoint(source.CorpseDonor.parent.TransformPoint(desired));
+            DsPortMapTransaction.ProjectToViewport(local.x, local.y,
+                source.Center.x - source.Half * source.Aspect, source.Center.y - source.Half,
+                source.Center.x + source.Half * source.Aspect, source.Center.y + source.Half,
+                out float projectedX, out float projectedY);
+            if (local.x != projectedX || local.y != projectedY)
             {
-                var component = node.GetComponent<SortingGroup>();
-                if (component == null || !component.enabled) continue;
-                ancestry.Insert(0, component);
-                if (component.sortAtRoot) break;
-            }
-            var groupPlan = new GroupBinding[ancestry.Count];
-            for (int i = 0; i < ancestry.Count; i++)
-            {
-                var component = ancestry[i];
-                if (!groups.TryGetValue(component, out var group))
-                {
-                    group = new GroupBinding { Group = component, Donor = DonorTransform(source, component.transform),
-                        Stable = stableGroup++, Enabled = component.enabled, SortAtRoot = component.sortAtRoot };
-                    groups.Add(component, group);
-                }
-                groupPlan[i] = group;
-            }
-            var materials = renderer.sharedMaterials;
-            for (int submesh = 0; submesh < materials.Length; submesh++)
-            {
-                var material = materials[submesh]; if (material == null) continue;
-                int queue = material.renderQueue;
-                for (int i = 0; i < groupPlan.Length; i++)
-                {
-                    if (groupQueues.TryGetValue(groupPlan[i], out int previous) && previous != queue)
-                        throw new InvalidOperationException("Map sorting group mixed native queues need concrete pass authority");
-                    groupQueues[groupPlan[i]] = queue;
-                }
-                bindings.Add(new DrawBinding { Renderer = renderer, Sprite = renderer as SpriteRenderer,
-                    Material = material, Submesh = submesh, Stable = bindings.Count, CorpseArrow = corpseArrow,
-                    Groups = groupPlan, Keys = new DsPortMapDrawKey[groupPlan.Length + 1] });
+                if (source.CorpseArrow != null && !Within(source.CorpseArrow.transform, marker))
+                    throw new InvalidOperationException("Map native corpse arrow escaped owner");
+                var projected = source.CorpseDonor.parent.InverseTransformPoint(source.Donors.transform.TransformPoint(
+                    new Vector3(projectedX, projectedY, local.z)));
+                SetMarker(source, source.CorpseDonor, projected);
+                // Exact native direction-to-angle consumer; only retained adapter donors
+                // move. Native initialPos, activity, quick-map and viewport stay untouched.
+                float angle = (source.CorpseLocal - (Vector2)projected).DirectionToAngle();
+                SetRotation(source, source.CorpseArrowDonor, Quaternion.Euler(0, 0, angle));
+                SetCorpseArrowVisible(source, true);
             }
         }
-        for (int i = 0; i < source.Draw.Count; i++) AddRenderer(source.Draw[i], false);
-        for (int i = 0; i < source.CorpseArrowDraw.Count; i++) AddRenderer(source.CorpseArrowDraw[i], true);
-        source.DrawPlan = bindings.ToArray();
-        source.GroupPlan = new GroupBinding[groups.Count];
-        foreach (var group in groups.Values) source.GroupPlan[group.Stable] = group;
-    }
-
-    static float SortDistance(Camera camera, Vector3 point, int queue)
-    {
-        var mode = camera.transparencySortMode;
-        var axis = camera.transparencySortAxis;
-        if (mode == TransparencySortMode.Default) { mode = GraphicsSettings.transparencySortMode; axis = GraphicsSettings.transparencySortAxis; }
-        if (mode == TransparencySortMode.Default) mode = camera.orthographic ? TransparencySortMode.Orthographic : TransparencySortMode.Perspective;
-        if (queue <= 2500) mode = camera.orthographic ? TransparencySortMode.Orthographic : TransparencySortMode.Perspective;
-        var delta = point - camera.transform.position;
-        float result = mode == TransparencySortMode.CustomAxis ? Vector3.Dot(delta, axis) :
-            mode == TransparencySortMode.Perspective ? delta.sqrMagnitude : Vector3.Dot(delta, camera.transform.forward);
-        if (!Finite(result)) throw new InvalidOperationException("Map native sorting distance unavailable");
-        return result;
-    }
-    void RunDrawPlan(Source source, CameraState state)
-    {
-        var camera = state.Camera; var scratch = state.Scratch;
-        state.Frame++;
-        if (state.Frame == 0) { Array.Clear(state.GroupFrames, 0, state.GroupFrames.Length); state.Frame = 1; }
-        scratch.Reset();
-        int mask = camera.cullingMask;
-        for (int bindingIndex = 0; bindingIndex < source.DrawPlan.Length; bindingIndex++)
-        {
-            ref var binding = ref source.DrawPlan[bindingIndex];
-            if (binding.CorpseArrow && !source.CorpseArrowVisible) continue;
-            var renderer = binding.Renderer; var material = binding.Material;
-            if (renderer == null || material == null) throw new InvalidOperationException("Map retained draw binding unavailable");
-            if ((mask & (1 << renderer.gameObject.layer)) == 0) continue;
-            float depth = camera.transform.InverseTransformPoint(renderer.bounds.center).z;
-            if (depth < camera.nearClipPlane || depth > camera.farClipPlane) continue;
-            int queue = material.renderQueue;
-            for (int keyIndex = 0; keyIndex < binding.Groups.Length; keyIndex++)
-            {
-                var group = binding.Groups[keyIndex];
-                if (group.Group == null || group.Donor == null || group.Group.enabled != group.Enabled ||
-                    group.Group.sortAtRoot != group.SortAtRoot)
-                    throw new InvalidOperationException("Map retained sorting group topology changed before structural poll");
-                int groupIndex = group.Stable;
-                if (state.GroupFrames[groupIndex] == state.Frame && state.GroupQueues[groupIndex] != queue)
-                    throw new InvalidOperationException("Map sorting group mixed native queues need concrete pass authority");
-                state.GroupFrames[groupIndex] = state.Frame; state.GroupQueues[groupIndex] = queue;
-                ref var key = ref binding.Keys[keyIndex];
-                key.Group = group.Group;
-                key.Layer = SortingLayer.GetLayerValueFromID(group.Group.sortingLayerID);
-                key.Order = group.Group.sortingOrder; key.Queue = queue; key.Stable = group.Stable;
-                key.Distance = keyIndex == 0 ? SortDistance(camera, group.Donor.position, queue) : 0f;
-            }
-            ref var rendererKey = ref binding.Keys[binding.Groups.Length];
-            rendererKey.Group = null;
-            rendererKey.Layer = SortingLayer.GetLayerValueFromID(renderer.sortingLayerID);
-            rendererKey.Order = renderer.sortingOrder; rendererKey.Queue = queue; rendererKey.Stable = binding.Stable;
-            var point = binding.Sprite != null && binding.Sprite.spriteSortPoint == SpriteSortPoint.Pivot ?
-                renderer.transform.position : renderer.bounds.center;
-            rendererKey.Distance = binding.Groups.Length == 0 ? SortDistance(camera, point, queue) : 0f;
-            scratch.Add(new DsPortMapSortSlot { Binding = bindingIndex, Keys = binding.Keys, KeyCount = binding.Keys.Length });
-        }
-        scratch.Sort();
-        for (int i = 0; i < scratch.Count; i++)
-        {
-            var slot = scratch.At(i); ref var binding = ref source.DrawPlan[slot.Binding];
-            state.Commands.DrawRenderer(binding.Renderer, binding.Material, binding.Submesh);
-        }
-    }
-    void Setup(Source source, CameraState rooms, CameraState decor)
-    {
-        SetupCamera(source, rooms, source.Center, source.Half, source.Aspect, true);
-        SetupCamera(source, decor, source.Center, source.Half, source.Aspect, false);
-    }
-    void SetupCamera(Source source, CameraState state, Vector3 center, float half, float aspect, bool clearColor)
-    {
-        var camera = state.Camera; var commands = state.Commands;
-        var offset = camera.transform.position - center; offset.z = 0;
-        // Only owned commands execute: native Camera.Render callbacks/buffers,
-        // automatic aspect/projection and source targetTexture remain untouched.
-        // Reuse the two lifetime-owned buffers; never append across frames.
-        commands.Clear();
-        commands.SetRenderTarget(_output);
-        commands.SetViewport(new Rect(0, 0, _output.width, _output.height));
-        commands.ClearRenderTarget(true, clearColor, Color.clear);
-        commands.SetViewProjectionMatrices(camera.worldToCameraMatrix * Matrix4x4.Translate(offset),
-            GL.GetGPUProjectionMatrix(Matrix4x4.Ortho(-half * aspect, half * aspect, -half, half, camera.nearClipPlane, camera.farClipPlane), true));
-        RunDrawPlan(source, state);
-        commands.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.projectionMatrix);
+        var root = source.Donors.transform;
+        root.localRotation = Quaternion.identity;
+        root.localScale = new Vector3(pixelsPerUnit, pixelsPerUnit, 1f);
+        root.localPosition = new Vector3(source.Host.rect.center.x - source.Center.x * pixelsPerUnit,
+            source.Host.rect.center.y - source.Center.y * pixelsPerUnit, 0f);
     }
     public bool OnGesture(DsGesture gesture)
     {
@@ -1631,36 +1331,34 @@ public sealed class DsPortMap : IDisposable
     void RetireGraph(Source source)
     {
         if (source == null || source.Queue == null) throw new InvalidOperationException("Map retained graph release unavailable");
-        RestorePresentation(source);
+        if (source.Donors != null) source.Donors.SetActive(false);
         source.Queue.Restore();
         if (ReferenceEquals(_presented, source)) _presented = null;
-        source.RoomsState = null; source.DecorState = null;
     }
-    bool KeepOutgoing() => _presented != null && _image != null && _output != null && _image.enabled &&
-        ReferenceEquals(_image.texture, _output) && _pendingRestore == null && !_presented.PresentationPending && DsGameData.InGame &&
-        ReferenceEquals(_image.transform.parent, _presented.Host) && Current(_presented, presentationOnly: true) && !PrimaryShowing(_presented);
+    bool KeepOutgoing() => _presented != null && _presented.Donors != null && _presented.Donors.activeSelf &&
+        DsGameData.InGame && ReferenceEquals(_presented.Donors.transform.parent, _presented.Host) &&
+        Current(_presented, presentationOnly: true) && !PrimaryShowing(_presented);
     void SelectionChanged()
     {
         _ready = false;
         try
         {
-            _pendingRestore?.Invoke();
             _outgoing = KeepOutgoing();
             if (!_outgoing) Invalidate();
         }
         catch
         {
-            _outgoing = false; _presented = null;
-            if (_image != null) _image.enabled = false;
+            _outgoing = false;
+            if (_presented != null && _presented.Donors != null) _presented.Donors.SetActive(false);
+            _presented = null;
             throw;
         }
     }
     public void Invalidate()
     {
-        _outgoing = false; _presented = null;
-        _ready = false;
-        if (_image != null) _image.enabled = false;
-        _pendingRestore?.Invoke();
+        _outgoing = false;
+        if (_presented != null && _presented.Donors != null) _presented.Donors.SetActive(false);
+        _presented = null; _ready = false;
         _retained.Retire(_retireGraph);
     }
     public void Dispose()
@@ -1668,9 +1366,7 @@ public sealed class DsPortMap : IDisposable
         if (_disposed) return;
         Invalidate();
         _frame.BeforeCompositionDestroyed -= Invalidate; _frame.SelectionChanged -= SelectionChanged;
-        if (_image != null) Object.Destroy(_image.gameObject);
-        if (_output != null) { _output.Release(); Object.Destroy(_output); }
-        _image = null; _output = null; _disposed = true;
+        _disposed = true;
     }
 }
 #endif

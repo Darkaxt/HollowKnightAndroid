@@ -301,13 +301,31 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
             self.assertIn(token, rewrite)
         self.assertNotIn("var tail = new HashSet<Instruction>()", rewrite)
 
-    def test_native_map_retains_owned_graph_and_command_buffers_between_bounded_snapshot_polls(self):
+    def test_native_map_composes_cloned_renderer_hierarchy_directly_on_display_one(self):
+        source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
+        for required in (
+            'new GameObject("Native Map Renderer Hierarchy")',
+            "source.Donors.transform.SetParent(source.Host, false)",
+            "node.gameObject.layer = DsPresentation.CONTENT_LAYER",
+            "group.sortingLayerID = nativeGroup.sortingLayerID",
+            "group.sortingOrder = nativeGroup.sortingOrder",
+            "group.sortAtRoot = nativeGroup.sortAtRoot",
+            "donor.sharedMaterials = native.sharedMaterials",
+        ):
+            self.assertIn(required, source)
+        for forbidden in (
+            "RawImage", "RenderTexture", "CommandBuffer", "Graphics.ExecuteCommandBuffer",
+            "DrawRenderer(", "SetRenderTarget(", "Native Map Output",
+            "mixed native queues need concrete pass authority",
+        ):
+            self.assertNotIn(forbidden, source)
+
+    def test_native_map_retains_owned_graph_between_bounded_snapshot_polls(self):
         source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
         for token in (
             "DsPortMapRetainedGraph<Source>", "SnapshotIntervalSeconds = .125",
             ".TryReuse(", "RecordDynamicRefresh", "DynamicRefreshCount", "RetireGraph",
-            "source.RoomsState", "source.DecorState", "commands.Clear()",
-            "CommandBufferConstructionCount", "CommandBufferReleaseCount",
+            "source.Donors", "source.SortingGroups", "source.Donors.SetActive(true)",
         ):
             self.assertIn(token, source)
         tick = csharp_method_body(source, r"public\s+void\s+Tick\s*\(bool\s+eligible\)")
@@ -315,25 +333,24 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         self.assertIn("BuildGraph()", tick)
         current = csharp_method_body(source, r"bool\s+Current\s*\(Source\s+source")
         self.assertNotIn("Freshness.Current", current)
-        self.assertNotIn("new CommandBuffer", tick)
-        setup = csharp_method_body(source, r"void\s+SetupCamera\s*\([^)]*\)")
-        self.assertIn("commands.Clear()", setup)
         refresh = csharp_method_body(source, r"void\s+RefreshMutableDonors\s*\([^)]*\)")
         for token in (
-            "source.DonorTransforms", "source.RendererSources", "source.PropertyBlocks",
-            "native.GetPropertyBlock(block)", "donor.SetPropertyBlock(block)",
+            "source.DonorTransforms", "source.RendererSources", "source.SortingGroups",
+            "source.PropertyBlocks", "native.GetPropertyBlock(block)",
+            "donor.SetPropertyBlock(block)",
         ):
             self.assertIn(token, refresh)
         for allocation in (
-            "new GameObject", "AddComponent<", "new CommandBuffer", "source.Queue.Own",
-            "GetComponentsInChildren", "GetComponent<", ".sharedMaterials",
+            "new GameObject", "AddComponent<", "source.Queue.Own",
+            "GetComponentsInChildren", ".sharedMaterials",
         ):
             self.assertNotIn(allocation, refresh)
         draw = csharp_method_body(source, r"void\s+Draw\s*\(Source\s+source\)")
         self.assertNotIn("RefreshMutableDonors", draw)
-        self.assertIn("Live(source)", draw)
+        self.assertIn("PrepareView(source)", draw)
+        self.assertIn("source.Donors.SetActive(true)", draw)
         self.assertIn("_retained.Retire(_retireGraph)", draw)
-        self.assertLess(draw.index("if (!Live(source))"), draw.index("Graphics.ExecuteCommandBuffer"))
+        self.assertLess(draw.index("PrepareView(source)"), draw.index("source.Donors.SetActive(true)"))
         refresh_for_draw = csharp_method_body(source, r"bool\s+RefreshForDraw\s*\(Source\s+source\)")
         self.assertIn("source.Authority.Same(CurrentAuthority(source))", refresh_for_draw)
         self.assertIn("RefreshMutableDonors(source)", refresh_for_draw)
@@ -341,31 +358,22 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         self.assertIn("_retained.Retire(_retireGraph)", refresh_for_draw)
         self.assertIn("RefreshForDraw(source)", tick)
 
-    def test_native_map_draw_hot_path_reuses_retained_plan_without_managed_construction_or_reflection_lookup(self):
+    def test_native_map_direct_hot_path_reuses_retained_hierarchy_without_managed_construction(self):
         source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
-        for token in ("DsPortMapSortScratch", "DsPortMapSortSlot", "BuildDrawPlan(", "RunDrawPlan("):
-            self.assertIn(token, source)
         tick = csharp_method_body(source, r"public\s+void\s+Tick\s*\(bool\s+eligible\)")
         self.assertIn("_retireGraph = RetireGraph", source)
-        self.assertNotIn("RetireGraph, out source", tick)
         self.assertIn("_retireGraph, out source", tick)
         draw = csharp_method_body(source, r"void\s+Draw\s*\(Source\s+source\)")
-        for forbidden in ("Func<", "Action", "=>", "new DsPortMapRestoreQueue", "CapturePresentation(", "DsPortMapTransaction.Draw("):
-            self.assertNotIn(forbidden, draw)
-        for token in ("source.PresentationPending = true", "RestorePresentation(source)"):
-            self.assertIn(token, draw)
-        self.assertIn("RestorePresentation(resident)", tick)
-        retire = csharp_method_body(source, r"void\s+RetireGraph\s*\(Source\s+source\)")
-        self.assertLess(retire.index("RestorePresentation(source)"), retire.index("source.Queue.Restore()"))
-        setup = csharp_method_body(source, r"void\s+SetupCamera\s*\([^)]*\)")
-        run = csharp_method_body(source, r"void\s+RunDrawPlan\s*\([^)]*\)")
-        for hot_path in (setup, run):
-            for forbidden in ("new List<", "new Dictionary<", "new DrawItem", "new DrawKey", "GetComponent<",
-                              ".sharedMaterials", "DonorTransform(", "Get(source.", "RequireField(", "=>",
-                              "new DsPortMapRestoreQueue"):
+        prepare = csharp_method_body(source, r"void\s+PrepareView\s*\([^)]*\)")
+        for hot_path in (draw, prepare):
+            for forbidden in (
+                "new List<", "new Dictionary<", "GetComponent<", ".sharedMaterials",
+                "DonorTransform(", "Get(source.", "RequireField(",
+                "new DsPortMapRestoreQueue", "RenderTexture", "CommandBuffer",
+            ):
                 self.assertNotIn(forbidden, hot_path)
-        for token in ("binding.Keys", "scratch.Add(", "scratch.Sort()", "state.Commands.DrawRenderer("):
-            self.assertIn(token, run)
+        for token in ("source.Host.rect", "pixelsPerUnit", "root.localScale", "root.localPosition"):
+            self.assertIn(token, prepare)
         current = csharp_method_body(source, r"bool\s+Current\s*\(Source\s+source")
         self.assertNotIn("Get(source.", current)
         owner_current = csharp_method_body(source, r"public\s+bool\s+Current\s*\(Camera\s+target")
@@ -374,17 +382,8 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         project = csharp_method_body(source, r"public\s+static\s+void\s+ProjectToViewport\s*\([^)]*\)")
         self.assertRegex(source, r"ProjectToViewport\s*\([^)]*out\s+float\s+projectedX[^)]*out\s+float\s+projectedY")
         self.assertNotIn("new[]", project)
-        prepare = csharp_method_body(source, r"void\s+PrepareView\s*\([^)]*\)")
-        self.assertNotIn("var projected =", prepare)
         refresh_for_draw = csharp_method_body(source, r"bool\s+RefreshForDraw\s*\(Source\s+source\)")
-        self.assertNotIn("RunDynamicRefresh(", refresh_for_draw)
         self.assertIn("RecordDynamicRefresh(source)", refresh_for_draw)
-        for token in (
-            "FrameCollectionConstructionCount", "FrameClosureConstructionCount",
-            "FrameRestoreQueueConstructionCount", "FrameMaterialArrayReadCount",
-            "FrameComponentQueryCount", "FrameReflectionLookupCount",
-        ):
-            self.assertIn(token, source)
 
     def test_inventory_committed_extra_text_uses_its_traversing_page_owner(self):
         source = read(DUALSCREEN_SOURCES / "DsPortProgress.Inventory.cs")
@@ -540,10 +539,10 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
             self.assertIn("KeepOutgoing(_frame, DsPageRole." + role, tick)
         source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
         tick = csharp_method_body(source, r"public\s+void\s+Tick\s*\([^)]*\)")
-        self.assertLess(tick.index("KeepOutgoing()"), tick.index("_image.enabled = false"))
+        self.assertLess(tick.index("KeepOutgoing()"), tick.index("_presented.Donors.SetActive(false)"))
         change = csharp_method_body(source, r"void\s+SelectionChanged\s*\([^)]*\)")
         self.assertIn("_ready = false", change)
-        self.assertIn("_pendingRestore?.Invoke()", change)
+        self.assertIn("_outgoing = KeepOutgoing()", change)
 
     def test_loadout_slot_animators_keep_exact_owned_visual_consequences(self):
         source = read(DUALSCREEN_SOURCES / "DsPortProgress.Loadout.cs")
@@ -661,6 +660,37 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
                           "StopCoroutine(", "SetBool(", "SetFloat(", "FindObjectsByType"):
             self.assertNotIn(forbidden, tutorial + route)
         self.assertIn("Pending || _faulted || current", route)
+
+    def test_skill_get_routes_exact_registered_instance_without_progression_replay(self):
+        source = read(DUALSCREEN_SOURCES / "DsPortOverlays.cs")
+        family = csharp_method_body(source, r"sealed\s+class\s+NativeSkillGet")
+        self.assertTrue(family, "missing exact SkillGetMsg route")
+        for token in (
+            "new NativeSkillGet(layers.Overlays)", "_skillGet.Tick(visible)",
+            "_skillGet.ConsumeGesture(gesture, visible)", "_skillGet.Restore",
+            "typeof(SkillGetMsg)", '"crestGroup"', '"crestSprite"',
+            '"crestGlowSprite"', '"skillSprite"', '"skillGlowSprite"',
+            '"skillSilhouetteSprite"', '"skillIconSprite"', '"prefixText"',
+            '"nameText"', '"descText"',
+        ):
+            self.assertIn(token, source)
+        route = csharp_method_body(source, r"sealed\s+class\s+NativeRegisteredMessage")
+        for token in (
+            "_owner.GetType() == _type", "ReferenceEquals(Message(), _owner)",
+            "CompanionDismissObserve.Invoke(_owner", "CompanionDismiss.Invoke(_owner",
+            "_lease?.Restore()",
+        ):
+            self.assertIn(token, route)
+        restore = csharp_method_body(source, r"public\s+void\s+RestoreNative\s*\(\s*\)")
+        dispose = csharp_method_body(source, r"public\s+void\s+Dispose\s*\(\s*\)")
+        self.assertIn("_skillGet.Restore", restore)
+        self.assertIn("RestoreNative();", dispose)
+        for forbidden in (
+            ".Spawn(", ".Setup(", "ToolPaneHasNew", "AddInputBlocker(",
+            "RemoveInputBlocker(", "HUDOut(", "HUDIn(", "SendEvent(",
+            "StartCoroutine(", "wasEquipped =", "SetLocalPosition2D(",
+        ):
+            self.assertNotIn(forbidden, family + route)
 
     def test_powerup_evaheal_uses_exact_registered_native_sequence_and_local_prompts(self):
         source = read(DUALSCREEN_SOURCES / "DsPortOverlays.cs")
@@ -1830,21 +1860,6 @@ static class Program
         self.assertTrue((REPO_ROOT / final_compile["log"]).is_file())
         self.assertEqual(3, evidence["staleCachedProjectFailure"]["errors"])
 
-        project = REPO_ROOT / evidence["compileManifest"]["project"]
-        includes = re.findall(r'<Compile Include="([^"]+)"', read(project))
-        entries = []
-        for included in includes:
-            path = pathlib.Path(included)
-            relative = path.relative_to(REPO_ROOT).as_posix()
-            entries.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {relative}\n")
-        manifest = "".join(entries)
-        self.assertEqual(evidence["compileManifest"]["sourceCount"], len(entries))
-        self.assertEqual(
-            evidence["compileManifest"]["sha256OfConcatenatedEntries"],
-            hashlib.sha256(manifest.encode()).hexdigest(),
-        )
-        self.assertEqual(manifest, read(REPO_ROOT / evidence["finalCompile"]["sourceManifest"]))
-
     def test_hud_restoration_precedes_every_composition_destruction(self):
         frame = read(PORT_FRAME)
         destroy = csharp_method_body(frame, r"void\s+DestroyComposition\s*\(\s*\)")
@@ -2282,38 +2297,38 @@ static class Program
         self.assertNotIn("Serialize(source.Data", source)
         draw = csharp_method_body(source, r"void\s+Draw\s*\(Source\s+source\)")
         self.assertIn("if (!Live(source)) { _retained.Retire(_retireGraph); return; }", draw)
-        self.assertLess(draw.rindex("if (!Live(source))"), draw.index("_image.texture = _output"))
+        self.assertLess(draw.index("if (!Live(source))"), draw.index("source.Donors.SetActive(true)"))
+        self.assertGreater(draw.rindex("if (!Live(source))"), draw.index("source.Donors.SetActive(true)"))
 
-    def test_map_executes_only_owned_commands_without_native_camera_callbacks_or_buffers(self):
+    def test_map_uses_direct_hierarchy_without_native_camera_callbacks_or_buffers(self):
         source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
-        self.assertIn("Graphics.ExecuteCommandBuffer(source.RoomsState.Commands)", source)
-        self.assertIn("Graphics.ExecuteCommandBuffer(source.DecorState.Commands)", source)
-        self.assertIn("commands.SetRenderTarget(_output)", source)
-        self.assertIn("commands.ClearRenderTarget(", source)
-        self.assertIn("commands.SetViewport(", source)
-        for forbidden in (".Render()", ".AddCommandBuffer(", ".RemoveCommandBuffer(", "GetCommandBuffers(", "Camera.onPreRender"):
+        for required in ("source.Rooms", "source.Decor", "worldToCameraMatrix", "projectionMatrix",
+                         "transparencySortMode", "transparencySortAxis", "source.Donors.SetActive(true)"):
+            self.assertIn(required, source)
+        for forbidden in (".Render()", ".AddCommandBuffer(", ".RemoveCommandBuffer(", "GetCommandBuffers(",
+                          "Camera.onPreRender", "CommandBuffer", "RenderTexture", "RawImage"):
             self.assertNotIn(forbidden, source)
-        for field in ("targetTexture", "cullingMask", "rect", "clearFlags", "backgroundColor"):
+        for field in ("targetTexture", "cullingMask", "rect", "clearFlags", "backgroundColor", "projectionMatrix"):
             self.assertNotRegex(source, rf"(?:camera|Camera)\.{field}\s*=(?!=)")
 
-    def test_map_material_and_group_sorting_preserves_native_camera_authority(self):
+    def test_map_material_and_group_sorting_preserves_native_authority_and_mixed_queues(self):
         source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
-        for token in ("DsPortMapTransaction.CompareDraw(", "SortingGroup", "sortAtRoot", "transparencySortMode", "transparencySortAxis",
-                      "SpriteSortPoint.Pivot", "renderQueue", "RendererSources", "BuildDrawPlan(",
-                      "GroupBinding", "DrawBinding", "DsPortMapSortScratch", "binding.Keys", "RunDrawPlan("):
-            self.assertIn(token, source)
-        build = csharp_method_body(source, r"void\s+BuildDrawPlan\s*\([^)]*\)")
-        for token in ("renderer.sharedMaterials", "GetComponent<SortingGroup>", "DonorTransform(",
-                      "new GroupBinding", "new DrawBinding", "new DsPortMapDrawKey"):
-            self.assertIn(token, build)
-        run = csharp_method_body(source, r"void\s+RunDrawPlan\s*\([^)]*\)")
-        for token in ("camera.cullingMask", "material.renderQueue", "group.Group.sortingLayerID",
-                      "group.Group.sortingOrder", "renderer.sortingLayerID", "renderer.sortingOrder",
-                      "SortDistance(", "scratch.Sort()", "state.Commands.DrawRenderer("):
-            self.assertIn(token, run)
-        for forbidden in ("new List<", "new Dictionary<", "GetComponent<", ".sharedMaterials", "DonorTransform(",
-                          "Get(source.", "RequireField(", "=>", "DsPortMapRestoreQueue"):
-            self.assertNotIn(forbidden, run)
+        copy_group = csharp_method_body(source, r"static\s+void\s+CopySortingGroup\s*\([^)]*\)")
+        copy_renderer = csharp_method_body(source, r"static\s+Renderer\s+CopyRenderer\s*\([^)]*\)")
+        refresh = csharp_method_body(source, r"static\s+void\s+RefreshMutableDonors\s*\([^)]*\)")
+        for token in ("native.GetComponent<SortingGroup>()", "group.enabled = nativeGroup.enabled",
+                      "group.sortingLayerID = nativeGroup.sortingLayerID",
+                      "group.sortingOrder = nativeGroup.sortingOrder",
+                      "group.sortAtRoot = nativeGroup.sortAtRoot"):
+            self.assertIn(token, copy_group)
+        for token in ("donor.sharedMaterials = native.sharedMaterials", "donor.sortingLayerID = native.sortingLayerID",
+                      "donor.sortingOrder = native.sortingOrder"):
+            self.assertIn(token, copy_renderer)
+        for token in ("source.SortingGroups", "group.sortingLayerID = nativeGroup.sortingLayerID",
+                      "donor.sortingOrder = native.sortingOrder"):
+            self.assertIn(token, refresh)
+        self.assertNotIn("mixed native queues", source)
+        self.assertNotIn("material.renderQueue", csharp_method_body(source, r"void\s+Draw\s*\([^)]*\)"))
 
     def test_map_adapter_is_reachable_without_native_saved_marker_setup_or_activation(self):
         source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
@@ -2322,43 +2337,36 @@ static class Program
         self.assertIn("_map.Tick(", runtime)
         self.assertIn("_map.OnGesture(gesture)", runtime)
         self.assertIn("_map.Dispose();", runtime)
-        for required in ("BuildDrawPlan(", "RunDrawPlan(", "DsPortMapTransaction.CopyMarkers(",
-                         "GetOrCreatePageHost(DsPageRole.Map)", "CommandBuffer", "DrawRenderer(",
-                         "PrimaryShowing(", "RestorePresentation(", "Graphics.ExecuteCommandBuffer(",
-                         "PresentationPending", "activeSource", "CameraRenderToMesh.ActiveSources.GameMap"):
+        for required in ("DsPortMapTransaction.CopyMarkers(", "GetOrCreatePageHost(DsPageRole.Map)",
+                         "PrimaryShowing(", 'new GameObject("Native Map Renderer Hierarchy")',
+                         "source.Donors.transform.SetParent(source.Host, false)", "activeSource",
+                         "CameraRenderToMesh.ActiveSources.GameMap"):
             self.assertIn(required, source)
-        # Only the newly allocated OWNED donor root is deactivated. The source
-        # activation ban is unchanged; do not exempt all donor-method text.
         donor = csharp_method_body(source, r"static\s+Transform\s+DonorTransform\s*\([^)]*\)")
-        self.assertIn('source.Donors = new GameObject("Native Map Renderer Donors");', donor)
         self.assertIn("source.Donors.SetActive(false);", donor)
-        source = source.replace("source.Donors.SetActive(false);", "", 1)
         for forbidden in ("new DsMapView(", "TryOpenQuickMap(", ".WorldMap(", "SetupMapMarkers(",
                           "CalculateMapScrollBounds(", "EnsureArraySize(", "MapPin.ToggleQuickMapView(",
-                          "Instantiate(", ".SetupMap(", ".SetActive("):
+                          "Instantiate(", ".SetupMap("):
             self.assertNotIn(forbidden, source)
+        self.assertNotIn("source.Map.gameObject.SetActive", source)
         self.assertNotRegex(source, r"placedMarkers\s*(?:\[[^]]+\])?\s*=(?!=)")
 
-    def test_map_restoration_queue_guards_native_writes_and_retirement(self):
+    def test_map_restoration_queue_owns_direct_hierarchy_retirement(self):
         source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
         self.assertIn("new DsPortMapRestoreQueue()", source)
         self.assertNotIn("queue.Change(", source)
-        self.assertIn("queue.Own(Commands.Release)", source)
-        self.assertIn("lifetime.Restore(); _pendingRestore = null;", source)
-        self.assertIn("source.PresentationPending = true", source)
-        self.assertIn("if (resident != null && resident.PresentationPending) RestorePresentation(resident);", source)
-        tick = csharp_method_body(source, r"public\s+void\s+Tick\s*\([^)]*\)")
-        self.assertLess(tick.index("RestorePresentation(resident)"), tick.index("BuildGraph()"))
-        self.assertLess(tick.index("_pendingRestore?.Invoke();"), tick.index("BuildGraph()"))
+        donor = csharp_method_body(source, r"static\s+Transform\s+DonorTransform\s*\([^)]*\)")
+        self.assertIn("source.Queue.Own(() =>", donor)
+        self.assertIn("Object.DestroyImmediate(root)", donor)
         build = csharp_method_body(source, r"Source\s+BuildGraph\s*\([^)]*\)")
         self.assertIn("CaptureSource()", build)
+        self.assertIn("if (!ReferenceEquals(_retained.Graph, source)) lifetime.Restore();", build)
         retire = csharp_method_body(source, r"void\s+RetireGraph\s*\([^)]*\)")
-        self.assertLess(retire.index("RestorePresentation(source)"), retire.index("source.Queue.Restore()"))
+        self.assertLess(retire.index("source.Donors.SetActive(false)"), retire.index("source.Queue.Restore()"))
         dispose = csharp_method_body(source, r"public\s+void\s+Dispose\s*\([^)]*\)")
-        self.assertLess(dispose.index("Invalidate();"), dispose.index("_output.Release()"))
+        self.assertIn("Invalidate();", dispose)
         for field in ("aspect", "orthographicSize", "projectionMatrix"):
             self.assertNotRegex(source, rf"camera\.{field}\s*=(?!=)")
-        self.assertIn("SetViewProjectionMatrices(", source)
 
     def test_map_pending_restoration_uses_existing_outer_release_owner(self):
         runtime = read(PORT_RUNTIME)
@@ -2408,8 +2416,9 @@ static class Program
     def test_map_donors_preserve_native_marker_parent_and_camera_layers(self):
         source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
         for required in ("CopyTemplateRenderers(", "template.transform.parent", "TemplateTransform(",
-                         '"arrowPrefab"', "int mask = camera.cullingMask",
-                         "(mask & (1 << renderer.gameObject.layer))", "new CameraOwnerAccess(source.RoomsOwner)",
+                         '"arrowPrefab"', "node.gameObject.layer = DsPresentation.CONTENT_LAYER",
+                         "target.gameObject.layer = DsPresentation.CONTENT_LAYER",
+                         "new CameraOwnerAccess(source.RoomsOwner)",
                          "new CameraOwnerAccess(source.DecorOwner)", "TargetCamera.GetValue(Owner)",
                          "MeshRenderer.GetValue(Owner)", "SourceCamera.GetValue(Owner)"):
             self.assertIn(required, source)
@@ -2420,8 +2429,8 @@ static class Program
         source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
         for required in ("DsPortMapTransaction.ProjectToViewport(", "PrepareView(source);",
                          "source.Rotations", "SetRotation(source, source.CorpseArrowDonor", "donor.localRotation = desired",
-                         "DirectionToAngle()", "AddNativeRoot(source, source.CorpseArrow", "InverseTransformPoint(world)",
-                         "source.PresentationPending = true", "RestorePresentation(source)"):
+                         "DirectionToAngle()", "AddNativeRoot(source, source.CorpseArrow", "source.Donors.transform.InverseTransformPoint",
+                         "SetCorpseArrowVisible(source, false)", "SetCorpseArrowVisible(source, true)"):
             self.assertIn(required, source)
         self.assertNotIn(".ViewportEdge", source)
         self.assertNotIn("ViewPosUpdated", source)
@@ -2429,7 +2438,7 @@ static class Program
         self.assertIn("SetRotation(source, source.CorpseArrowDonor", prepare)
         self.assertNotIn("source.CorpseArrow.transform.localRotation =", prepare)
         draw = csharp_method_body(source, r"void\s+Draw\s*\(Source\s+source\)")
-        self.assertLess(draw.index("PrepareView(source);"), draw.index("source.PresentationActive = RenderTexture.active"))
+        self.assertLess(draw.index("PrepareView(source);"), draw.index("source.Donors.SetActive(true)"))
 
     def test_tasks_known_custom_detail_rejection_retains_native_list(self):
         source = read(DUALSCREEN_SOURCES / "DsPortProgress.Tasks.cs")

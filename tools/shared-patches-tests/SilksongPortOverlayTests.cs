@@ -74,6 +74,29 @@ public sealed class SilksongPortOverlayTests
         Assert.Same(replace ? replacement : null, RegisteredMessage(registrations, _ => true));
     }
 
+    [Fact] public void SkillGetMessageKeepsExactOwnerGenerationAndNeverReplaysProgression()
+    {
+        var owner = new MessageOwner(); var replacement = new MessageOwner();
+        var registrations = new List<object> { owner };
+        int presented = 0, restored = 0, released = 0, progression = 17;
+        var generation = new DsPortCompanionDismissState();
+        generation.Begin(); generation.Arm(); int observed = generation.Observe();
+        var lease = new DsPortDialogueLease(
+            () => ReferenceEquals(owner, RegisteredMessage(registrations, _ => true)),
+            () => owner,
+            value => { Assert.Same(owner, value); presented++; },
+            value => { Assert.Same(owner, value); restored++; },
+            value => { Assert.Same(owner, value); released++; });
+        Assert.True(lease.Tick());
+        Assert.True(generation.Request(observed));
+        Assert.True(generation.Consume());
+        registrations[0] = replacement;
+        Assert.False(lease.Tick());
+        Assert.False(generation.Request(observed));
+        Assert.Equal(1, presented); Assert.Equal(1, restored); Assert.Equal(1, released);
+        Assert.Equal(17, progression);
+    }
+
     static object PopupIsland(object root, object target, Func<object, object> parent)
     {
         var method = typeof(DsPortOverlayTargets).GetMethod("Island");

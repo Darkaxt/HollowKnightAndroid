@@ -296,12 +296,12 @@ public sealed class SilksongPortSelectionTests
         AuthorityCamera = new object(), AuthorityViewport = new object();
 
     [Fact]
-    public void NativeMapRetainsOneGraphAndTwoCommandBuffersAcrossManySteadyTicks()
+    public void NativeMapRetainsOneDirectHierarchyAcrossManySteadyTicks()
     {
         var state = new DsPortMapRetainedGraph<RetainedMapGraph>(.125);
         var graph = new RetainedMapGraph(); object[] values = { "room", 1 }; int reads = 0, releases = 0;
         int sourcePose = 0, donorPose = 0;
-        state.Admit(graph, MapAuthority(), values, 0, 2);
+        state.Admit(graph, MapAuthority(), values, 0);
         for (int frame = 1; frame <= 1000; frame++)
         {
             Assert.True(state.TryReuse(MapAuthority(), true, false, frame / 1000d,
@@ -313,9 +313,7 @@ public sealed class SilksongPortSelectionTests
             Assert.Equal(sourcePose, donorPose);
         }
         Assert.Equal(1, state.ConstructionCount);
-        Assert.Equal(2, state.CommandBufferConstructionCount);
         Assert.Equal(0, state.RetirementCount);
-        Assert.Equal(0, state.CommandBufferReleaseCount);
         Assert.InRange(reads, 7, 8);
         Assert.Equal(reads, state.SnapshotCount);
         Assert.Equal(1000, state.DynamicRefreshCount);
@@ -323,59 +321,20 @@ public sealed class SilksongPortSelectionTests
     }
 
     [Fact]
-    public void NativeMapProductionSortScratchAllocatesNothingAcrossChangingThousandFrameHotLoop()
-    {
-        var firstKeys = new[] { new DsPortMapDrawKey { Layer = 0, Order = 0, Queue = 3000, Distance = 1, Stable = 0 } };
-        var secondKeys = new[] { new DsPortMapDrawKey { Layer = 0, Order = 1, Queue = 3000, Distance = 2, Stable = 1 } };
-        var scratch = new DsPortMapSortScratch(2);
-        for (int warm = 0; warm < 32; warm++)
-        {
-            scratch.Reset();
-            scratch.Add(new DsPortMapSortSlot { Binding = 0, Keys = firstKeys, KeyCount = 1 });
-            scratch.Add(new DsPortMapSortSlot { Binding = 1, Keys = secondKeys, KeyCount = 1 });
-            scratch.Sort();
-        }
-        int dynamicValue = 0;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int frame = 1; frame <= 1000; frame++)
-        {
-            firstKeys[0].Distance = frame;
-            secondKeys[0].Distance = 1001 - frame;
-            scratch.Reset();
-            scratch.Add(new DsPortMapSortSlot { Binding = 0, Keys = firstKeys, KeyCount = 1 });
-            scratch.Add(new DsPortMapSortSlot { Binding = 1, Keys = secondKeys, KeyCount = 1 });
-            scratch.Sort();
-            dynamicValue = scratch.At(0).Keys[0].Distance > 0 ? frame : 0;
-        }
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.Equal(1000, dynamicValue);
-        Assert.Equal(0, allocated);
-        Assert.Equal(1032, scratch.SortCount);
-        Assert.Equal(0, scratch.FrameCollectionConstructionCount);
-        Assert.Equal(0, scratch.FrameClosureConstructionCount);
-        Assert.Equal(0, scratch.FrameRestoreQueueConstructionCount);
-        Assert.Equal(0, scratch.FrameMaterialArrayReadCount);
-        Assert.Equal(0, scratch.FrameComponentQueryCount);
-        Assert.Equal(0, scratch.FrameReflectionLookupCount);
-    }
-
-    [Fact]
     public void NativeMapSnapshotChangeRetiresAndRebuildsExactlyOnce()
     {
         var state = new DsPortMapRetainedGraph<RetainedMapGraph>(.125);
         object[] values = { "room", 1 }; int releases = 0;
-        state.Admit(new RetainedMapGraph(), MapAuthority(), values, 0, 2);
+        state.Admit(new RetainedMapGraph(), MapAuthority(), values, 0);
         values = new object[] { "room", 2 };
         Assert.False(state.TryReuse(MapAuthority(), true, false, .125,
             () => values, _ => releases++, out _));
-        state.Admit(new RetainedMapGraph(), MapAuthority(), values, .125, 2);
+        state.Admit(new RetainedMapGraph(), MapAuthority(), values, .125);
         for (int frame = 126; frame < 250; frame++)
             Assert.True(state.TryReuse(MapAuthority(), true, false, frame / 1000d,
                 () => values, _ => releases++, out _));
         Assert.Equal(2, state.ConstructionCount);
         Assert.Equal(1, state.RetirementCount);
-        Assert.Equal(4, state.CommandBufferConstructionCount);
-        Assert.Equal(2, state.CommandBufferReleaseCount);
         Assert.Equal(1, releases);
     }
 
@@ -386,7 +345,7 @@ public sealed class SilksongPortSelectionTests
     public void NativeMapAuthorityLossRetiresImmediatelyWithoutSnapshotPolling(string change)
     {
         var state = new DsPortMapRetainedGraph<RetainedMapGraph>(.125); int reads = 0, releases = 0;
-        state.Admit(new RetainedMapGraph(), MapAuthority(), new object[] { 1 }, 0, 2);
+        state.Admit(new RetainedMapGraph(), MapAuthority(), new object[] { 1 }, 0);
         var current = change == "owner" ? MapAuthority(owner: new object()) :
             change == "map" ? MapAuthority(map: new object()) : change == "host" ? MapAuthority(host: new object()) :
             change == "camera" ? MapAuthority(camera: new object()) : change == "viewport" ? MapAuthority(viewport: new object()) :
@@ -405,35 +364,19 @@ public sealed class SilksongPortSelectionTests
     {
         var state = new DsPortMapRetainedGraph<RetainedMapGraph>(.125);
         var graph = new RetainedMapGraph(); int attempts = 0;
-        state.Admit(graph, MapAuthority(), new object[] { 1 }, 0, 2);
+        state.Admit(graph, MapAuthority(), new object[] { 1 }, 0);
         Assert.Throws<InvalidOperationException>(() => state.TryReuse(MapAuthority(epoch: 8), true, false, .001,
             () => throw new Exception("must not poll"), _ => { attempts++; throw new InvalidOperationException("release"); }, out _));
         Assert.Same(graph, state.Graph);
         Assert.Equal(1, state.ConstructionCount);
         Assert.Equal(0, state.RetirementCount);
-        Assert.Throws<InvalidOperationException>(() => state.Admit(new RetainedMapGraph(), MapAuthority(epoch: 8), new object[] { 1 }, .001, 2));
+        Assert.Throws<InvalidOperationException>(() => state.Admit(new RetainedMapGraph(), MapAuthority(epoch: 8), new object[] { 1 }, .001));
         Assert.False(state.TryReuse(MapAuthority(), true, false, .002,
             () => throw new Exception("must not poll"), _ => attempts++, out _));
-        state.Admit(new RetainedMapGraph(), MapAuthority(epoch: 8), new object[] { 1 }, .002, 2);
+        state.Admit(new RetainedMapGraph(), MapAuthority(epoch: 8), new object[] { 1 }, .002);
         Assert.Equal(2, attempts);
         Assert.Equal(2, state.ConstructionCount);
         Assert.Equal(1, state.RetirementCount);
-        Assert.Equal(2, state.CommandBufferReleaseCount);
-    }
-
-    [Theory]
-    [InlineData(0, 0, 3000, 1f, 0, 1, 0, 2000, 9f, 1, -1)]
-    [InlineData(0, 0, 3000, 1f, 0, 0, 1, 2000, 9f, 1, -1)]
-    [InlineData(0, 0, 2000, 1f, 0, 0, 0, 3000, 9f, 1, -1)]
-    [InlineData(0, 0, 3000, 9f, 0, 0, 0, 3000, 1f, 1, -1)]
-    [InlineData(0, 0, 2000, 1f, 0, 0, 0, 2000, 9f, 1, -1)]
-    [InlineData(0, 0, 3000, 1f, 2, 0, 0, 3000, 1f, 1, 1)]
-    public void NativeMapDrawOrderUsesLayerOrderQueueDistanceAndStableTie(int la, int oa, int qa, float da, int sa,
-        int lb, int ob, int qb, float db, int sb, int expected)
-    {
-        var compare = typeof(DsPortMapTransaction).GetMethod("CompareDraw");
-        Assert.NotNull(compare);
-        Assert.Equal(expected, Math.Sign((int)compare.Invoke(null, new object[] { la, oa, qa, da, sa, lb, ob, qb, db, sb })));
     }
 
     [Theory] [InlineData("selected", true)] [InlineData("other-selected", false)] [InlineData("foreign-source", false)]
