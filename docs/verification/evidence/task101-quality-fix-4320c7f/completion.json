@@ -1,0 +1,160 @@
+{
+  "schema": 1,
+  "task": "Task101-QUALITY-REMEDIATION",
+  "status": "HOST_COMPLETE_DEVICE_DEFERRED",
+  "baseCommit": "41942d9f89659f86d6a070efd0ee3a91abedb775",
+  "sourceCommit": "4320c7f",
+  "supersedes": "docs/verification/evidence/task101-spec-fix-a701d33/completion.json",
+  "scope": "Six QUALITY findings: owner-refresh liveness, 512 MiB transitions, deferred Unity destruction, durable rotation-run authority, exact import dimensions, and final post-weave death verification",
+  "managedAuthority": {
+    "silksongPlatform": "Linux",
+    "silksongGameVersion": "1.0.29980",
+    "silksongAssemblyCSharpSha256": "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d",
+    "canonicalDeathBridgeSha256": "86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e",
+    "postDeathUiMessageFinalSha256": "fee81c9bfee10dea307373b167f717d0b4aa5811c2e849ef9a4cf98c7804a2a0",
+    "classifierFingerprintSha256": "816e58334b5f6ba6de252ef20cb7a71aff1b41bca720fa577ca9babf17ee2fd2",
+    "recorderFingerprintSha256": "2195f14702bd92bdd84a58ba38b653299c76bafb4588ffa03d4aa8a7d46751d3",
+    "bundleSurgeryToolSha256": "6f8de61c16e8920671704c2c41f900d7e7ec9c3980f8198f4d72427146ea1cce",
+    "hollowKnightGameVersion": "1.5.12620",
+    "hollowKnightAssemblyCSharpSha256": "5c84b8e59dd669c48db1fc426541d0d96643f59d35a72534b21fead7c96a3086"
+  },
+  "remediations": [
+    {
+      "finding": 1,
+      "claim": "Pending rotation polls lightweight hero, manager, HUD, library, collection, animator and sprite identities once per second; hierarchy traversal occurs only to establish or replace cached HUD sources, and a changed stamp forces one visual refresh even while normal refresh is gated.",
+      "evidence": [
+        "Task101SpecRegressionTests.Pending_owner_replacement_forces_one_bounded_visual_refresh_then_reaches_stable_ready",
+        "Task101SpecRegressionTests.Steady_pending_owner_polling_is_throttled_without_hierarchy_refresh_growth",
+        "DualSoulsUiPortContractTest.test_silksong_pending_owner_poll_uses_cached_sources_not_hierarchy_traversal"
+      ]
+    },
+    {
+      "finding": 2,
+      "claim": "The 484 MiB ON set and 352 MiB ROTATE set transition through restore, retire, confirmed release, then successor allocation when current plus candidate exceeds 512 MiB; pending requests cannot claim a successor mode or retain ON-only HUD visuals.",
+      "evidence": [
+        "HollowKnightSkinRuntimeTests.Full_pack_change_restores_and_waits_for_release_before_successor_allocation",
+        "HollowKnightSkinRuntimeTests.Full_on_to_rotate_restores_hud_and_does_not_claim_new_mode_before_release",
+        "HollowKnightSkinRuntimeTests.Filter_empty_transition_restores_before_waiting_and_never_reapplies_environment"
+      ]
+    },
+    {
+      "finding": 3,
+      "claim": "Unity texture release remains charged and blocks successor apply until a later-frame fake-null confirms deferred Destroy; release is requested once and no completed tracking dictionary or keys remain.",
+      "evidence": [
+        "HollowKnightSkinRuntimeTests.Pending_destroy_remains_charged_and_dispose_is_idempotent",
+        "HollowKnightSkinRuntimeTests.Repeated_delayed_retirement_cycles_do_not_allocate_successors_or_grow_accounting",
+        "DualSoulsUiPortContractTest.test_silksong_texture_retirement_waits_for_unity_fake_null_without_tracking_growth"
+      ]
+    },
+    {
+      "finding": 4,
+      "claim": "A changed or cleared durable Kotlin rotationRun supersedes impossible unacknowledged local cancellation state, so polling configures the replacement run or OFF state.",
+      "evidence": [
+        "SilksongSkinLibraryTests.Durable_run_change_discards_impossible_local_cancellation_and_polling_recovers(ROTATE)",
+        "SilksongSkinLibraryTests.Durable_run_change_discards_impossible_local_cancellation_and_polling_recovers(OFF)"
+      ]
+    },
+    {
+      "finding": 5,
+      "claim": "The closed Silksong profile owns exact dimensions for all eleven targets; normalization rejects a structurally valid, decoder-matching PNG whose dimensions differ before publication while Hollow Knight retains its dimension-neutral catalog.",
+      "dimensionClasses": ["2048x2048", "2048x4096", "1024x2048", "4096x4096", "512x1024"],
+      "evidence": [
+        "SilksongSkinProfileTest.closedProfilesExposeIndependentExactCatalogAuthorities",
+        "SilksongSkinProfileTest.silksongNormalizerAcceptsExactDimensionsAcrossEveryDimensionClass",
+        "SilksongSkinProfileTest.silksongNormalizerRejectsMismatchAcrossEveryDimensionClass"
+      ]
+    },
+    {
+      "finding": 6,
+      "claim": "Production invokes structural death-bridge verification after save redirection, UIMsg rewriting and Mods weaving and before IL2CPP; the final assembly hash and structural-v1 result are atomically recorded, included in completion signature, and rechecked by Silksong staleness. Exact stripped and moved-call mutations fail closed.",
+      "evidence": [
+        "HollowKnightBuildPlanTest final provenance success/failure and mutation regressions",
+        "BridgeSilksongNormalDeathTests.Final_structural_verifier_rejects_a_managed_image_without_the_exact_bridge",
+        "DualSoulsUiPortContractTest.test_exact_silksong_normal_death_bridge_is_in_the_production_conversion_path",
+        "docs/verification/evidence/task101-quality-fix-4320c7f/death-bridge-exact.log"
+      ]
+    }
+  ],
+  "testRuns": [
+    {
+      "name": "shared-managed-suite",
+      "command": "dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj -c Release --no-restore",
+      "passed": 1576,
+      "failed": 0,
+      "skipped": 0,
+      "log": "shared-tests.log",
+      "logSha256": "ac0c64822ac624576477fd855de957801f28ff77f62264d0d01b166152b67038"
+    },
+    {
+      "name": "launcher-task101-selected",
+      "command": "Gradle 8.11 --offline --no-daemon :app:testDebugUnitTest with 11 Task101 profile/build/runtime/library/UI classes",
+      "passed": 116,
+      "failed": 0,
+      "skipped": 0,
+      "log": "launcher-tests.log",
+      "logSha256": "7f515d145f14c54761f6e4f60fcc04b0e53f33ff41a09534159eb8227be06e5d"
+    },
+    {
+      "name": "python-production-contracts",
+      "command": "python -m unittest tools.ci.tests.test_profile_mod_pipeline tools.ci.tests.test_dual_souls_ui_port tools.ci.tests.test_hollow_knight_first_plan",
+      "passed": 150,
+      "failed": 0,
+      "skipped": 0,
+      "log": "python-contracts.log",
+      "logSha256": "399ee4b488ef02b0c4f9ef78aeb985f8614450a6e373cbd481a14d95e37b2eb5"
+    },
+    {
+      "name": "bundle-surgery-suite",
+      "command": "dotnet test tools/bundle-surgery-tests/BundleSurgery.Tests.csproj -c Release --no-restore",
+      "passed": 40,
+      "failed": 0,
+      "skipped": 0,
+      "log": "bundle-surgery-tests.log",
+      "logSha256": "3e4f5651cac10b26acac61da1b682cb05f2b97cb6bf6ea9b10f2eba8827379ab"
+    }
+  ],
+  "managedCompiles": {
+    "silksong": {
+      "compiledSourceCount": 83,
+      "entryPointCount": 14,
+      "errors": 0,
+      "log": "silksong-managed-compile.log",
+      "logSha256": "7b0ad67b0a3056e9e0826342b83d2c39efa5ea95c8d09894fd09e1863dbeaf0b"
+    },
+    "hollowKnight": {
+      "outputBytes": 763392,
+      "entryPointCount": 2,
+      "warnings": 1,
+      "errors": 0,
+      "log": "hollow-knight-managed-compile.log",
+      "logSha256": "a51184ab202480f12e37e7dc710e4482ca2837cfdf2cb15fda5acfcbb0cbaf50"
+    }
+  },
+  "rewriteChecks": {
+    "canonicalRewriteVerified": true,
+    "idempotentByteEqual": true,
+    "originalDriftRejectedWithoutOutput": true,
+    "bridgedDriftRejectedWithoutOutput": true,
+    "postUiMessageFinalStructuralVerified": true,
+    "strippedBridgeRejected": true,
+    "movedRecorderCallRejected": true,
+    "log": "death-bridge-exact.log",
+    "logSha256": "61c8c07561befb959c8ee0a75473f6deffd89fea221403a0f8ecff0abf845aaf"
+  },
+  "sourceManifest": "source-manifest.sha256",
+  "sourceManifestEntries": 17,
+  "sourceManifestSha256": "c9274028d83bff1d528823451d4f33144b2897b5145f3f1c9a2973dbcc6e6767",
+  "crossGame": "All 1,576 shared tests pass, including Hollow Knight filter-empty transitions, scheduled refresh/failure recovery, atomic under-budget switching, delayed teardown accounting, and exact 1.5.12620 managed compilation.",
+  "prohibitedWorkPerformed": [],
+  "deviceDeferrals": [
+    "Android bundle identity and managed parity",
+    "sampled material appearance",
+    "Scythe and Shaman shader behavior",
+    "crest and fallback visuals",
+    "HUD effects",
+    "resource pressure on an Android runtime",
+    "death and respawn visuals and lifecycle",
+    "persistence interaction"
+  ],
+  "evidenceBoundary": "Host behavior, source contracts, exact managed compiles, and deterministic rewrite checks prove the listed behavior and production wiring. They do not prove Android, Unity renderer/GPU/shader, live JNI, or device lifecycle acceptance."
+}

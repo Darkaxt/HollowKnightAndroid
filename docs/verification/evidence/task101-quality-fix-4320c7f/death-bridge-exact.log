@@ -1,0 +1,17 @@
+canonical rewrite and verification
+  exact Silksong normal-death bridge already present; copied unchanged
+  verified executable strict-death bridge: normalized nonlethal, memory, cinematic/control, permadeath, demo terminal, duplicate, hazard, and unstable guards
+  verified final executable strict-death bridge after all managed rewrites
+1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d */d/Temp/task101-quality-cli/managed/original.dll
+86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e */d/Temp/task101-quality-cli/managed/bridged.dll
+86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e */d/Temp/task101-quality-cli/managed/idempotent.dll
+fee81c9bfee10dea307373b167f717d0b4aa5811c2e849ef9a4cf98c7804a2a0 */d/Temp/task101-quality-cli/managed/final.dll
+drift and downstream structure rejection
+  Silksong normal-death rewrite failed closed: Assembly-CSharp.dll differs from pinned 1.0.29980: e62fa633b638812318839da19f0ed6be631a22b2311546f586c125476df0b5c1
+original_drift_exit=1
+  Silksong normal-death rewrite failed closed: already-bridged Silksong assembly differs from canonical rewritten identity: 258f5bb2bfb0be516ea700980e34dfe33f4b6f30b4c7ca07512a7336e663db53
+bridged_drift_exit=1
+  final Silksong normal-death verification failed closed: Silksong normal-death bridge members are incomplete
+stripped_final_exit=1
+  final Silksong normal-death verification failed closed: Silksong normal-death recorder call site is incomplete or moved
+moved_final_exit=1

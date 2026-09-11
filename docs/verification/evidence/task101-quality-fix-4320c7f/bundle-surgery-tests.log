@@ -1,0 +1,6 @@
+  BundleSurgery -> D:\Temp\HollowKnightAndroid-h1\tools\bundle-surgery\bin\Release\net8.0\BundleSurgery.dll
+  BundleSurgery.Tests -> D:\Temp\HollowKnightAndroid-h1\tools\bundle-surgery-tests\bin\Release\net8.0\BundleSurgery.Tests.dll
+Test run for D:\Temp\HollowKnightAndroid-h1\tools\bundle-surgery-tests\bin\Release\net8.0\BundleSurgery.Tests.dll (.NETCoreApp,Version=v8.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    40, Skipped:     0, Total:    40, Duration: 3 s - BundleSurgery.Tests.dll (net8.0)

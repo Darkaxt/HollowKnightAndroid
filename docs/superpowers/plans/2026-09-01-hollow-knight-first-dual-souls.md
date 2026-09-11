@@ -1424,28 +1424,33 @@ mutation, device/publication/source activation, save edits or cleanup; commands
   Test foreign profiles/catalogs, identical pack IDs across games, startup-selection
   changes, selected/pending protection, mode changes, duplicate/hazard events,
   prompt matching acknowledgments, next death before polling and owner replacement.
-  **Host-complete/device-deferred at `a701d33`, superseding `bcf3508`.** Exact SS
+  **Host-complete/device-deferred at `4320c7f`, superseding `a701d33`.** Exact SS
   1.0.29980 managed input SHA-256
   `1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d`
-  is pinned by an exact post-guard/post-normalization classifier and a canonical,
-  byte-idempotent rewrite with SHA-256
+  remains pinned; the canonical death bridge remains byte-idempotent at SHA-256
   `86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e`.
-  BundleSurgery verifies that exact SHA and canonical bridge IL before publishing
-  every fresh output. The launcher independently checks the pinned rewritten SHA
-  and invokes canonical verification before replacing its staged assembly.
-  Original drift and unrelated drift after the bridge are rejected without output.
-  Closed eleven-target profile/storage/import/JNI authority, exact multi-instance
-  collection/material admission, all sparse omissions, atomic apply/restore,
-  retry-owned teardown, a 32-slot ordered hero/manager/token occurrence ring,
-  stale-occurrence-only cancellation, restore-before-frozen-successor rotation,
-  two consecutive stable PLAYING frames, and profile-aware launcher output are
-  executable-host tested. Counter jumps preserve distinct owners, H1 replacement
-  cancels only H1 while H2 remains queued, and bounded overflow fails closed.
+  The closed profile now owns exact dimensions for all eleven atlases and rejects
+  decoder-matching dimension drift before publication. Pending rotation polls
+  lightweight hero/manager/HUD/library/collection identities once per second and
+  performs full visual discovery only when the cached source stamp is absent or
+  changed, so owner replacement can reach two-frame stable readiness without an
+  unbounded hierarchy scan. The 484 MiB ON and 352 MiB ROTATE sets transition
+  under the 512 MiB runtime bound by restoring old visuals, requesting retirement,
+  waiting for later-frame Unity fake-null confirmation, then allocating the
+  successor; retries neither allocate nor grow accounting, and ON-only HUD visuals
+  cannot survive a claimed ROTATE transition. A changed/cleared durable Kotlin
+  `rotationRun` supersedes impossible local cancellation state. After save
+  redirection, UIMsg rewriting and Mods weaving, production runs a second structural
+  death-bridge verifier before IL2CPP and atomically records the final assembly hash
+  plus `structural-v1` result in completion provenance. Exact stripped-helper and
+  moved-call mutations fail closed. The quality checkpoint passes 1,576 shared,
+  116 launcher, 150 Python and 40 BundleSurgery tests; compiles 83 Silksong sources
+  with 14 entry points and the exact Hollow Knight 1.5.12620 consumer with two.
   Evidence is retained in
-  `docs/verification/evidence/task101-spec-fix-a701d33/`. Android bundle
+  `docs/verification/evidence/task101-quality-fix-4320c7f/`. Android bundle
   identity/parity, sampled material appearance, Scythe/Shaman shaders,
-  crest/fallback visuals, HUD effects, resource pressure, death/respawn visuals
-  and lifecycle, and persistence interaction remain genuine device-only deferrals.
+  crest/fallback visuals, HUD effects, device resource pressure, death/respawn
+  visuals and lifecycle, and persistence interaction remain device-only deferrals.
 - [ ] **Task102.** Verify production reachability, focused behavioral suites,
   exact two-game compiles and cross-game isolation, with independent SPEC,
   separate QUALITY and fresh main verification. Distinguish executed host
