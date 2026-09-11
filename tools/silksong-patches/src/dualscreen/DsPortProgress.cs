@@ -819,6 +819,13 @@ public sealed partial class DsPortProgress : IDisposable, IDsPortJournalNative, 
 // Only atlas textures and already-resident global read-only formatting state are borrowed.
 public sealed class DsPortOwnedText
 {
+    sealed class ColdRoot
+    {
+        public readonly GameObject Root;
+        public PaneText Text;
+        public List<Component> Retirement;
+        public ColdRoot(GameObject root) { Root = root; }
+    }
     const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
     readonly DsPortOwnedGraph _graph = new DsPortOwnedGraph();
     readonly HashSet<TMProOld.TMP_FontAsset> _fonts = new HashSet<TMProOld.TMP_FontAsset>();
@@ -827,7 +834,9 @@ public sealed class DsPortOwnedText
     readonly HashSet<PaneText> _preparedTexts = new HashSet<PaneText>();
     readonly HashSet<List<TMProOld.TMP_FontAsset>> _augmentedFallbacks = new HashSet<List<TMProOld.TMP_FontAsset>>();
     readonly List<Mesh> _coldMeshes = new List<Mesh>();
-    readonly List<GameObject> _coldRoots = new List<GameObject>();
+    readonly List<ColdRoot> _coldRoots = new List<ColdRoot>();
+    readonly HashSet<PaneText> _coldTexts = new HashSet<PaneText>();
+    readonly DsPortExactRetirement<Component> _coldRetirement = new DsPortExactRetirement<Component>();
     object _settings, _styles, _rules;
     int _inputSize, _dataWork;
     bool _failed;
@@ -1171,13 +1180,15 @@ public sealed class DsPortOwnedText
         if (rect == null) throw Missing("cold native text RectTransform missing");
         var staging = new GameObject("Owned native cold staging text", typeof(RectTransform));
         staging.SetActive(false);
-        _coldRoots.Add(staging);
+        var coldRoot = new ColdRoot(staging);
+        _coldRoots.Add(coldRoot);
         var ownedRect = (RectTransform)staging.transform;
         ownedRect.anchorMin = rect.anchorMin; ownedRect.anchorMax = rect.anchorMax;
         ownedRect.pivot = rect.pivot; ownedRect.sizeDelta = rect.sizeDelta;
         ownedRect.localPosition = Vector3.zero; ownedRect.localRotation = Quaternion.identity; ownedRect.localScale = Vector3.one;
         staging.layer = source.gameObject.layer;
         var owned = staging.AddComponent<PaneText>();
+        coldRoot.Text = owned;
         for (var type = typeof(PaneText); type != null && type != typeof(MonoBehaviour); type = type.BaseType)
             foreach (var field in type.GetFields(Flags))
             {
@@ -1215,6 +1226,7 @@ public sealed class DsPortOwnedText
     {
         Validate(text.gameObject);
         if (text.gameObject.activeInHierarchy) throw Missing("cold native text staging became active");
+        _coldTexts.Add(text);
         try
         {
             // Explicit owned Awake while permanently inactive. The staging root is
@@ -1243,17 +1255,48 @@ public sealed class DsPortOwnedText
             }
         }
     }
+    static void RetireColdComponent(Component component)
+    {
+        Type type;
+        if (component is TMProOld.TMP_SubMesh) type = typeof(TMProOld.TMP_SubMesh);
+        else if (component is PaneText) type = typeof(PaneText);
+        else throw Missing("cold native lifecycle component changed");
+        var method = type.GetMethod(
+            "OnDestroy", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (method == null) throw Missing("cold native OnDestroy unavailable");
+        method.Invoke(component, null);
+    }
     public void RetireCold()
     {
-        // Unity owns lifecycle dispatch. Remove each permanently inactive staging
-        // root only after exact destruction succeeds so restoration can retry.
+        // Manual Awake on a never-active object is invisible to Unity lifecycle
+        // bookkeeping. Explicitly unwind generated submeshes before their PaneText,
+        // retaining each successful callback across retries, then destroy the root.
         while (_coldRoots.Count != 0)
         {
             int last = _coldRoots.Count - 1;
-            var root = _coldRoots[last];
+            var coldRoot = _coldRoots[last];
+            var root = coldRoot.Root;
+            var text = coldRoot.Text;
+            if (text != null && _coldTexts.Contains(text))
+            {
+                if (coldRoot.Retirement == null)
+                {
+                    var components = new List<Component>();
+                    foreach (var submesh in
+                        text.GetComponentsInChildren<TMProOld.TMP_SubMesh>(true))
+                        components.Add(submesh);
+                    components.Add(text);
+                    coldRoot.Retirement = components;
+                }
+                _coldRetirement.Retire(
+                    coldRoot.Retirement, RetireColdComponent);
+            }
             if (root != null) Object.DestroyImmediate(root);
+            if (text != null) _coldTexts.Remove(text);
             _coldRoots.RemoveAt(last);
         }
+        _coldRetirement.Clear();
+        _coldTexts.Clear();
     }
     public void Clear()
     {
@@ -1266,6 +1309,7 @@ public sealed class DsPortOwnedText
         }
         _graph.Clear(); _fonts.Clear(); _materials.Clear(); _inputs.Clear();
         _preparedTexts.Clear(); _augmentedFallbacks.Clear(); _coldRoots.Clear();
+        _coldTexts.Clear(); _coldRetirement.Clear();
         _inputSize = _dataWork = 0; _failed = false; _settings = _styles = _rules = null;
     }
 }

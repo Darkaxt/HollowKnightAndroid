@@ -3007,11 +3007,13 @@ static class Program
         self.assertIn('Set(owned, "m_subTextObjects", new TMProOld.TMP_SubMesh[16])', cold)
         self.assertIn('Data(Get(source, field))', cold)
 
-    def test_map_cold_generation_stays_inactive_and_publishes_renderer_only_state(self):
+    def test_map_cold_generation_stays_inactive_publishes_renderer_only_and_retires_exactly_once(self):
         helper = read(DUALSCREEN_SOURCES / "DsPortProgress.cs").split("public sealed class DsPortOwnedText", 1)[1]
         cold = csharp_method_body(helper, r"public\s+PaneText\s+CopyCold\s*\([^)]*\)")
         self.assertIn("staging.SetActive(false)", cold)
-        self.assertIn("_coldRoots.Add(staging)", cold)
+        self.assertIn("var coldRoot = new ColdRoot(staging)", cold)
+        self.assertIn("_coldRoots.Add(coldRoot)", cold)
+        self.assertIn("coldRoot.Text = owned", cold)
         self.assertLess(cold.index("staging.SetActive(false)"), cold.index("AddComponent<PaneText>()"))
         self.assertNotIn("SetParent(", cold)
         map_source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
@@ -3034,9 +3036,22 @@ static class Program
                           "AddComponent<TMProOld.TextContainer>"):
             self.assertNotIn(forbidden, transfer)
         retire = csharp_method_body(helper, r"public\s+void\s+RetireCold\s*\(\s*\)")
-        self.assertIn("Object.DestroyImmediate(root)", retire)
-        self.assertNotIn('GetMethod("OnDestroy"', retire)
-        self.assertNotIn("_coldRetired", helper)
+        for token in ("GetComponentsInChildren<TMProOld.TMP_SubMesh>(true)",
+                      "components.Add(text)",
+                      "_coldRetirement.Retire(",
+                      "coldRoot.Retirement, RetireColdComponent",
+                      "Object.DestroyImmediate(root)"):
+            self.assertIn(token, retire)
+        self.assertLess(retire.index("GetComponentsInChildren<TMProOld.TMP_SubMesh>(true)"),
+                        retire.index("components.Add(text)"))
+        self.assertLess(retire.index("_coldRetirement.Retire("),
+                        retire.index("Object.DestroyImmediate(root)"))
+        callback = csharp_method_body(helper, r"static\s+void\s+RetireColdComponent\s*\([^)]*\)")
+        self.assertIn('"OnDestroy", BindingFlags.Instance | BindingFlags.NonPublic', callback)
+        self.assertIn("method.Invoke(component, null)", callback)
+        self.assertIn("DsPortExactRetirement<Component> _coldRetirement", helper)
+        self.assertIn("HashSet<PaneText> _coldTexts", helper)
+        self.assertIn("_coldTexts.Add(text)", helper)
         donor = csharp_method_body(map_source, r"static\s+Transform\s+DonorTransform\s*\([^)]*\)")
         self.assertLess(donor.index("source.Text.RetireCold()"), donor.index("Object.DestroyImmediate(root)"))
         self.assertLess(donor.index("Object.DestroyImmediate(root)"), donor.index("source.Text.Clear()"))

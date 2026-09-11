@@ -75,6 +75,36 @@ public sealed class DsPortMapPartialGraph<T> where T : class
     }
 }
 
+public sealed class DsPortExactRetirement<T> where T : class
+{
+    readonly HashSet<T> _completed = new HashSet<T>();
+    readonly HashSet<T> _running = new HashSet<T>();
+    public void Retire(IEnumerable<T> ordered, Action<T> retire)
+    {
+        if (ordered == null) throw new ArgumentNullException(nameof(ordered));
+        if (retire == null) throw new ArgumentNullException(nameof(retire));
+        foreach (var item in ordered)
+        {
+            if (item == null) throw new InvalidOperationException("Exact retirement item unavailable");
+            if (_completed.Contains(item)) continue;
+            if (!_running.Add(item))
+                throw new InvalidOperationException("Exact retirement reentered");
+            try
+            {
+                retire(item);
+                _completed.Add(item);
+            }
+            finally { _running.Remove(item); }
+        }
+    }
+    public void Clear()
+    {
+        if (_running.Count != 0)
+            throw new InvalidOperationException("Exact retirement clear reentered");
+        _completed.Clear();
+    }
+}
+
 public sealed class DsPortMapPropertyBlockPlan
 {
     bool _renderer;

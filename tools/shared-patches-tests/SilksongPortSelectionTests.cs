@@ -360,6 +360,36 @@ public sealed class SilksongPortSelectionTests
     }
 
     [Fact]
+    public void NativeMapColdRetirementRetriesInOrderWithoutRepeatingCompletedCallbacks()
+    {
+        var firstSubmesh = new object();
+        var failedSubmesh = new object();
+        var text = new object();
+        var ordered = new[] { firstSubmesh, failedSubmesh, text };
+        var calls = new List<object>();
+        var failedOnce = false;
+        var retirement = new DsPortExactRetirement<object>();
+
+        Assert.Throws<InvalidOperationException>(() => retirement.Retire(ordered, item =>
+        {
+            calls.Add(item);
+            if (ReferenceEquals(item, failedSubmesh) && !failedOnce)
+            {
+                failedOnce = true;
+                throw new InvalidOperationException("partial native cleanup");
+            }
+        }));
+        Assert.Equal(new[] { firstSubmesh, failedSubmesh }, calls);
+
+        retirement.Retire(ordered, calls.Add);
+        Assert.Equal(
+            new[] { firstSubmesh, failedSubmesh, failedSubmesh, text }, calls);
+
+        retirement.Retire(ordered, calls.Add);
+        Assert.Equal(4, calls.Count);
+    }
+
+    [Fact]
     public void NativeMapRetainsOneDirectHierarchyAcrossManySteadyTicks()
     {
         var state = new DsPortMapRetainedGraph<RetainedMapGraph>(.125);
