@@ -14,7 +14,7 @@ SPEC = REPO_ROOT / "docs" / "superpowers" / "specs" / "2026-08-31-dual-souls-ui-
 PLAN = REPO_ROOT / "docs" / "superpowers" / "plans" / "2026-08-31-dual-souls-ui-port.md"
 MATRIX = REPO_ROOT / "docs" / "verification" / "dual-souls-ui-port-matrix.md"
 HUD_EVIDENCE = REPO_ROOT / "docs" / "verification" / "task99-hud-29980-evidence.json"
-TASK112_EVIDENCE = REPO_ROOT / "docs" / "verification" / "evidence" / "task112-host-gaps"
+TASK112_EVIDENCE = REPO_ROOT / "docs" / "verification" / "evidence" / "task112-spec-fix"
 SOURCE_AUDIT = REPO_ROOT / "docs" / "verification" / "dualscreen-source-audit.md"
 DUALSCREEN_SOURCES = (
     REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen"
