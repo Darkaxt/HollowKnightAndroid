@@ -302,6 +302,58 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
             self.assertIn(token, rewrite)
         self.assertNotIn("var tail = new HashSet<Instruction>()", rewrite)
 
+    def test_native_map_failed_partial_build_blocks_replacement_until_exact_retry(self):
+        source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
+        self.assertIn("DsPortMapPartialGraph<Source>", source)
+        build = csharp_method_body(source, r"Source\s+BuildGraph\s*\(\s*\)")
+        self.assertIn("_partial.Hold(source)", build)
+        self.assertIn("_partial.Retire(_retirePartialGraph)", build)
+        self.assertLess(build.index("_partial.Hold(source)"),
+                        build.index("_partial.Retire(_retirePartialGraph)"))
+        tick = csharp_method_body(source, r"public\s+void\s+Tick\s*\(bool\s+eligible\)")
+        self.assertIn("_partial.Retire(_retirePartialGraph)", tick)
+        self.assertLess(tick.index("_partial.Retire(_retirePartialGraph)"),
+                        tick.index("BuildGraph()"))
+        invalidate = csharp_method_body(source, r"public\s+void\s+Invalidate\s*\(\s*\)")
+        self.assertIn("_partial.Retire(_retirePartialGraph)", invalidate)
+
+    def test_native_map_preserves_renderer_and_every_indexed_material_property_block(self):
+        source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
+        binding = csharp_method_body(source, r"sealed\s+class\s+PropertyBlockBinding")
+        self.assertIn("MaterialPropertyBlock Renderer", binding)
+        self.assertIn("MaterialPropertyBlock[] Materials", binding)
+        refresh = csharp_method_body(source, r"static\s+void\s+RefreshPropertyBlocks\s*\([^)]*\)")
+        for required in (
+            "native.GetPropertyBlock(binding.Renderer)",
+            "donor.SetPropertyBlock(binding.Renderer)",
+            "native.GetPropertyBlock(block, index)",
+            "donor.SetPropertyBlock(block, index)",
+            "for (int index = 0; index < binding.Materials.Length; index++)",
+        ):
+            self.assertIn(required, refresh)
+        copy = csharp_method_body(source, r"static\s+void\s+CopyPropertyBlocks\s*\([^)]*\)")
+        self.assertIn("new PropertyBlockBinding(native.sharedMaterials.Length)", copy)
+        self.assertIn("RefreshPropertyBlocks(native, donor, binding)", copy)
+        mutable = csharp_method_body(source, r"void\s+RefreshMutableDonors\s*\([^)]*\)")
+        self.assertIn("RefreshPropertyBlocks(native, donor, binding)", mutable)
+
+    def test_native_map_outgoing_ticks_poll_freshness_refresh_donors_and_retire_stale_graph(self):
+        source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
+        tick = csharp_method_body(source, r"public\s+void\s+Tick\s*\(bool\s+eligible\)")
+        self.assertIn("if (_outgoing && RefreshOutgoing()) return", tick)
+        outgoing = csharp_method_body(source, r"bool\s+RefreshOutgoing\s*\(\s*\)")
+        for required in (
+            "_retained.TryReuse(", "Current(existing, presentationOnly: true)",
+            "existing.SnapshotReader", "RefreshForDraw(source, presentationOnly: true)",
+            "KeepOutgoing()", "_retained.Retire(_retireGraph)",
+        ):
+            self.assertIn(required, outgoing)
+        self.assertLess(outgoing.index("_retained.TryReuse("),
+                        outgoing.index("RefreshForDraw(source, presentationOnly: true)"))
+        refresh = csharp_method_body(source, r"bool\s+RefreshForDraw\s*\(Source\s+source[^)]*\)")
+        self.assertIn("Current(source, presentationOnly)", refresh)
+        self.assertIn("RefreshMutableDonors(source)", refresh)
+
     def test_native_map_composes_cloned_renderer_hierarchy_directly_on_display_one(self):
         source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
         for required in (
@@ -337,8 +389,7 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         refresh = csharp_method_body(source, r"void\s+RefreshMutableDonors\s*\([^)]*\)")
         for token in (
             "source.DonorTransforms", "source.RendererSources", "source.SortingGroups",
-            "source.PropertyBlocks", "native.GetPropertyBlock(block)",
-            "donor.SetPropertyBlock(block)",
+            "source.PropertyBlocks", "RefreshPropertyBlocks(native, donor, binding)",
         ):
             self.assertIn(token, refresh)
         for allocation in (
@@ -352,8 +403,8 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         self.assertIn("source.Donors.SetActive(true)", draw)
         self.assertIn("_retained.Retire(_retireGraph)", draw)
         self.assertLess(draw.index("PrepareView(source)"), draw.index("source.Donors.SetActive(true)"))
-        refresh_for_draw = csharp_method_body(source, r"bool\s+RefreshForDraw\s*\(Source\s+source\)")
-        self.assertIn("source.Authority.Same(CurrentAuthority(source))", refresh_for_draw)
+        refresh_for_draw = csharp_method_body(source, r"bool\s+RefreshForDraw\s*\(Source\s+source[^)]*\)")
+        self.assertIn("source.Authority.Same(CurrentAuthority(source, presentationOnly))", refresh_for_draw)
         self.assertIn("RefreshMutableDonors(source)", refresh_for_draw)
         self.assertIn("_retained.RecordDynamicRefresh(source)", refresh_for_draw)
         self.assertIn("_retained.Retire(_retireGraph)", refresh_for_draw)
@@ -383,7 +434,7 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         project = csharp_method_body(source, r"public\s+static\s+void\s+ProjectToViewport\s*\([^)]*\)")
         self.assertRegex(source, r"ProjectToViewport\s*\([^)]*out\s+float\s+projectedX[^)]*out\s+float\s+projectedY")
         self.assertNotIn("new[]", project)
-        refresh_for_draw = csharp_method_body(source, r"bool\s+RefreshForDraw\s*\(Source\s+source\)")
+        refresh_for_draw = csharp_method_body(source, r"bool\s+RefreshForDraw\s*\(Source\s+source[^)]*\)")
         self.assertIn("RecordDynamicRefresh(source)", refresh_for_draw)
 
     def test_inventory_committed_extra_text_uses_its_traversing_page_owner(self):
@@ -540,7 +591,7 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
             self.assertIn("KeepOutgoing(_frame, DsPageRole." + role, tick)
         source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
         tick = csharp_method_body(source, r"public\s+void\s+Tick\s*\([^)]*\)")
-        self.assertLess(tick.index("KeepOutgoing()"), tick.index("_presented.Donors.SetActive(false)"))
+        self.assertLess(tick.index("RefreshOutgoing()"), tick.index("_presented.Donors.SetActive(false)"))
         change = csharp_method_body(source, r"void\s+SelectionChanged\s*\([^)]*\)")
         self.assertIn("_ready = false", change)
         self.assertIn("_outgoing = KeepOutgoing()", change)
@@ -1861,28 +1912,26 @@ static class Program
         self.assertTrue((REPO_ROOT / final_compile["log"]).is_file())
         self.assertEqual(3, evidence["staleCachedProjectFailure"]["errors"])
 
-    def test_task112_compile_evidence_matches_exact_ordered_sources_and_boundary(self):
+    def test_task112_evidence_covers_final_sources_tests_and_exact_legal_acknowledgement_bridge(self):
         receipt = json.loads(read(TASK112_EVIDENCE / "completion.json"))
+        compile_receipt = receipt["managedCompile"]
         manifest_path = TASK112_EVIDENCE / "source-manifest.sha256"
         manifest = manifest_path.read_bytes()
         entries = manifest.decode("utf-8").splitlines()
 
         self.assertEqual("Linux Silksong 1.0.29980", receipt["gameVersion"])
-        self.assertEqual(
-            "812e85e818976eb50748acf5f476a4321cc386fa",
-            receipt["sourceCommit"],
-        )
-        self.assertEqual(0, receipt["exitCode"])
-        self.assertEqual(7, receipt["warnings"])
-        self.assertEqual(0, receipt["errors"])
-        self.assertEqual(68, receipt["compiledSourceCount"])
+        self.assertRegex(receipt["sourceCommit"], r"^[0-9a-f]{40}$")
+        self.assertEqual(0, compile_receipt["exitCode"])
+        self.assertEqual(7, compile_receipt["warnings"])
+        self.assertEqual(0, compile_receipt["errors"])
+        self.assertEqual(68, compile_receipt["compiledSourceCount"])
         self.assertEqual(68, len(entries))
         self.assertEqual(
             hashlib.sha256(manifest).hexdigest(),
-            receipt["compiledSourceManifestSha256"],
+            compile_receipt["compiledSourceManifestSha256"],
         )
-        self.assertIn("--no-restore", receipt["command"])
-        self.assertIn("--no-incremental", receipt["command"])
+        self.assertIn("--no-restore", compile_receipt["command"])
+        self.assertIn("--no-incremental", compile_receipt["command"])
         self.assertIn("do not prove Unity display-1 pixels", receipt["evidenceBoundary"])
 
         project = read(REPO_ROOT / "tools" / "shared-patches-tests" / "obj" /
@@ -1895,14 +1944,62 @@ static class Program
             ordered_paths.append(normalized.split("/HollowKnightAndroid-h1/", 1)[1])
         manifest_paths = [entry.split("  ", 1)[1] for entry in entries]
         self.assertEqual(ordered_paths, manifest_paths)
-        for entry in entries:
+
+        reviewed_path = TASK112_EVIDENCE / "reviewed-source-manifest.sha256"
+        reviewed = reviewed_path.read_bytes()
+        reviewed_entries = reviewed.decode("utf-8").splitlines()
+        self.assertEqual(hashlib.sha256(reviewed).hexdigest(),
+                         receipt["reviewedSourceManifestSha256"])
+        reviewed_paths = []
+        for entry in reviewed_entries:
             digest, relative_path = entry.split("  ", 1)
+            reviewed_paths.append(relative_path)
             self.assertEqual(
                 hashlib.sha256((REPO_ROOT / relative_path).read_bytes()).hexdigest(),
                 digest,
             )
+        for required in (
+            "tools/silksong-patches/src/dualscreen/DsPortMap.cs",
+            "tools/silksong-patches/src/dualscreen/DsPortOverlays.cs",
+            "tools/bundle-surgery/RedirectUIMsgDismiss.cs",
+            "tools/bundle-surgery/Program.cs",
+            "tools/bundle-surgery/BundleSurgery.csproj",
+            "tools/ci/tests/test_dual_souls_ui_port.py",
+            "tools/shared-patches-tests/SilksongPortSelectionTests.cs",
+            "tools/shared-patches-tests/SilksongPortOverlayTests.cs",
+        ):
+            self.assertIn(required, reviewed_paths)
 
-        compiler_log = read(TASK112_EVIDENCE / "compiler.log")
+        bridge = receipt["legalAcknowledgementBridge"]
+        self.assertEqual("1.0.29980", bridge["pinnedGameVersion"])
+        self.assertEqual(
+            "1886e0884a720b0b53412e04f912fb6d7c31d7c9da9cd365e9ac6b85fc4bc179",
+            bridge["pinnedNativeTailSha256"],
+        )
+        self.assertEqual("tools/bundle-surgery/RedirectUIMsgDismiss.cs",
+                         bridge["rewriteSource"])
+        self.assertEqual(0, bridge["build"]["exitCode"])
+        self.assertEqual(0, bridge["inject"]["exitCode"])
+        self.assertEqual(0, bridge["verifyExisting"]["exitCode"])
+        self.assertEqual(bridge["inject"]["outputSha256"],
+                         bridge["verifyExisting"]["outputSha256"])
+        self.assertIn("injected one armed UIMsgBase companion dismissal wait bridge",
+                      read(REPO_ROOT / bridge["inject"]["log"]))
+        self.assertIn("companion dismissal bridge already present; copied unchanged",
+                      read(REPO_ROOT / bridge["verifyExisting"]["log"]))
+        for injector_input in bridge["inputs"]:
+            self.assertRegex(injector_input["sha256"], r"^[0-9a-f]{64}$")
+
+        runs = {run["name"]: run for run in receipt["testRuns"]}
+        for name in ("focused-python", "focused-shared", "full-python",
+                     "full-shared", "bundle-surgery"):
+            self.assertIn(name, runs)
+            self.assertEqual(0, runs[name]["exitCode"])
+            self.assertEqual(0, runs[name]["failed"])
+            self.assertGreater(runs[name]["passed"], 0)
+            self.assertTrue((REPO_ROOT / runs[name]["log"]).is_file())
+
+        compiler_log = read(REPO_ROOT / compile_receipt["log"])
         self.assertIn("Build succeeded.", compiler_log)
         self.assertIn("7 Warning(s)", compiler_log)
         self.assertIn("0 Error(s)", compiler_log)
@@ -2407,7 +2504,10 @@ static class Program
         self.assertIn("Object.DestroyImmediate(root)", donor)
         build = csharp_method_body(source, r"Source\s+BuildGraph\s*\([^)]*\)")
         self.assertIn("CaptureSource()", build)
-        self.assertIn("if (!ReferenceEquals(_retained.Graph, source)) lifetime.Restore();", build)
+        self.assertIn("_partial.Hold(source)", build)
+        self.assertIn("_partial.Retire(_retirePartialGraph)", build)
+        partial = csharp_method_body(source, r"void\s+RetirePartialGraph\s*\([^)]*\)")
+        self.assertIn("source.Queue.Restore()", partial)
         retire = csharp_method_body(source, r"void\s+RetireGraph\s*\([^)]*\)")
         self.assertLess(retire.index("source.Donors.SetActive(false)"), retire.index("source.Queue.Restore()"))
         dispose = csharp_method_body(source, r"public\s+void\s+Dispose\s*\([^)]*\)")
@@ -2861,7 +2961,10 @@ static class Program
         self.assertIn('Data(Get(source, field))', cold)
         map_source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
         self.assertIn("source.Watches.Add(source.Text.WatchCold(text))", map_source)
-        self.assertIn("renderer.SetPropertyBlock(propertyBlock)", map_source)
+        self.assertIn("CopyPropertyBlocks(source, native, renderer)", map_source)
+        blocks = csharp_method_body(map_source, r"static\s+void\s+RefreshPropertyBlocks\s*\([^)]*\)")
+        self.assertIn("donor.SetPropertyBlock(binding.Renderer)", blocks)
+        self.assertIn("donor.SetPropertyBlock(block, index)", blocks)
         donor = csharp_method_body(map_source, r"static\s+Transform\s+DonorTransform\s*\([^)]*\)")
         self.assertLess(donor.index("source.Text.RetireCold()"), donor.index("Object.DestroyImmediate(root)"))
         self.assertLess(donor.index("Object.DestroyImmediate(root)"), donor.index("source.Text.Clear()"))

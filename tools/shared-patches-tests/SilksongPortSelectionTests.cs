@@ -296,6 +296,37 @@ public sealed class SilksongPortSelectionTests
         AuthorityCamera = new object(), AuthorityViewport = new object();
 
     [Fact]
+    public void NativeMapFailedPartialConstructionBlocksReplacementUntilExactRetirementSucceeds()
+    {
+        var open = typeof(DsPortMapRetainedGraph<>).Assembly.GetType("DsPortMapPartialGraph`1");
+        Assert.NotNull(open);
+        var type = open.MakeGenericType(typeof(RetainedMapGraph));
+        var state = Activator.CreateInstance(type); var hold = type.GetMethod("Hold"); var retire = type.GetMethod("Retire");
+        var graph = new RetainedMapGraph(); var replacement = new RetainedMapGraph(); int attempts = 0;
+        hold.Invoke(state, new object[] { graph });
+        var failedRetirement = Assert.Throws<System.Reflection.TargetInvocationException>(() => retire.Invoke(state,
+            new object[] { (Action<RetainedMapGraph>)(_ =>
+            {
+                attempts++;
+                throw new InvalidOperationException("partial release");
+            }) }));
+        Assert.IsType<InvalidOperationException>(failedRetirement.InnerException);
+        Assert.Same(graph, type.GetProperty("Graph").GetValue(state));
+        var blockedReplacement = Assert.Throws<System.Reflection.TargetInvocationException>(() =>
+            hold.Invoke(state, new object[] { replacement }));
+        Assert.IsType<InvalidOperationException>(blockedReplacement.InnerException);
+        retire.Invoke(state, new object[] { (Action<RetainedMapGraph>)(exact =>
+        {
+            Assert.Same(graph, exact);
+            attempts++;
+        }) });
+        Assert.Null(type.GetProperty("Graph").GetValue(state));
+        hold.Invoke(state, new object[] { replacement });
+        Assert.Same(replacement, type.GetProperty("Graph").GetValue(state));
+        Assert.Equal(2, attempts);
+    }
+
+    [Fact]
     public void NativeMapRetainsOneDirectHierarchyAcrossManySteadyTicks()
     {
         var state = new DsPortMapRetainedGraph<RetainedMapGraph>(.125);

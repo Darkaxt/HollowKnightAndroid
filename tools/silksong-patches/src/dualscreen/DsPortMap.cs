@@ -45,6 +45,36 @@ public sealed class DsPortMapRestoreQueue
     }
 }
 
+public sealed class DsPortMapPartialGraph<T> where T : class
+{
+    T _graph;
+    bool _retiring;
+    public T Graph => _graph;
+    public void Hold(T graph)
+    {
+        if (graph == null) throw new ArgumentNullException(nameof(graph));
+        if (_graph != null || _retiring)
+            throw new InvalidOperationException("Map partial replacement requires exact prior retirement");
+        _graph = graph;
+    }
+    public void Retire(Action<T> retire)
+    {
+        if (_graph == null) return;
+        if (retire == null) throw new ArgumentNullException(nameof(retire));
+        if (_retiring) throw new InvalidOperationException("Map partial retirement reentered");
+        _retiring = true;
+        try
+        {
+            var graph = _graph;
+            retire(graph);
+            if (!ReferenceEquals(graph, _graph))
+                throw new InvalidOperationException("Map partial retirement lost exact graph");
+            _graph = null;
+        }
+        finally { _retiring = false; }
+    }
+}
+
 // A bounded observation retry, not an initializer: readiness remains native.
 public sealed class DsPortMapResidency
 {
@@ -283,7 +313,8 @@ public sealed class DsPortMap : IDisposable
     readonly HashSet<string> _reported = new HashSet<string>();
     readonly DsPortMapResidency _residency = new DsPortMapResidency();
     readonly DsPortMapRetainedGraph<Source> _retained = new DsPortMapRetainedGraph<Source>();
-    readonly Action<Source> _retireGraph;
+    readonly DsPortMapPartialGraph<Source> _partial = new DsPortMapPartialGraph<Source>();
+    readonly Action<Source> _retireGraph, _retirePartialGraph;
     Vector2 _pan;
     float _zoom = 1f, _unitsPerPixel;
     bool _ready, _eligible, _disposed;
@@ -322,7 +353,7 @@ public sealed class DsPortMap : IDisposable
         public readonly Dictionary<Renderer, Renderer> RendererSources = new Dictionary<Renderer, Renderer>();
         public readonly Dictionary<SortingGroup, SortingGroup> SortingGroups = new Dictionary<SortingGroup, SortingGroup>();
         public readonly Dictionary<SpriteRenderer, Room> RoomDonors = new Dictionary<SpriteRenderer, Room>();
-        public readonly Dictionary<Renderer, MaterialPropertyBlock> PropertyBlocks = new Dictionary<Renderer, MaterialPropertyBlock>();
+        public readonly Dictionary<Renderer, PropertyBlockBinding> PropertyBlocks = new Dictionary<Renderer, PropertyBlockBinding>();
         public DsPortMapFreshness Freshness;
         public Func<IEnumerable<object>> SnapshotReader;
         public readonly List<Renderer> Draw = new List<Renderer>();
@@ -340,6 +371,19 @@ public sealed class DsPortMap : IDisposable
         public float Half, Aspect;
         public readonly List<KeyValuePair<Transform, Quaternion>> Rotations = new List<KeyValuePair<Transform, Quaternion>>();
         public Bounds Bounds;
+    }
+
+    sealed class PropertyBlockBinding
+    {
+        public readonly MaterialPropertyBlock Renderer = new MaterialPropertyBlock();
+        public readonly MaterialPropertyBlock[] Materials;
+        public PropertyBlockBinding(int materialCount)
+        {
+            if (materialCount <= 0) throw new InvalidOperationException("Map native material slots unavailable");
+            Materials = new MaterialPropertyBlock[materialCount];
+            for (int index = 0; index < materialCount; index++)
+                Materials[index] = new MaterialPropertyBlock();
+        }
     }
 
     sealed class Room
@@ -376,6 +420,7 @@ public sealed class DsPortMap : IDisposable
     {
         _frame = frame;
         _retireGraph = RetireGraph;
+        _retirePartialGraph = RetirePartialGraph;
         _frame.BeforeCompositionDestroyed += Invalidate;
         _frame.SelectionChanged += SelectionChanged;
     }
@@ -401,7 +446,8 @@ public sealed class DsPortMap : IDisposable
         _eligible = eligible; _ready = false;
         try
         {
-            if (_outgoing && KeepOutgoing()) return;
+            _partial.Retire(_retirePartialGraph);
+            if (_outgoing && RefreshOutgoing()) return;
         }
         catch (Exception e) { Report(e); return; }
         _outgoing = false;
@@ -446,20 +492,41 @@ public sealed class DsPortMap : IDisposable
         }
         finally
         {
-            // Partial construction owns no publishable graph. Its exact release
-            // remains pending and therefore blocks another construction on error.
-            if (!ReferenceEquals(_retained.Graph, source)) lifetime.Restore();
+            // A failed partial release retains this exact source and queue. Tick
+            // retries it before outgoing reuse or any replacement construction.
+            if (!ReferenceEquals(_retained.Graph, source))
+            {
+                _partial.Hold(source);
+                _partial.Retire(_retirePartialGraph);
+            }
         }
     }
-    bool RefreshForDraw(Source source)
+    bool RefreshForDraw(Source source, bool presentationOnly = false)
     {
-        bool live = source.Authority.Same(CurrentAuthority(source)) && Current(source) && !PrimaryShowing(source);
+        bool live = source.Authority.Same(CurrentAuthority(source, presentationOnly)) && Current(source, presentationOnly) && !PrimaryShowing(source);
         if (!live) { _retained.Retire(_retireGraph); return false; }
         try { RefreshMutableDonors(source); _retained.RecordDynamicRefresh(source); }
         catch { _retained.Retire(_retireGraph); throw; }
-        live = source.Authority.Same(CurrentAuthority(source)) && Current(source) && !PrimaryShowing(source);
+        live = source.Authority.Same(CurrentAuthority(source, presentationOnly)) && Current(source, presentationOnly) && !PrimaryShowing(source);
         if (!live) _retained.Retire(_retireGraph);
         return live;
+    }
+    bool RefreshOutgoing()
+    {
+        var existing = _retained.Graph;
+        if (existing == null) return false;
+        if (!ReferenceEquals(existing, _presented))
+        {
+            _retained.Retire(_retireGraph);
+            return false;
+        }
+        if (!_retained.TryReuse(CurrentAuthority(existing, presentationOnly: true),
+            Current(existing, presentationOnly: true), PrimaryShowing(existing), Time.unscaledTime,
+            existing.SnapshotReader, _retireGraph, out var source)) return false;
+        if (!RefreshForDraw(source, presentationOnly: true)) return false;
+        if (KeepOutgoing()) return true;
+        _retained.Retire(_retireGraph);
+        return false;
     }
     bool Live(Source source) => source.Authority.Same(CurrentAuthority(source)) &&
         Current(source) && !PrimaryShowing(source);
@@ -523,13 +590,13 @@ public sealed class DsPortMap : IDisposable
         width = host == null ? 0 : Mathf.Clamp(Mathf.CeilToInt(host.rect.width), 64, 2048);
         height = host == null ? 0 : Mathf.Clamp(Mathf.CeilToInt(host.rect.height), 64, 2048);
     }
-    DsPortMapAuthorityToken CurrentAuthority(Source source)
+    DsPortMapAuthorityToken CurrentAuthority(Source source, bool presentationOnly = false)
     {
         ViewportSize(source.Host, out int width, out int height);
         var game = GameManager.SilentInstance;
         return new DsPortMapAuthorityToken(game, game != null ? game.gameMap : null,
             source.Host, source.Rooms, source.Decor, game != null ? game.sceneName : null,
-            _frame.SelectionEpoch, width, height);
+            presentationOnly ? source.Epoch : _frame.SelectionEpoch, width, height);
     }
     bool Current(Source source, bool presentationOnly = false)
     {
@@ -1145,12 +1212,10 @@ public sealed class DsPortMap : IDisposable
                     source.Text.Prepare(cold.gameObject);
                     var generated = source.Text.GenerateCold(cold);
                     var main = cold.GetComponent<Renderer>();
-                    var propertyBlock = new MaterialPropertyBlock(); native.GetPropertyBlock(propertyBlock);
                     foreach (var renderer in generated)
                     {
-                        renderer.SetPropertyBlock(propertyBlock);
+                        CopyPropertyBlocks(source, native, renderer);
                         source.RendererSources[renderer] = native;
-                        source.PropertyBlocks[renderer] = propertyBlock;
                         if (renderer != main) source.Draw.Add(renderer);
                     }
                     return main;
@@ -1165,10 +1230,28 @@ public sealed class DsPortMap : IDisposable
         if (native is SpriteRenderer conditional && source.Materials.TryGetValue(conditional, out var material)) donor.sharedMaterial = material;
         if (donor.sharedMaterial == null) throw new InvalidOperationException("Map native donor material unavailable: " + native.name);
         donor.sortingLayerID = native.sortingLayerID; donor.sortingOrder = native.sortingOrder;
-        var block = new MaterialPropertyBlock(); native.GetPropertyBlock(block); donor.SetPropertyBlock(block);
+        CopyPropertyBlocks(source, native, donor);
         source.RendererSources[donor] = native;
-        source.PropertyBlocks[donor] = block;
         return donor;
+    }
+    static void CopyPropertyBlocks(Source source, Renderer native, Renderer donor)
+    {
+        var binding = new PropertyBlockBinding(native.sharedMaterials.Length);
+        RefreshPropertyBlocks(native, donor, binding);
+        source.PropertyBlocks.Add(donor, binding);
+    }
+    static void RefreshPropertyBlocks(Renderer native, Renderer donor, PropertyBlockBinding binding)
+    {
+        binding.Renderer.Clear();
+        native.GetPropertyBlock(binding.Renderer);
+        donor.SetPropertyBlock(binding.Renderer);
+        for (int index = 0; index < binding.Materials.Length; index++)
+        {
+            var block = binding.Materials[index];
+            block.Clear();
+            native.GetPropertyBlock(block, index);
+            donor.SetPropertyBlock(block, index);
+        }
     }
     static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     static bool NativeCameraAdmits(Source source, Renderer renderer)
@@ -1244,13 +1327,13 @@ public sealed class DsPortMap : IDisposable
             group.sortingOrder = nativeGroup.sortingOrder;
             group.sortAtRoot = nativeGroup.sortAtRoot;
         }
-        foreach (var binding in source.RendererSources)
+        foreach (var renderer in source.RendererSources)
         {
-            var donor = binding.Key; var native = binding.Value;
+            var donor = renderer.Key; var native = renderer.Value;
             if (donor == null || native == null)
                 throw new InvalidOperationException("Map retained renderer binding unavailable");
-            if (!source.PropertyBlocks.TryGetValue(donor, out var block) || block == null)
-                throw new InvalidOperationException("Map retained renderer property block unavailable");
+            if (!source.PropertyBlocks.TryGetValue(donor, out var binding) || binding == null)
+                throw new InvalidOperationException("Map retained renderer property blocks unavailable");
             donor.sortingLayerID = native.sortingLayerID;
             donor.sortingOrder = native.sortingOrder;
             if (donor is SpriteRenderer copy && native is SpriteRenderer sprite)
@@ -1261,7 +1344,7 @@ public sealed class DsPortMap : IDisposable
                 if (source.RoomDonors.TryGetValue(copy, out var room))
                 { copy.sprite = room.Selected; copy.color = room.Color; }
             }
-            block.Clear(); native.GetPropertyBlock(block); donor.SetPropertyBlock(block);
+            RefreshPropertyBlocks(native, donor, binding);
         }
     }
     static void SetCorpseArrowVisible(Source source, bool visible)
@@ -1328,6 +1411,12 @@ public sealed class DsPortMap : IDisposable
         if (gesture.Type == DsGestureType.Pinch) { if (Finite(gesture.Scale) && gesture.Scale > 0) _zoom = Mathf.Clamp(_zoom * gesture.Scale, .25f, 6f); return true; }
         return gesture.Type == DsGestureType.Tap;
     }
+    void RetirePartialGraph(Source source)
+    {
+        if (source == null || source.Queue == null)
+            throw new InvalidOperationException("Map partial graph release unavailable");
+        source.Queue.Restore();
+    }
     void RetireGraph(Source source)
     {
         if (source == null || source.Queue == null) throw new InvalidOperationException("Map retained graph release unavailable");
@@ -1359,6 +1448,7 @@ public sealed class DsPortMap : IDisposable
         _outgoing = false;
         if (_presented != null && _presented.Donors != null) _presented.Donors.SetActive(false);
         _presented = null; _ready = false;
+        _partial.Retire(_retirePartialGraph);
         _retained.Retire(_retireGraph);
     }
     public void Dispose()
