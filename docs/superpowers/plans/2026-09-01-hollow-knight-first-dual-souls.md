@@ -1407,7 +1407,7 @@ mutation, device/publication/source activation, save edits or cleanup; commands
   all relevant changes invalidate it. Exact evidence and the device boundary are in
   `docs/verification/evidence/task100-quality-c3f61f5/completion.json`; this
   supersedes `task100-spec-fix-0c422bc`.
-- [ ] **Task101.** Share existing bounded Kotlin import/library/UI algorithms
+- [x] **Task101.** Share existing bounded Kotlin import/library/UI algorithms
   through a closed immutable HK/SS catalog/profile definition. Thread it through
   catalog, library codec/store, object builder, canonical manifest, tree verifier,
   quota, UI services and runtime bridge; retain immutable GameProcessStartup
@@ -1418,11 +1418,22 @@ mutation, device/publication/source activation, save edits or cleanup; commands
   `tools/silksong-patches/src/skins/runtime/`. Establish actual SS writable
   texture bindings/catalog and normal-death/stable-respawn event ordering;
   neither HK filenames nor its death exclusions are SS evidence. Preserve
-  ON full supported pack, ROTATE character/HUD-associated visuals with excluded
-  environment restored immediately, and OFF original restoration. Test foreign
-  profiles/catalogs, identical pack IDs across games, startup-selection changes,
-  selected/pending protection, mode changes, duplicate/hazard events, prompt
-  matching acknowledgments, next death before polling and owner replacement.
+  ON across all eleven supported targets, ROTATE across only the nine character
+  collections, the two persistent HUD collections ON-only and excluded from
+  ROTATE, and OFF original restoration.
+  Test foreign profiles/catalogs, identical pack IDs across games, startup-selection
+  changes, selected/pending protection, mode changes, duplicate/hazard events,
+  prompt matching acknowledgments, next death before polling and owner replacement.
+  **Host-complete/device-deferred at `0b92f4d`.** Exact SS 1.0.29980 managed input
+  SHA-256 `1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d`
+  is pinned by a byte-idempotent, drift-rejecting normal-death rewrite. Closed
+  eleven-target profile/storage/import/JNI authority, exact collection/material
+  admission, atomic apply/restore, restore-before-frozen-successor rotation and
+  two consecutive stable PLAYING frames are host tested. Evidence is retained in
+  `docs/verification/evidence/task101-host-0b92f4d/`. Android bundle identity/parity,
+  sampled material appearance, Scythe/Shaman shaders, crest/fallback visuals, HUD
+  effects, resource pressure, death/respawn visuals and lifecycle, and persistence
+  interaction remain genuine device-only deferrals.
 - [ ] **Task102.** Verify production reachability, focused behavioral suites,
   exact two-game compiles and cross-game isolation, with independent SPEC,
   separate QUALITY and fresh main verification. Distinguish executed host

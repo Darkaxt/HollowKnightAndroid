@@ -1,0 +1,134 @@
+{
+  "schema": 1,
+  "task": "Task101",
+  "status": "HOST_COMPLETE_DEVICE_DEFERRED",
+  "baseCommit": "215d9036ef4fcf6a9ced7ed9211bd59005bbdbbc",
+  "sourceCommit": "0b92f4d9a5bdc9f36ccf007e8d63f49fc03cf1a9",
+  "scope": "Closed Silksong skin catalog/profile, isolated launcher storage/import/runtime bridge, exact tk2d material mutation, strict normal-death rotation, and production managed rewrite wiring",
+  "catalog": {
+    "profileId": "silksong",
+    "gameVersion": "1.0.29980",
+    "catalogId": "silksong-1.0.29980-character-hud-11",
+    "catalogEntries": 11,
+    "characterEntries": 9,
+    "persistentHudEntries": 2,
+    "catalogSha256": "363ff1affbe9b95214667b4ebdc0d903aa8cc098aa3e956183519c9e88f4136e"
+  },
+  "managedAuthority": {
+    "platform": "Linux",
+    "assemblyCSharpSha256": "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d",
+    "rewrittenAssemblySha256": "5eb407f4cb05414b45dce586b10cddc5461a9f063ad082d302d3db25df509cae",
+    "canonicalHelperFingerprintSha256": "ac2d03869b623aba238b2bb58867e3d2a906f194933e47a197b0c09eafa3ef3e",
+    "bundleSurgeryToolSha256": "bedd135540c705c46e3a8f147e3168b2cf4aad49fe6f443ff5cf7b50063ed38f",
+    "rewriteTarget": "HeroController/<Die>d__1101::MoveNext",
+    "idempotentSecondOutputSha256": "5eb407f4cb05414b45dce586b10cddc5461a9f063ad082d302d3db25df509cae",
+    "driftInputSha256": "11e898edfdac6335bf3802a2c6fc19d528aa4e6dc11c3e66e43bb29a9c34b0eb",
+    "driftRejected": true
+  },
+  "testRuns": [
+    {
+      "name": "shared-managed-suite",
+      "command": "dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj --no-restore --logger console;verbosity=minimal",
+      "passed": 1556,
+      "failed": 0,
+      "skipped": 0,
+      "log": "docs/verification/evidence/task101-host-0b92f4d/shared-tests.log",
+      "logSha256": "876deddd071efc264dc0a63a1020db9b4221925c8b372039197e212513a17541"
+    },
+    {
+      "name": "python-production-contracts",
+      "command": "python -m unittest tools.ci.tests.test_profile_mod_pipeline tools.ci.tests.test_dual_souls_ui_port",
+      "passed": 142,
+      "failed": 0,
+      "log": "docs/verification/evidence/task101-host-0b92f4d/python-contracts.log",
+      "logSha256": "6c5bb79ecc5290a1d3c7da72396c20357842aca7a1c81bbc8f42f69f27cf3c29"
+    },
+    {
+      "name": "launcher-catalog-profile",
+      "command": "gradle.bat :app:testDebugUnitTest -x :app:preBuild -x :app:stageBuildScript -x :app:stageBundleSurgery -x :app:stagePatches -x :app:stageHollowKnightPatches -x :app:stageIo -x :app:stageModWeaver -x :app:stageBepInExShim --tests dev.silksong.launcher.skins.catalog.SilksongSkinProfileTest --tests dev.silksong.launcher.skins.catalog.HollowKnightCatalogPathsTest --tests dev.silksong.launcher.profiles.HollowKnightBuildPlanTest --offline --no-daemon",
+      "selectedTests": 25,
+      "failed": 0,
+      "log": "docs/verification/evidence/task101-host-0b92f4d/launcher-catalog-tests.log",
+      "logSha256": "d4905fc4f820a723850e254f6f11f2bac84c382dcba92d0cdefaba081453a0f0"
+    },
+    {
+      "name": "launcher-runtime",
+      "command": "gradle.bat :app:testDebugUnitTest -x :app:preBuild -x :app:stageBuildScript -x :app:stageBundleSurgery -x :app:stagePatches -x :app:stageHollowKnightPatches -x :app:stageIo -x :app:stageModWeaver -x :app:stageBepInExShim --tests dev.silksong.launcher.runtime.GameProcessStartupTest --tests dev.silksong.launcher.runtime.SkinLibraryRuntimeBridgeTest --tests dev.silksong.launcher.skins.library.SkinLibraryDocumentTest --offline --no-daemon",
+      "selectedTests": 21,
+      "failed": 0,
+      "log": "docs/verification/evidence/task101-host-0b92f4d/launcher-runtime-tests.log",
+      "logSha256": "2bb22abc818ed8fb27cf7a36a543c7965341c214863d0094c34ef8c0e045dc89"
+    },
+    {
+      "name": "launcher-library-service",
+      "command": "gradle.bat :app:testDebugUnitTest -x :app:preBuild -x :app:stageBuildScript -x :app:stageBundleSurgery -x :app:stagePatches -x :app:stageHollowKnightPatches -x :app:stageIo -x :app:stageModWeaver -x :app:stageBepInExShim --tests dev.silksong.launcher.skins.ui.SkinLibraryServiceTest --offline --no-daemon",
+      "selectedTests": 12,
+      "failed": 0,
+      "log": "docs/verification/evidence/task101-host-0b92f4d/launcher-library-service-tests.log",
+      "logSha256": "3c4f86f55c1160e113e21a88fb295c33283e5f91ec4631d385203e6e8c29d2eb"
+    },
+    {
+      "name": "launcher-library-store",
+      "command": "gradle.bat :app:testDebugUnitTest -x :app:preBuild -x :app:stageBuildScript -x :app:stageBundleSurgery -x :app:stagePatches -x :app:stageHollowKnightPatches -x :app:stageIo -x :app:stageModWeaver -x :app:stageBepInExShim --tests dev.silksong.launcher.skins.library.SkinLibraryStoreTest --offline --no-daemon",
+      "selectedTests": 15,
+      "failed": 0,
+      "log": "docs/verification/evidence/task101-host-0b92f4d/launcher-library-store-tests.log",
+      "logSha256": "384d7dca9294511153587b167b623463adfdef13bc086368d83bcfe33cdcf946"
+    },
+    {
+      "name": "launcher-legacy-coordinator-isolation",
+      "command": "gradle.bat :app:testDebugUnitTest -x :app:preBuild -x :app:stageBuildScript -x :app:stageBundleSurgery -x :app:stagePatches -x :app:stageHollowKnightPatches -x :app:stageIo -x :app:stageModWeaver -x :app:stageBepInExShim --tests dev.silksong.launcher.skins.ui.CoordinatorSkinImportServiceTest --offline --no-daemon",
+      "selectedTests": 3,
+      "failed": 0,
+      "log": "docs/verification/evidence/task101-host-0b92f4d/launcher-coordinator-tests.log",
+      "logSha256": "44329633d9a987c4ba7027470f26ae65fd9fe0fa927fe923a83d9d067a295951"
+    }
+  ],
+  "managedCompiles": {
+    "silksong": {
+      "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/silksong-patches/check.ps1 -Depot 'D:/Temp/task99-silksong-linux-1.0.29980/Hollow Knight Silksong/Hollow Knight Silksong_Data/Managed' -Player D:/Temp/dualsouls-unity-player/android/Variations/il2cpp/Managed",
+      "compiledSourceCount": 79,
+      "entryPointCount": 14,
+      "errors": 0,
+      "log": "docs/verification/evidence/task101-host-0b92f4d/silksong-managed-compile.log",
+      "logSha256": "7dad1d44438dac66e5dcf7eed3c461cd96b5074bbe18550949f57df12d31bf84"
+    },
+    "hollowKnight": {
+      "gameVersion": "1.5.12620",
+      "assemblyCSharpSha256": "5c84b8e59dd669c48db1fc426541d0d96643f59d35a72534b21fead7c96a3086",
+      "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/hollow-knight-patches/check.ps1 -Depot 'D:/Temp/dualsouls-hk-12620/Hollow Knight/hollow_knight_Data/Managed' -Player D:/Temp/dualsouls-unity-player/android/Variations/il2cpp/Managed",
+      "entryPointCount": 2,
+      "outputBytes": 761856,
+      "warnings": 1,
+      "errors": 0,
+      "log": "docs/verification/evidence/task101-host-0b92f4d/hollow-knight-managed-compile.log",
+      "logSha256": "b06a4740b7750872f13aa352c7cae29f2ef373a09632f6fcb25baec4376e8fa3"
+    }
+  },
+  "rewriteChecks": {
+    "buildLog": "docs/verification/evidence/task101-host-0b92f4d/bundle-surgery-build.log",
+    "buildLogSha256": "77b2ef66d5586dfd80120be8b0961b111afcc4f55e00646f4415ecb6633dd944",
+    "injectLog": "docs/verification/evidence/task101-host-0b92f4d/death-bridge-inject.log",
+    "injectLogSha256": "cd743c5e68d7eaced2a8cc9d7a7c76668deded03ad5dd20be29f514efeee17e7",
+    "idempotenceLog": "docs/verification/evidence/task101-host-0b92f4d/death-bridge-idempotence.log",
+    "idempotenceLogSha256": "3b1dbb2fc444072120e6c6f123469a77025679f673872f13a2987bdeee061deb",
+    "outputIdentityLog": "docs/verification/evidence/task101-host-0b92f4d/death-bridge-output.sha256",
+    "outputIdentityLogSha256": "3d942bf73d8890aa27793f532e3df3a334db6a4b40e2e04fee480c06e7632e05",
+    "driftRejectionLog": "docs/verification/evidence/task101-host-0b92f4d/death-bridge-drift-rejection.log",
+    "driftRejectionLogSha256": "d7f46b418eb758029f6020becc43108fc0728eab0a2e18adfd1f025ba678f3f5"
+  },
+  "sourceManifest": "docs/verification/evidence/task101-host-0b92f4d/source-manifest.sha256",
+  "sourceManifestSha256": "dd08f6c6775bec637a43399ef0bf557352fbf4fca2368b390e9dd3a31a815668",
+  "deviceDeferrals": [
+    "Android bundle identity and managed parity",
+    "sampled material appearance",
+    "Scythe and Shaman shader behavior",
+    "crest and fallback visuals",
+    "HUD effects",
+    "resource pressure",
+    "death and respawn visuals and lifecycle",
+    "persistence interaction"
+  ],
+  "prohibitedWorkPerformed": [],
+  "evidenceBoundary": "Host tests, source contracts, exact managed compiles, and deterministic managed rewrite checks prove host behavior and production wiring. They do not prove Android, Unity renderer, GPU/shader, JNI lifecycle, gameplay appearance, resource-pressure, death/respawn lifecycle, or persistence interaction acceptance."
+}
