@@ -1,12 +1,12 @@
 {
   "scope": "Task112 corrected native Map ownership and exact SkillGetMsg legal acknowledgment",
   "gameVersion": "Linux Silksong 1.0.29980",
-  "sourceCommit": "031684d4d3b34e943cfe7a7dc022a20a5149f120",
-  "sourceTree": "eda394d0c075d1edbb440986e3307856e171e889",
+  "sourceCommit": "a41143c78ba05505842985163770002a51a800e0",
+  "sourceTree": "4f3aaa27cf53f8d8f9a70c81071bc4ba93f796de",
   "cwd": "D:\\Temp\\HollowKnightAndroid-h1",
   "reviewedSourceCount": 83,
   "reviewedSourceManifest": "docs/verification/evidence/task112-spec-fix/reviewed-source-manifest.sha256",
-  "reviewedSourceManifestSha256": "7e9d8d4b7314d055464cd1df62cd382982f3ef411aa6af807e6543040b3be13f",
+  "reviewedSourceManifestSha256": "e2e7cab7f2a4360478c79a9f5ce9f07e493c409a46d44848e6b959aa286d90a2",
   "injectorSourceCount": 12,
   "injectorSourceManifest": "docs/verification/evidence/task112-spec-fix/injector-source-manifest.sha256",
   "injectorSourceManifestSha256": "2536b5bb2ed402d294204181bbe65e198018178a99fbf436f6b5fe23e3d1d01f",
@@ -144,21 +144,16 @@
       "name": "focused-shared",
       "command": [
         "dotnet",
-        "test",
-        "tools/shared-patches-tests/SharedPatches.Tests.csproj",
-        "--no-restore",
-        "--no-build",
-        "-c",
-        "Release",
-        "--nologo",
-        "--filter",
-        "FullyQualifiedName~SilksongPortSelectionTests|FullyQualifiedName~SilksongPortOverlayTests"
+        "vstest",
+        "tools/shared-patches-tests/obj/task112-spec-fix-final/shared-tests/bin/SharedPatches.Tests.dll",
+        "--TestCaseFilter:FullyQualifiedName~SilksongPortSelectionTests|FullyQualifiedName~SilksongPortOverlayTests"
       ],
       "exitCode": 0,
       "passed": 255,
       "failed": 0,
       "skipped": 0,
-      "log": "docs/verification/evidence/task112-spec-fix/focused-shared.log"
+      "log": "docs/verification/evidence/task112-spec-fix/focused-shared-fresh.log",
+      "assemblySha256": "14b6c1d7e2740ebe429e8fab17511e5d91ff883ecbac1c95e9dcafe000517dad"
     },
     {
       "name": "full-python",
@@ -178,19 +173,15 @@
       "name": "full-shared",
       "command": [
         "dotnet",
-        "test",
-        "tools/shared-patches-tests/SharedPatches.Tests.csproj",
-        "--no-restore",
-        "--no-build",
-        "-c",
-        "Release",
-        "--nologo"
+        "vstest",
+        "tools/shared-patches-tests/obj/task112-spec-fix-final/shared-tests/bin/SharedPatches.Tests.dll"
       ],
       "exitCode": 0,
       "passed": 1526,
       "failed": 0,
       "skipped": 0,
-      "log": "docs/verification/evidence/task112-spec-fix/full-shared.log"
+      "log": "docs/verification/evidence/task112-spec-fix/full-shared-fresh.log",
+      "assemblySha256": "14b6c1d7e2740ebe429e8fab17511e5d91ff883ecbac1c95e9dcafe000517dad"
     },
     {
       "name": "bundle-surgery",
@@ -242,5 +233,32 @@
       "log": "docs/verification/evidence/task112-spec-fix/bundle-surgery-csc-msys-arg-failure.log"
     }
   ],
-  "evidenceBoundary": "Host contracts, managed compilation, and exact managed-assembly rewrite verification do not prove Unity display-1 pixels, clipping, material ordering, scale, contextual activation, or device interaction."
+  "evidenceBoundary": "Host contracts, managed compilation, and exact managed-assembly rewrite verification do not prove Unity display-1 pixels, clipping, material ordering, scale, contextual activation, or device interaction.",
+  "sharedTestsBuild": {
+    "command": [
+      "dotnet",
+      "build",
+      "tools/shared-patches-tests/SharedPatches.Tests.csproj",
+      "--no-restore",
+      "--no-incremental",
+      "-c",
+      "Release",
+      "-p:UseSharedCompilation=false",
+      "-nodeReuse:false",
+      "--output",
+      "tools/shared-patches-tests/obj/task112-spec-fix-final/shared-tests/bin",
+      "--nologo"
+    ],
+    "startUtc": "2026-09-11T01:54:38Z",
+    "endUtc": "2026-09-11T01:54:45Z",
+    "exitCode": 0,
+    "warnings": 0,
+    "errors": 0,
+    "sourceCount": 87,
+    "sourceManifest": "docs/verification/evidence/task112-spec-fix/shared-tests-source-manifest.sha256",
+    "sourceManifestSha256": "2a755f98402f7af06fcf69a7b70bad41a7e10c21305bc596ec229192f3bc9d2c",
+    "output": "tools/shared-patches-tests/obj/task112-spec-fix-final/shared-tests/bin/SharedPatches.Tests.dll",
+    "outputSha256": "14b6c1d7e2740ebe429e8fab17511e5d91ff883ecbac1c95e9dcafe000517dad",
+    "log": "docs/verification/evidence/task112-spec-fix/shared-tests-build.log"
+  }
 }
