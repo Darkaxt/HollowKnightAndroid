@@ -228,6 +228,18 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
                 self.assertNotIn(forbidden, presenter)
         self.assertNotRegex(presenter, r"\bITweakStore\b")
 
+    def test_h3_runtime_retains_failed_teardown_and_blocks_replacement(self):
+        runtime = strip_csharp_comments(read(MODS_RUNTIME))
+        self.assertIn("HollowKnightModsRestorePump.BlocksReplacement", runtime)
+        self.assertIn("HollowKnightModsRestorePump.Create(session)", runtime)
+        self.assertIn("new PendingTweakTeardown()", runtime)
+        self.assertIn("_pending.TryRetain(session)", runtime)
+        self.assertIn("_pending.Tick()", runtime)
+        self.assertLess(
+            runtime.index("session.Dispose()"),
+            runtime.index("HollowKnightModsRestorePump.Create(session)"),
+        )
+
     def test_h3_mods_presenter_preserves_the_three_accepted_tabs(self):
         frame = strip_csharp_comments(
             read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")

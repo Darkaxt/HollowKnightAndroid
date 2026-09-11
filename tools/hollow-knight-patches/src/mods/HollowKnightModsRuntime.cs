@@ -20,7 +20,7 @@ namespace DualSouls.Mods.HollowKnight
 
         public static void EnsureStarted()
         {
-            if (Current != null || _creating) return;
+            if (Current != null || _creating || HollowKnightModsRestorePump.BlocksReplacement) return;
 
             _creating = true;
             GameObject runtimeObject = null;
@@ -98,7 +98,15 @@ namespace DualSouls.Mods.HollowKnight
             Current = null;
             try
             {
-                if (session != null) session.Dispose();
+                if (session != null)
+                {
+                    session.Dispose();
+                    if (!session.TeardownComplete)
+                    {
+                        Debug.LogError("[HK Mods] restoration pending; retained for retry: " + session.LastError);
+                        HollowKnightModsRestorePump.Create(session);
+                    }
+                }
             }
             finally
             {
@@ -115,6 +123,47 @@ namespace DualSouls.Mods.HollowKnight
                     }
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Process-owned restoration-only pump. A failed Hollow Knight session keeps
+    /// its exact adapter and baseline authority here, preventing replacement until
+    /// a later update completes teardown.
+    /// </summary>
+    public sealed class HollowKnightModsRestorePump : MonoBehaviour
+    {
+        static HollowKnightModsRestorePump _owner;
+        readonly PendingTweakTeardown _pending = new PendingTweakTeardown();
+
+        public static bool BlocksReplacement =>
+            _owner != null && _owner._pending.BlocksReplacement;
+
+        public static void Create(HollowKnightModsSession session)
+        {
+            if (session == null || session.TeardownComplete) return;
+            if (_owner != null)
+            {
+                _owner._pending.TryRetain(session);
+                return;
+            }
+
+            var restoreObject = new GameObject("__HollowKnightModsRestoreOwner__");
+            DontDestroyOnLoad(restoreObject);
+            var pump = restoreObject.AddComponent<HollowKnightModsRestorePump>();
+            if (!pump._pending.TryRetain(session))
+            {
+                Destroy(restoreObject);
+                return;
+            }
+            _owner = pump;
+        }
+
+        void Update()
+        {
+            if (!_pending.Tick()) return;
+            if (ReferenceEquals(_owner, this)) _owner = null;
+            Destroy(gameObject);
         }
     }
 }

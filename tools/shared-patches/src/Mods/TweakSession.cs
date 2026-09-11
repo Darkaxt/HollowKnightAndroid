@@ -9,7 +9,7 @@ namespace DualSouls.Mods
     /// Failed initialization and restoration retain the old adapter until its
     /// captured baseline has been restored.
     /// </summary>
-    public sealed class TweakSession : IDisposable
+    public sealed class TweakSession : ITweakTeardownSession
     {
         public const int DefaultInitializationRetryReadyTicks = 60;
 
@@ -206,7 +206,6 @@ namespace DualSouls.Mods
         {
             readonly SessionTweakAdapter _adapter;
             readonly SessionTweakStore _store;
-            bool _baselineMayHaveBeenCaptured;
             bool _disabled;
 
             internal Pipeline(ITweakAdapter adapter, ITweakStore store, int visibleRows)
@@ -222,7 +221,6 @@ namespace DualSouls.Mods
 
             internal TweakActionResult Initialize()
             {
-                _baselineMayHaveBeenCaptured = true;
                 TweakActionResult result = Controller.Initialize();
                 if (!result.Success) return result;
 
@@ -248,7 +246,7 @@ namespace DualSouls.Mods
             {
                 if (_disabled) return;
                 BlockMutations();
-                if (_baselineMayHaveBeenCaptured) _adapter.RestoreForSession();
+                if (_adapter.BaselineCaptured) _adapter.RestoreForSession();
                 _adapter.DisableRestoration();
                 _disabled = true;
             }
@@ -267,10 +265,13 @@ namespace DualSouls.Mods
 
             public string GameId => _inner.GameId;
             public IReadOnlyList<TweakDescriptor> Descriptors => _inner.Descriptors;
+            internal bool BaselineCaptured { get; private set; }
 
             public void CaptureBaseline()
             {
-                if (_mutationsAllowed) _inner.CaptureBaseline();
+                if (!_mutationsAllowed) return;
+                _inner.CaptureBaseline();
+                BaselineCaptured = true;
             }
 
             public TweakActionResult Apply(string id, string value)

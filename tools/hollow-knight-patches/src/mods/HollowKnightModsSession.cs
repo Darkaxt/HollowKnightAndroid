@@ -7,7 +7,7 @@ namespace DualSouls.Mods.HollowKnight
     /// Hollow Knight compatibility surface over the shared process-session owner.
     /// Readiness remains the exact typed Hollow Knight API signal.
     /// </summary>
-    public sealed class HollowKnightModsSession : IDisposable
+    public sealed class HollowKnightModsSession : ITweakTeardownSession
     {
         readonly TweakSession _session;
 

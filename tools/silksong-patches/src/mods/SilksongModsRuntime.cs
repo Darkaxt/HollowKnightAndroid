@@ -92,31 +92,34 @@ namespace DualSouls.Mods.Silksong
     public sealed class SilksongModsRestorePump : MonoBehaviour
     {
         static SilksongModsRestorePump _owner;
-        TweakSession _session;
+        readonly PendingTweakTeardown _pending = new PendingTweakTeardown();
 
         public static bool BlocksReplacement =>
-            _owner != null && _owner._session != null && !_owner._session.TeardownComplete;
+            _owner != null && _owner._pending.BlocksReplacement;
 
         public static void Create(TweakSession session)
         {
             if (session == null || session.TeardownComplete) return;
-            if (BlocksReplacement) return;
+            if (_owner != null)
+            {
+                _owner._pending.TryRetain(session);
+                return;
+            }
 
             var restoreObject = new GameObject("__SilksongModsRestoreOwner__");
             DontDestroyOnLoad(restoreObject);
             var pump = restoreObject.AddComponent<SilksongModsRestorePump>();
-            pump._session = session;
+            if (!pump._pending.TryRetain(session))
+            {
+                Destroy(restoreObject);
+                return;
+            }
             _owner = pump;
         }
 
         void Update()
         {
-            TweakSession session = _session;
-            if (session == null) return;
-            session.Tick();
-            if (!session.TeardownComplete) return;
-
-            _session = null;
+            if (!_pending.Tick()) return;
             if (ReferenceEquals(_owner, this)) _owner = null;
             Destroy(gameObject);
         }

@@ -34,6 +34,48 @@ public sealed class TweakSessionTests
     }
 
     [Fact]
+    public void InitialCaptureFailureRetriesWithoutAttemptingInvalidRestoration()
+    {
+        var store = EnabledStore();
+        var adapters = new List<RecordingAdapter>();
+        int owner = 0;
+        using var session = new TweakSession(
+            () => true,
+            () =>
+            {
+                var adapter = new RecordingAdapter
+                {
+                    CaptureFailuresRemaining = owner++ == 0 ? 1 : 0,
+                    RejectRestoreBeforeCapture = true,
+                };
+                adapters.Add(adapter);
+                return adapter;
+            },
+            store,
+            visibleRows: 5);
+
+        session.Tick();
+
+        Assert.False(session.IsReady);
+        Assert.False(session.RestorationPending);
+        Assert.Single(adapters);
+        Assert.Equal(1, adapters[0].CaptureCount);
+        Assert.Equal(0, adapters[0].RestoreCount);
+        Assert.Equal(0, adapters[0].InvalidRestoreCount);
+
+        for (int i = 0; i < 59; i++) session.Tick();
+        Assert.Single(adapters);
+
+        session.Tick();
+
+        Assert.True(session.IsReady);
+        Assert.Equal(2, adapters.Count);
+        Assert.Equal(1, adapters[1].CaptureCount);
+        Assert.Equal(0, adapters[1].RestoreCount);
+        Assert.True(session.Controller.MasterEnabled);
+    }
+
+    [Fact]
     public void PersistedApplyFailureRetriesAfterSixtyReadyTicksWithNewOwner()
     {
         var store = EnabledStore();
@@ -204,12 +246,25 @@ public sealed class TweakSessionTests
         public string GameId => "silksong";
         public IReadOnlyList<TweakDescriptor> Descriptors => Rows;
         public bool FailApply { get; set; }
+        public int CaptureFailuresRemaining { get; set; }
+        public bool RejectRestoreBeforeCapture { get; set; }
         public int RestoreFailuresRemaining { get; set; }
         public int CaptureCount { get; private set; }
         public int ApplyCount { get; private set; }
         public int RestoreCount { get; private set; }
+        public int InvalidRestoreCount { get; private set; }
+        public bool BaselineCaptured { get; private set; }
 
-        public void CaptureBaseline() => CaptureCount++;
+        public void CaptureBaseline()
+        {
+            CaptureCount++;
+            if (CaptureFailuresRemaining > 0)
+            {
+                CaptureFailuresRemaining--;
+                throw new InvalidOperationException("capture failed");
+            }
+            BaselineCaptured = true;
+        }
 
         public TweakActionResult Apply(string id, string value)
         {
@@ -220,6 +275,11 @@ public sealed class TweakSessionTests
         public void RestoreBaseline()
         {
             RestoreCount++;
+            if (RejectRestoreBeforeCapture && !BaselineCaptured)
+            {
+                InvalidRestoreCount++;
+                throw new InvalidOperationException("baseline was not captured");
+            }
             if (RestoreFailuresRemaining > 0)
             {
                 RestoreFailuresRemaining--;

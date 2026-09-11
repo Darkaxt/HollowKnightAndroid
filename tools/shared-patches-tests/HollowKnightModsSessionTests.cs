@@ -128,7 +128,8 @@ public sealed class HollowKnightModsSessionTests
 
         Assert.False(session.IsReady);
         Assert.Equal(2, api.CaptureCount);
-        Assert.Equal(2, api.RestoreCount);
+        Assert.Equal(0, api.RestoreCount);
+        Assert.Equal(new[] { "capture", "capture" }, api.Calls);
         Assert.Equal(secondError, session.LastError);
     }
 
@@ -189,6 +190,36 @@ public sealed class HollowKnightModsSessionTests
         Assert.Equal("black", store[Prefix + "value.companion_backdrop"]);
         Assert.True(session.Controller.MasterEnabled);
         Assert.Equal("black", session.Controller.Value("companion_backdrop"));
+    }
+
+    [Fact]
+    public void FailedHollowKnightTeardownOwnerBlocksReplacementUntilExactSessionRestores()
+    {
+        var api = new RecordingApi();
+        var session = new HollowKnightModsSession(api, new RecordingStore(), visibleRows: 5);
+        session.Tick();
+        api.RestoreFailuresRemaining = 1;
+
+        session.Dispose();
+
+        Assert.False(session.TeardownComplete);
+        var owner = new PendingTweakTeardown();
+        Assert.True(owner.TryRetain(session));
+        Assert.True(owner.BlocksReplacement);
+        Assert.Same(session, owner.Session);
+
+        var replacement = new HollowKnightModsSession(
+            new RecordingApi(), new RecordingStore(), visibleRows: 5);
+        Assert.False(owner.TryRetain(replacement));
+        Assert.Same(session, owner.Session);
+
+        owner.Tick();
+
+        Assert.True(session.TeardownComplete);
+        Assert.False(owner.BlocksReplacement);
+        Assert.Null(owner.Session);
+        Assert.Equal(2, api.RestoreCount);
+        replacement.Dispose();
     }
 
     [Fact]
@@ -253,6 +284,7 @@ public sealed class HollowKnightModsSessionTests
     {
         public bool IsReady { get; set; } = true;
         public int BackdropFailuresRemaining { get; set; }
+        public int RestoreFailuresRemaining { get; set; }
         public bool AlwaysFailCapture { get; set; }
         public int CaptureCount { get; private set; }
         public int RestoreCount { get; private set; }
@@ -270,6 +302,11 @@ public sealed class HollowKnightModsSessionTests
         {
             RestoreCount++;
             Calls.Add("restore");
+            if (RestoreFailuresRemaining > 0)
+            {
+                RestoreFailuresRemaining--;
+                throw new InvalidOperationException("restore failed");
+            }
         }
 
         public void SetCompanionBackdropBlack(bool black)
