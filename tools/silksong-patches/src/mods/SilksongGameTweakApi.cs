@@ -18,6 +18,23 @@ namespace DualSouls.Mods.Silksong
         static bool _silkDrainDisabled;
         static bool _equipAnywhere;
 
+        public bool IsReady
+        {
+            get
+            {
+                try
+                {
+                    if (!PlayerData.HasInstance || HeroController.instance == null) return false;
+                    GameManager manager = GameManager.SilentInstance;
+                    return manager != null && manager.IsGameplayScene();
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+        }
+
         public void CaptureBaseline()
         {
             if (_captured) return;

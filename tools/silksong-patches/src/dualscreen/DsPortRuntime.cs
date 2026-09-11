@@ -12,6 +12,7 @@ public sealed class DsPortRuntime
     DsPortOverlays _overlays;
     DsPortProgress _progress;
     DsPortMap _map;
+    DsPortMods _mods;
     System.Func<DsGesture, bool> _modsGestureConsumer;
     bool _transitionBoundary;
     bool _pagesVisible = true;
@@ -31,6 +32,7 @@ public sealed class DsPortRuntime
         _overlays = new DsPortOverlays(_layers);
         _progress = new DsPortProgress(_frame);
         _map = new DsPortMap(_frame);
+        _mods = new DsPortMods(_frame, SetModsGestureConsumer);
         _sceneHandle = SceneManager.GetActiveScene().handle;
         IsVisible = true;
     }
@@ -49,6 +51,7 @@ public sealed class DsPortRuntime
             _frame.InvalidateResidentSources();
         }
         _frame.Tick(dt);
+        _mods.Tick(IsVisible && _pagesVisible && !_transitionBoundary);
     }
 
     public void SetIdle(bool idle)
@@ -57,8 +60,8 @@ public sealed class DsPortRuntime
         IsIdle = idle;
     }
 
-    // Task100 binds its actual modal/gear consumer here. No Mods UI, settings or
-    // action behavior is implemented by this batch, and null never swallows input.
+    // The process-owned Task100 session is independent of this replaceable
+    // presentation consumer. Null never swallows input.
     public void SetModsGestureConsumer(System.Func<DsGesture, bool> consumer)
     {
         if (!_disposed) _modsGestureConsumer = consumer;
@@ -129,6 +132,7 @@ public sealed class DsPortRuntime
 
     void OnPageTabPressed(DsPageRole role)
     {
+        if (_mods != null) _mods.Close();
         SetPagesVisible(DsPortFrameState.PagesVisibleAfterTab(_pagesVisible, role == _frame.SelectedRole));
     }
 
@@ -145,6 +149,7 @@ public sealed class DsPortRuntime
     {
         if (_disposed) return;
         if (IsVisible != visible) { _map.Invalidate(); _progress.Invalidate(); }
+        if (!visible && _mods != null) _mods.DetachPresentation();
         if (!visible) _overlays.RestoreNative();
         if (!visible) _hud.RestoreBefore(() => _layers.SetVisible(false));
         else
@@ -163,7 +168,9 @@ public sealed class DsPortRuntime
         _map.Dispose();
         _progress.Dispose();
         _overlays.Dispose();
-        _modsGestureConsumer = null;
+        if (_mods != null) _mods.Dispose();
+        _mods = null;
+        SetModsGestureConsumer(null);
         _frame.Dispose();
         _frame.TabPressed -= OnPageTabPressed;
         _overlays = null;

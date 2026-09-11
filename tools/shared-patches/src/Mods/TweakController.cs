@@ -35,6 +35,7 @@ namespace DualSouls.Mods
 
         public IReadOnlyList<TweakDescriptor> Descriptors { get; }
         public bool MasterEnabled { get; private set; }
+        public bool RestorationPending { get; private set; }
 
         public TweakActionResult Initialize()
         {
@@ -88,12 +89,21 @@ namespace DualSouls.Mods
         public TweakActionResult SetMaster(bool enabled)
         {
             EnsureInitialized();
+            if (RestorationPending)
+                return TweakActionResult.Fail("The game baseline restoration is pending; Mods actions are disabled.");
             if (enabled == MasterEnabled) return TweakActionResult.Ok();
 
             if (!enabled)
             {
-                try { _adapter.RestoreBaseline(); }
-                catch (Exception e) { return FailClosed("Could not restore the game baseline: " + e.Message); }
+                try
+                {
+                    _adapter.RestoreBaseline();
+                    RestorationPending = false;
+                }
+                catch (Exception e)
+                {
+                    return MarkRestorationPending("Could not restore the game baseline: " + e.Message);
+                }
                 MasterEnabled = false;
                 TweakActionResult persisted = PersistMaster();
                 return persisted.Success ? persisted : FailClosed(persisted.Error, false);
@@ -106,6 +116,8 @@ namespace DualSouls.Mods
         public TweakActionResult Cycle(string id)
         {
             EnsureInitialized();
+            if (RestorationPending)
+                return TweakActionResult.Fail("The game baseline restoration is pending; Mods actions are disabled.");
             TweakDescriptor descriptor;
             if (!_byId.TryGetValue(id, out descriptor)) return TweakActionResult.Fail("Unknown tweak: " + id);
             if (!descriptor.IsAvailable)
@@ -138,8 +150,17 @@ namespace DualSouls.Mods
         public TweakActionResult Reset()
         {
             EnsureInitialized();
-            try { _adapter.RestoreBaseline(); }
-            catch (Exception e) { return FailClosed("Could not restore the game baseline: " + e.Message); }
+            if (RestorationPending)
+                return TweakActionResult.Fail("The game baseline restoration is pending; Mods actions are disabled.");
+            try
+            {
+                _adapter.RestoreBaseline();
+                RestorationPending = false;
+            }
+            catch (Exception e)
+            {
+                return MarkRestorationPending("Could not restore the game baseline: " + e.Message);
+            }
 
             var previousValues = new Dictionary<string, string>(_values, StringComparer.Ordinal);
             try
@@ -167,9 +188,31 @@ namespace DualSouls.Mods
             return TweakActionResult.Ok();
         }
 
+        public TweakActionResult RetryRestoration()
+        {
+            EnsureInitialized();
+            if (!RestorationPending) return TweakActionResult.Ok();
+            try
+            {
+                _adapter.RestoreBaseline();
+                RestorationPending = false;
+                return TweakActionResult.Ok();
+            }
+            catch (Exception e)
+            {
+                return TweakActionResult.Fail("Could not restore the game baseline: " + e.Message);
+            }
+        }
+
         public void Tick()
         {
-            if (!_initialized || !MasterEnabled) return;
+            if (!_initialized) return;
+            if (RestorationPending)
+            {
+                RetryRestoration();
+                return;
+            }
+            if (!MasterEnabled) return;
             try { _adapter.Tick(); }
             catch (Exception e) { FailClosed("Tweak maintenance failed: " + e.Message); }
         }
@@ -198,9 +241,25 @@ namespace DualSouls.Mods
         {
             if (restoreBaseline)
             {
-                try { _adapter.RestoreBaseline(); }
-                catch (Exception restoreError) { error += "; baseline restore failed: " + restoreError.Message; }
+                try
+                {
+                    _adapter.RestoreBaseline();
+                    RestorationPending = false;
+                }
+                catch (Exception restoreError)
+                {
+                    RestorationPending = true;
+                    error += "; baseline restore failed: " + restoreError.Message;
+                }
             }
+            MasterEnabled = false;
+            BestEffortWrite(MasterKey, "0");
+            return TweakActionResult.Fail(error);
+        }
+
+        TweakActionResult MarkRestorationPending(string error)
+        {
+            RestorationPending = true;
             MasterEnabled = false;
             BestEffortWrite(MasterKey, "0");
             return TweakActionResult.Fail(error);

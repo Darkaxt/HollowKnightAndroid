@@ -16,6 +16,7 @@ namespace DualSouls.Mods.Silksong
     /// </summary>
     public interface ISilksongTweakApi
     {
+        bool IsReady { get; }
         void CaptureBaseline();
         void RestoreBaseline();
         void SetDamageMode(SilksongDamageMode mode);
@@ -70,6 +71,8 @@ namespace DualSouls.Mods.Silksong
 
         public TweakActionResult Apply(string id, string value)
         {
+            if (!_api.IsReady)
+                return TweakActionResult.Fail("Silksong gameplay owners are not ready for Mods actions.");
             TweakDescriptor descriptor = Find(id);
             if (descriptor == null) return TweakActionResult.Fail("Unknown Silksong tweak: " + id);
             if (!descriptor.Allows(value)) return TweakActionResult.Fail("Unsupported value for " + id + ": " + value);
@@ -121,7 +124,7 @@ namespace DualSouls.Mods.Silksong
 
         public void Tick()
         {
-            if (_unlimitedSilk) _api.RefillSilk();
+            if (_unlimitedSilk && _api.IsReady) _api.RefillSilk();
         }
 
         static TweakDescriptor Find(string id)

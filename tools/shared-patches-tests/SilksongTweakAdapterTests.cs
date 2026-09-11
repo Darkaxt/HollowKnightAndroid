@@ -106,6 +106,21 @@ public sealed class SilksongTweakAdapterTests
     }
 
     [Fact]
+    public void ActionsFailClosedWhileTypedOwnersAreUnavailable()
+    {
+        var api = new RecordingApi { IsReady = false };
+        var adapter = new SilksongTweakAdapter(api);
+
+        var result = adapter.Apply("damage_received", "invincible");
+        adapter.Tick();
+
+        Assert.False(result.Success);
+        Assert.Contains("not ready", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, api.TotalMutationCount);
+        Assert.Equal(0, api.RefillCount);
+    }
+
+    [Fact]
     public void TypedApiExceptionsBecomeVisibleApplyFailures()
     {
         var api = new RecordingApi { ThrowOnMutation = true };
@@ -126,6 +141,7 @@ public sealed class SilksongTweakAdapterTests
 
     private sealed class RecordingApi : ISilksongTweakApi
     {
+        public bool IsReady { get; set; } = true;
         public int CaptureCount { get; private set; }
         public int RestoreAllCount { get; private set; }
         public int RestoreDamageCount { get; private set; }

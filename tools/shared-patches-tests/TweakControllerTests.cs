@@ -173,6 +173,33 @@ public sealed class TweakControllerTests
     }
 
     [Fact]
+    public void FailedMasterDisableRestorationRemainsOwnedUntilRetrySucceeds()
+    {
+        var adapter = new RecordingAdapter("silksong");
+        var store = new MemoryStore
+        {
+            ["dualsouls.mods.silksong.master"] = "1",
+            ["dualsouls.mods.silksong.value.unlimited_silk"] = "on"
+        };
+        var controller = new TweakController(adapter, store);
+        Assert.True(controller.Initialize().Success);
+        adapter.RestoreFailuresRemaining = 1;
+
+        var failed = controller.SetMaster(false);
+
+        Assert.False(failed.Success);
+        Assert.True(controller.RestorationPending);
+        Assert.False(controller.MasterEnabled);
+        Assert.Equal("0", store["dualsouls.mods.silksong.master"]);
+
+        var retried = controller.RetryRestoration();
+
+        Assert.True(retried.Success);
+        Assert.False(controller.RestorationPending);
+        Assert.Equal(2, adapter.RestoreCount);
+    }
+
+    [Fact]
     public void FailedEnableRestoresBaselineAndLeavesMasterOff()
     {
         var adapter = new RecordingAdapter("silksong") { FailId = "unlimited_silk" };
@@ -375,6 +402,7 @@ public sealed class TweakControllerTests
                 "off", new[] { "off", "on" }),
         };
 
+        public int RestoreFailuresRemaining { get; set; }
         public int CaptureCount { get; private set; }
         public int RestoreCount { get; private set; }
         public int TickCount { get; private set; }
@@ -390,7 +418,15 @@ public sealed class TweakControllerTests
             return TweakActionResult.Ok();
         }
 
-        public void RestoreBaseline() => RestoreCount++;
+        public void RestoreBaseline()
+        {
+            RestoreCount++;
+            if (RestoreFailuresRemaining > 0)
+            {
+                RestoreFailuresRemaining--;
+                throw new InvalidOperationException("restore failed");
+            }
+        }
         public void Tick() => TickCount++;
     }
 
