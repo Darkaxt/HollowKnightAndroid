@@ -33,6 +33,8 @@
     "compiledSourceCount": 68,
     "compiledSourceManifestSha256": "b1e55151e22ef1d9f99003a74a67256f4cdadab7d511725fbf79861ea63ef8a4",
     "sourceManifest": "docs/verification/evidence/task112-spec-fix/source-manifest.sha256",
+    "compileProjectSnapshot": "docs/verification/evidence/task112-spec-fix/silksong-compile-project.csproj",
+    "compileProjectSha256": "569b1bff1e8fc314875e991a10fbf1c56a03e6285d1f9fbbfe04942684d508b0",
     "output": "tools/shared-patches-tests/obj/task112-spec-fix-final/managed/bin/PatchCheck.dll",
     "outputSha256": "6497ff4fe2a42fe2e7e08a2f67cc72ea72401e7f8a2162cfe69c11848934dbb0",
     "log": "docs/verification/evidence/task112-spec-fix/compiler.log"

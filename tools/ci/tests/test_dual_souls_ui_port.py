@@ -2024,14 +2024,21 @@ static class Program
         self.assertIn("--no-incremental", compile_receipt["command"])
         self.assertIn("do not prove Unity display-1 pixels", receipt["evidenceBoundary"])
 
-        project = read(REPO_ROOT / "tools" / "shared-patches-tests" / "obj" /
-                       "task99-journal-continuation-20260908" / "ss-project" /
-                       "PatchCheck.csproj")
-        includes = re.findall(r'<Compile Include="([^"]+)"', project)
+        project_path = REPO_ROOT / compile_receipt["compileProjectSnapshot"]
+        project_bytes = project_path.read_bytes()
+        self.assertEqual(
+            hashlib.sha256(project_bytes).hexdigest(),
+            compile_receipt["compileProjectSha256"],
+        )
+        includes = re.findall(
+            r'<Compile Include="([^"]+)"', project_bytes.decode("utf-8")
+        )
         ordered_paths = []
         for include in includes:
             normalized = include.replace("\\", "/")
-            ordered_paths.append(normalized.split("/HollowKnightAndroid-h1/", 1)[1])
+            _, separator, relative_path = normalized.partition("/tools/")
+            self.assertEqual("/tools/", separator)
+            ordered_paths.append("tools/" + relative_path)
         manifest_paths = [entry.split("  ", 1)[1] for entry in entries]
         self.assertEqual(ordered_paths, manifest_paths)
 
