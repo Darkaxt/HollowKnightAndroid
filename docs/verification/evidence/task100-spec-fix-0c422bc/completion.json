@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "task": "Task100",
+  "status": "HOST_COMPLETE_DEVICE_DEFERRED",
+  "sourceCommit": "0c422bca2cbbb568c0dcb857f110a88700c0c836",
+  "supersedes": "docs/verification/evidence/task100-silksong-mods-41bb3cd/completion.json",
+  "scope": "Production-reachable source-backed Silksong Mods plus guarded HK and Silksong process teardown ownership",
+  "redGreen": [
+    {
+      "name": "initial-capture-ownership",
+      "red": "InitialCaptureFailureRetriesWithoutAttemptingInvalidRestoration failed because restoration was entered before CaptureBaseline returned",
+      "green": {
+        "executableTest": "SharedPatches.Tests.TweakSessionTests.InitialCaptureFailureRetriesWithoutAttemptingInvalidRestoration",
+        "passed": 1,
+        "failed": 0
+      }
+    },
+    {
+      "name": "hollow-knight-failed-teardown-owner",
+      "red": "FailedHollowKnightTeardownOwnerBlocksReplacementUntilExactSessionRestores failed compilation with CS0246 because PendingTweakTeardown did not exist",
+      "green": {
+        "executableTest": "SharedPatches.Tests.HollowKnightModsSessionTests.FailedHollowKnightTeardownOwnerBlocksReplacementUntilExactSessionRestores",
+        "passed": 1,
+        "failed": 0
+      }
+    }
+  ],
+  "testRuns": [
+    {
+      "name": "spec-regressions",
+      "command": "dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj --no-restore --filter FullyQualifiedName~InitialCaptureFailureRetriesWithoutAttemptingInvalidRestoration|FullyQualifiedName~FailedHollowKnightTeardownOwnerBlocksReplacementUntilExactSessionRestores --logger console;verbosity=minimal",
+      "passed": 2,
+      "failed": 0,
+      "log": "docs/verification/evidence/task100-spec-fix-0c422bc/spec-regressions.log",
+      "logSha256": "d70addeabdcc4724bf96be24b409bb52ec1f8f48e4d93f6a422c052988a9cf26"
+    },
+    {
+      "name": "focused-shared",
+      "command": "dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj --no-restore --filter FullyQualifiedName~TweakControllerTests|FullyQualifiedName~TweakSessionTests|FullyQualifiedName~TweakMenuModelTests|FullyQualifiedName~TweakPresenterTests|FullyQualifiedName~HollowKnightModsSessionTests|FullyQualifiedName~SilksongTweakAdapterTests --logger console;verbosity=minimal",
+      "passed": 77,
+      "failed": 0,
+      "log": "docs/verification/evidence/task100-spec-fix-0c422bc/focused-shared.log",
+      "logSha256": "eab80f191dff9453cbf942dd003f7ba389fa2ac76d4ec99a43d486be4fe2bdbe"
+    },
+    {
+      "name": "full-shared",
+      "command": "dotnet test tools/shared-patches-tests/SharedPatches.Tests.csproj --no-restore --logger console;verbosity=minimal",
+      "passed": 1540,
+      "failed": 0,
+      "log": "docs/verification/evidence/task100-spec-fix-0c422bc/full-shared.log",
+      "logSha256": "2107abd2b43359feb893ace16e43d47355ccc137b190b84210ddcfc8862cf3e1"
+    },
+    {
+      "name": "profile-mod-python",
+      "command": "python tools/ci/tests/test_profile_mod_pipeline.py",
+      "passed": 20,
+      "failed": 0,
+      "log": "docs/verification/evidence/task100-spec-fix-0c422bc/profile-mod-python.log",
+      "logSha256": "e3d0b8e19556dc1b8a6a3d38e41401f2bee8ab0f9a1dff156b5fabdb8da51a2a"
+    },
+    {
+      "name": "dual-souls-python",
+      "command": "python tools/ci/tests/test_dual_souls_ui_port.py",
+      "passed": 120,
+      "failed": 0,
+      "log": "docs/verification/evidence/task100-spec-fix-0c422bc/dual-souls-python.log",
+      "logSha256": "0f316cd0e39a7dce8ff76a09c036e7bf686233d884d9c6663762cf072463e2a6"
+    },
+    {
+      "name": "hollow-knight-reference-python",
+      "command": "python tools/ci/tests/test_hollow_knight_reference_port.py",
+      "passed": 48,
+      "failed": 0,
+      "log": "docs/verification/evidence/task100-spec-fix-0c422bc/hk-reference-python.log",
+      "logSha256": "10d20cb3d5f3b3433ffb7dd0427ecbd7488621edbf80c8653656f8624c3ab7f2"
+    },
+    {
+      "name": "hollow-knight-plan-python",
+      "command": "python tools/ci/tests/test_hollow_knight_first_plan.py",
+      "passed": 6,
+      "failed": 0,
+      "log": "docs/verification/evidence/task100-spec-fix-0c422bc/hk-plan-python.log",
+      "logSha256": "ba9882e9ac323861c4e47fd88f712e12a56b4bd76a6d541faec02026dfe5f209"
+    }
+  ],
+  "managedCompiles": {
+    "silksong": {
+      "gameVersion": "Linux Silksong 1.0.29980",
+      "assemblyCSharpSha256": "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d",
+      "command": "dotnet build tools/shared-patches-tests/obj/task100-spec-fix/ss-project/PatchCheck.csproj --no-restore --no-incremental -c Release -p:UseSharedCompilation=false -nodeReuse:false --output tools/shared-patches-tests/obj/task100-spec-fix/ss-bin --nologo",
+      "compiledSourceCount": 72,
+      "compileProjectSnapshot": "docs/verification/evidence/task100-spec-fix-0c422bc/silksong-compile-project.csproj",
+      "compileProjectSha256": "6acbc4986270f7b8e93fc3cb570d84555ad449f903ac8c1f96a0028280783ca2",
+      "sourceManifest": "docs/verification/evidence/task100-spec-fix-0c422bc/silksong-source-manifest.sha256",
+      "sourceManifestSha256": "22d58b598c9c3ff8aa80ea76e6307d14093091b7a8fc5572b0120e31278fbd5b",
+      "warnings": 7,
+      "errors": 0,
+      "outputBytes": 643584,
+      "outputSha256": "1520282b59c5dd7b027e2f9072cbda84dbed13605957692b3e9a53d3bb710a5b",
+      "log": "docs/verification/evidence/task100-spec-fix-0c422bc/silksong-compile.log",
+      "logSha256": "a30e010650b231e4a73622e9810a237775300dd6228956452d1de577a7d7c953"
+    },
+    "hollowKnight": {
+      "gameVersion": "Hollow Knight 1.5.12620",
+      "assemblyCSharpSha256": "5c84b8e59dd669c48db1fc426541d0d96643f59d35a72534b21fead7c96a3086",
+      "command": "dotnet build tools/hollow-knight-patches/HollowKnightPatches.csproj --no-restore --no-incremental -c Release -p:UseSharedCompilation=false -nodeReuse:false -p:HollowKnightManaged=D:/Temp/dualsouls-hk-12620/Hollow Knight/hollow_knight_Data/Managed -p:UnityManaged=D:/Temp/dualsouls-unity-player/android/Variations/il2cpp/Managed --output tools/shared-patches-tests/obj/task100-spec-fix/hk-bin --nologo",
+      "compiledSourceCount": 64,
+      "compileProjectSource": "tools/hollow-knight-patches/HollowKnightPatches.csproj",
+      "compileProjectSnapshot": "docs/verification/evidence/task100-spec-fix-0c422bc/hollow-knight-compile-project.csproj",
+      "compileProjectSha256": "ae5c12a6e1af6f7521f85e93266f824964d6eb5df1481459a7cb7a7559e9435c",
+      "sourceManifest": "docs/verification/evidence/task100-spec-fix-0c422bc/hollow-knight-source-manifest.sha256",
+      "sourceManifestSha256": "cab3cd17e398a5f60d412d908fff4cb4fb87c1150231da8791c38baf5016ac24",
+      "warnings": 1,
+      "errors": 0,
+      "outputBytes": 758784,
+      "outputSha256": "d6ee4c1667b66282fcdb523cec1b664c7aa9254eea619cb42925d24a78d4356c",
+      "log": "docs/verification/evidence/task100-spec-fix-0c422bc/hollow-knight-compile.log",
+      "logSha256": "98ec15cc7a709a1f27a7a750b1935d85f1d3ead85292d11190eca8fd548e4e36"
+    }
+  },
+  "exactSilksongBindings": [
+    "CheatManager.Invincibility",
+    "CheatManager.IsSilkDrainDisabled plus HeroController.RefillSilkToMaxSilent()",
+    "CheatManager.NailDamage = NailDamageStates.InstaKill",
+    "CheatManager.CanChangeEquipsAnywhere"
+  ],
+  "evidenceBoundary": "Host tests and exact managed compiles prove source behavior and wiring only. They do not prove Unity display-1 pixels, touch fit, real gameplay effects, Android lifecycle, or device interaction; all device UI and interaction acceptance remains deferred."
+}

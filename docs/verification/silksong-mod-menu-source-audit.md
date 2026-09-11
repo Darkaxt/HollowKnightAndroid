@@ -73,6 +73,9 @@ The source-backed capability boundary remains exactly the same four rows above.
 Typed actions require the current `GameManager`, gameplay scene, `PlayerData` and
 `HeroController`; unavailable state fails closed. Shared controller/session tests
 cover default-off profile isolation, reset, apply retry, restoration retry and
-owner replacement. Exact source manifests, compile receipts and the unproved
-device boundary are recorded in
-`docs/verification/evidence/task100-silksong-mods-41bb3cd/completion.json`.
+owner replacement. Executable regressions additionally prove that failed initial
+capture never attempts restoration and that an exact failed Hollow Knight teardown
+owner blocks replacement until retry succeeds. Exact source manifests, compile
+receipts and the unproved device boundary are recorded in
+`docs/verification/evidence/task100-spec-fix-0c422bc/completion.json`, which
+supersedes the incomplete `task100-silksong-mods-41bb3cd` receipt.

@@ -291,13 +291,28 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertIn("new DsModsScreen", shell)
 
     def test_task100_receipt_is_bound_to_committed_compile_sources(self):
-        evidence = REPO_ROOT / "docs" / "verification" / "evidence" / "task100-silksong-mods-41bb3cd"
+        evidence = REPO_ROOT / "docs" / "verification" / "evidence" / "task100-spec-fix-0c422bc"
         receipt = json.loads((evidence / "completion.json").read_text(encoding="utf-8"))
 
         self.assertEqual("HOST_COMPLETE_DEVICE_DEFERRED", receipt["status"])
         self.assertRegex(receipt["sourceCommit"], r"^[0-9a-f]{40}$")
+        self.assertEqual(
+            "docs/verification/evidence/task100-silksong-mods-41bb3cd/completion.json",
+            receipt["supersedes"],
+        )
         self.assertEqual(4, len(receipt["exactSilksongBindings"]))
         self.assertIn("device UI and interaction acceptance remains deferred", receipt["evidenceBoundary"])
+        self.assertEqual(2, len(receipt["redGreen"]))
+        for regression in receipt["redGreen"]:
+            self.assertIn("executableTest", regression["green"])
+            self.assertEqual(1, regression["green"]["passed"])
+            self.assertEqual(0, regression["green"]["failed"])
+        for test_run in receipt["testRuns"]:
+            self.assertEqual(0, test_run["failed"])
+            if test_run["name"] == "profile-mod-python":
+                continue  # This suite cannot validate the digest of its own active log.
+            log = (REPO_ROOT / test_run["log"]).read_bytes()
+            self.assertEqual(test_run["logSha256"], hashlib.sha256(log).hexdigest())
         for compile_receipt in receipt["managedCompiles"].values():
             manifest_path = REPO_ROOT / compile_receipt["sourceManifest"]
             manifest = manifest_path.read_bytes()
@@ -307,6 +322,18 @@ class ProfileModPipelineContractTest(unittest.TestCase):
             self.assertEqual(0, compile_receipt["errors"])
             self.assertIn("--no-restore", compile_receipt["command"])
             self.assertIn("--no-incremental", compile_receipt["command"])
+            compile_log = (REPO_ROOT / compile_receipt["log"]).read_bytes()
+            self.assertEqual(compile_receipt["logSha256"], hashlib.sha256(compile_log).hexdigest())
+            project = (REPO_ROOT / compile_receipt["compileProjectSnapshot"]).read_bytes()
+            self.assertEqual(compile_receipt["compileProjectSha256"], hashlib.sha256(project).hexdigest())
+            if "compileProjectSource" in compile_receipt:
+                historical_project = subprocess.run(
+                    ["git", "-C", str(REPO_ROOT), "show",
+                     f"{receipt['sourceCommit']}:{compile_receipt['compileProjectSource']}"],
+                    check=True,
+                    capture_output=True,
+                ).stdout
+                self.assertEqual(project, historical_project)
             for entry in entries:
                 digest, relative_path = entry.split("  ", 1)
                 historical = subprocess.run(
