@@ -15,7 +15,7 @@ internal class SkinLibraryImporter(private val store: SkinLibraryStore, decoder:
     override val available = true
     private val fs = store.fs
     private val normalizer = SkinNormalizer(store.catalog, decoder, fs)
-    private val builder = SkinObjectBuilder(fs)
+    private val builder = SkinObjectBuilder(fs, store.catalog)
     private val publisher = DurableDirectoryPublisher(fs)
     private data class Preparation(val owner: File, val candidates: List<CandidatePreparationResult>)
     private val handles = linkedMapOf<UUID, Preparation>()

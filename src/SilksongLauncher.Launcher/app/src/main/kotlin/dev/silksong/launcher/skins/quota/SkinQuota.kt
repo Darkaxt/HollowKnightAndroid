@@ -631,8 +631,8 @@ class SkinQuota private constructor(
 }
 
 private fun exactRoot(file: File): File = file.absoluteFile.normalize().also { root ->
-    require(root.name == "skins" && root.parentFile?.name == "hollow-knight") {
-        "Quota root must be the exact Hollow Knight profile skins child"
+    require(root.name == "skins" && root.parentFile?.name in setOf("hollow-knight", "silksong")) {
+        "Quota root must be an exact supported profile skins child"
     }
     require(root.parentFile != null && root != root.parentFile) { "Quota root has no exact profile owner" }
 }

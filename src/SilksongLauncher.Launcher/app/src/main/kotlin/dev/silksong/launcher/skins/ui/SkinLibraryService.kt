@@ -1,8 +1,8 @@
 package dev.silksong.launcher.skins.ui
 
 import dev.silksong.launcher.profiles.GameProfile
-import dev.silksong.launcher.profiles.HollowKnightProfile
 import dev.silksong.launcher.profiles.ProfilePaths
+import dev.silksong.launcher.skins.catalog.SkinCatalogProfiles
 import dev.silksong.launcher.skins.contracts.SkinImportCode
 import dev.silksong.launcher.skins.contracts.SkinResult
 import dev.silksong.launcher.skins.quota.SkinQuotaAdmission
@@ -86,7 +86,7 @@ internal class SkinLibraryService(
     }
 
     companion object {
-        fun isVisible(profile: GameProfile): Boolean = profile == HollowKnightProfile
+        fun isVisible(profile: GameProfile): Boolean = runCatching { SkinCatalogProfiles.require(profile) }.isSuccess
 
         // Context-free callers have no packaged catalog authority; never dual-read the old registry.
         fun production(filesDir: File, profile: GameProfile): SkinLibraryService = SkinLibraryService(profile) {
@@ -105,7 +105,7 @@ internal class SkinLibraryService(
         }
 
         private fun unsupported() = SkinResult.Error(
-            SkinImportCode.INVALID_INPUT, "Skins are available only for Hollow Knight",
+            SkinImportCode.INVALID_INPUT, "Skins are unavailable for this game profile",
         )
     }
 }

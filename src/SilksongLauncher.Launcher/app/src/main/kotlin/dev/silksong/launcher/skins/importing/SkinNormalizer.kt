@@ -282,6 +282,7 @@ class SkinNormalizer(
             reject(SkinImportCode.LIMIT_EXCEEDED, "Too many entry or archive import warnings")
         }
         val receipt = SkinImportReceiptDocument(
+            normalizerVersion = if (catalog.profile.profileId == "hollow-knight") "hkzip-v1" else "sszip-v1",
             candidateKey = candidateKey,
             archiveSha256 = quarantined.archiveSha256,
             archiveName = canonicalArchiveName(quarantined.archiveName, quarantined.archiveSha256),

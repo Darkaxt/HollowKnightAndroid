@@ -159,7 +159,7 @@ class GameProcessStartupTest {
         assertTrue(File(isolated.filesDir,"profiles/hollow-knight/skins/library.json").isFile)
         assertTrue(!File(isolated.filesDir,"profiles/silksong/skins").exists())
     }
-    @Test fun `Silksong startup never creates Hollow Knight skin storage even after preference changes`() {
+    @Test fun `Silksong startup creates only Silksong skin storage even after preference changes`() {
         val profile = GameProfiles.require("silksong"); val paths = paths(profile.id)
         publish(paths,"gen-no-hk-skins",UnityToolchainRegistry.resolve(profile).contentHash)
         GameProcessStartup.installForTests(GameProcessStartup.resolve(context,profile,paths))
@@ -168,7 +168,10 @@ class GameProcessStartupTest {
         }
         SkinLibraryRuntimeBridge.initialize(isolated,profile.id)
         dev.silksong.launcher.profiles.SelectedGameStore(context).set(GameProfiles.require("hollow-knight"))
-        assertTrue(!com.google.gson.JsonParser.parseString(SkinLibraryRuntimeBridge.readConfiguration()).asJsonObject["ok"].asBoolean)
+        val wire = com.google.gson.JsonParser.parseString(SkinLibraryRuntimeBridge.readConfiguration()).asJsonObject
+        assertTrue(wire.toString(), wire["ok"].asBoolean)
+        assertEquals("silksong", wire["profileId"].asString)
+        assertTrue(File(isolated.filesDir,"profiles/silksong/skins/library.json").isFile)
         assertTrue(!File(isolated.filesDir,"profiles/hollow-knight").exists())
     }
     private fun paths(profileId: String): ProfileBuildPaths {

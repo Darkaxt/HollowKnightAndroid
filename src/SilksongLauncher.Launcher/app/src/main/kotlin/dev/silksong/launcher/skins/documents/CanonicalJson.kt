@@ -131,20 +131,21 @@ object CanonicalJson {
         if (bytes.size > 65536) {
             return SkinResult.Error(SkinImportCode.DOCUMENT_INVALID, "Skin manifest exceeds 64 KiB")
         }
-        return parseDocument(bytes) { value ->
+        return parseDocument(bytes, catalog) { value ->
             val root = value.objectWithKeys(
                 required = setOf("schemaVersion", "id", "name", "author", "contentSha256", "games"),
                 optional = setOf("license", "source", "homepage", "attribution", "preview"),
             )
-            val gamesObject = root.required("games").objectWithKeys(setOf("hollow-knight"), emptySet())
-            val game = parseGame(gamesObject.getValue("hollow-knight"))
+            val profileId = catalog?.profile?.profileId ?: "hollow-knight"
+            val gamesObject = root.required("games").objectWithKeys(setOf(profileId), emptySet())
+            val game = parseGame(gamesObject.getValue(profileId))
             SkinManifestDocument(
                 schemaVersion = root.int("schemaVersion"),
                 id = root.string("id"),
                 name = root.string("name"),
                 author = root.string("author"),
                 contentSha256 = root.string("contentSha256"),
-                games = mapOf("hollow-knight" to game),
+                games = mapOf(profileId to game),
                 license = root.optionalString("license"),
                 source = root.optionalString("source"),
                 homepage = root.optionalString("homepage"),
@@ -181,7 +182,7 @@ object CanonicalJson {
         if (bytes.size > 8 * 1024 * 1024) {
             return SkinResult.Error(SkinImportCode.DOCUMENT_INVALID, "Import receipt exceeds 8 MiB")
         }
-        return parseDocument(bytes) { value ->
+        return parseDocument(bytes, catalog) { value ->
             val root = value.objectWithKeys(
                 setOf(
                     "schemaVersion", "normalizerVersion", "candidateKey", "archiveSha256", "archiveName",
@@ -219,7 +220,7 @@ object CanonicalJson {
         is SkinResult.Error -> throw IllegalArgumentException(result.detail)
     }
 
-    private inline fun <T> parseDocument(bytes: ByteArray, decode: (JValue) -> T): SkinResult<T> = try {
+    private inline fun <T> parseDocument(bytes: ByteArray, catalog: CatalogPathSet? = null, decode: (JValue) -> T): SkinResult<T> = try {
         val text = StandardCharsets.UTF_8.newDecoder()
             .onMalformedInput(CodingErrorAction.REPORT)
             .onUnmappableCharacter(CodingErrorAction.REPORT)
@@ -229,9 +230,9 @@ object CanonicalJson {
         val value = Parser(text).parse()
         val decoded = decode(value)
         val canonical = when (decoded) {
-            is SkinManifestDocument -> encodeManifest(decoded)
+            is SkinManifestDocument -> encodeManifest(decoded, catalog)
             is SkinObjectDocument -> encodeObject(decoded)
-            is SkinImportReceiptDocument -> encodeImportReceipt(decoded)
+            is SkinImportReceiptDocument -> encodeImportReceipt(decoded, catalog)
             else -> error("Unsupported document")
         }
         require(canonical.contentEquals(bytes)) { "Document is not canonical RFC 8785 JSON" }
@@ -282,12 +283,13 @@ object CanonicalJson {
         requireDisplayName(document.name, 80)
         requireDisplayName(document.author, 80)
         require(SHA256.matches(document.contentSha256))
-        require(document.games.keys == setOf("hollow-knight"))
-        val game = document.games.getValue("hollow-knight")
-        require(game.gameVersion == "1.5.12620")
-        require(game.catalogId == "hk-custom-knight-v3.5.0-205")
+        val profile = authority.profile
+        require(document.games.keys == setOf(profile.profileId))
+        val game = document.games.getValue(profile.profileId)
+        require(game.gameVersion == profile.gameVersion)
+        require(game.catalogId == profile.catalogId)
         require(game.assetRoot == "assets")
-        require(game.textures.isNotEmpty() && game.textures.size <= 205)
+        require(game.textures.isNotEmpty() && game.textures.size <= profile.pathCount)
         game.textures.forEach { (target, source) ->
             require(target in authority.pathSet && DIGEST_NAME.matches(source))
         }
@@ -320,7 +322,8 @@ object CanonicalJson {
 
     private fun validateReceipt(document: SkinImportReceiptDocument, catalog: CatalogPathSet? = null) {
         val authority = (catalog ?: CatalogPathSet.requirePinned()).revalidate()
-        require(document.schemaVersion == 1 && document.normalizerVersion == "hkzip-v1")
+        val normalizer = if (authority.profile.profileId == "hollow-knight") "hkzip-v1" else "sszip-v1"
+        require(document.schemaVersion == 1 && document.normalizerVersion == normalizer)
         require(SHA256.matches(document.candidateKey) && SHA256.matches(document.archiveSha256))
         requireArchiveName(document.archiveName)
         require(HEX.matches(document.candidateRawPathHex))
@@ -335,7 +338,7 @@ object CanonicalJson {
         require(document.signatureStatus == "UNVERIFIED_SOURCE")
         document.source?.let(::requireHttps)
         document.homepage?.let(::requireHttps)
-        require(document.aliases.size <= 205)
+        require(document.aliases.size <= authority.profile.pathCount)
         val aliasSources = HashSet<String>()
         val aliasTargets = HashSet<String>()
         val candidatePrefix = document.candidateRawPathHex.hexBytes()

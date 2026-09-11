@@ -59,7 +59,7 @@ class SkinTreeVerifier(
             is SkinResult.Error -> corrupt(parsed.detail)
         }
         if (manifest.contentSha256 != objectDocument.contentSha256) corrupt("Manifest content identity mismatch")
-        val game = manifest.games.getValue("hollow-knight")
+        val game = manifest.games.getValue(catalog.profile.profileId)
         val texturePaths = game.textures.values.map { "assets/$it" }.toSet()
         val payloadPaths = objectDocument.files.map { it.path }.filterNot { it == "skin.json" }.toSet()
         val declaredPayloadPaths = texturePaths.toMutableSet()

@@ -1,7 +1,6 @@
 package dev.silksong.launcher.skins.importing
 
 import dev.silksong.launcher.skins.catalog.CatalogPathSet
-import dev.silksong.launcher.skins.catalog.HollowKnightCatalogPaths
 import dev.silksong.launcher.skins.contracts.BuiltSkin
 import dev.silksong.launcher.skins.contracts.PreparedSkinCandidate
 import dev.silksong.launcher.skins.contracts.SkinImportCode
@@ -32,11 +31,12 @@ import java.util.concurrent.atomic.AtomicLong
 class SkinObjectBuilder(
     private val fs: SkinFileSystem,
 ) {
-    private val catalog: CatalogPathSet = CatalogPathSet.requirePinned()
+    private var configuredCatalog: CatalogPathSet? = null
+    private val catalog: CatalogPathSet get() = configuredCatalog ?: CatalogPathSet.requirePinned()
     private val limits: SkinLimits = SkinLimits.V1
 
     internal constructor(fs: SkinFileSystem, catalog: CatalogPathSet, limits: SkinLimits = SkinLimits.V1) : this(fs) {
-        require(catalog.sha256 == this.catalog.sha256 && catalog.exactBytes.contentEquals(this.catalog.exactBytes))
+        configuredCatalog = catalog.revalidate()
         configuredLimits = limits
     }
 
@@ -81,6 +81,7 @@ class SkinObjectBuilder(
                 copied += payload.copy(file = destination)
             }
 
+            val profile = catalog.profile
             val manifest = SkinManifestDocument(
                 id = id,
                 name = prepared.name,
@@ -88,9 +89,9 @@ class SkinObjectBuilder(
                 attribution = "Unknown",
                 contentSha256 = prepared.contentSha256,
                 games = mapOf(
-                    "hollow-knight" to SkinGameDocument(
-                        gameVersion = "1.5.12620",
-                        catalogId = HollowKnightCatalogPaths.CATALOG_ID,
+                    profile.profileId to SkinGameDocument(
+                        gameVersion = profile.gameVersion,
+                        catalogId = profile.catalogId,
                         assetRoot = "assets",
                         textures = prepared.mappings,
                     ),

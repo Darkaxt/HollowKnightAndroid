@@ -57,7 +57,7 @@ internal class SkinLibraryUiServices(
                 recover = { requireNotNull(services.recover).invoke() })
         }
         fun bound(store: dev.silksong.launcher.skins.library.SkinLibraryStore): SkinLibraryUiServices = SkinLibraryUiServices(
-            dev.silksong.launcher.profiles.HollowKnightProfile, { SkinLibraryService.readLibrary(store) },
+            dev.silksong.launcher.profiles.GameProfiles.require(store.profileId), { SkinLibraryService.readLibrary(store) },
             dev.silksong.launcher.skins.library.SkinLibraryImporter(store, dev.silksong.launcher.skins.importing.AndroidPngDecoder()),
             object : SkinLibraryMutations {
                 override val available = true

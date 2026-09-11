@@ -29,14 +29,15 @@ class SkinLibraryServiceTest {
         assertEquals(SkinImportCode.LIFECYCLE_BLOCKED, (result as SkinResult.Error).code)
     }
 
-    @Test fun `only the exact Hollow Knight profile exposes skins`() {
+    @Test fun `both closed game profiles expose their own skin library`() {
         assertTrue(SkinLibraryService.isVisible(HollowKnightProfile))
-        assertFalse(SkinLibraryService.isVisible(SilksongProfile))
+        assertTrue(SkinLibraryService.isVisible(SilksongProfile))
     }
 
     @Test fun `unsupported profile never invokes snapshot authority`() {
         var reads = 0
-        val service = SkinLibraryService(SilksongProfile) { reads++; error("wrong profile read") }
+        val unsupported = SilksongProfile.copy(id = "invented")
+        val service = SkinLibraryService(unsupported) { reads++; error("wrong profile read") }
         assertTrue(service.refresh() is SkinResult.Error)
         assertEquals(0, reads)
     }

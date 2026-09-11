@@ -1,7 +1,13 @@
 package dev.silksong.launcher.skins.catalog
 
 import dev.silksong.launcher.profiles.GameProfiles
+import dev.silksong.launcher.skins.contracts.DecodeResult
 import dev.silksong.launcher.skins.contracts.SkinResult
+import dev.silksong.launcher.skins.fixtures.RawZipFixture
+import dev.silksong.launcher.skins.fixtures.TinyPngFixture
+import dev.silksong.launcher.skins.importing.PngDecoder
+import dev.silksong.launcher.skins.importing.SkinImportInput
+import dev.silksong.launcher.skins.library.SkinLibraryImporter
 import dev.silksong.launcher.skins.library.SkinLibraryCodec
 import dev.silksong.launcher.skins.library.SkinLibraryDocument
 import dev.silksong.launcher.skins.library.SkinLibraryStore
@@ -99,6 +105,37 @@ class SilksongSkinProfileTest {
         assertEquals("silksong", store.profileId)
         assertEquals("hollow-knight legacy sentinel", legacy.readText())
         assertTrue(File(profileRoot, "skins/library.json").isFile)
+    }
+
+    @Test
+    fun silksongImportPublishesOnlyCanonicalSilksongTargetsAndReportsOmissions() {
+        val profileRoot = temp.newFolder("imports", "profiles", "silksong")
+        val store = SkinLibraryStore(SkinPaths(profileRoot), catalog = silksongCatalog())
+        val decoder = PngDecoder { _, info -> SkinResult.Ok(DecodeResult(info.width, info.height, info.width.toLong() * info.height)) }
+        val archive = RawZipFixture.build(listOf(
+            RawZipFixture.Entry("Scarlet/${expected[0]}".toByteArray(), TinyPngFixture.rgba()),
+            RawZipFixture.Entry("Scarlet/Knight.png".toByteArray(), TinyPngFixture.rgba()),
+        )).bytes
+        val importer = SkinLibraryImporter(store, decoder)
+
+        val prepared = importer.prepare(SkinImportInput.SelectedFile("scarlet.zip") { archive.inputStream() })
+        assertTrue(prepared is SkinResult.Ok)
+        val handle = when (prepared) {
+            is SkinResult.Ok -> prepared.value
+            is SkinResult.Error -> error(prepared.detail)
+        }
+        assertTrue(handle.candidates.toString(), handle.candidates.any { it.candidateKey != null })
+        assertTrue(importer.commitImport(handle.handleId) is SkinResult.Ok)
+        val pack = store.read().let { result -> when (result) {
+            is SkinResult.Ok -> result.value.packs.single()
+            is SkinResult.Error -> error(result.detail)
+        } }
+        val manifest = store.requireVerified(pack)
+        val textures = manifest.games.getValue("silksong").textures
+
+        assertEquals(setOf(expected[0]), textures.keys)
+        assertFalse(textures.keys.any { it.endsWith("Knight.png") && !it.contains("Hornet") })
+        assertEquals(10, expected.count { it !in textures })
     }
 
     private fun silksongCatalog(): CatalogPathSet {
