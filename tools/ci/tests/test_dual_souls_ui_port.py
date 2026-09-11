@@ -317,20 +317,24 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         invalidate = csharp_method_body(source, r"public\s+void\s+Invalidate\s*\(\s*\)")
         self.assertIn("_partial.Retire(_retirePartialGraph)", invalidate)
 
-    def test_native_map_preserves_renderer_and_every_indexed_material_property_block(self):
+    def test_native_map_preserves_renderer_and_only_present_indexed_property_blocks(self):
         source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
         binding = csharp_method_body(source, r"sealed\s+class\s+PropertyBlockBinding")
         self.assertIn("MaterialPropertyBlock Renderer", binding)
         self.assertIn("MaterialPropertyBlock[] Materials", binding)
+        self.assertIn("DsPortMapPropertyBlockPlan Plan", binding)
         refresh = csharp_method_body(source, r"static\s+void\s+RefreshPropertyBlocks\s*\([^)]*\)")
         for required in (
             "native.GetPropertyBlock(binding.Renderer)",
-            "donor.SetPropertyBlock(binding.Renderer)",
+            "binding.Plan.ObserveRenderer(!binding.Renderer.isEmpty)",
+            "binding.Plan.Renderer ? binding.Renderer : null",
             "native.GetPropertyBlock(block, index)",
-            "donor.SetPropertyBlock(block, index)",
+            "binding.Plan.ObserveIndexed(index, !block.isEmpty)",
+            "binding.Plan.UsesIndexed(index) ? block : null",
             "for (int index = 0; index < binding.Materials.Length; index++)",
         ):
             self.assertIn(required, refresh)
+        self.assertNotIn("donor.SetPropertyBlock(block, index)", refresh)
         copy = csharp_method_body(source, r"static\s+void\s+CopyPropertyBlocks\s*\([^)]*\)")
         self.assertIn("new PropertyBlockBinding(native.sharedMaterials.Length)", copy)
         self.assertIn("RefreshPropertyBlocks(native, donor, binding)", copy)
@@ -3002,12 +3006,37 @@ static class Program
         self.assertIn('Set(owned, "m_renderer", renderer)', cold)
         self.assertIn('Set(owned, "m_subTextObjects", new TMProOld.TMP_SubMesh[16])', cold)
         self.assertIn('Data(Get(source, field))', cold)
+
+    def test_map_cold_generation_stays_inactive_and_publishes_renderer_only_state(self):
+        helper = read(DUALSCREEN_SOURCES / "DsPortProgress.cs").split("public sealed class DsPortOwnedText", 1)[1]
+        cold = csharp_method_body(helper, r"public\s+PaneText\s+CopyCold\s*\([^)]*\)")
+        self.assertIn("staging.SetActive(false)", cold)
+        self.assertIn("_coldRoots.Add(staging)", cold)
+        self.assertLess(cold.index("staging.SetActive(false)"), cold.index("AddComponent<PaneText>()"))
+        self.assertNotIn("SetParent(", cold)
         map_source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
-        self.assertIn("source.Watches.Add(source.Text.WatchCold(text))", map_source)
-        self.assertIn("CopyPropertyBlocks(source, native, renderer)", map_source)
-        blocks = csharp_method_body(map_source, r"static\s+void\s+RefreshPropertyBlocks\s*\([^)]*\)")
-        self.assertIn("donor.SetPropertyBlock(binding.Renderer)", blocks)
-        self.assertIn("donor.SetPropertyBlock(block, index)", blocks)
+        copy = csharp_method_body(map_source, r"static\s+Renderer\s+CopyRenderer\s*\([^)]*\)")
+        for token in ("source.Watches.Add(source.Text.WatchCold(text))",
+                      "source.Text.CopyCold(text)", "RefreshPropertyBlocks(native, coldRenderer",
+                      "source.Text.GenerateCold(cold)", "TransferColdRenderer(",
+                      "source, renderer, cold.transform, target, transforms"):
+            self.assertIn(token, copy)
+        self.assertLess(copy.index("source.Text.CopyCold(text)"),
+                        copy.index("RefreshPropertyBlocks(native, coldRenderer"))
+        self.assertLess(copy.index("RefreshPropertyBlocks(native, coldRenderer"),
+                        copy.index("source.Text.GenerateCold(cold)"))
+        transfer = csharp_method_body(map_source, r"static\s+Renderer\s+TransferColdRenderer\s*\([^)]*\)")
+        for token in ("AddComponent<MeshFilter>()", "AddComponent<MeshRenderer>()",
+                      "sharedMesh = mesh", "sharedMaterials = generated.sharedMaterials",
+                      "CopyPropertyBlocks(source, generated, donor)"):
+            self.assertIn(token, transfer)
+        for forbidden in ("AddComponent<PaneText>", "AddComponent<TMProOld.TMP_SubMesh>",
+                          "AddComponent<TMProOld.TextContainer>"):
+            self.assertNotIn(forbidden, transfer)
+        retire = csharp_method_body(helper, r"public\s+void\s+RetireCold\s*\(\s*\)")
+        self.assertIn("Object.DestroyImmediate(root)", retire)
+        self.assertNotIn('GetMethod("OnDestroy"', retire)
+        self.assertNotIn("_coldRetired", helper)
         donor = csharp_method_body(map_source, r"static\s+Transform\s+DonorTransform\s*\([^)]*\)")
         self.assertLess(donor.index("source.Text.RetireCold()"), donor.index("Object.DestroyImmediate(root)"))
         self.assertLess(donor.index("Object.DestroyImmediate(root)"), donor.index("source.Text.Clear()"))

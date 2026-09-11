@@ -327,6 +327,39 @@ public sealed class SilksongPortSelectionTests
     }
 
     [Fact]
+    public void NativeMapRendererWideOnlyBlockRemainsEffectiveWithAbsentIndexedBlocks()
+    {
+        var plan = new DsPortMapPropertyBlockPlan(2);
+        plan.ObserveRenderer(true);
+        plan.ObserveIndexed(0, false); plan.ObserveIndexed(1, false);
+        Assert.True(plan.Renderer);
+        Assert.False(plan.UsesIndexed(0)); Assert.False(plan.UsesIndexed(1));
+        Assert.True(plan.EffectiveAt(0)); Assert.True(plan.EffectiveAt(1));
+    }
+
+    [Fact]
+    public void NativeMapIndexedOnlyBlocksOverrideOnlyTheirExactSlots()
+    {
+        var plan = new DsPortMapPropertyBlockPlan(2);
+        plan.ObserveRenderer(false);
+        plan.ObserveIndexed(0, true); plan.ObserveIndexed(1, false);
+        Assert.False(plan.Renderer);
+        Assert.True(plan.UsesIndexed(0)); Assert.False(plan.UsesIndexed(1));
+        Assert.True(plan.EffectiveAt(0)); Assert.False(plan.EffectiveAt(1));
+    }
+
+    [Fact]
+    public void NativeMapMixedBlocksUseIndexedOverrideAndRendererFallbackPerSlot()
+    {
+        var plan = new DsPortMapPropertyBlockPlan(2);
+        plan.ObserveRenderer(true);
+        plan.ObserveIndexed(0, false); plan.ObserveIndexed(1, true);
+        Assert.True(plan.Renderer);
+        Assert.False(plan.UsesIndexed(0)); Assert.True(plan.UsesIndexed(1));
+        Assert.True(plan.EffectiveAt(0)); Assert.True(plan.EffectiveAt(1));
+    }
+
+    [Fact]
     public void NativeMapRetainsOneDirectHierarchyAcrossManySteadyTicks()
     {
         var state = new DsPortMapRetainedGraph<RetainedMapGraph>(.125);

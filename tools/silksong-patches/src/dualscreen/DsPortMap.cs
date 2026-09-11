@@ -75,6 +75,23 @@ public sealed class DsPortMapPartialGraph<T> where T : class
     }
 }
 
+public sealed class DsPortMapPropertyBlockPlan
+{
+    bool _renderer;
+    readonly bool[] _indexed;
+    public bool Renderer => _renderer;
+    public DsPortMapPropertyBlockPlan(int materialCount)
+    {
+        if (materialCount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(materialCount));
+        _indexed = new bool[materialCount];
+    }
+    public void ObserveRenderer(bool exists) => _renderer = exists;
+    public void ObserveIndexed(int index, bool exists) => _indexed[index] = exists;
+    public bool UsesIndexed(int index) => _indexed[index];
+    public bool EffectiveAt(int index) => _indexed[index] || _renderer;
+}
+
 // A bounded observation retry, not an initializer: readiness remains native.
 public sealed class DsPortMapResidency
 {
@@ -377,9 +394,11 @@ public sealed class DsPortMap : IDisposable
     {
         public readonly MaterialPropertyBlock Renderer = new MaterialPropertyBlock();
         public readonly MaterialPropertyBlock[] Materials;
+        public readonly DsPortMapPropertyBlockPlan Plan;
         public PropertyBlockBinding(int materialCount)
         {
             if (materialCount <= 0) throw new InvalidOperationException("Map native material slots unavailable");
+            Plan = new DsPortMapPropertyBlockPlan(materialCount);
             Materials = new MaterialPropertyBlock[materialCount];
             for (int index = 0; index < materialCount; index++)
                 Materials[index] = new MaterialPropertyBlock();
@@ -1208,17 +1227,30 @@ public sealed class DsPortMap : IDisposable
                 if ((mesh == null || mesh.vertexCount == 0) && (retained == null || retained.vertexCount == 0))
                 {
                     source.Watches.Add(source.Text.WatchCold(text));
-                    var cold = source.Text.CopyCold(text, target.gameObject);
+                    var cold = source.Text.CopyCold(text);
+                    var coldRenderer = cold.GetComponent<Renderer>();
+                    if (coldRenderer == null)
+                        throw new InvalidOperationException(
+                            "Map cold native text staging renderer unavailable");
+                    RefreshPropertyBlocks(native, coldRenderer,
+                        new PropertyBlockBinding(native.sharedMaterials.Length));
                     source.Text.Prepare(cold.gameObject);
                     var generated = source.Text.GenerateCold(cold);
                     var main = cold.GetComponent<Renderer>();
+                    var transforms = new Dictionary<Transform, Transform>
+                    { { cold.transform, target } };
+                    Renderer mainDonor = null;
                     foreach (var renderer in generated)
                     {
-                        CopyPropertyBlocks(source, native, renderer);
-                        source.RendererSources[renderer] = native;
-                        if (renderer != main) source.Draw.Add(renderer);
+                        var transferred = TransferColdRenderer(
+                            source, renderer, cold.transform, target, transforms);
+                        if (renderer == main) mainDonor = transferred;
+                        else source.Draw.Add(transferred);
                     }
-                    return main;
+                    if (mainDonor == null)
+                        throw new InvalidOperationException(
+                            "Map generated native text main renderer unavailable");
+                    return mainDonor;
                 }
                 mesh = (Mesh)DsPortMapTransaction.TextGeometry(mesh != null && mesh.vertexCount != 0 ? mesh : null, retained, native.name);
             }
@@ -1234,6 +1266,76 @@ public sealed class DsPortMap : IDisposable
         source.RendererSources[donor] = native;
         return donor;
     }
+    static Transform TransferColdTransform(Transform generated, Transform stagingRoot,
+        Transform target, Dictionary<Transform, Transform> transfers)
+    {
+        if (transfers.TryGetValue(generated, out var retained)) return retained;
+        if (generated == null || generated == stagingRoot || generated.parent == null ||
+            !Within(generated, stagingRoot))
+            throw new InvalidOperationException("Map cold text transform escaped staging");
+        var parent = TransferColdTransform(
+            generated.parent, stagingRoot, target, transfers);
+        var node = new GameObject("Native Cold Text Presentation").transform;
+        node.SetParent(parent, false);
+        node.localPosition = generated.localPosition;
+        node.localRotation = generated.localRotation;
+        node.localScale = generated.localScale;
+        node.gameObject.layer = DsPresentation.CONTENT_LAYER;
+        node.gameObject.SetActive(generated.gameObject.activeSelf);
+        var nativeGroup = generated.GetComponent<SortingGroup>();
+        if (nativeGroup != null)
+        {
+            var group = node.gameObject.AddComponent<SortingGroup>();
+            group.enabled = nativeGroup.enabled;
+            group.sortingLayerID = nativeGroup.sortingLayerID;
+            group.sortingOrder = nativeGroup.sortingOrder;
+            group.sortAtRoot = nativeGroup.sortAtRoot;
+        }
+        transfers.Add(generated, node);
+        return node;
+    }
+    static Renderer TransferColdRenderer(Source source, Renderer generated,
+        Transform stagingRoot, Transform target,
+        Dictionary<Transform, Transform> transfers)
+    {
+        if (generated == null || generated.GetType() != typeof(MeshRenderer))
+            throw new InvalidOperationException("Map generated native text renderer unavailable");
+        var node = TransferColdTransform(
+            generated.transform, stagingRoot, target, transfers);
+        if (node.GetComponent<Renderer>() != null ||
+            node.GetComponent<MeshFilter>() != null)
+            throw new InvalidOperationException("Map generated native text renderer duplicated");
+        var generatedFilter = generated.GetComponent<MeshFilter>();
+        var mesh = generatedFilter != null ? generatedFilter.sharedMesh : null;
+        if (mesh == null || mesh.vertexCount == 0)
+        {
+            var text = generated.GetComponent<TMProOld.TextMeshPro>();
+            if (text != null) mesh = Get(text, "m_mesh") as Mesh;
+            var submesh = generated.GetComponent<TMProOld.TMP_SubMesh>();
+            if ((mesh == null || mesh.vertexCount == 0) && submesh != null)
+                mesh = Get(submesh, "m_mesh") as Mesh;
+        }
+        if (mesh == null || mesh.vertexCount == 0)
+            throw new InvalidOperationException("Map generated native text mesh unavailable");
+        node.gameObject.AddComponent<MeshFilter>().sharedMesh = mesh;
+        var donor = node.gameObject.AddComponent<MeshRenderer>();
+        donor.enabled = generated.enabled;
+        donor.sharedMaterials = generated.sharedMaterials;
+        donor.sortingLayerID = generated.sortingLayerID;
+        donor.sortingOrder = generated.sortingOrder;
+        donor.shadowCastingMode = generated.shadowCastingMode;
+        donor.receiveShadows = generated.receiveShadows;
+        donor.lightProbeUsage = generated.lightProbeUsage;
+        donor.reflectionProbeUsage = generated.reflectionProbeUsage;
+        donor.probeAnchor = generated.probeAnchor;
+        donor.motionVectorGenerationMode = generated.motionVectorGenerationMode;
+        donor.allowOcclusionWhenDynamic = generated.allowOcclusionWhenDynamic;
+        if (donor.sharedMaterial == null)
+            throw new InvalidOperationException("Map generated native text material unavailable");
+        CopyPropertyBlocks(source, generated, donor);
+        source.RendererSources.Add(donor, generated);
+        return donor;
+    }
     static void CopyPropertyBlocks(Source source, Renderer native, Renderer donor)
     {
         var binding = new PropertyBlockBinding(native.sharedMaterials.Length);
@@ -1244,13 +1346,17 @@ public sealed class DsPortMap : IDisposable
     {
         binding.Renderer.Clear();
         native.GetPropertyBlock(binding.Renderer);
-        donor.SetPropertyBlock(binding.Renderer);
+        binding.Plan.ObserveRenderer(!binding.Renderer.isEmpty);
+        donor.SetPropertyBlock(
+            binding.Plan.Renderer ? binding.Renderer : null);
         for (int index = 0; index < binding.Materials.Length; index++)
         {
             var block = binding.Materials[index];
             block.Clear();
             native.GetPropertyBlock(block, index);
-            donor.SetPropertyBlock(block, index);
+            binding.Plan.ObserveIndexed(index, !block.isEmpty);
+            donor.SetPropertyBlock(
+                binding.Plan.UsesIndexed(index) ? block : null, index);
         }
     }
     static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
