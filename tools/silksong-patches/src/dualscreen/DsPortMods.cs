@@ -23,6 +23,8 @@ public sealed class DsPortMods : IDisposable
     readonly Action<Func<DsGesture, bool>> _setConsumer;
     readonly List<NativeLabel> _rowLabels = new List<NativeLabel>();
     readonly List<Rect> _rowHits = new List<Rect>();
+    readonly TweakPresenterPaintInvalidation _paint =
+        new TweakPresenterPaintInvalidation();
 
     TweakSession _session;
     TweakMenuModel _menu;
@@ -47,6 +49,7 @@ public sealed class DsPortMods : IDisposable
     Rect _nextGroupHit;
     Rect _resetHit;
     Rect _closeHit;
+    long _gearGeometryStamp = long.MinValue;
     bool _consumerAttached;
     bool _disposed;
 
@@ -82,13 +85,29 @@ public sealed class DsPortMods : IDisposable
         }
         if (_gear == null) return;
 
+        long geometryStamp = ComputeGeometryPaintStamp();
+        if (_gearGeometryStamp != geometryStamp)
+        {
+            RefreshGearGeometry();
+            _gearGeometryStamp = geometryStamp;
+        }
+
         AttachConsumer();
         _session.SetPresenterAttached(true);
         _frame.SetModsOpen(_menu.IsOpen);
         if (_menu.IsOpen)
         {
             if (_modal == null) BuildModal();
-            if (_modal != null) Paint();
+            if (_modal != null)
+            {
+                long modelStamp = TweakPresenterModelPaintStamp.Compute(
+                    _session, _menu, _session.Controller);
+                if (_paint.ShouldPaint(modelStamp, geometryStamp))
+                {
+                    Paint();
+                    _paint.Acknowledge(modelStamp, geometryStamp);
+                }
+            }
         }
         else
         {
@@ -179,6 +198,8 @@ public sealed class DsPortMods : IDisposable
         _gearMaterial = null;
         _gearMesh = null;
         _boundAnchor = null;
+        _gearGeometryStamp = long.MinValue;
+        _paint.Invalidate();
     }
 
     public void Dispose()
@@ -242,6 +263,14 @@ public sealed class DsPortMods : IDisposable
         renderer.sharedMaterial = _gearMaterial;
         renderer.sortingLayerID = 0;
         renderer.sortingOrder = DsPortLayers.FRAME_RENDER_ORDER + 100;
+        RefreshGearGeometry();
+        _gearGeometryStamp = ComputeGeometryPaintStamp();
+    }
+
+    void RefreshGearGeometry()
+    {
+        RectTransform anchor = _frame.ModsAnchor;
+        if (_gear == null || anchor == null) return;
         float size = Mathf.Max(1f, Mathf.Min(anchor.rect.width, anchor.rect.height)) * 0.36f;
         _gear.transform.localScale = new Vector3(size, size, 1f);
         _gear.transform.localPosition = Vector3.zero;
@@ -249,6 +278,26 @@ public sealed class DsPortMods : IDisposable
         float w = Mathf.Max(1f, DsPresentation.PanelW);
         float h = Mathf.Max(1f, DsPresentation.PanelH);
         _gearHit = new Rect(w * 0.84f, h * 0.76f, w * 0.14f, h * 0.22f);
+    }
+
+    long ComputeGeometryPaintStamp()
+    {
+        float panelW = Mathf.Max(1f, DsPresentation.PanelW);
+        float panelH = Mathf.Max(1f, DsPresentation.PanelH);
+        Rect anchor = _frame.ModsAnchor != null ? _frame.ModsAnchor.rect : new Rect();
+        Rect content = _frame.ContentMask != null ? _frame.ContentMask.rect : new Rect();
+        Vector3 scale = _frame.ContentMask != null
+            ? _frame.ContentMask.lossyScale
+            : Vector3.one;
+        long geometry = TweakPresenterGeometryPaintStamp.Compute(
+            -panelW * 0.5f, panelW * 0.5f,
+            -panelH * 0.5f, panelH * 0.5f,
+            scale.x,
+            anchor.x, anchor.y, anchor.width, anchor.height,
+            content.x, content.y, scale.z,
+            content.width, content.height);
+        return TweakPresenterGeometryPaintStamp.WithLayoutRevision(
+            geometry, _frame.LayoutRevision);
     }
 
     void BuildModal()
@@ -286,6 +335,7 @@ public sealed class DsPortMods : IDisposable
         }
         for (int i = 0; i < _rowLabels.Count; i++)
             if (_rowLabels[i] == null) { DetachPresentation(); return; }
+        _paint.Invalidate();
     }
 
     NativeLabel CreateLabel(string name)
@@ -312,6 +362,10 @@ public sealed class DsPortMods : IDisposable
         float bottom = -height * 0.5f;
         float top = height * 0.5f;
         float line = height * 0.055f;
+        if (_ground != null)
+            _ground.SetRect(Rect.MinMaxRect(
+                -panelW * 0.46f, -panelH * 0.305f,
+                 panelW * 0.46f,  panelH * 0.305f));
 
         SetLabel(_title, "MODS", Color.white, 0f, top - height * 0.06f, line * 1.2f, width * 0.5f);
         bool master = _session.Controller.MasterEnabled;
@@ -468,6 +522,7 @@ public sealed class DsPortMods : IDisposable
         _bottomOrnament = null;
         _rowLabels.Clear();
         _rowHits.Clear();
+        _paint.Invalidate();
     }
 
     static string Friendly(string value)

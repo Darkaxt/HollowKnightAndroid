@@ -204,6 +204,13 @@ namespace DualSouls.Mods
             }
         }
 
+        internal void StageDisabledMaster()
+        {
+            MasterEnabled = false;
+            _store.Write(MasterKey, "0");
+            _store.Flush();
+        }
+
         public void Tick()
         {
             if (!_initialized) return;

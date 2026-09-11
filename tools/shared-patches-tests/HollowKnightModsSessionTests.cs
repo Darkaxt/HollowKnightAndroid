@@ -76,8 +76,8 @@ public sealed class HollowKnightModsSessionTests
         api.IsReady = false;
         for (int i = 0; i < retryReadyTicks * 2; i++) session.Tick();
         Assert.Equal(1, api.CaptureCount);
-        Assert.Equal(0, store.WriteCount);
-        Assert.Equal("1", store[Prefix + "master"]);
+        Assert.Equal(1, store.WriteCount);
+        Assert.Equal("0", store[Prefix + "master"]);
         Assert.Equal("black", store[Prefix + "value.companion_backdrop"]);
         Assert.Equal(initializationError, session.LastError);
 
@@ -95,13 +95,13 @@ public sealed class HollowKnightModsSessionTests
         Assert.Equal(2, api.RestoreCount);
         Assert.NotSame(failedController, session.Controller);
         Assert.NotSame(failedMenu, session.Menu);
-        Assert.True(session.Controller.MasterEnabled);
+        Assert.False(session.Controller.MasterEnabled);
         Assert.Equal("black", session.Controller.Value("companion_backdrop"));
         Assert.Equal(
             new[]
             {
                 "capture", "backdrop:True", "restore", "restore",
-                "capture", "backdrop:True",
+                "capture",
             },
             api.Calls);
     }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace DualSouls.Mods
 {
@@ -76,9 +77,69 @@ namespace DualSouls.Mods
             return Hash(stamp, aspect);
         }
 
+        public static long WithLayoutRevision(long geometryStamp, int layoutRevision)
+        {
+            return unchecked((geometryStamp ^ (uint)layoutRevision) * Prime);
+        }
+
         static long Hash(long hash, float value)
         {
             return unchecked((hash ^ (uint)value.GetHashCode()) * Prime);
+        }
+    }
+
+    public static class TweakPresenterModelPaintStamp
+    {
+        const long Offset = 1469598103934665603L;
+        const long Prime = 1099511628211L;
+
+        public static long Compute(
+            object owner,
+            TweakMenuModel menu,
+            TweakController controller)
+        {
+            if (owner == null || menu == null || controller == null) return 0L;
+
+            long stamp = Offset;
+            stamp = Hash(stamp, RuntimeHelpers.GetHashCode(owner));
+            stamp = Hash(stamp, RuntimeHelpers.GetHashCode(menu));
+            stamp = Hash(stamp, menu.IsOpen ? 1 : 0);
+            stamp = Hash(stamp, menu.SelectedGroupIndex);
+            stamp = Hash(stamp, menu.SelectedRowIndex);
+            stamp = Hash(stamp, menu.WindowStart);
+            stamp = Hash(stamp, menu.VisibleRows);
+            stamp = Hash(stamp, menu.Message);
+            stamp = Hash(stamp, menu.MessageIsError ? 1 : 0);
+            stamp = Hash(stamp, controller.MasterEnabled ? 1 : 0);
+            stamp = Hash(stamp, menu.Groups.Count);
+            if (menu.Groups.Count > 0)
+                stamp = Hash(stamp, menu.Groups[menu.SelectedGroupIndex]);
+
+            IReadOnlyList<TweakDescriptor> rows = menu.CurrentRows;
+            int first = menu.WindowStart;
+            int end = Math.Min(rows.Count, first + menu.VisibleRows);
+            stamp = Hash(stamp, rows.Count);
+            for (int i = first; i < end; i++)
+            {
+                TweakDescriptor descriptor = rows[i];
+                stamp = Hash(stamp, descriptor.Id);
+                stamp = Hash(stamp, descriptor.IsAvailable ? 1 : 0);
+                stamp = Hash(stamp, controller.Value(descriptor.Id));
+            }
+            return stamp;
+        }
+
+        static long Hash(long hash, int value)
+        {
+            return unchecked((hash ^ (uint)value) * Prime);
+        }
+
+        static long Hash(long hash, string value)
+        {
+            if (value == null) return Hash(hash, 0);
+            hash = Hash(hash, value.Length);
+            for (int i = 0; i < value.Length; i++) hash = Hash(hash, value[i]);
+            return hash;
         }
     }
 

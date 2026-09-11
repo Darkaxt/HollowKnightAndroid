@@ -76,7 +76,7 @@ public sealed class TweakSessionTests
     }
 
     [Fact]
-    public void PersistedApplyFailureRetriesAfterSixtyReadyTicksWithNewOwner()
+    public void PersistedApplyFailureRetriesAfterSixtyReadyTicksAsDisabledOwner()
     {
         var store = EnabledStore();
         var adapters = new List<RecordingAdapter>();
@@ -104,8 +104,92 @@ public sealed class TweakSessionTests
 
         Assert.True(session.IsReady);
         Assert.Equal(2, adapters.Count);
+        Assert.False(session.Controller.MasterEnabled);
+        Assert.Equal("0", store[Prefix + "master"]);
+        Assert.Equal(0, adapters[1].ApplyCount);
+    }
+
+    [Fact]
+    public void PermanentPersistedApplyFailureCommitsDisabledStateAndAllowsResetRecovery()
+    {
+        var store = EnabledStore();
+        var adapters = new List<RecordingAdapter>();
+        using var session = new TweakSession(
+            () => true,
+            () =>
+            {
+                var adapter = new RecordingAdapter { FailApply = true };
+                adapters.Add(adapter);
+                return adapter;
+            },
+            store,
+            visibleRows: 5);
+
+        session.Tick();
+
+        Assert.False(session.IsReady);
+        Assert.Equal("0", store[Prefix + "master"]);
+        Assert.Single(adapters);
+
+        for (int i = 0; i < 60; i++) session.Tick();
+
+        Assert.True(session.IsReady);
+        Assert.False(session.Controller.MasterEnabled);
+        Assert.Equal(2, adapters.Count);
+        Assert.Equal(0, adapters[1].ApplyCount);
+
+        TweakActionResult reset = session.Menu.Reset();
+        TweakActionResult enable = session.Menu.ToggleMaster();
+
+        Assert.True(reset.Success);
+        Assert.True(enable.Success);
+        Assert.Equal("off", store[Prefix + "value.proven"]);
+        Assert.Equal("1", store[Prefix + "master"]);
         Assert.True(session.Controller.MasterEnabled);
-        Assert.Equal(1, adapters[1].ApplyCount);
+    }
+
+    [Fact]
+    public void SustainedRestorationFailureKeepsBoundedDiagnosticAndEventuallyRecovers()
+    {
+        var store = EnabledStore();
+        var adapters = new List<RecordingAdapter>();
+        using var session = new TweakSession(
+            () => true,
+            () =>
+            {
+                var adapter = new RecordingAdapter
+                {
+                    FailApply = true,
+                    RestoreFailuresRemaining = 1000,
+                };
+                adapters.Add(adapter);
+                return adapter;
+            },
+            store,
+            visibleRows: 5);
+
+        session.Tick();
+        string boundedError = session.LastError;
+        Assert.True(session.RestorationPending);
+        Assert.Contains("apply failed", boundedError);
+        Assert.Contains("failed pipeline restore failed: restore failed", boundedError);
+
+        for (int i = 0; i < 500; i++) session.Tick();
+
+        Assert.Equal(boundedError, session.LastError);
+        Assert.True(session.LastError.Length < 256);
+        Assert.True(session.RestorationPending);
+        Assert.Equal("1", store[Prefix + "master"]);
+        Assert.Single(adapters);
+
+        adapters[0].RestoreFailuresRemaining = 0;
+        session.Tick();
+
+        Assert.False(session.RestorationPending);
+        Assert.Equal("0", store[Prefix + "master"]);
+        for (int i = 0; i < 60; i++) session.Tick();
+        Assert.True(session.IsReady);
+        Assert.False(session.Controller.MasterEnabled);
     }
 
     [Fact]

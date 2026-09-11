@@ -161,6 +161,57 @@ public sealed class TweakPresenterTests
     }
 
     [Fact]
+    public void ModelAndLayoutStampsSkipSteadyPaintAndInvalidateEveryRenderedChange()
+    {
+        var fixture = PresenterFixture.Create();
+        fixture.Menu.Open();
+        var paint = new TweakPresenterPaintInvalidation();
+        long geometry = TweakPresenterGeometryPaintStamp.WithLayoutRevision(
+            GeometryStamp(bottom: -3f, top: 4f), layoutRevision: 7);
+        long model = TweakPresenterModelPaintStamp.Compute(
+            fixture, fixture.Menu, fixture.Controller);
+
+        Assert.True(paint.ShouldPaint(model, geometry));
+        paint.Acknowledge(model, geometry);
+        Assert.False(paint.ShouldPaint(
+            TweakPresenterModelPaintStamp.Compute(fixture, fixture.Menu, fixture.Controller),
+            TweakPresenterGeometryPaintStamp.WithLayoutRevision(
+                GeometryStamp(bottom: -3f, top: 4f), layoutRevision: 7)));
+
+        fixture.Menu.MoveRow(1);
+        long selection = TweakPresenterModelPaintStamp.Compute(
+            fixture, fixture.Menu, fixture.Controller);
+        Assert.NotEqual(model, selection);
+        Assert.True(paint.ShouldPaint(selection, geometry));
+        paint.Acknowledge(selection, geometry);
+
+        fixture.Menu.ToggleMaster();
+        long master = TweakPresenterModelPaintStamp.Compute(
+            fixture, fixture.Menu, fixture.Controller);
+        Assert.NotEqual(selection, master);
+        Assert.True(paint.ShouldPaint(master, geometry));
+        paint.Acknowledge(master, geometry);
+
+        fixture.Menu.CycleSelected();
+        long valueAndStatus = TweakPresenterModelPaintStamp.Compute(
+            fixture, fixture.Menu, fixture.Controller);
+        Assert.NotEqual(master, valueAndStatus);
+        Assert.True(paint.ShouldPaint(valueAndStatus, geometry));
+        paint.Acknowledge(valueAndStatus, geometry);
+
+        long relayout = TweakPresenterGeometryPaintStamp.WithLayoutRevision(
+            GeometryStamp(bottom: -3f, top: 4f), layoutRevision: 8);
+        Assert.NotEqual(geometry, relayout);
+        Assert.True(paint.ShouldPaint(valueAndStatus, relayout));
+        paint.Acknowledge(valueAndStatus, relayout);
+
+        long resized = TweakPresenterGeometryPaintStamp.WithLayoutRevision(
+            GeometryStamp(bottom: -3f, top: 4.25f), layoutRevision: 8);
+        Assert.NotEqual(relayout, resized);
+        Assert.True(paint.ShouldPaint(valueAndStatus, resized));
+    }
+
+    [Fact]
     public void PaintInvalidationTracksModelGeometryRebindBuildAndAcknowledgment()
     {
         var paint = new TweakPresenterPaintInvalidation();
@@ -242,18 +293,20 @@ public sealed class TweakPresenterTests
 
     sealed class PresenterFixture
     {
-        PresenterFixture(TweakMenuModel menu)
+        PresenterFixture(TweakController controller, int visibleRows)
         {
-            Menu = menu;
+            Controller = controller;
+            Menu = new TweakMenuModel(controller, visibleRows);
         }
 
+        public TweakController Controller { get; }
         public TweakMenuModel Menu { get; }
 
         public static PresenterFixture Create(int visibleRows = 3)
         {
             var controller = new TweakController(new PresenterAdapter(), new MemoryStore());
             Assert.True(controller.Initialize().Success);
-            return new PresenterFixture(new TweakMenuModel(controller, visibleRows));
+            return new PresenterFixture(controller, visibleRows);
         }
     }
 

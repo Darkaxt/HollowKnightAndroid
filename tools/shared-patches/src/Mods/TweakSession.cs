@@ -23,6 +23,7 @@ namespace DualSouls.Mods
         bool _retryPending;
         bool _restorationPending;
         bool _presenterAttached;
+        string _primaryError = "";
 
         public TweakSession(
             Func<bool> isGameReady,
@@ -83,7 +84,7 @@ namespace DualSouls.Mods
             TweakActionResult result = pipeline.Initialize();
             if (!result.Success)
             {
-                LastError = result.Error;
+                SetPrimaryError(result.Error);
                 IsReady = false;
                 pipeline.BlockMutations();
                 if (TryRestore(pipeline, out string restoreError))
@@ -91,13 +92,13 @@ namespace DualSouls.Mods
                 else
                 {
                     _restorationPending = true;
-                    AppendError("failed pipeline restore failed: " + restoreError);
+                    SetRestorationError("failed pipeline restore failed: ", restoreError);
                 }
                 return;
             }
 
             IsReady = true;
-            LastError = "";
+            ClearError();
             Controller.Tick();
         }
 
@@ -127,7 +128,7 @@ namespace DualSouls.Mods
             else
             {
                 _restorationPending = true;
-                AppendError("session restore failed: " + restoreError);
+                SetRestorationError("session restore failed: ", restoreError);
             }
         }
 
@@ -158,6 +159,7 @@ namespace DualSouls.Mods
             _restorationPending = false;
             _retryPending = true;
             _retryReadyTicksRemaining = _retryReadyTicks;
+            LastError = _primaryError;
         }
 
         bool RetryRestoration(string errorPrefix)
@@ -171,7 +173,7 @@ namespace DualSouls.Mods
             if (!TryRestore(_pipeline, out string restoreError))
             {
                 _restorationPending = true;
-                AppendError(errorPrefix + restoreError);
+                SetRestorationError(errorPrefix, restoreError);
                 return false;
             }
 
@@ -195,11 +197,24 @@ namespace DualSouls.Mods
             }
         }
 
-        void AppendError(string error)
+        void SetPrimaryError(string error)
         {
-            if (string.IsNullOrEmpty(error)) return;
-            if (!string.IsNullOrEmpty(LastError)) LastError += "; ";
-            LastError += error;
+            _primaryError = error ?? "";
+            LastError = _primaryError;
+        }
+
+        void SetRestorationError(string prefix, string error)
+        {
+            string restorationError = (prefix ?? "") + (error ?? "");
+            LastError = string.IsNullOrEmpty(_primaryError)
+                ? restorationError
+                : _primaryError + "; " + restorationError;
+        }
+
+        void ClearError()
+        {
+            _primaryError = "";
+            LastError = "";
         }
 
         sealed class Pipeline
@@ -222,7 +237,11 @@ namespace DualSouls.Mods
             internal TweakActionResult Initialize()
             {
                 TweakActionResult result = Controller.Initialize();
-                if (!result.Success) return result;
+                if (!result.Success)
+                {
+                    if (_adapter.BaselineCaptured) Controller.StageDisabledMaster();
+                    return result;
+                }
 
                 try
                 {
@@ -231,6 +250,7 @@ namespace DualSouls.Mods
                 }
                 catch (Exception error)
                 {
+                    Controller.StageDisabledMaster();
                     return TweakActionResult.Fail(
                         "Could not commit initialized Mods settings: " + error.Message);
                 }
@@ -239,7 +259,7 @@ namespace DualSouls.Mods
             internal void BlockMutations()
             {
                 _adapter.BlockMutations();
-                _store.Disable();
+                _store.BlockMutations();
             }
 
             internal void RestoreAndDisable()
@@ -247,7 +267,9 @@ namespace DualSouls.Mods
                 if (_disabled) return;
                 BlockMutations();
                 if (_adapter.BaselineCaptured) _adapter.RestoreForSession();
+                _store.Commit();
                 _adapter.DisableRestoration();
+                _store.Disable();
                 _disabled = true;
             }
         }
@@ -312,7 +334,8 @@ namespace DualSouls.Mods
             readonly ITweakStore _inner;
             readonly Dictionary<string, string> _pending =
                 new Dictionary<string, string>(StringComparer.Ordinal);
-            bool _active = true;
+            bool _writesAllowed = true;
+            bool _commitAllowed = true;
             bool _committed;
             bool _flushPending;
 
@@ -323,7 +346,7 @@ namespace DualSouls.Mods
 
             public string Read(string key)
             {
-                if (!_active) return null;
+                if (!_commitAllowed) return null;
                 string value;
                 return !_committed && _pending.TryGetValue(key, out value)
                     ? value
@@ -332,21 +355,21 @@ namespace DualSouls.Mods
 
             public void Write(string key, string value)
             {
-                if (!_active) return;
+                if (!_writesAllowed) return;
                 if (_committed) _inner.Write(key, value);
                 else _pending[key] = value;
             }
 
             public void Flush()
             {
-                if (!_active) return;
+                if (!_writesAllowed) return;
                 if (_committed) _inner.Flush();
                 else _flushPending = true;
             }
 
             internal void Commit()
             {
-                if (!_active) throw new InvalidOperationException("The Mods pipeline is inactive.");
+                if (!_commitAllowed) throw new InvalidOperationException("The Mods pipeline is inactive.");
                 if (_committed) return;
 
                 foreach (KeyValuePair<string, string> pair in _pending)
@@ -358,11 +381,17 @@ namespace DualSouls.Mods
                 _committed = true;
             }
 
+            internal void BlockMutations()
+            {
+                _writesAllowed = false;
+            }
+
             internal void Disable()
             {
                 _pending.Clear();
                 _flushPending = false;
-                _active = false;
+                _writesAllowed = false;
+                _commitAllowed = false;
             }
         }
     }
