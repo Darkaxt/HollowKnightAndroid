@@ -2010,6 +2010,25 @@ static class Program
         for injector_input in bridge["inputs"]:
             self.assertRegex(injector_input["sha256"], r"^[0-9a-f]{64}$")
 
+        shared_build = receipt["sharedTestsBuild"]
+        self.assertEqual(0, shared_build["exitCode"])
+        self.assertIn("--no-restore", shared_build["command"])
+        self.assertIn("--no-incremental", shared_build["command"])
+        shared_manifest_path = REPO_ROOT / shared_build["sourceManifest"]
+        shared_manifest = shared_manifest_path.read_bytes()
+        shared_entries = shared_manifest.decode("utf-8").splitlines()
+        self.assertEqual(shared_build["sourceCount"], len(shared_entries))
+        self.assertEqual(hashlib.sha256(shared_manifest).hexdigest(),
+                         shared_build["sourceManifestSha256"])
+        for entry in shared_entries:
+            digest, relative_path = entry.split("  ", 1)
+            self.assertEqual(
+                hashlib.sha256((REPO_ROOT / relative_path).read_bytes()).hexdigest(),
+                digest,
+            )
+        self.assertRegex(shared_build["outputSha256"], r"^[0-9a-f]{64}$")
+        self.assertIn("Build succeeded.", read(REPO_ROOT / shared_build["log"]))
+
         runs = {run["name"]: run for run in receipt["testRuns"]}
         for name in ("focused-python", "focused-shared", "full-python",
                      "full-shared", "bundle-surgery"):
@@ -2018,6 +2037,10 @@ static class Program
             self.assertEqual(0, runs[name]["failed"])
             self.assertGreater(runs[name]["passed"], 0)
             self.assertTrue((REPO_ROOT / runs[name]["log"]).is_file())
+        for name in ("focused-shared", "full-shared"):
+            self.assertEqual(["dotnet", "vstest"], runs[name]["command"][:2])
+            self.assertIn(shared_build["output"], runs[name]["command"])
+            self.assertEqual(shared_build["outputSha256"], runs[name]["assemblySha256"])
 
         compiler_log = read(REPO_ROOT / compile_receipt["log"])
         self.assertIn("Build succeeded.", compiler_log)
