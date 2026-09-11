@@ -14,6 +14,7 @@ SPEC = REPO_ROOT / "docs" / "superpowers" / "specs" / "2026-08-31-dual-souls-ui-
 PLAN = REPO_ROOT / "docs" / "superpowers" / "plans" / "2026-08-31-dual-souls-ui-port.md"
 MATRIX = REPO_ROOT / "docs" / "verification" / "dual-souls-ui-port-matrix.md"
 HUD_EVIDENCE = REPO_ROOT / "docs" / "verification" / "task99-hud-29980-evidence.json"
+TASK112_EVIDENCE = REPO_ROOT / "docs" / "verification" / "evidence" / "task112-host-gaps"
 SOURCE_AUDIT = REPO_ROOT / "docs" / "verification" / "dualscreen-source-audit.md"
 DUALSCREEN_SOURCES = (
     REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen"
@@ -1859,6 +1860,52 @@ static class Program
         self.assertTrue((REPO_ROOT / final_compile["sourceManifest"]).is_file())
         self.assertTrue((REPO_ROOT / final_compile["log"]).is_file())
         self.assertEqual(3, evidence["staleCachedProjectFailure"]["errors"])
+
+    def test_task112_compile_evidence_matches_exact_ordered_sources_and_boundary(self):
+        receipt = json.loads(read(TASK112_EVIDENCE / "completion.json"))
+        manifest_path = TASK112_EVIDENCE / "source-manifest.sha256"
+        manifest = manifest_path.read_bytes()
+        entries = manifest.decode("utf-8").splitlines()
+
+        self.assertEqual("Linux Silksong 1.0.29980", receipt["gameVersion"])
+        self.assertEqual(
+            "812e85e818976eb50748acf5f476a4321cc386fa",
+            receipt["sourceCommit"],
+        )
+        self.assertEqual(0, receipt["exitCode"])
+        self.assertEqual(7, receipt["warnings"])
+        self.assertEqual(0, receipt["errors"])
+        self.assertEqual(68, receipt["compiledSourceCount"])
+        self.assertEqual(68, len(entries))
+        self.assertEqual(
+            hashlib.sha256(manifest).hexdigest(),
+            receipt["compiledSourceManifestSha256"],
+        )
+        self.assertIn("--no-restore", receipt["command"])
+        self.assertIn("--no-incremental", receipt["command"])
+        self.assertIn("do not prove Unity display-1 pixels", receipt["evidenceBoundary"])
+
+        project = read(REPO_ROOT / "tools" / "shared-patches-tests" / "obj" /
+                       "task99-journal-continuation-20260908" / "ss-project" /
+                       "PatchCheck.csproj")
+        includes = re.findall(r'<Compile Include="([^"]+)"', project)
+        ordered_paths = []
+        for include in includes:
+            normalized = include.replace("\\", "/")
+            ordered_paths.append(normalized.split("/HollowKnightAndroid-h1/", 1)[1])
+        manifest_paths = [entry.split("  ", 1)[1] for entry in entries]
+        self.assertEqual(ordered_paths, manifest_paths)
+        for entry in entries:
+            digest, relative_path = entry.split("  ", 1)
+            self.assertEqual(
+                hashlib.sha256((REPO_ROOT / relative_path).read_bytes()).hexdigest(),
+                digest,
+            )
+
+        compiler_log = read(TASK112_EVIDENCE / "compiler.log")
+        self.assertIn("Build succeeded.", compiler_log)
+        self.assertIn("7 Warning(s)", compiler_log)
+        self.assertIn("0 Error(s)", compiler_log)
 
     def test_hud_restoration_precedes_every_composition_destruction(self):
         frame = read(PORT_FRAME)
