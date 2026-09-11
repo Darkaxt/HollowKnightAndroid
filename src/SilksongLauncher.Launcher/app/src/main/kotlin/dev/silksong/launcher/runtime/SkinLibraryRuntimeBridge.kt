@@ -39,6 +39,10 @@ object SkinLibraryRuntimeBridge {
         GameProcessStartup.requireProfile(requireNotNull(launchedProfile) { "Skin runtime is not initialized" })
         access?.confirmDeath(run, occurrence) ?: false
     } catch (_: Exception) { false }
+    @JvmStatic fun cancelDeath(run: String, occurrence: Long): Boolean = try {
+        GameProcessStartup.requireProfile(requireNotNull(launchedProfile) { "Skin runtime is not initialized" })
+        access?.cancelDeath(run, occurrence) ?: false
+    } catch (_: Exception) { false }
     @JvmStatic fun cancelRotation(run: String): Boolean = try {
         GameProcessStartup.requireProfile(requireNotNull(launchedProfile) { "Skin runtime is not initialized" })
         access?.cancelRotation(run) ?: false
@@ -88,6 +92,7 @@ internal class SkinLibraryRuntimeAccess(private val store: SkinLibraryStore) {
         }
     }
     fun confirmDeath(run: String, occurrence: Long) = initialized && store.confirmDeath(run, occurrence) is SkinResult.Ok
+    fun cancelDeath(run: String, occurrence: Long) = initialized && store.cancelDeath(run, occurrence) is SkinResult.Ok
     fun cancelRotation(run: String) = initialized && store.cancelRotation(run) is SkinResult.Ok
     fun reportRotation(config: String, run: String, occurrence: Long, id: String, tree: String, status: String, detail: String): Boolean =
         store.locked(nonblocking = true) {

@@ -79,9 +79,9 @@ object Il2cppConverter {
     private const val UI_MESSAGE_DISMISS_PART_SUFFIX = ".uimsg-bridge.part"
     private const val SILKSONG_DEATH_SCHEMA = "1"
     internal const val SILKSONG_DEATH_ALGORITHM =
-        "task101-v2;game=1.0.29980;assembly=1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d;rewritten=37cd088f4de464b4cc7b01b193ac294a3dfeb282d1fa1757a653215d514db634;site=post-normalization;order=pre-save-pre-mod"
+        "task101-v3;game=1.0.29980;assembly=1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d;rewritten=86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e;site=post-normalization;owners=ring32;verify=canonical;order=pre-save-pre-mod"
     private const val SILKSONG_DEATH_REWRITTEN_SHA256 =
-        "37cd088f4de464b4cc7b01b193ac294a3dfeb282d1fa1757a653215d514db634"
+        "86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e"
     private const val SILKSONG_DEATH_MARKER = "silksong-death-bridge.properties"
     private const val SILKSONG_DEATH_PART_SUFFIX = ".silksong-death-bridge.part"
     private val SHA256 = Regex("^[0-9a-f]{64}$")
@@ -689,12 +689,15 @@ object Il2cppConverter {
     internal suspend fun rewriteStagedSilksongNormalDeath(
         root: File,
         surgery: File,
+        expectedRewrittenSha256: String = SILKSONG_DEATH_REWRITTEN_SHA256,
         replace: (File, File) -> Unit = ::atomicReplaceStaged,
         runRewrite: suspend (input: File, output: File) -> Unit,
+        runVerify: suspend (output: File) -> Unit,
     ) {
         val assembly = File(asmDir(root), "Assembly-CSharp.dll")
         if (!assembly.isFile || assembly.length() <= 0) throw IOException("no staged Assembly-CSharp.dll for Silksong death bridge")
         if (!surgery.isFile || surgery.length() <= 0) throw IOException("no BundleSurgery.dll for Silksong death bridge")
+        if (!SHA256.matches(expectedRewrittenSha256)) throw IOException("invalid expected Silksong death bridge SHA-256")
         val marker = silksongDeathBridgeMarker(root)
         val markerPart = File(root, "${marker.name}.part")
         for (stale in listOf(marker, markerPart)) if (stale.exists() && !stale.delete())
@@ -707,6 +710,15 @@ object Il2cppConverter {
             if (!output.isFile || output.length() <= 0) throw IOException("Silksong death bridge produced no rewritten assembly")
             val managedImage = output.inputStream().use { it.read() == 'M'.code && it.read() == 'Z'.code }
             if (!managedImage) throw IOException("Silksong death bridge produced an invalid managed assembly")
+            val outputSha256 = sha256(output)
+            if (outputSha256 != expectedRewrittenSha256) {
+                throw IOException("Silksong death bridge output differs from canonical identity: $outputSha256")
+            }
+            runVerify(output)
+            val verifiedSha256 = sha256(output)
+            if (verifiedSha256 != expectedRewrittenSha256) {
+                throw IOException("verified Silksong death bridge output identity changed: $verifiedSha256")
+            }
             replace(output, assembly)
             recordSilksongDeathBridgeProvenance(root, surgery, assembly, inputSha256)
         } finally {
@@ -716,12 +728,22 @@ object Il2cppConverter {
 
     private suspend fun bridgeSilksongNormalDeath(context: android.content.Context, root: File) {
         val surgery = PlayerImage.stageSurgery(root, context.assets)
-        rewriteStagedSilksongNormalDeath(root, surgery) { input, output ->
-            PlayerImage.run(surgery, context,
-                listOf("bridge-silksong-normal-death", input.absolutePath, output.absolutePath)) {
-                line -> LauncherLog.log("Silksong death bridge: ${line.trim()}")
-            }
-        }
+        rewriteStagedSilksongNormalDeath(
+            root = root,
+            surgery = surgery,
+            runRewrite = { input, output ->
+                PlayerImage.run(surgery, context,
+                    listOf("bridge-silksong-normal-death", input.absolutePath, output.absolutePath)) {
+                    line -> LauncherLog.log("Silksong death bridge: ${line.trim()}")
+                }
+            },
+            runVerify = { output ->
+                PlayerImage.run(surgery, context,
+                    listOf("verify-silksong-normal-death", output.absolutePath)) {
+                    line -> LauncherLog.log("Silksong death verification: ${line.trim()}")
+                }
+            },
+        )
     }
 
     internal suspend fun rewriteStagedUiMessageDismissal(

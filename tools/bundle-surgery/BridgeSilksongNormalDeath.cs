@@ -9,16 +9,18 @@ internal static class BridgeSilksongNormalDeath
 {
     internal const string PINNED_GAME_VERSION = "1.0.29980";
     internal const string PINNED_ASSEMBLY_SHA256 = "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d";
-    internal const string PINNED_REWRITTEN_ASSEMBLY_SHA256 = "37cd088f4de464b4cc7b01b193ac294a3dfeb282d1fa1757a653215d514db634";
+    internal const string PINNED_REWRITTEN_ASSEMBLY_SHA256 = "86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e";
     const string StateMachineName = "<Die>d__1101";
     const string OccurrenceName = "__dsNormalDeathOccurrence";
-    const string HeroName = "__dsNormalDeathHero";
-    const string ManagerName = "__dsNormalDeathManager";
+    const string HeroesName = "__dsNormalDeathHeroes";
+    const string ManagersName = "__dsNormalDeathManagers";
+    const string TokensName = "__dsNormalDeathTokens";
+    const int OccurrenceCapacity = 32;
     const string EligibleName = "__dsNormalDeathEligible";
     const string ClassifierName = "DsClassifyNormalDeath";
     const string RecorderName = "DsRecordNormalDeath";
-    const string PinnedClassifierSha256 = "205c3ecd96f7a3cff0bd4076a61273479c7a9867a624f4fd3249ea8b9d8a27d4";
-    const string PinnedRecorderSha256 = "f0f00da1c0ed44f07a800a767349b1ae6bba669ee7ef8e1d266bbea83e125b19";
+    const string PinnedClassifierSha256 = "816e58334b5f6ba6de252ef20cb7a71aff1b41bca720fa577ca9babf17ee2fd2";
+    const string PinnedRecorderSha256 = "2195f14702bd92bdd84a58ba38b653299c76bafb4588ffa03d4aa8a7d46751d3";
 
     sealed class DieShape
     {
@@ -47,15 +49,7 @@ internal static class BridgeSilksongNormalDeath
         try
         {
             if (!File.Exists(path)) throw new InvalidOperationException("managed assembly input is missing");
-            string hash = FileSha256(path);
-            if (hash != PINNED_REWRITTEN_ASSEMBLY_SHA256)
-                throw new InvalidOperationException("rewritten assembly differs from canonical identity: " + hash);
-            var resolver = new DefaultAssemblyResolver();
-            resolver.AddSearchDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-            using var assembly = AssemblyDefinition.ReadAssembly(path,
-                new ReaderParameters { AssemblyResolver = resolver });
-            if (!AlreadyRewritten(RequireExactDieShape(assembly.MainModule)))
-                throw new InvalidOperationException("canonical strict death bridge is absent");
+            RequireCanonicalOutput(path);
             Console.WriteLine("  verified executable strict-death bridge: normalized nonlethal, memory, cinematic/control, permadeath, demo terminal, duplicate, hazard, and unstable guards");
             return 0;
         }
@@ -101,11 +95,7 @@ internal static class BridgeSilksongNormalDeath
             try
             {
                 assembly.Write(staging);
-                using (var persisted = AssemblyDefinition.ReadAssembly(staging, reader))
-                {
-                    if (!AlreadyRewritten(RequireExactDieShape(persisted.MainModule)))
-                        throw new InvalidOperationException("persisted Silksong normal-death bridge did not verify");
-                }
+                RequireCanonicalOutput(staging);
                 File.Move(staging, outputPath, false);
             }
             finally
@@ -120,6 +110,19 @@ internal static class BridgeSilksongNormalDeath
             Console.Error.WriteLine("  Silksong normal-death rewrite failed closed: " + error.Message);
             return 1;
         }
+    }
+
+    internal static void RequireCanonicalOutput(string path)
+    {
+        string hash = FileSha256(path);
+        if (hash != PINNED_REWRITTEN_ASSEMBLY_SHA256)
+            throw new InvalidOperationException("rewritten assembly differs from canonical rewritten identity: " + hash);
+        var resolver = new DefaultAssemblyResolver();
+        resolver.AddSearchDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        using var assembly = AssemblyDefinition.ReadAssembly(path,
+            new ReaderParameters { AssemblyResolver = resolver });
+        if (!AlreadyRewritten(RequireExactDieShape(assembly.MainModule)))
+            throw new InvalidOperationException("canonical strict death bridge is absent");
     }
 
     static void RequireDistinctPaths(string inputPath, string outputPath)
@@ -201,7 +204,7 @@ internal static class BridgeSilksongNormalDeath
     }
 
     static bool HasAnyBridgeMember(DieShape shape) => shape.Manager.Fields.Any(x =>
-            x.Name == OccurrenceName || x.Name == HeroName || x.Name == ManagerName) ||
+            x.Name == OccurrenceName || x.Name == HeroesName || x.Name == ManagersName || x.Name == TokensName) ||
         shape.Manager.Methods.Any(x => x.Name == RecorderName || x.Name == ClassifierName) ||
         shape.StateMachine.Fields.Any(x => x.Name == EligibleName);
 
@@ -210,10 +213,12 @@ internal static class BridgeSilksongNormalDeath
         if (!HasAnyBridgeMember(shape)) return false;
         var occurrence = shape.Manager.Fields.SingleOrDefault(x => x.Name == OccurrenceName &&
             x.IsPublic && x.IsStatic && x.FieldType.MetadataType == MetadataType.Int64);
-        var hero = shape.Manager.Fields.SingleOrDefault(x => x.Name == HeroName && x.IsPublic && x.IsStatic &&
-            x.FieldType.FullName == shape.Hero.FullName);
-        var manager = shape.Manager.Fields.SingleOrDefault(x => x.Name == ManagerName && x.IsPublic && x.IsStatic &&
-            x.FieldType.FullName == shape.Manager.FullName);
+        var heroes = shape.Manager.Fields.SingleOrDefault(x => x.Name == HeroesName && x.IsPublic && x.IsStatic &&
+            x.FieldType is ArrayType heroArray && heroArray.ElementType.FullName == shape.Hero.FullName);
+        var managers = shape.Manager.Fields.SingleOrDefault(x => x.Name == ManagersName && x.IsPublic && x.IsStatic &&
+            x.FieldType is ArrayType managerArray && managerArray.ElementType.FullName == shape.Manager.FullName);
+        var tokens = shape.Manager.Fields.SingleOrDefault(x => x.Name == TokensName && x.IsPublic && x.IsStatic &&
+            x.FieldType is ArrayType tokenArray && tokenArray.ElementType.MetadataType == MetadataType.Int64);
         var eligible = shape.StateMachine.Fields.SingleOrDefault(x => x.Name == EligibleName && !x.IsStatic &&
             x.FieldType.MetadataType == MetadataType.Boolean);
         var classifier = shape.Manager.Methods.SingleOrDefault(x => x.Name == ClassifierName && x.IsPublic && x.IsStatic &&
@@ -227,7 +232,7 @@ internal static class BridgeSilksongNormalDeath
             x.Parameters[0].ParameterType.FullName == shape.Hero.FullName &&
             x.Parameters[1].ParameterType.FullName == shape.Manager.FullName &&
             x.Parameters[2].ParameterType.MetadataType == MetadataType.Boolean && x.HasBody);
-        if (occurrence == null || hero == null || manager == null || eligible == null || classifier == null || recorder == null)
+        if (occurrence == null || heroes == null || managers == null || tokens == null || eligible == null || classifier == null || recorder == null)
             throw new InvalidOperationException("Silksong normal-death bridge members are incomplete");
         RequireFingerprint(classifier, PinnedClassifierSha256, "classifier");
         RequireFingerprint(recorder, PinnedRecorderSha256, "recorder");
@@ -267,12 +272,17 @@ internal static class BridgeSilksongNormalDeath
     {
         var occurrence = new FieldDefinition(OccurrenceName, FieldAttributes.Public | FieldAttributes.Static,
             shape.Module.TypeSystem.Int64);
-        var heroField = new FieldDefinition(HeroName, FieldAttributes.Public | FieldAttributes.Static, shape.Hero);
-        var managerField = new FieldDefinition(ManagerName, FieldAttributes.Public | FieldAttributes.Static, shape.Manager);
+        var heroes = new FieldDefinition(HeroesName, FieldAttributes.Public | FieldAttributes.Static,
+            new ArrayType(shape.Hero));
+        var managers = new FieldDefinition(ManagersName, FieldAttributes.Public | FieldAttributes.Static,
+            new ArrayType(shape.Manager));
+        var tokens = new FieldDefinition(TokensName, FieldAttributes.Public | FieldAttributes.Static,
+            new ArrayType(shape.Module.TypeSystem.Int64));
         var eligible = new FieldDefinition(EligibleName, FieldAttributes.Private, shape.Module.TypeSystem.Boolean);
         shape.Manager.Fields.Add(occurrence);
-        shape.Manager.Fields.Add(heroField);
-        shape.Manager.Fields.Add(managerField);
+        shape.Manager.Fields.Add(heroes);
+        shape.Manager.Fields.Add(managers);
+        shape.Manager.Fields.Add(tokens);
         shape.StateMachine.Fields.Add(eligible);
 
         var gameState = RequireType(shape.Module, "GlobalEnums.GameState");
@@ -348,8 +358,15 @@ internal static class BridgeSilksongNormalDeath
         recorder.Parameters.Add(new ParameterDefinition("hero", ParameterAttributes.None, shape.Hero));
         recorder.Parameters.Add(new ParameterDefinition("manager", ParameterAttributes.None, shape.Manager));
         recorder.Parameters.Add(new ParameterDefinition("eligible", ParameterAttributes.None, shape.Module.TypeSystem.Boolean));
+        recorder.Body.InitLocals = true;
+        var nextOccurrence = new VariableDefinition(shape.Module.TypeSystem.Int64);
+        var ringIndex = new VariableDefinition(shape.Module.TypeSystem.Int32);
+        recorder.Body.Variables.Add(nextOccurrence);
+        recorder.Body.Variables.Add(ringIndex);
         shape.Manager.Methods.Add(recorder);
         var ril = recorder.Body.GetILProcessor();
+        var allocateRing = Instruction.Create(OpCodes.Nop);
+        var ringReady = Instruction.Create(OpCodes.Nop);
         var recorderRet = Instruction.Create(OpCodes.Ret);
         void R(Instruction instruction) => ril.Append(instruction);
         R(Instruction.Create(OpCodes.Ldarg_2)); R(Instruction.Create(OpCodes.Brfalse, recorderRet));
@@ -365,9 +382,25 @@ internal static class BridgeSilksongNormalDeath
         R(Instruction.Create(OpCodes.Ldarg_1)); R(Instruction.Create(OpCodes.Callvirt, loading)); R(Instruction.Create(OpCodes.Brtrue, recorderRet));
         R(Instruction.Create(OpCodes.Ldarg_1)); R(Instruction.Create(OpCodes.Ldfld, managerPlayerData)); R(Instruction.Create(OpCodes.Ldfld, permaField)); R(Instruction.Create(OpCodes.Ldc_I4, permaOff)); R(Instruction.Create(OpCodes.Bne_Un, recorderRet));
         R(Instruction.Create(OpCodes.Ldsfld, occurrence)); R(Instruction.Create(OpCodes.Ldc_I8, long.MaxValue)); R(Instruction.Create(OpCodes.Beq, recorderRet));
-        R(Instruction.Create(OpCodes.Ldarg_0)); R(Instruction.Create(OpCodes.Stsfld, heroField));
-        R(Instruction.Create(OpCodes.Ldarg_1)); R(Instruction.Create(OpCodes.Stsfld, managerField));
-        R(Instruction.Create(OpCodes.Ldsfld, occurrence)); R(Instruction.Create(OpCodes.Ldc_I4_1)); R(Instruction.Create(OpCodes.Conv_I8)); R(Instruction.Create(OpCodes.Add)); R(Instruction.Create(OpCodes.Stsfld, occurrence));
+        foreach (var ring in new[] { heroes, managers, tokens })
+        {
+            R(Instruction.Create(OpCodes.Ldsfld, ring)); R(Instruction.Create(OpCodes.Brfalse, allocateRing));
+            R(Instruction.Create(OpCodes.Ldsfld, ring)); R(Instruction.Create(OpCodes.Ldlen)); R(Instruction.Create(OpCodes.Conv_I4));
+            R(Instruction.Create(OpCodes.Ldc_I4, OccurrenceCapacity)); R(Instruction.Create(OpCodes.Bne_Un, allocateRing));
+        }
+        R(Instruction.Create(OpCodes.Br, ringReady));
+        R(allocateRing);
+        R(Instruction.Create(OpCodes.Ldc_I4, OccurrenceCapacity)); R(Instruction.Create(OpCodes.Newarr, shape.Hero)); R(Instruction.Create(OpCodes.Stsfld, heroes));
+        R(Instruction.Create(OpCodes.Ldc_I4, OccurrenceCapacity)); R(Instruction.Create(OpCodes.Newarr, shape.Manager)); R(Instruction.Create(OpCodes.Stsfld, managers));
+        R(Instruction.Create(OpCodes.Ldc_I4, OccurrenceCapacity)); R(Instruction.Create(OpCodes.Newarr, shape.Module.TypeSystem.Int64)); R(Instruction.Create(OpCodes.Stsfld, tokens));
+        R(ringReady);
+        R(Instruction.Create(OpCodes.Ldsfld, occurrence)); R(Instruction.Create(OpCodes.Ldc_I4_1)); R(Instruction.Create(OpCodes.Conv_I8)); R(Instruction.Create(OpCodes.Add)); R(Instruction.Create(OpCodes.Stloc, nextOccurrence));
+        R(Instruction.Create(OpCodes.Ldloc, nextOccurrence)); R(Instruction.Create(OpCodes.Ldc_I4_1)); R(Instruction.Create(OpCodes.Conv_I8)); R(Instruction.Create(OpCodes.Sub));
+        R(Instruction.Create(OpCodes.Ldc_I4, OccurrenceCapacity)); R(Instruction.Create(OpCodes.Conv_I8)); R(Instruction.Create(OpCodes.Rem_Un)); R(Instruction.Create(OpCodes.Conv_I4)); R(Instruction.Create(OpCodes.Stloc, ringIndex));
+        R(Instruction.Create(OpCodes.Ldsfld, heroes)); R(Instruction.Create(OpCodes.Ldloc, ringIndex)); R(Instruction.Create(OpCodes.Ldarg_0)); R(Instruction.Create(OpCodes.Stelem_Ref));
+        R(Instruction.Create(OpCodes.Ldsfld, managers)); R(Instruction.Create(OpCodes.Ldloc, ringIndex)); R(Instruction.Create(OpCodes.Ldarg_1)); R(Instruction.Create(OpCodes.Stelem_Ref));
+        R(Instruction.Create(OpCodes.Ldsfld, tokens)); R(Instruction.Create(OpCodes.Ldloc, ringIndex)); R(Instruction.Create(OpCodes.Ldloc, nextOccurrence)); R(Instruction.Create(OpCodes.Stelem_I8));
+        R(Instruction.Create(OpCodes.Ldloc, nextOccurrence)); R(Instruction.Create(OpCodes.Stsfld, occurrence));
         R(recorderRet);
         return new BridgeMembers { Classifier = classifier, Recorder = recorder, Eligible = eligible };
     }
@@ -441,7 +474,7 @@ internal static class BridgeSilksongNormalDeath
             VariableDefinition variable => "local:" + variable.Index,
             _ => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "-",
         };
-        var normalized = new List<string> { "schema=task101-silksong-death-v2", "locals=" +
+        var normalized = new List<string> { "schema=task101-silksong-death-v3", "locals=" +
             string.Join(",", helper.Body.Variables.Select(x => x.VariableType.FullName)) };
         normalized.AddRange(instructions.Select((x, i) => i + "|" + x.OpCode.Code + "|" + Operand(x.Operand)));
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n", normalized)))).ToLowerInvariant();

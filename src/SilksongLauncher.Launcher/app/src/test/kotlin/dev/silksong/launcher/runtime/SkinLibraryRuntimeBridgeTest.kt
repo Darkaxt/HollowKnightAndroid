@@ -69,6 +69,21 @@ class SkinLibraryRuntimeBridgeTest {
         assertTrue(access.reportRotation(config,run,1,id,tree,"Applied","")); assertEquals(id,store.read().required().selectedPackId)
         assertNull(store.confirmDeath(run,1).required().pendingPackId)
     }
+    @Test fun `exact JNI death cancellation preserves and promotes newer occurrence`() {
+        val store = importedStore()
+        val access = SkinLibraryRuntimeAccess(store)
+        val run = JsonParser.parseString(access.readConfiguration()).asJsonObject["rotationRun"].asString
+        store.confirmDeath(run, 1).required()
+        store.confirmDeath(run, 2).required()
+
+        assertTrue(access.cancelDeath(run, 1))
+        val promoted = store.read().required()
+        assertEquals(2L, promoted.lastDeath)
+        assertNotNull(promoted.pendingPackId)
+        assertTrue(promoted.queuedDeathOccurrences.isEmpty())
+        assertTrue(access.cancelDeath(run, 1))
+    }
+
     @Test fun `fresh runtime drops stale work and manual selection renews run`() {
         val store = importedStore(); val access = SkinLibraryRuntimeAccess(store)
         val first = JsonParser.parseString(access.readConfiguration()).asJsonObject
@@ -86,6 +101,7 @@ class SkinLibraryRuntimeBridgeTest {
             GameProcessStartup.installForTests(GameProcessStartupSnapshot("silksong","generation","toolchain","pkg","native","data","unity","dex","mods"))
             assertEquals("PROFILE_REJECTED", JsonParser.parseString(SkinLibraryRuntimeBridge.readConfiguration()).asJsonObject["code"].asString)
             assertFalse(SkinLibraryRuntimeBridge.confirmDeath("a".repeat(32),1))
+            assertFalse(SkinLibraryRuntimeBridge.cancelDeath("a".repeat(32),1))
             assertFalse(SkinLibraryRuntimeBridge.cancelRotation("a".repeat(32)))
         } finally { GameProcessStartup.resetForTests() }
     }

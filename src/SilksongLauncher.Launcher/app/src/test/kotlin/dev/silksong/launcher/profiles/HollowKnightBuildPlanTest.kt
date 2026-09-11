@@ -232,19 +232,84 @@ class HollowKnightBuildPlanTest {
         val surgery = File(root, "bundle-surgery/BundleSurgery.dll").apply {
             parentFile.mkdirs(); writeBytes(byteArrayOf(3, 4, 5))
         }
-        Il2cppConverter.rewriteStagedSilksongNormalDeath(root, surgery) { input, output ->
-            assertTrue(input.readBytes().contentEquals(original))
-            output.writeBytes(rewritten)
-        }
+        var verified = false
+        Il2cppConverter.rewriteStagedSilksongNormalDeath(
+            root = root,
+            surgery = surgery,
+            expectedRewrittenSha256 = sha256(rewritten),
+            runRewrite = { input, output ->
+                assertTrue(input.readBytes().contentEquals(original))
+                output.writeBytes(rewritten)
+            },
+            runVerify = { output ->
+                assertTrue(output.readBytes().contentEquals(rewritten))
+                verified = true
+            },
+        )
+        assertTrue(verified)
         assertTrue(assembly.readBytes().contentEquals(rewritten))
         val marker = Il2cppConverter.silksongDeathBridgeMarker(root).readText()
         assertTrue(marker.contains("algorithm=${Il2cppConverter.SILKSONG_DEATH_ALGORITHM}"))
-        assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("task101-v2"))
+        assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("task101-v3"))
         assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("site=post-normalization"))
-        assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("rewritten=37cd088f4de464b4cc7b01b193ac294a3dfeb282d1fa1757a653215d514db634"))
+        assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("owners=ring32"))
+        assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("verify=canonical"))
+        assertTrue(Il2cppConverter.SILKSONG_DEATH_ALGORITHM.contains("rewritten=86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e"))
         assertTrue(marker.contains("inputSha256=${sha256(original)}"))
         assertTrue(marker.contains("bridgeAssemblySha256=${sha256(rewritten)}"))
         assertTrue(marker.contains("toolSha256=${sha256(byteArrayOf(3, 4, 5))}"))
+    }
+
+    @Test
+    fun `Silksong death bridge rejects an arbitrary managed image before replacement`() = runBlocking {
+        val root = temp.newFolder("death-bridge-noncanonical")
+        val original = byteArrayOf(0x4d, 0x5a, 1, 2)
+        val assembly = File(Il2cppConverter.asmDir(root), "Assembly-CSharp.dll").apply {
+            parentFile.mkdirs(); writeBytes(original)
+        }
+        val surgery = File(root, "bundle-surgery/BundleSurgery.dll").apply {
+            parentFile.mkdirs(); writeBytes(byteArrayOf(3, 4, 5))
+        }
+
+        val failure = runCatching {
+            Il2cppConverter.rewriteStagedSilksongNormalDeath(
+                root = root,
+                surgery = surgery,
+                runRewrite = { _, output -> output.writeBytes(byteArrayOf(0x4d, 0x5a, 9, 8)) },
+                runVerify = { throw AssertionError("noncanonical output must not reach verification") },
+            )
+        }.exceptionOrNull()
+
+        assertTrue(failure is java.io.IOException)
+        assertTrue(assembly.readBytes().contentEquals(original))
+        assertFalse(Il2cppConverter.silksongDeathBridgeMarker(root).exists())
+    }
+
+    @Test
+    fun `Silksong death bridge verifier failure preserves staged input and clears provenance`() = runBlocking {
+        val root = temp.newFolder("death-bridge-verification-failure")
+        val original = byteArrayOf(0x4d, 0x5a, 1, 2)
+        val rewritten = byteArrayOf(0x4d, 0x5a, 9, 8)
+        val assembly = File(Il2cppConverter.asmDir(root), "Assembly-CSharp.dll").apply {
+            parentFile.mkdirs(); writeBytes(original)
+        }
+        val surgery = File(root, "bundle-surgery/BundleSurgery.dll").apply {
+            parentFile.mkdirs(); writeBytes(byteArrayOf(3))
+        }
+
+        val failure = runCatching {
+            Il2cppConverter.rewriteStagedSilksongNormalDeath(
+                root = root,
+                surgery = surgery,
+                expectedRewrittenSha256 = sha256(rewritten),
+                runRewrite = { _, output -> output.writeBytes(rewritten) },
+                runVerify = { throw java.io.IOException("canonical verification failed") },
+            )
+        }.exceptionOrNull()
+
+        assertTrue(failure is java.io.IOException)
+        assertTrue(assembly.readBytes().contentEquals(original))
+        assertFalse(Il2cppConverter.silksongDeathBridgeMarker(root).exists())
     }
 
     @Test
@@ -258,9 +323,12 @@ class HollowKnightBuildPlanTest {
             parentFile.mkdirs(); writeBytes(byteArrayOf(3))
         }
         val failure = runCatching {
-            Il2cppConverter.rewriteStagedSilksongNormalDeath(root, surgery) { _, _ ->
-                throw java.io.IOException("runner failed")
-            }
+            Il2cppConverter.rewriteStagedSilksongNormalDeath(
+                root = root,
+                surgery = surgery,
+                runRewrite = { _, _ -> throw java.io.IOException("runner failed") },
+                runVerify = { throw AssertionError("failed rewrite must not reach verification") },
+            )
         }.exceptionOrNull()
         assertTrue(failure is java.io.IOException)
         assertTrue(assembly.readBytes().contentEquals(original))

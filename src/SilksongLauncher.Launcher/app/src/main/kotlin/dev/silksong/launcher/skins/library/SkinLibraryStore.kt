@@ -53,6 +53,21 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
         val next = if (ring.isEmpty()) null else ring[if (index < 0) 0 else (index + 1) % ring.size]
         return value.copy(lastDeath = occurrence, pendingPackId = next.takeUnless { it == value.selectedPackId })
     }
+    internal fun cancelDeath(run: String, occurrence: Long): SkinResult<SkinLibraryDocument> = changeRotation { value ->
+        require(value.mode == LibraryMode.ROTATE && value.rotationRun == run && occurrence > 0) { "Death belongs to a retired rotation run" }
+        when {
+            occurrence < value.lastDeath -> value
+            occurrence in value.queuedDeathOccurrences ->
+                value.copy(queuedDeathOccurrences = value.queuedDeathOccurrences - occurrence)
+            occurrence == value.lastDeath && value.pendingPackId != null -> {
+                val cancelled = value.copy(pendingPackId = null)
+                val next = cancelled.queuedDeathOccurrences.firstOrNull()
+                if (next == null) cancelled
+                else activateOccurrence(cancelled.copy(queuedDeathOccurrences = cancelled.queuedDeathOccurrences.drop(1)), next)
+            }
+            else -> value
+        }
+    }
     internal fun cancelRotation(run: String): SkinResult<SkinLibraryDocument> = changeRotation { value ->
         if (value.rotationRun == run) renewRotation(value) else value
     }

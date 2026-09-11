@@ -31,13 +31,12 @@ public sealed class SilksongSkinLibraryTests
                 request.PackId = "b";
                 request.TreeSha256 = new string('c', 64);
                 return true;
-            }, _ => true);
+            }, (_, __) => true, _ => true);
 
         library.Tick(0);
         Assert.Equal(new[] { "apply:a" }, actions);
         frame.BridgeOccurrence = 1;
-        frame.BridgeHero = frame.Hero;
-        frame.BridgeManager = frame.Manager;
+        frame.BridgeOccurrences = new[] { new SilksongDeathOccurrence(1, frame.Hero, frame.Manager) };
         frame.Dead = true;
         frame.Frame++;
         library.Tick(.1f);
@@ -71,14 +70,73 @@ public sealed class SilksongSkinLibraryTests
             _ => new SkinApplyResult(SkinApplyStatus.Applied),
             () => new SkinApplyResult(SkinApplyStatus.Restored), _ => true,
             () => new SkinApplyResult(SkinApplyStatus.Unchanged), death,
-            (_, __) => { confirms++; return true; }, _ => true);
+            (_, __) => { confirms++; return true; }, (_, __) => true, _ => true);
         library.Tick(0);
         frame.BridgeOccurrence = 1;
-        frame.BridgeHero = frame.Hero;
-        frame.BridgeManager = frame.Manager;
+        frame.BridgeOccurrences = new[] { new SilksongDeathOccurrence(1, frame.Hero, frame.Manager) };
         frame.Frame++;
         library.Tick(1);
         Assert.Equal(0, confirms);
+    }
+
+    [Fact]
+    public void Stale_first_owner_is_cancelled_without_losing_replacement_owner_death()
+    {
+        var frame = Frame();
+        var firstHero = frame.Hero;
+        var secondHero = new object();
+        var death = new SilksongSkinDeathAdapter(() => frame);
+        var request = Request("a");
+        var confirmed = new List<long>();
+        var cancelled = new List<long>();
+        var cancelledRuns = 0;
+        using var library = new SilksongSkinLibrary(() => request,
+            _ => new SkinApplyResult(SkinApplyStatus.Applied),
+            () => new SkinApplyResult(SkinApplyStatus.Restored),
+            observation => {
+                if (observation.PendingOccurrence == 2 && observation.Status == "Applied")
+                    request.PendingOccurrence = 0;
+                return true;
+            }, () => new SkinApplyResult(SkinApplyStatus.Unchanged), death,
+            (_, occurrence) => {
+                if (!confirmed.Contains(occurrence)) confirmed.Add(occurrence);
+                if (request.PendingOccurrence == 0)
+                {
+                    request.LastDeath = occurrence;
+                    request.PendingOccurrence = occurrence;
+                    request.PackId = "b";
+                }
+                return true;
+            }, (_, occurrence) => {
+                cancelled.Add(occurrence);
+                if (occurrence == request.PendingOccurrence)
+                    request.PendingOccurrence = 0;
+                return true;
+            }, _ => { cancelledRuns++; return true; });
+
+        library.Tick(0);
+        frame.BridgeOccurrence = 1;
+        frame.BridgeOccurrences = new[] { new SilksongDeathOccurrence(1, firstHero, frame.Manager) };
+        frame.Dead = true;
+        frame.Frame++;
+        library.Tick(1);
+        Assert.Equal(new long[] { 1 }, confirmed);
+
+        frame.Hero = secondHero;
+        frame.BridgeOccurrence = 2;
+        frame.BridgeOccurrences = new[] {
+            new SilksongDeathOccurrence(1, firstHero, frame.Manager),
+            new SilksongDeathOccurrence(2, secondHero, frame.Manager),
+        };
+        frame.Frame++;
+        library.Tick(1.1f);
+        library.Tick(2);
+
+        Assert.Equal(new long[] { 1 }, cancelled);
+        Assert.Equal(new long[] { 1, 2 }, confirmed);
+        Assert.Equal(2, death.Occurrence);
+        Assert.True(death.Recorded);
+        Assert.Equal(0, cancelledRuns);
     }
 
     [Fact]
@@ -102,18 +160,21 @@ public sealed class SilksongSkinLibraryTests
                 request.PendingOccurrence = occurrence;
                 request.PackId = occurrence == 1 ? "b" : "a";
                 return true;
-            }, _ => true);
+            }, (_, __) => true, _ => true);
 
         library.Tick(0);
-        frame.BridgeHero = frame.Hero;
-        frame.BridgeManager = frame.Manager;
         frame.BridgeOccurrence = 1;
+        frame.BridgeOccurrences = new[] { new SilksongDeathOccurrence(1, frame.Hero, frame.Manager) };
         frame.Dead = true;
         frame.Frame++;
         library.Tick(1);
         Assert.Equal(new long[] { 1 }, confirmed);
 
         frame.BridgeOccurrence = 2;
+        frame.BridgeOccurrences = new[] {
+            new SilksongDeathOccurrence(1, frame.Hero, frame.Manager),
+            new SilksongDeathOccurrence(2, frame.Hero, frame.Manager),
+        };
         frame.Frame++;
         library.Tick(1.1f);
         Assert.Equal(new long[] { 1 }, confirmed);

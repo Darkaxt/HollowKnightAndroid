@@ -150,6 +150,21 @@ class SkinLibraryStoreTest {
         assertEquals(promoted, store.confirmDeath(run, 1).required())
         assertEquals(promoted, store.confirmDeath(run, 2).required())
     }
+    @Test fun `cancelling stale active death promotes the exact newer queued occurrence`() {
+        val store = rotationStore(listOf("a", "b", "c"))
+        val run = requireNotNull(store.startRuntime().required().rotationRun)
+        store.confirmDeath(run, 1).required()
+        store.confirmDeath(run, 2).required()
+
+        val promoted = store.cancelDeath(run, 1).required()
+
+        assertEquals("a", promoted.selectedPackId)
+        assertEquals(2L, promoted.lastDeath)
+        assertEquals("b", promoted.pendingPackId)
+        assertTrue(promoted.queuedDeathOccurrences.isEmpty())
+        assertEquals(promoted, store.cancelDeath(run, 1).required())
+    }
+
     @Test fun `death backlog is durably bounded and overflow fails closed`() {
         val store = rotationStore(listOf("a", "b", "c"))
         val run = requireNotNull(store.startRuntime().required().rotationRun)

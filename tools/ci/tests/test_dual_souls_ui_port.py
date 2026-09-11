@@ -36,8 +36,12 @@ PORT_HUD = DUALSCREEN_SOURCES / "DsPortHud.cs"
 PORT_HUD_STATE = DUALSCREEN_SOURCES / "DsPortHudState.cs"
 UI_MSG_DISMISS_REWRITE = REPO_ROOT / "tools" / "bundle-surgery" / "RedirectUIMsgDismiss.cs"
 SILKSONG_DEATH_REWRITE = REPO_ROOT / "tools" / "bundle-surgery" / "BridgeSilksongNormalDeath.cs"
+SILKSONG_DEATH_ADAPTER = REPO_ROOT / "tools" / "silksong-patches" / "src" / "skins" / "runtime" / "SilksongSkinDeathAdapter.cs"
+SILKSONG_SKIN_LIBRARY = REPO_ROOT / "tools" / "silksong-patches" / "src" / "skins" / "runtime" / "SilksongSkinLibrary.cs"
 BUNDLE_SURGERY_PROGRAM = REPO_ROOT / "tools" / "bundle-surgery" / "Program.cs"
 IL2CPP_CONVERTER = REPO_ROOT / "src" / "SilksongLauncher.Launcher" / "app" / "src" / "main" / "kotlin" / "dev" / "silksong" / "launcher" / "Il2cppConverter.kt"
+SKIN_RUNTIME_BRIDGE = REPO_ROOT / "src" / "SilksongLauncher.Launcher" / "app" / "src" / "main" / "kotlin" / "dev" / "silksong" / "launcher" / "runtime" / "SkinLibraryRuntimeBridge.kt"
+SKIN_LIBRARY_STORE = REPO_ROOT / "src" / "SilksongLauncher.Launcher" / "app" / "src" / "main" / "kotlin" / "dev" / "silksong" / "launcher" / "skins" / "library" / "SkinLibraryStore.kt"
 
 
 def portable_temp_parent():
@@ -241,20 +245,44 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         rewrite = read(SILKSONG_DEATH_REWRITE)
         program = read(BUNDLE_SURGERY_PROGRAM)
         converter = read(IL2CPP_CONVERTER)
+        adapter = read(SILKSONG_DEATH_ADAPTER)
+        library = read(SILKSONG_SKIN_LIBRARY)
+        runtime_bridge = read(SKIN_RUNTIME_BRIDGE)
+        store = read(SKIN_LIBRARY_STORE)
         for token in (
             '"HeroController"', '"<Die>d__1101"', '"MoveNext"', '"PlayerDead"',
-            '"__dsNormalDeathOccurrence"', '"__dsNormalDeathHero"', '"__dsNormalDeathManager"',
-            '"DsRecordNormalDeath"', "PINNED_ASSEMBLY_SHA256", "AlreadyRewritten",
-            "RequireExactDieShape", "PermadeathModes", "DemoHelper", "MaxDeathCount",
-            "HasFinishedEnteringScene", "IsInSceneTransition", "IsLoadingSceneTransition",
+            '"__dsNormalDeathOccurrence"', '"__dsNormalDeathHeroes"',
+            '"__dsNormalDeathManagers"', '"__dsNormalDeathTokens"',
+            '"DsRecordNormalDeath"', "PINNED_ASSEMBLY_SHA256",
+            "PINNED_REWRITTEN_ASSEMBLY_SHA256", "AlreadyRewritten",
+            "RequireCanonicalOutput", "RequireExactDieShape", "OccurrenceCapacity = 32",
+            "PermadeathModes", "DemoHelper", "MaxDeathCount", "HasFinishedEnteringScene",
+            "IsInSceneTransition", "IsLoadingSceneTransition",
         ):
             self.assertIn(token, rewrite)
         self.assertIn('"bridge-silksong-normal-death"', program)
         self.assertIn("BridgeSilksongNormalDeath.Run(args[1], args[2])", program)
+        self.assertIn('"verify-silksong-normal-death"', program)
+        self.assertIn("BridgeSilksongNormalDeath.Verify(args[1])", program)
+        self.assertLess(rewrite.index("assembly.Write(staging)"),
+                        rewrite.index("RequireCanonicalOutput(staging)"))
+        self.assertLess(rewrite.index("RequireCanonicalOutput(staging)"),
+                        rewrite.index("File.Move(staging, outputPath, false)"))
         self.assertIn("bridgeSilksongNormalDeath(context, root)", converter)
         self.assertIn('"bridge-silksong-normal-death"', converter)
+        self.assertIn('listOf("verify-silksong-normal-death", output.absolutePath)', converter)
+        self.assertIn("SILKSONG_DEATH_REWRITTEN_SHA256", converter)
+        self.assertLess(converter.index("runVerify(output)"), converter.index("replace(output, assembly)"))
         self.assertLess(converter.index("bridgeSilksongNormalDeath(context, root)"),
                         converter.index("bridgeUiMessageDismissal(context, root)"))
+        for token in ("HeroesFieldName", "ManagersFieldName", "TokensFieldName",
+                      "tokens[index] != occurrence", "MaxPendingOccurrences = 32",
+                      "PendingCancellations", "AcknowledgeCancellation"):
+            self.assertIn(token, adapter)
+        self.assertIn('Bridge.CallStatic<bool>("cancelDeath", run, occurrence)', library)
+        self.assertIn("fun cancelDeath(run: String, occurrence: Long)", runtime_bridge)
+        self.assertIn("store.cancelDeath(run, occurrence)", runtime_bridge)
+        self.assertIn("internal fun cancelDeath(", store)
 
     def test_registered_native_message_companion_dismissal_rewrites_only_armed_wait(self):
         self.assertTrue(UI_MSG_DISMISS_REWRITE.is_file(), "Task105 Cecil rewrite is missing")

@@ -16,6 +16,7 @@ namespace DualSouls.Skins.Silksong.Runtime
         readonly Func<SkinLibraryRequest> read;
         readonly Func<SkinLibraryObservation, bool> report;
         readonly Func<string, long, bool> confirm;
+        readonly Func<string, long, bool> cancelOccurrence;
         readonly Func<string, bool> cancel;
         float nextPoll;
         bool pending, disposed;
@@ -30,12 +31,14 @@ namespace DualSouls.Skins.Silksong.Runtime
         public SilksongSkinLibrary(Func<SkinLibraryRequest> read, Func<SkinPack, SkinApplyResult> apply,
             Func<SkinApplyResult> restore, Func<SkinLibraryObservation, bool> report,
             Func<SkinApplyResult> observe, SilksongSkinDeathAdapter death,
-            Func<string, long, bool> confirm, Func<string, bool> cancel)
+            Func<string, long, bool> confirm, Func<string, long, bool> cancelOccurrence,
+            Func<string, bool> cancel)
         {
             this.read = read ?? throw new ArgumentNullException(nameof(read));
             this.report = report ?? throw new ArgumentNullException(nameof(report));
             this.death = death ?? throw new ArgumentNullException(nameof(death));
             this.confirm = confirm ?? throw new ArgumentNullException(nameof(confirm));
+            this.cancelOccurrence = cancelOccurrence ?? throw new ArgumentNullException(nameof(cancelOccurrence));
             this.cancel = cancel ?? throw new ArgumentNullException(nameof(cancel));
             controller = new SkinLibraryRuntimeController(SilksongSkinTargets.RuntimeRules,
                 ReadCurrent, apply, restore, ReportCurrent, observe,
@@ -50,6 +53,7 @@ namespace DualSouls.Skins.Silksong.Runtime
             read = ReadManaged;
             report = ReportManaged;
             confirm = (run, occurrence) => Bridge.CallStatic<bool>("confirmDeath", run, occurrence);
+            cancelOccurrence = (run, occurrence) => Bridge.CallStatic<bool>("cancelDeath", run, occurrence);
             cancel = run => Bridge.CallStatic<bool>("cancelRotation", run);
             controller = new SkinLibraryRuntimeController(SilksongSkinTargets.RuntimeRules,
                 ReadCurrent, pack => runtime.TryApply(pack), runtime.TryRestore, ReportCurrent,
@@ -144,13 +148,30 @@ namespace DualSouls.Skins.Silksong.Runtime
         SkinLibraryRequest ReadCurrent()
         {
             var request = read();
-            if (!Consume(request)) return request;
+            if (request == null || request.ProfileId != SilksongSkinTargets.RuntimeRules.ProfileId) return request;
+            bool changed = false;
+            var cancellations = death.PendingCancellations;
+            if (cancellations.Count > 0 && request.RotationRun != death.Run) return null;
+            foreach (long occurrence in cancellations)
+            {
+                if (!cancelOccurrence(death.Run, occurrence)) return null;
+                if (!death.AcknowledgeCancellation(occurrence))
+                    throw new InvalidOperationException("Silksong death cancellation order changed.");
+                changed = true;
+            }
+            if (changed)
+            {
+                request = read();
+                if (request == null || request.ProfileId != SilksongSkinTargets.RuntimeRules.ProfileId) return null;
+            }
+            if (!Consume(request)) return null;
             var occurrences = death.PendingBridgeOccurrences;
             foreach (long occurrence in occurrences)
             {
                 if (!confirm(death.Run, occurrence)) return null;
+                changed = true;
             }
-            if (occurrences.Count > 0)
+            if (changed)
             {
                 request = read();
                 if (!Consume(request)) return null;

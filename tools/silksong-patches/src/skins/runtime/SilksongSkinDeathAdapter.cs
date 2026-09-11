@@ -8,9 +8,24 @@ using GlobalEnums;
 
 namespace DualSouls.Skins.Silksong.Runtime
 {
+    public sealed class SilksongDeathOccurrence
+    {
+        public long Occurrence { get; }
+        public object Hero { get; }
+        public object Manager { get; }
+
+        public SilksongDeathOccurrence(long occurrence, object hero, object manager)
+        {
+            Occurrence = occurrence;
+            Hero = hero;
+            Manager = manager;
+        }
+    }
+
     public sealed class SilksongDeathFrame
     {
-        public object Hero, Manager, HudOwners, BridgeHero, BridgeManager;
+        public object Hero, Manager, HudOwners;
+        public IReadOnlyList<SilksongDeathOccurrence> BridgeOccurrences;
         public long Frame, BridgeOccurrence;
         public bool Gameplay, Playing, Paused, HeroInPosition, SceneComplete, Dead, Hazard,
             Transitioning, Loading, AcceptingInput, ControlRelinquished, TargetsAvailable;
@@ -30,6 +45,8 @@ namespace DualSouls.Skins.Silksong.Runtime
         readonly Func<SilksongDeathFrame> sample;
         readonly System.Collections.Generic.Queue<PendingDeath> backlog =
             new System.Collections.Generic.Queue<PendingDeath>();
+        readonly System.Collections.Generic.Queue<long> cancellations =
+            new System.Collections.Generic.Queue<long>();
         long observedBridge = -1, sampledFrame = -1;
         int stableFrames;
         object deathHero, deathManager, stableHero, stableManager, stableHud;
@@ -40,6 +57,8 @@ namespace DualSouls.Skins.Silksong.Runtime
         public bool Recorded { get; private set; }
         public int PendingOccurrences => backlog.Count;
         public bool BacklogFaulted { get; private set; }
+        public IReadOnlyList<long> PendingCancellations =>
+            new List<long>(cancellations).AsReadOnly();
         public IReadOnlyList<long> PendingBridgeOccurrences
         {
             get
@@ -103,12 +122,12 @@ namespace DualSouls.Skins.Silksong.Runtime
             CaptureOccurrences(frame);
             if (BacklogFaulted) return;
             ActivateNext();
-            if (Occurrence == 0) return;
-            if (!Recorded && !SameDeathOwners(frame))
+            while (Occurrence != 0 && frame.Hero != null && frame.Manager != null && !SameDeathOwners(frame))
             {
-                FailBacklog();
-                return;
+                CancelActive();
+                ActivateNext();
             }
+            if (Occurrence == 0) return;
             if (frame.Frame == sampledFrame) return;
             sampledFrame = frame.Frame;
             if (!Recorded || !Stable(frame) || !SameDeathOwners(frame))
@@ -128,17 +147,35 @@ namespace DualSouls.Skins.Silksong.Runtime
         {
             if (frame == null || frame.BridgeOccurrence <= observedBridge) return;
             long delta = frame.BridgeOccurrence - observedBridge;
-            int occupied = backlog.Count + (Occurrence == 0 ? 0 : 1);
-            if (observedBridge < 0 || delta > MaxPendingOccurrences - occupied ||
-                frame.BridgeHero == null || frame.BridgeManager == null ||
-                !ReferenceEquals(frame.Hero, frame.BridgeHero) || !ReferenceEquals(frame.Manager, frame.BridgeManager))
+            int occupied = cancellations.Count + backlog.Count + (Occurrence == 0 ? 0 : 1);
+            if (observedBridge < 0 || delta > MaxPendingOccurrences - occupied)
             {
                 FailBacklog();
                 return;
             }
+            var owners = new Dictionary<long, SilksongDeathOccurrence>();
+            if (frame.BridgeOccurrences != null)
+            {
+                foreach (var item in frame.BridgeOccurrences)
+                {
+                    if (item == null || item.Occurrence <= 0 || owners.ContainsKey(item.Occurrence))
+                    {
+                        FailBacklog();
+                        return;
+                    }
+                    owners.Add(item.Occurrence, item);
+                }
+            }
             for (long occurrence = observedBridge + 1; occurrence <= frame.BridgeOccurrence; occurrence++)
+            {
+                if (!owners.TryGetValue(occurrence, out var item) || item.Hero == null || item.Manager == null)
+                {
+                    FailBacklog();
+                    return;
+                }
                 backlog.Enqueue(new PendingDeath { Occurrence = occurrence,
-                    Hero = frame.BridgeHero, Manager = frame.BridgeManager });
+                    Hero = item.Hero, Manager = item.Manager });
+            }
             observedBridge = frame.BridgeOccurrence;
         }
 
@@ -151,6 +188,20 @@ namespace DualSouls.Skins.Silksong.Runtime
             deathManager = next.Manager;
             Recorded = false;
             stableFrames = 0;
+        }
+
+        void CancelActive()
+        {
+            if (Occurrence == 0) return;
+            cancellations.Enqueue(Occurrence);
+            ClearActive();
+        }
+
+        public bool AcknowledgeCancellation(long occurrence)
+        {
+            if (cancellations.Count == 0 || cancellations.Peek() != occurrence) return false;
+            cancellations.Dequeue();
+            return true;
         }
 
         bool SameDeathOwners(SilksongDeathFrame frame) =>
@@ -174,6 +225,7 @@ namespace DualSouls.Skins.Silksong.Runtime
         {
             ClearActive();
             backlog.Clear();
+            cancellations.Clear();
             BacklogFaulted = true;
         }
 
@@ -181,6 +233,7 @@ namespace DualSouls.Skins.Silksong.Runtime
         {
             ClearActive();
             backlog.Clear();
+            cancellations.Clear();
             BacklogFaulted = false;
         }
 
@@ -194,13 +247,16 @@ namespace DualSouls.Skins.Silksong.Runtime
 
 #if UNITY_ANDROID && !UNITY_EDITOR
         const string OccurrenceFieldName = "__dsNormalDeathOccurrence";
-        const string HeroFieldName = "__dsNormalDeathHero";
-        const string ManagerFieldName = "__dsNormalDeathManager";
+        const string HeroesFieldName = "__dsNormalDeathHeroes";
+        const string ManagersFieldName = "__dsNormalDeathManagers";
+        const string TokensFieldName = "__dsNormalDeathTokens";
         static readonly FieldInfo OccurrenceField = typeof(GameManager).GetField(OccurrenceFieldName,
             BindingFlags.Public | BindingFlags.Static);
-        static readonly FieldInfo HeroField = typeof(GameManager).GetField(HeroFieldName,
+        static readonly FieldInfo HeroesField = typeof(GameManager).GetField(HeroesFieldName,
             BindingFlags.Public | BindingFlags.Static);
-        static readonly FieldInfo ManagerField = typeof(GameManager).GetField(ManagerFieldName,
+        static readonly FieldInfo ManagersField = typeof(GameManager).GetField(ManagersFieldName,
+            BindingFlags.Public | BindingFlags.Static);
+        static readonly FieldInfo TokensField = typeof(GameManager).GetField(TokensFieldName,
             BindingFlags.Public | BindingFlags.Static);
 
         public SilksongSkinDeathAdapter(SilksongSkinRuntime runtime) : this(() => CaptureManaged(runtime)) { }
@@ -215,11 +271,26 @@ namespace DualSouls.Skins.Silksong.Runtime
                 Manager = manager != null ? manager : null,
                 HudOwners = runtime != null ? runtime.HudOwnerIdentity : null,
             };
-            if (OccurrenceField != null && HeroField != null && ManagerField != null)
+            if (OccurrenceField != null && HeroesField != null && ManagersField != null && TokensField != null)
             {
                 frame.BridgeOccurrence = (long)OccurrenceField.GetValue(null);
-                frame.BridgeHero = HeroField.GetValue(null);
-                frame.BridgeManager = ManagerField.GetValue(null);
+                var heroes = HeroesField.GetValue(null) as HeroController[];
+                var managers = ManagersField.GetValue(null) as GameManager[];
+                var tokens = TokensField.GetValue(null) as long[];
+                var occurrences = new List<SilksongDeathOccurrence>();
+                if (heroes != null && managers != null && tokens != null &&
+                    heroes.Length == MaxPendingOccurrences && managers.Length == MaxPendingOccurrences &&
+                    tokens.Length == MaxPendingOccurrences)
+                {
+                    long first = Math.Max(1, frame.BridgeOccurrence - MaxPendingOccurrences + 1);
+                    for (long occurrence = first; occurrence <= frame.BridgeOccurrence; occurrence++)
+                    {
+                        int index = (int)((occurrence - 1) % MaxPendingOccurrences);
+                        if (tokens[index] != occurrence || heroes[index] == null || managers[index] == null) continue;
+                        occurrences.Add(new SilksongDeathOccurrence(occurrence, heroes[index], managers[index]));
+                    }
+                }
+                frame.BridgeOccurrences = occurrences.AsReadOnly();
             }
             if (hero == null || manager == null || hero.cState == null) return frame;
             frame.Gameplay = manager.IsGameplayScene();
