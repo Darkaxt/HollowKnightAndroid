@@ -9,6 +9,15 @@ ROOT = pathlib.Path(__file__).resolve().parents[3]
 HELPER = ROOT / "tools" / "ci" / "release_contract.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 BUILD_SCRIPT = ROOT / "tools" / "depot-to-apk" / "build.sh"
+LAUNCHER_MANIFEST = (
+    ROOT
+    / "src"
+    / "SilksongLauncher.Launcher"
+    / "app"
+    / "src"
+    / "main"
+    / "AndroidManifest.xml"
+)
 IL2CPP_BUILD_SCRIPT = ROOT / "tools" / "ondevice-il2cpp" / "build-il2cpp.sh"
 IL2CPP_CONVERTER = (
     ROOT
@@ -109,6 +118,18 @@ class ReleasePipelineContractTest(unittest.TestCase):
         self.assertIsNotNone(setup)
         self.assertIn('android:exported="false"', setup.group("body"))
         self.assertNotIn('android.intent.action.MAIN', setup.group("body"))
+
+    def test_apk_shell_registers_every_launcher_library_activity(self):
+        script = BUILD_SCRIPT.read_text(encoding="utf-8")
+        manifest = LAUNCHER_MANIFEST.read_text(encoding="utf-8")
+        library_activities = set(
+            re.findall(r'<activity\s+android:name="([^"]+)"', manifest)
+        )
+
+        self.assertTrue(library_activities)
+        for activity in sorted(library_activities):
+            with self.subTest(activity=activity):
+                self.assertIn(f'<activity android:name="{activity}"', script)
 
     def test_on_device_object_names_use_android_shell_portable_sanitising(self):
         script = IL2CPP_BUILD_SCRIPT.read_text(encoding="utf-8")
