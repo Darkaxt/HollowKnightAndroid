@@ -1970,6 +1970,20 @@ static class Program
         ):
             self.assertIn(required, reviewed_paths)
 
+        injector_manifest_path = TASK112_EVIDENCE / "injector-source-manifest.sha256"
+        injector_manifest = injector_manifest_path.read_bytes()
+        injector_entries = injector_manifest.decode("utf-8").splitlines()
+        self.assertEqual(hashlib.sha256(injector_manifest).hexdigest(),
+                         receipt["injectorSourceManifestSha256"])
+        injector_paths = [entry.split("  ", 1)[1] for entry in injector_entries]
+        for required in (
+            "tools/bundle-surgery/RedirectUIMsgDismiss.cs",
+            "tools/bundle-surgery/Program.cs",
+            "tools/bundle-surgery/BundleSurgery.csproj",
+            "src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/Il2cppConverter.kt",
+        ):
+            self.assertIn(required, injector_paths)
+
         bridge = receipt["legalAcknowledgementBridge"]
         self.assertEqual("1.0.29980", bridge["pinnedGameVersion"])
         self.assertEqual(
@@ -1987,6 +2001,12 @@ static class Program
                       read(REPO_ROOT / bridge["inject"]["log"]))
         self.assertIn("companion dismissal bridge already present; copied unchanged",
                       read(REPO_ROOT / bridge["verifyExisting"]["log"]))
+        input_roles = {injector_input["role"] for injector_input in bridge["inputs"]}
+        self.assertEqual(
+            {"native-managed-assembly", "injector-binary", "mono-cecil",
+             "assets-tools", "compile-response"},
+            input_roles,
+        )
         for injector_input in bridge["inputs"]:
             self.assertRegex(injector_input["sha256"], r"^[0-9a-f]{64}$")
 
