@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace DualSouls.Skins.HollowKnight.Runtime
+namespace DualSouls.Skins.Runtime
 {
     public sealed class SkinLibraryRequest
     {
@@ -18,6 +18,7 @@ namespace DualSouls.Skins.HollowKnight.Runtime
     // Kotlin alone chooses/commits successors. Live admission only gates the frozen candidate.
     public sealed class SkinLibraryRuntimeController
     {
+        readonly SkinRuntimeRules rules;
         readonly Func<SkinLibraryRequest> read;
         readonly Func<SkinPack, SkinApplyResult> apply;
         readonly Func<SkinApplyResult> restore;
@@ -27,10 +28,15 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         SkinPack cached, cachedRotation;
         string cachedTree, activeId, activeTree, activeMode;
         bool restored, restoreRequired;
-        public SkinLibraryRuntimeController(Func<SkinLibraryRequest> read, Func<SkinPack, SkinApplyResult> apply,
-            Func<SkinApplyResult> restore, Action<SkinLibraryObservation> report, Func<SkinApplyResult> observe = null,
+        public SkinLibraryRuntimeController(SkinRuntimeRules rules, Func<SkinLibraryRequest> read,
+            Func<SkinPack, SkinApplyResult> apply, Func<SkinApplyResult> restore,
+            Action<SkinLibraryObservation> report, Func<SkinApplyResult> observe = null,
             Func<SkinLibraryRequest, bool> ready = null)
-        { this.read = read; this.apply = apply; this.restore = restore; this.report = report; this.observe = observe; this.ready = ready; }
+        {
+            this.rules = rules ?? throw new ArgumentNullException(nameof(rules));
+            this.read = read; this.apply = apply; this.restore = restore; this.report = report;
+            this.observe = observe; this.ready = ready;
+        }
 
         public void Tick()
         {
@@ -39,7 +45,7 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             {
                 request = read();
                 if (request == null) return; // nonblocking Kotlin lock was busy; next poll retries
-                if (request.ProfileId != "hollow-knight" || !Digest(request.ConfigSha256) ||
+                if (request.ProfileId != rules.ProfileId || !Digest(request.ConfigSha256) ||
                     (request.Mode != "OFF" && request.Mode != "ON" && request.Mode != "ROTATE"))
                     throw new InvalidOperationException("Invalid launched-profile skin configuration.");
                 SkinApplyResult result;
@@ -63,8 +69,9 @@ namespace DualSouls.Skins.HollowKnight.Runtime
                 }
                 else
                 {
-                    if (string.IsNullOrEmpty(request.PackId) || !Digest(request.TreeSha256) || request.Textures == null)
-                        throw new InvalidOperationException("Selected skin is unavailable.");
+                    if (string.IsNullOrEmpty(request.PackId) || !Digest(request.TreeSha256) || request.Textures == null ||
+                        request.Textures.Count < 1 || request.Textures.Count > rules.MappingLimit)
+                        throw new InvalidOperationException("Selected skin is unavailable or exceeds the launched profile bound.");
                     if (cached == null || cached.Id != request.PackId || cachedTree != request.TreeSha256 || cached.Root != request.Root)
                     { cached = new SkinPack(request.PackId, request.Root, request.Textures); cachedRotation = null; cachedTree = request.TreeSha256; }
                     if (request.Mode == "ROTATE" && cachedRotation == null)

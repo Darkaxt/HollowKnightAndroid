@@ -1,19 +1,39 @@
 using System;
 using System.Collections.Generic;
 using DualSouls.Skins.HollowKnight.Runtime;
+using DualSouls.Skins.Runtime;
 using Xunit;
 
 public class HollowKnightSkinLibraryTests
 {
     [Fact] public void ProductionControllerBoundaryExists()
     {
-        Assert.NotNull(typeof(SkinRuntimeSession).Assembly.GetType("DualSouls.Skins.HollowKnight.Runtime.SkinLibraryRuntimeController"));
+        Assert.NotNull(typeof(SkinRuntimeSession).Assembly.GetType("DualSouls.Skins.Runtime.SkinLibraryRuntimeController"));
+    }
+
+    [Fact] public void Controller_accepts_only_its_explicit_profile()
+    {
+        var request = Request(); request.ProfileId = "silksong";
+        var rules = new SkinRuntimeRules("silksong", 11, _ => true, (_, __) => true);
+        int applies = 0; SkinLibraryObservation observed = null;
+        var controller = new SkinLibraryRuntimeController(rules, () => request,
+            _ => { applies++; return new SkinApplyResult(SkinApplyStatus.Applied); },
+            () => new SkinApplyResult(SkinApplyStatus.Restored), value => observed = value);
+
+        controller.Tick();
+        Assert.Equal(1, applies);
+        Assert.Equal("Applied", observed.Status);
+        request.ProfileId = "hollow-knight";
+        request.PackId = "b";
+        controller.Tick();
+        Assert.Equal(1, applies);
+        Assert.Equal("Failed", observed.Status);
     }
 
     [Fact] public void OnAndRotateReuseImmutablePackAndOffRestoresOnce()
     {
         var request = Request(); var applied = new List<SkinPack>(); int restores = 0;
-        var controller = new SkinLibraryRuntimeController(() => request,
+        var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules,() => request,
             pack => { applied.Add(pack); return new SkinApplyResult(SkinApplyStatus.Applied); },
             () => { restores++; return new SkinApplyResult(SkinApplyStatus.Restored); }, _ => { });
         controller.Tick(); controller.Tick(); request.Mode = "ROTATE"; request.ConfigSha256 = new string('c', 64); controller.Tick();
@@ -27,7 +47,7 @@ public class HollowKnightSkinLibraryTests
     {
         var request = Request(); bool ready = false, busy = false, reportBusy = true; int attempts = 0;
         var candidates = new List<SkinPack>(); SkinLibraryObservation seen = null;
-        var controller = new SkinLibraryRuntimeController(() => busy ? null : request, pack => {
+        var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules,() => busy ? null : request, pack => {
             candidates.Add(pack); return new SkinApplyResult(++attempts == 2 ? SkinApplyStatus.Failed : SkinApplyStatus.Applied);
         }, () => throw new Exception("must not restore working pack"), result => {
             seen = result; if (result.ActivePackId == "b" && reportBusy) { reportBusy = false; throw new Exception("report busy"); }
@@ -45,7 +65,7 @@ public class HollowKnightSkinLibraryTests
     [Fact] public void BusyAndReadFailureKeepWorkingVisualAndRetry()
     {
         var request = Request(); int reads = 0, applies = 0, restores = 0;
-        var controller = new SkinLibraryRuntimeController(() => ++reads == 2 ? null : reads == 3 ? throw new InvalidOperationException("busy io") : request,
+        var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules,() => ++reads == 2 ? null : reads == 3 ? throw new InvalidOperationException("busy io") : request,
             _ => { applies++; return new SkinApplyResult(SkinApplyStatus.Applied); },
             () => { restores++; return new SkinApplyResult(SkinApplyStatus.Restored); }, _ => { });
         controller.Tick(); controller.Tick(); controller.Tick(); controller.Tick();
@@ -54,7 +74,7 @@ public class HollowKnightSkinLibraryTests
     [Fact] public void FailedCandidateAndAwaitingTargetsAreRetriedWithoutClaimingActive()
     {
         var request = Request(); int attempts = 0; SkinLibraryObservation observed = null;
-        var controller = new SkinLibraryRuntimeController(() => request,
+        var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules,() => request,
             _ => new SkinApplyResult(++attempts == 1 ? SkinApplyStatus.AwaitingTargets : attempts == 2 ? SkinApplyStatus.Failed : SkinApplyStatus.Applied),
             () => throw new Exception("must not restore working visual"), result => observed = result);
         controller.Tick(); Assert.Null(observed.ActivePackId);
@@ -64,7 +84,7 @@ public class HollowKnightSkinLibraryTests
     [Fact] public void RestoreFailureRemainsVisibleAndRetries()
     {
         var request = Request(); int restores = 0; SkinLibraryObservation observed = null;
-        var controller = new SkinLibraryRuntimeController(() => request, _ => new SkinApplyResult(SkinApplyStatus.Applied),
+        var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules,() => request, _ => new SkinApplyResult(SkinApplyStatus.Applied),
             () => new SkinApplyResult(++restores == 1 ? SkinApplyStatus.RestoreFailed : SkinApplyStatus.Restored), x => observed = x);
         controller.Tick(); request.Mode = "OFF"; controller.Tick(); Assert.Equal("a", observed.ActivePackId);
         controller.Tick(); Assert.Null(observed.ActivePackId); Assert.Equal(2, restores);
@@ -72,14 +92,14 @@ public class HollowKnightSkinLibraryTests
     [Fact] public void WrongProfileAndUnsafeModeDoNotTouchVisuals()
     {
         var request = Request(); request.ProfileId = "silksong"; int writes = 0;
-        var controller = new SkinLibraryRuntimeController(() => request, _ => { writes++; return null; }, () => { writes++; return null; }, _ => { });
+        var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules,() => request, _ => { writes++; return null; }, () => { writes++; return null; }, _ => { });
         controller.Tick(); request.ProfileId = "hollow-knight"; request.Mode = "BOGUS"; controller.Tick(); Assert.Equal(0, writes);
     }
     [Fact] public void CachedSelectionDoesNotHideRuntimeRefreshFailure()
     {
         SkinLibraryObservation observation = null;
         var current = new SkinApplyResult(SkinApplyStatus.Applied);
-        var controller = new SkinLibraryRuntimeController(Request, _ => current,
+        var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules,Request, _ => current,
             () => new SkinApplyResult(SkinApplyStatus.Restored), x => observation = x, () => current);
         controller.Tick(); current = new SkinApplyResult(SkinApplyStatus.Failed, "refresh failed"); controller.Tick();
         Assert.Equal("Failed", observation.Status); Assert.Equal("refresh failed", observation.Detail);
@@ -88,7 +108,7 @@ public class HollowKnightSkinLibraryTests
     [Fact] public void FailedReplacementReportsLastWorkingPackUntilRetrySucceeds()
     {
         var request = Request(); SkinLibraryObservation observation = null; int attempts = 0;
-        var controller = new SkinLibraryRuntimeController(() => request,
+        var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules,() => request,
             _ => new SkinApplyResult(++attempts == 2 ? SkinApplyStatus.Failed : SkinApplyStatus.Applied),
             () => throw new Exception("must preserve working visual"), x => observation = x);
         controller.Tick(); request.PackId = "b"; request.TreeSha256 = new string('c',64); controller.Tick();
@@ -98,7 +118,7 @@ public class HollowKnightSkinLibraryTests
     [Fact] public void ReportingFailureRetriesWithoutReapplyingOrRestoringVisuals()
     {
         int reports = 0, applies = 0;
-        var controller = new SkinLibraryRuntimeController(Request,
+        var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules,Request,
             _ => { applies++; return new SkinApplyResult(SkinApplyStatus.Applied); },
             () => throw new Exception("must not restore"), _ => { if (++reports == 1) throw new Exception("report busy"); });
         controller.Tick(); controller.Tick(); Assert.Equal(2,reports); Assert.Equal(1,applies);
@@ -121,11 +141,12 @@ public class HollowKnightSkinLibraryTests
                 visual = value;
                 if (failWrites) throw new System.IO.IOException("apply setter mutated then failed");
             }, (texture, original) => texture.Value);
-        using var session = new SkinRuntimeSession(new RecoveryDecoder(), () => new[] { slot });
+        using var session = new SkinRuntimeSession(new RecoveryDecoder(), () => new[] { slot },
+            512L * 1024 * 1024, HollowKnightSkinPolicy.RuntimeRules);
         var request = Request(); request.Mode = "OFF"; request.Root = root;
         request.Textures = new Dictionary<string, string> { ["Knight.png"] = "sheet.png" };
         int restores = 0; SkinApplyResult current = null; SkinLibraryObservation observed = null;
-        var controller = new SkinLibraryRuntimeController(() => request, pack => current = session.TryApply(pack),
+        var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules,() => request, pack => current = session.TryApply(pack),
             () => { restores++; return current = session.TryRestore(); }, x => observed = x, () => current);
         void Tick() { current = session.Refresh(); controller.Tick(); } // production runtime-before-library polling order
 
@@ -142,7 +163,7 @@ public class HollowKnightSkinLibraryTests
     [Fact] public void PriorOffDoesNotSuppressRestoreRetryAfterApplyThrows()
     {
         var request = Request(); request.Mode = "OFF"; int restores = 0; SkinLibraryObservation observed = null;
-        var controller = new SkinLibraryRuntimeController(() => request, _ => throw new InvalidOperationException("apply threw"),
+        var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules,() => request, _ => throw new InvalidOperationException("apply threw"),
             () => new SkinApplyResult(++restores == 2 ? SkinApplyStatus.RestoreFailed : SkinApplyStatus.Restored), x => observed = x);
         controller.Tick(); Assert.Equal(1, restores);
         request.Mode = "ON"; controller.Tick(); Assert.Equal("Failed", observed.Status); Assert.Equal("apply threw", observed.Detail);
@@ -198,7 +219,7 @@ public class HollowKnightSkinLibraryTests
     {
         var request=Request();request.Mode="ROTATE";request.PendingOccurrence=1;request.RotationRun="run";
         int applies=0,restores=0;SkinLibraryObservation seen=null;
-        var controller=new SkinLibraryRuntimeController(()=>request,_=>new SkinApplyResult(++applies==1?SkinApplyStatus.RestoreFailed:SkinApplyStatus.Applied),
+        var controller=new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules,()=>request,_=>new SkinApplyResult(++applies==1?SkinApplyStatus.RestoreFailed:SkinApplyStatus.Applied),
             ()=>new SkinApplyResult(++restores==1?SkinApplyStatus.RestoreFailed:SkinApplyStatus.Restored),x=>seen=x,null,_=>true);
         controller.Tick();Assert.Equal("RestoreFailed",seen.Status);
         controller.Tick();Assert.Equal(1,applies);Assert.Equal(1,restores);Assert.Equal("RestoreFailed",seen.Status);

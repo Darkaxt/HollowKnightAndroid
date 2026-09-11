@@ -6,8 +6,28 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 
-namespace DualSouls.Skins.HollowKnight.Runtime
+namespace DualSouls.Skins.Runtime
 {
+    public sealed class SkinRuntimeRules
+    {
+        readonly Func<string, bool> isSupported;
+        readonly Func<string, string, bool> allows;
+        public string ProfileId { get; }
+        public int MappingLimit { get; }
+        public SkinRuntimeRules(string profileId, int mappingLimit, Func<string, bool> isSupported,
+            Func<string, string, bool> allows)
+        {
+            if (string.IsNullOrWhiteSpace(profileId)) throw new ArgumentException("Profile ID is required.", nameof(profileId));
+            if (mappingLimit < 1 || mappingLimit > 4096) throw new ArgumentOutOfRangeException(nameof(mappingLimit));
+            ProfileId = profileId;
+            MappingLimit = mappingLimit;
+            this.isSupported = isSupported ?? throw new ArgumentNullException(nameof(isSupported));
+            this.allows = allows ?? throw new ArgumentNullException(nameof(allows));
+        }
+        public bool IsSupported(string target) => isSupported(target);
+        public bool Allows(string mode, string target) => isSupported(target) && allows(mode, target);
+    }
+
     // A caller-verified, immutable normalized object. No registry or automatic folder discovery.
     public sealed class SkinPack
     {
@@ -151,6 +171,7 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         const long EncodedLimit = 16L * 1024 * 1024;
         readonly ISkinTextureDecoder decoder;
         readonly Func<IReadOnlyList<SkinSlot>> discover;
+        readonly SkinRuntimeRules rules;
         readonly long memoryLimit;
         Dictionary<string, SkinTexture> current = new Dictionary<string, SkinTexture>(StringComparer.OrdinalIgnoreCase);
         Dictionary<SkinSlot, object> originals = new Dictionary<SkinSlot, object>();
@@ -164,10 +185,12 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         public SkinPack CurrentPack { get; private set; }
         public int SkinStamp { get; private set; }
         public long AccountedBytes => checked(AllTextures().Sum(x => x.AccountedBytes) + scratchBytes);
-        public SkinRuntimeSession(ISkinTextureDecoder decoder, Func<IReadOnlyList<SkinSlot>> discover, long memoryLimit = 512L * 1024 * 1024)
+        public SkinRuntimeSession(ISkinTextureDecoder decoder, Func<IReadOnlyList<SkinSlot>> discover,
+            long memoryLimit, SkinRuntimeRules rules)
         {
             this.decoder = decoder ?? throw new ArgumentNullException(nameof(decoder));
             this.discover = discover ?? throw new ArgumentNullException(nameof(discover));
+            this.rules = rules ?? throw new ArgumentNullException(nameof(rules));
             if (memoryLimit <= 0) throw new ArgumentOutOfRangeException(nameof(memoryLimit));
             this.memoryLimit = memoryLimit;
         }
@@ -195,18 +218,20 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         {
             if (disposed || blocked) return new SkinApplyResult(SkinApplyStatus.Blocked, "Runtime disposed or restoration required.");
             if (pack == null) return new SkinApplyResult(SkinApplyStatus.Rejected, "Normalized pack is required.");
+            if (pack.Textures.Count > rules.MappingLimit)
+                return new SkinApplyResult(SkinApplyStatus.Rejected, "Pack mapping count exceeds the launched profile bound.");
             if (cancellation.IsCancellationRequested) return new SkinApplyResult(SkinApplyStatus.Cancelled);
             mode = pack.Mode; // desired policy also governs retries/rebinds after an awaiting apply
             Reap();
             if (ReferenceEquals(pack, CurrentPack)) return Refresh();
-            var unsupported = pack.Textures.Keys.Where(x => !HollowKnightSkinTargets.IsSupported(x)).ToList();
+            var unsupported = pack.Textures.Keys.Where(x => !rules.IsSupported(x)).ToList();
             var candidate = new Dictionary<string, SkinTexture>(StringComparer.OrdinalIgnoreCase);
             try
             {
                 cancellation.ThrowIfCancellationRequested();
                 var files = new Dictionary<string, PngFile>(StringComparer.Ordinal);
                 long peak = AccountedBytes;
-                foreach (var pair in pack.Textures.Where(x => HollowKnightSkinPolicy.Allows(mode, x.Key)))
+                foreach (var pair in pack.Textures.Where(x => rules.Allows(mode, x.Key)))
                 {
                     cancellation.ThrowIfCancellationRequested();
                     string path = Path.Combine(pack.Root, pair.Value);
@@ -218,7 +243,7 @@ namespace DualSouls.Skins.HollowKnight.Runtime
                 }
                 encodedAdmission = files.Values.Sum(x => x.Length);
                 var decoded = new Dictionary<string, SkinTexture>(StringComparer.Ordinal);
-                foreach (var pair in pack.Textures.Where(x => HollowKnightSkinPolicy.Allows(mode, x.Key)))
+                foreach (var pair in pack.Textures.Where(x => rules.Allows(mode, x.Key)))
                 {
                     cancellation.ThrowIfCancellationRequested();
                     string path = Path.Combine(pack.Root, pair.Value);
@@ -261,8 +286,8 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             Reap();
             if (disposed || blocked) return new SkinApplyResult(SkinApplyStatus.Blocked);
             if (CurrentPack == null) return WithRetirement(new SkinApplyResult(SkinApplyStatus.Unchanged));
-            return WithRetirement(Change(current.Where(x => HollowKnightSkinPolicy.Allows(mode, x.Key)).ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase),
-                false, default, CurrentPack.Textures.Keys.Where(x => !HollowKnightSkinTargets.IsSupported(x))));
+            return WithRetirement(Change(current.Where(x => rules.Allows(mode, x.Key)).ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase),
+                false, default, CurrentPack.Textures.Keys.Where(x => !rules.IsSupported(x))));
         }
 
         public SkinApplyResult TryRestore()
@@ -311,9 +336,9 @@ namespace DualSouls.Skins.HollowKnight.Runtime
                 // No character target yet: retain working character visuals, but restore excluded
                 // environment now. A later refresh must not reapply the previous full-pack policy.
                 var activeOriginals = nextOriginals.Where(x => writes.ContainsKey(x.Key) ||
-                    (waiting && HollowKnightSkinPolicy.Allows(mode, x.Key.Target))).ToDictionary(x => x.Key, x => x.Value);
+                    (waiting && rules.Allows(mode, x.Key.Target))).ToDictionary(x => x.Key, x => x.Value);
                 foreach (var original in nextOriginals)
-                    if (!writes.ContainsKey(original.Key) && !(waiting && HollowKnightSkinPolicy.Allows(mode, original.Key.Target)))
+                    if (!writes.ContainsKey(original.Key) && !(waiting && rules.Allows(mode, original.Key.Target)))
                         writes.Add(original.Key, original.Value);
                 AddInventoryConsumerWrites(slots, writes, nextOriginals, activeOriginals);
                 cancellation.ThrowIfCancellationRequested(); // commit is synchronous; no mid-frame yielding

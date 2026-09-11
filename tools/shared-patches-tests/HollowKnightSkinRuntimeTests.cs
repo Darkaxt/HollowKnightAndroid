@@ -4,10 +4,35 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using DualSouls.Skins.HollowKnight.Runtime;
+using DualSouls.Skins.Runtime;
 using Xunit;
 
 public sealed class HollowKnightSkinRuntimeTests
 {
+    [Fact]
+    public void Shared_session_uses_explicit_profile_target_and_mode_rules()
+    {
+        var loader = new Loader();
+        var hornet = new Slot("Hornet.png", new object(), null);
+        var knight = new Slot("Knight.png", new object(), null);
+        var rules = new SkinRuntimeRules("silksong", 11,
+            target => target == "Hornet.png", (mode, target) => mode == "ON" && target == "Hornet.png");
+        using var session = new SkinRuntimeSession(loader,
+            () => new[] { hornet.Binding(), knight.Binding() }, 512L * 1024 * 1024, rules);
+        var root = Path.Combine(AppContext.BaseDirectory, "runtime-fixtures", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        File.WriteAllBytes(Path.Combine(root, "hornet.png"), Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg=="));
+        File.WriteAllBytes(Path.Combine(root, "knight.png"), Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg=="));
+
+        var result = session.TryApply(new SkinPack("ss", root, new Dictionary<string, string>
+            { ["Hornet.png"] = "hornet.png", ["Knight.png"] = "knight.png" }));
+
+        Assert.Equal(SkinApplyStatus.Applied, result.Status);
+        Assert.NotSame(hornet.Original, hornet.Value);
+        Assert.Same(knight.Original, knight.Value);
+        Assert.Contains("Knight.png", result.UnsupportedTargets);
+    }
+
     [Fact]
     public void Off_A_B_Off_restores_missing_sheets_and_originals()
     {
@@ -890,7 +915,7 @@ public sealed class HollowKnightSkinRuntimeTests
         TreeSha256 = new string('b', 64), Root = pack.Root, Textures = pack.Textures.ToDictionary(x => x.Key, x => x.Value)
     };
     static SkinLibraryRuntimeController PolicyController(Rig rig, SkinLibraryRequest request, Action<SkinLibraryObservation> report = null) =>
-        new SkinLibraryRuntimeController(() => request, pack => rig.Session.TryApply(pack), () => rig.Session.TryRestore(), report ?? (_ => { }), () => rig.Session.Refresh());
+        new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules, () => request, pack => rig.Session.TryApply(pack), () => rig.Session.TryRestore(), report ?? (_ => { }), () => rig.Session.Refresh());
 
     sealed class Rig
     {
@@ -900,7 +925,9 @@ public sealed class HollowKnightSkinRuntimeTests
         public readonly SkinRuntimeSession Session;
         public Rig(long budget = 512L * 1024 * 1024)
         {
-            Session = new SkinRuntimeSession(Loader, () => Slots.Where(x => x.Alive).Select(x => x.Binding()).Concat(ExtraSlots).ToList(), budget);
+            Session = new SkinRuntimeSession(Loader,
+                () => Slots.Where(x => x.Alive).Select(x => x.Binding()).Concat(ExtraSlots).ToList(), budget,
+                HollowKnightSkinPolicy.RuntimeRules);
             Loader.OnRelease = handle => Assert.DoesNotContain(Slots.Where(x => x.Alive), x => ReferenceEquals(x.Value, handle));
         }
         public Slot Add(string target, object original = null, Func<SkinTexture, object, object> prepare = null)

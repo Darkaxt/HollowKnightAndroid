@@ -1,4 +1,5 @@
 using System;
+using DualSouls.Skins.Runtime;
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System.Collections.Generic;
 using UnityEngine;
@@ -28,7 +29,7 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         }
         SkinLibraryRuntimeController CreateController(Func<SkinPack, SkinApplyResult> apply,
             Func<SkinApplyResult> restore, Func<SkinApplyResult> observe) =>
-            new SkinLibraryRuntimeController(ReadCurrent, apply, restore, ReportCurrent, observe,
+            new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules, ReadCurrent, apply, restore, ReportCurrent, observe,
                 request => request.Mode == "ROTATE" && Ready(request.RotationRun, request.PendingOccurrence));
         bool Ready(string run, long occurrence) => run == death.Run && occurrence == death.Occurrence && death.Recorded && death.Ready;
         public void Tick(float now)

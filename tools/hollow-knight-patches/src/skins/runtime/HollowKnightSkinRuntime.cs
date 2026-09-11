@@ -1,4 +1,5 @@
 using System;
+using DualSouls.Skins.Runtime;
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System.Collections.Generic;
 using System.Linq;
@@ -34,7 +35,8 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         public HollowKnightSkinRuntime()
         {
             if (Current != null) throw new InvalidOperationException("Only one skin runtime may own game visuals.");
-            session = new SkinRuntimeSession(decoder, Discover);
+            session = new SkinRuntimeSession(decoder, Discover, 512L * 1024 * 1024,
+                HollowKnightSkinPolicy.RuntimeRules);
             refreshSchedule = new SkinRuntimeRefreshSchedule(CacheDeathTargets,
                 () => RefreshAllowed == null || RefreshAllowed(), () => Publish(session.Refresh()));
             UnityEngine.SceneManagement.SceneManager.sceneLoaded += SceneLoaded;

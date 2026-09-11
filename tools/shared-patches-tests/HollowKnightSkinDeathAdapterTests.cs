@@ -1,5 +1,6 @@
 using System;
 using DualSouls.Skins.HollowKnight.Runtime;
+using DualSouls.Skins.Runtime;
 using Xunit;
 
 public class HollowKnightSkinDeathAdapterTests
