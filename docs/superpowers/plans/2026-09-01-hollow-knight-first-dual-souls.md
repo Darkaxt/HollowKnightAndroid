@@ -1424,16 +1424,22 @@ mutation, device/publication/source activation, save edits or cleanup; commands
   Test foreign profiles/catalogs, identical pack IDs across games, startup-selection
   changes, selected/pending protection, mode changes, duplicate/hazard events,
   prompt matching acknowledgments, next death before polling and owner replacement.
-  **Host-complete/device-deferred at `0b92f4d`.** Exact SS 1.0.29980 managed input
-  SHA-256 `1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d`
-  is pinned by a byte-idempotent, drift-rejecting normal-death rewrite. Closed
-  eleven-target profile/storage/import/JNI authority, exact collection/material
-  admission, atomic apply/restore, restore-before-frozen-successor rotation and
-  two consecutive stable PLAYING frames are host tested. Evidence is retained in
-  `docs/verification/evidence/task101-host-0b92f4d/`. Android bundle identity/parity,
-  sampled material appearance, Scythe/Shaman shaders, crest/fallback visuals, HUD
-  effects, resource pressure, death/respawn visuals and lifecycle, and persistence
-  interaction remain genuine device-only deferrals.
+  **Host-complete/device-deferred at `bcf3508`, superseding `0b92f4d`.** Exact SS
+  1.0.29980 managed input SHA-256
+  `1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d`
+  is pinned by an exact post-guard/post-normalization classifier and a canonical,
+  byte-idempotent rewrite with SHA-256
+  `37cd088f4de464b4cc7b01b193ac294a3dfeb282d1fa1757a653215d514db634`.
+  Original drift and unrelated drift after the bridge are rejected without output.
+  Closed eleven-target profile/storage/import/JNI authority, exact multi-instance
+  collection/material admission, all sparse omissions, atomic apply/restore,
+  retry-owned teardown, bounded ordered death retention, restore-before-frozen-
+  successor rotation, two consecutive stable PLAYING frames, and profile-aware
+  launcher output are executable-host tested. Evidence is retained in
+  `docs/verification/evidence/task101-spec-fix-bcf3508/`. Android bundle
+  identity/parity, sampled material appearance, Scythe/Shaman shaders,
+  crest/fallback visuals, HUD effects, resource pressure, death/respawn visuals
+  and lifecycle, and persistence interaction remain genuine device-only deferrals.
 - [ ] **Task102.** Verify production reachability, focused behavioral suites,
   exact two-game compiles and cross-game isolation, with independent SPEC,
   separate QUALITY and fresh main verification. Distinguish executed host

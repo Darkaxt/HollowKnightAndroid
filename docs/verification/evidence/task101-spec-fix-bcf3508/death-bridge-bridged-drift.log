@@ -1,0 +1,6 @@
+  injected one armed UIMsgBase companion dismissal wait bridge
+37cd088f4de464b4cc7b01b193ac294a3dfeb282d1fa1757a653215d514db634 *D:/Temp/task101-final-verify/deps/Assembly-CSharp.commit.dll
+a412f875da530259a48c7dcc92e4813c941ced4b7a88f733e8c8bb5826d126a8 *D:/Temp/task101-final-verify/deps/Assembly-CSharp.commit-ui.dll
+  Silksong normal-death rewrite failed closed: already-bridged Silksong assembly differs from canonical rewritten identity: a412f875da530259a48c7dcc92e4813c941ced4b7a88f733e8c8bb5826d126a8
+exit=1
+rejectedOutputAbsent=true
