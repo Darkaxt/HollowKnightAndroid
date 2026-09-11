@@ -1,0 +1,9 @@
+C:\Program Files\dotnet\sdk\10.0.400\Sdks\Microsoft.NET.Sdk\targets\Microsoft.PackageDependencyResolution.targets(266,5): error NETSDK1004: Assets file 'D:\Temp\HollowKnightAndroid-h1\tools\bundle-surgery\obj\project.assets.json' not found. Run a NuGet package restore to generate this file. [D:\Temp\HollowKnightAndroid-h1\tools\bundle-surgery\BundleSurgery.csproj]
+
+Build FAILED.
+
+C:\Program Files\dotnet\sdk\10.0.400\Sdks\Microsoft.NET.Sdk\targets\Microsoft.PackageDependencyResolution.targets(266,5): error NETSDK1004: Assets file 'D:\Temp\HollowKnightAndroid-h1\tools\bundle-surgery\obj\project.assets.json' not found. Run a NuGet package restore to generate this file. [D:\Temp\HollowKnightAndroid-h1\tools\bundle-surgery\BundleSurgery.csproj]
+    0 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:00.33

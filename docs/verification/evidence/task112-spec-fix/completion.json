@@ -1,0 +1,246 @@
+{
+  "scope": "Task112 corrected native Map ownership and exact SkillGetMsg legal acknowledgment",
+  "gameVersion": "Linux Silksong 1.0.29980",
+  "sourceCommit": "031684d4d3b34e943cfe7a7dc022a20a5149f120",
+  "sourceTree": "eda394d0c075d1edbb440986e3307856e171e889",
+  "cwd": "D:\\Temp\\HollowKnightAndroid-h1",
+  "reviewedSourceCount": 83,
+  "reviewedSourceManifest": "docs/verification/evidence/task112-spec-fix/reviewed-source-manifest.sha256",
+  "reviewedSourceManifestSha256": "7e9d8d4b7314d055464cd1df62cd382982f3ef411aa6af807e6543040b3be13f",
+  "injectorSourceCount": 12,
+  "injectorSourceManifest": "docs/verification/evidence/task112-spec-fix/injector-source-manifest.sha256",
+  "injectorSourceManifestSha256": "2536b5bb2ed402d294204181bbe65e198018178a99fbf436f6b5fe23e3d1d01f",
+  "managedCompile": {
+    "command": [
+      "dotnet",
+      "build",
+      "tools/shared-patches-tests/obj/task99-journal-continuation-20260908/ss-project/PatchCheck.csproj",
+      "--no-restore",
+      "--no-incremental",
+      "-c",
+      "Release",
+      "-p:UseSharedCompilation=false",
+      "-nodeReuse:false",
+      "--output",
+      "tools/shared-patches-tests/obj/task112-spec-fix-final/managed/bin",
+      "--nologo"
+    ],
+    "startUtc": "2026-09-11T01:34:46Z",
+    "endUtc": "2026-09-11T01:34:49Z",
+    "exitCode": 0,
+    "warnings": 7,
+    "errors": 0,
+    "compiledSourceCount": 68,
+    "compiledSourceManifestSha256": "c76ebbf60fac669e2c3d54c3404d9d286360ead575e7d209da0d1bc945852adb",
+    "sourceManifest": "docs/verification/evidence/task112-spec-fix/source-manifest.sha256",
+    "output": "tools/shared-patches-tests/obj/task112-spec-fix-final/managed/bin/PatchCheck.dll",
+    "outputSha256": "5d91ac109ac8a39bc31c9176bea094c36561aba07008d32e3111c6907c3681f1",
+    "log": "docs/verification/evidence/task112-spec-fix/compiler.log"
+  },
+  "legalAcknowledgementBridge": {
+    "pinnedGameVersion": "1.0.29980",
+    "pinnedNativeTailSha256": "1886e0884a720b0b53412e04f912fb6d7c31d7c9da9cd365e9ac6b85fc4bc179",
+    "pinnedBridgeBodySha256": {
+      "DsPortCompanionDismissBegin": "6a64119447cce048bf44f71b37f2f804ef90cda1ed6beea0a7b2d4f963ea893e",
+      "DsPortCompanionDismissArm": "1aa949b88527f1e6902916d27d995d3dd4f8416e7bab78229bdd1965210f9730",
+      "DsPortCompanionDismissObserve": "d22a108de8fdd6ff26223e08f4474277b2e45f26b918a936e3bcd00d780a15d1",
+      "DsPortCompanionDismissRequest": "34f189627f03289b4dbc4ef8e8487c1eabe831de2e29be7123bacfe4cdecf84a",
+      "DsPortCompanionDismissConsume": "2f5f0aa762c4e369baf8ed677bdf6a25c6447254383a0eec7c5707dc1b834ef4",
+      "DsPortCompanionDismissEnd": "374cae4558e2909df1eb56dd862fbbd471f6d01faadb63f7a5354bf6eeb31c79"
+    },
+    "rewriteSource": "tools/bundle-surgery/RedirectUIMsgDismiss.cs",
+    "inputs": [
+      {
+        "role": "native-managed-assembly",
+        "path": "D:\\Temp\\hkandroid-task11-silksong-managed\\Assembly-CSharp.dll",
+        "sha256": "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d"
+      },
+      {
+        "role": "injector-binary",
+        "path": "tools/shared-patches-tests/obj/task112-spec-fix-final/injector/bin/BundleSurgery.dll",
+        "sha256": "993cb7dc4f415335e750a44b972e2370e0e010b8d4f9a1c719edea9649b16bbc"
+      },
+      {
+        "role": "mono-cecil",
+        "path": "tools/shared-patches-tests/obj/task112-spec-fix-final/injector/bin/Mono.Cecil.dll",
+        "sha256": "831dca77470d85cb6ffbea3072daa7a3df5b7c9fcfd9c3f43674a9be99d4bfcf"
+      },
+      {
+        "role": "assets-tools",
+        "path": "tools/shared-patches-tests/obj/task112-spec-fix-final/injector/bin/AssetsTools.NET.dll",
+        "sha256": "2eb5ea9e2114245efc3fb457d4c18253173ae1da2f62d87e960a2234d1fa4924"
+      },
+      {
+        "role": "compile-response",
+        "path": "docs/verification/evidence/task112-spec-fix/injector-compile.rsp",
+        "sha256": "5571d3f6c981d0603e3b9bb99723c3e4f3da6c276f83e7d7b8d82a1ac2290cc1"
+      }
+    ],
+    "build": {
+      "command": [
+        "dotnet",
+        "C:/Program Files/dotnet/sdk/10.0.400/Roslyn/bincore/csc.dll",
+        "/noconfig",
+        "@tools/shared-patches-tests/obj/task112-spec-fix-final/injector/compile.rsp"
+      ],
+      "startUtc": "2026-09-11T01:45:25Z",
+      "endUtc": "2026-09-11T01:45:27Z",
+      "exitCode": 0,
+      "output": "tools/shared-patches-tests/obj/task112-spec-fix-final/injector/bin/BundleSurgery.dll",
+      "outputSha256": "993cb7dc4f415335e750a44b972e2370e0e010b8d4f9a1c719edea9649b16bbc",
+      "log": "docs/verification/evidence/task112-spec-fix/bundle-surgery-build.log"
+    },
+    "inject": {
+      "command": [
+        "dotnet",
+        "tools/shared-patches-tests/obj/task112-spec-fix-final/injector/bin/BundleSurgery.dll",
+        "bridge-ui-message-dismiss",
+        "D:/Temp/hkandroid-task11-silksong-managed/Assembly-CSharp.dll",
+        "D:/Temp/HollowKnightAndroid-h1/tools/shared-patches-tests/obj/task112-spec-fix-final/bridge/Assembly-CSharp.final-injected.dll"
+      ],
+      "startUtc": "2026-09-11T01:45:37Z",
+      "endUtc": "2026-09-11T01:45:38Z",
+      "exitCode": 0,
+      "outputSha256": "11e898edfdac6335bf3802a2c6fc19d528aa4e6dc11c3e66e43bb29a9c34b0eb",
+      "log": "docs/verification/evidence/task112-spec-fix/uimsg-bridge-inject.log"
+    },
+    "verifyExisting": {
+      "command": [
+        "dotnet",
+        "tools/shared-patches-tests/obj/task112-spec-fix-final/injector/bin/BundleSurgery.dll",
+        "bridge-ui-message-dismiss",
+        "D:/Temp/HollowKnightAndroid-h1/tools/shared-patches-tests/obj/task112-spec-fix-final/bridge/Assembly-CSharp.final-injected.dll",
+        "D:/Temp/HollowKnightAndroid-h1/tools/shared-patches-tests/obj/task112-spec-fix-final/bridge/Assembly-CSharp.final-verified.dll"
+      ],
+      "startUtc": "2026-09-11T01:45:48Z",
+      "endUtc": "2026-09-11T01:45:48Z",
+      "exitCode": 0,
+      "outputSha256": "11e898edfdac6335bf3802a2c6fc19d528aa4e6dc11c3e66e43bb29a9c34b0eb",
+      "log": "docs/verification/evidence/task112-spec-fix/uimsg-bridge-verify.log"
+    },
+    "verifiedContract": "The first pass accepted only the pinned native DoMsg continuation and persisted the injected bridge. The second pass re-read it and verified canonical fields, signatures, helper-body fingerprints, exact local operands, call sites, disposal cleanup, and unchanged pinned native continuation before copying byte-identically."
+  },
+  "testRuns": [
+    {
+      "name": "focused-python",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_native_map_failed_partial_build_blocks_replacement_until_exact_retry",
+        "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_native_map_preserves_renderer_and_every_indexed_material_property_block",
+        "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_native_map_outgoing_ticks_poll_freshness_refresh_donors_and_retire_stale_graph",
+        "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_native_map_composes_cloned_renderer_hierarchy_directly_on_display_one",
+        "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_skill_get_routes_exact_registered_instance_without_progression_replay",
+        "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_registered_native_message_companion_dismissal_rewrites_only_armed_wait"
+      ],
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "log": "docs/verification/evidence/task112-spec-fix/focused-python.log"
+    },
+    {
+      "name": "focused-shared",
+      "command": [
+        "dotnet",
+        "test",
+        "tools/shared-patches-tests/SharedPatches.Tests.csproj",
+        "--no-restore",
+        "--no-build",
+        "-c",
+        "Release",
+        "--nologo",
+        "--filter",
+        "FullyQualifiedName~SilksongPortSelectionTests|FullyQualifiedName~SilksongPortOverlayTests"
+      ],
+      "exitCode": 0,
+      "passed": 255,
+      "failed": 0,
+      "skipped": 0,
+      "log": "docs/verification/evidence/task112-spec-fix/focused-shared.log"
+    },
+    {
+      "name": "full-python",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "tools.ci.tests.test_dual_souls_ui_port"
+      ],
+      "exitCode": 0,
+      "passed": 119,
+      "failed": 0,
+      "skipped": 0,
+      "log": "docs/verification/evidence/task112-spec-fix/full-python.log"
+    },
+    {
+      "name": "full-shared",
+      "command": [
+        "dotnet",
+        "test",
+        "tools/shared-patches-tests/SharedPatches.Tests.csproj",
+        "--no-restore",
+        "--no-build",
+        "-c",
+        "Release",
+        "--nologo"
+      ],
+      "exitCode": 0,
+      "passed": 1526,
+      "failed": 0,
+      "skipped": 0,
+      "log": "docs/verification/evidence/task112-spec-fix/full-shared.log"
+    },
+    {
+      "name": "bundle-surgery",
+      "command": [
+        [
+          "dotnet",
+          "tools/shared-patches-tests/obj/task112-spec-fix-final/injector/bin/BundleSurgery.dll",
+          "bridge-ui-message-dismiss",
+          "D:/Temp/hkandroid-task11-silksong-managed/Assembly-CSharp.dll",
+          "D:/Temp/HollowKnightAndroid-h1/tools/shared-patches-tests/obj/task112-spec-fix-final/bridge/Assembly-CSharp.final-injected.dll"
+        ],
+        [
+          "dotnet",
+          "tools/shared-patches-tests/obj/task112-spec-fix-final/injector/bin/BundleSurgery.dll",
+          "bridge-ui-message-dismiss",
+          "D:/Temp/HollowKnightAndroid-h1/tools/shared-patches-tests/obj/task112-spec-fix-final/bridge/Assembly-CSharp.final-injected.dll",
+          "D:/Temp/HollowKnightAndroid-h1/tools/shared-patches-tests/obj/task112-spec-fix-final/bridge/Assembly-CSharp.final-verified.dll"
+        ]
+      ],
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "log": "docs/verification/evidence/task112-spec-fix/uimsg-bridge-verify.log"
+    }
+  ],
+  "preservedFailures": [
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tools/bundle-surgery/BundleSurgery.csproj",
+        "--no-restore",
+        "--no-incremental"
+      ],
+      "exitCode": 1,
+      "reason": "offline project assets were absent; no restore or network was permitted",
+      "log": "docs/verification/evidence/task112-spec-fix/bundle-surgery-msbuild-no-assets-failure.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "C:/Program Files/dotnet/sdk/10.0.400/Roslyn/bincore/csc.dll",
+        "/noconfig",
+        "@compile.rsp"
+      ],
+      "exitCode": 1,
+      "reason": "MSYS converted /noconfig before literal argument exclusion was applied",
+      "log": "docs/verification/evidence/task112-spec-fix/bundle-surgery-csc-msys-arg-failure.log"
+    }
+  ],
+  "evidenceBoundary": "Host contracts, managed compilation, and exact managed-assembly rewrite verification do not prove Unity display-1 pixels, clipping, material ordering, scale, contextual activation, or device interaction."
+}
