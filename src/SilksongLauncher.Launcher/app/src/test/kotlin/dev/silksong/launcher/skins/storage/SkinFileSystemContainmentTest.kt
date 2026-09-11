@@ -100,6 +100,22 @@ class SkinFileSystemContainmentTest {
     }
 
     @Test
+    fun `non-Windows containment does not require generic file-store evidence`() {
+        val child = File(owner, "child").apply { writeText("payload") }
+        val sameMount = SkinMountIdentityProvider {
+            SkinMountIdentity(device = "device-7", mountId = "profile-11")
+        }
+        var storeReads = 0
+
+        AndroidSkinFileSystem(sameMount, "Linux") {
+            storeReads++
+            throw UnsupportedOperationException("getFileStore")
+        }.requireContained(child, owner)
+
+        assertEquals(0, storeReads)
+    }
+
+    @Test
     fun `mountinfo parser selects one exact longest mount and verifies the real device`() {
         val rows = listOf(
             "10 1 8:1 / / rw - ext4 /dev/root rw",

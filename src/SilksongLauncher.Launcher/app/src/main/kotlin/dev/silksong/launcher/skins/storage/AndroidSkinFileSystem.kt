@@ -117,10 +117,21 @@ private object PlatformSkinMountIdentityProvider : SkinMountIdentityProvider {
 
 class AndroidSkinFileSystem private constructor(
     private val mountIdentityProvider: SkinMountIdentityProvider,
+    private val fileStoreProvider: (Path) -> FileStore?,
     @Suppress("UNUSED_PARAMETER") marker: Boolean,
 ) : SkinFileSystem, SkinFileSystemSecurity, SkinFileSystemBoundedListing {
-    constructor() : this(PlatformSkinMountIdentityProvider, true)
-    internal constructor(mountIdentityProvider: SkinMountIdentityProvider) : this(mountIdentityProvider, true)
+    constructor() : this(PlatformSkinMountIdentityProvider, platformFileStoreProvider(), true)
+    internal constructor(mountIdentityProvider: SkinMountIdentityProvider) :
+        this(mountIdentityProvider, platformFileStoreProvider(), true)
+    internal constructor(
+        mountIdentityProvider: SkinMountIdentityProvider,
+        operatingSystemName: String,
+        fileStoreProvider: (Path) -> FileStore,
+    ) : this(
+        mountIdentityProvider,
+        platformFileStoreProvider(operatingSystemName, fileStoreProvider),
+        true,
+    )
     override fun exists(file: File): Boolean = Files.exists(file.toPath(), NOFOLLOW_LINKS)
     override fun isDirectory(file: File): Boolean = Files.isDirectory(file.toPath(), NOFOLLOW_LINKS)
     override fun isRegularFile(file: File): Boolean = Files.isRegularFile(file.toPath(), NOFOLLOW_LINKS)
@@ -319,7 +330,7 @@ class AndroidSkinFileSystem private constructor(
         val mountBefore = mountIdentityProvider.identity(path)
             ?: throw IllegalStateException("Mount or device identity is unavailable")
         val key = identityKey(before)
-        val store = storeEvidence(Files.getFileStore(path))
+        val store = fileStoreProvider(path)?.let(::storeEvidence)
         val after = Files.readAttributes(path, BasicFileAttributes::class.java, NOFOLLOW_LINKS)
         val afterKey = identityKey(after)
         val mountAfter = mountIdentityProvider.identity(path)
@@ -369,7 +380,7 @@ class AndroidSkinFileSystem private constructor(
         val size: Long,
         val regularFile: Boolean,
         val directory: Boolean,
-        val store: StoreEvidence,
+        val store: StoreEvidence?,
         val device: String,
         val mountId: String,
         val strongIdentity: Boolean,
@@ -389,6 +400,17 @@ class AndroidSkinFileSystem private constructor(
     )
 
     private companion object {
+        fun platformFileStoreProvider(
+            operatingSystemName: String = System.getProperty("os.name", "").orEmpty(),
+            fileStoreProvider: (Path) -> FileStore = Files::getFileStore,
+        ): (Path) -> FileStore? = if (operatingSystemName.startsWith("Windows", ignoreCase = true)) {
+            fileStoreProvider
+        } else {
+            // Android's Linux NIO provider may reject getFileStore; unix device and
+            // mountinfo identities remain the fail-closed boundary authorities.
+            { null }
+        }
+
         const val MAX_DELETE_NODES = 512
     }
 }
