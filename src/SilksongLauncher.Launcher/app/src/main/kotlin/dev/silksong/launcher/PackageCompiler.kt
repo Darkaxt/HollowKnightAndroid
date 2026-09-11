@@ -52,6 +52,9 @@ object PackageCompiler {
     data class Progress(val step: String, val fraction: Float, val detail: String = "")
 
     private const val ASSEMBLY = "Unity.InputSystem.dll"
+    // Raw csc is not SDK-driven, so it does not synthesize target-framework constants.
+    internal const val PATCH_COMPILE_DEFINES =
+        "UNITY_ANDROID;ENABLE_INPUT_SYSTEM;NETSTANDARD2_1"
 
     // ── Roslyn ─────────────────────────────────────────────────────────────
 
@@ -310,7 +313,7 @@ object PackageCompiler {
             w.println("-langversion:9.0")
             w.println("-deterministic+")
             w.println("-nowarn:0169,0414,0649")
-            w.println("-define:UNITY_ANDROID;ENABLE_INPUT_SYSTEM")
+            w.println("-define:$PATCH_COMPILE_DEFINES")
             // Everything: the class library, the Android engine, and the
             // depot's own assemblies. The last of those is what a prebuilt
             // DLL could never have had.

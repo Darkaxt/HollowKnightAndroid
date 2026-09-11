@@ -41,6 +41,14 @@ class HollowKnightBuildPlanTest {
     }
 
     @Test
+    fun `on-device patch compiler defines netstandard record support`() {
+        assertEquals(
+            "UNITY_ANDROID;ENABLE_INPUT_SYSTEM;NETSTANDARD2_1",
+            PackageCompiler.PATCH_COMPILE_DEFINES,
+        )
+    }
+
+    @Test
     fun `save rewrite remains a Silksong-only build step`() {
         assertFalse(PackageCompiler.requiresSaveIo(hollowKnight))
         assertTrue(PackageCompiler.requiresSaveIo(silksong))
