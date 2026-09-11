@@ -37,6 +37,49 @@ public sealed class CompanionShellLayoutTests
         Assert.True(layout.Tabs[^1].Bounds.Right < layout.Battery.Bounds.Left);
     }
 
+    [Theory]
+    [InlineData(1240, 1080)]
+    [InlineData(1600, 900)]
+    [InlineData(640, 640)]
+    public void Tabs_share_the_status_and_battery_row_without_overflowing_selection_ornaments(
+        int width,
+        int height)
+    {
+        var layout = CompanionShellLayout.Create(width, height, Pages);
+
+        Assert.Equal(0, layout.Navigation.Left);
+        Assert.Equal(width, layout.Navigation.Right);
+        Assert.True(layout.Navigation.Top >= 0);
+        Assert.Equal(height, layout.Navigation.Bottom);
+        Assert.Equal(layout.Status.Bounds.CenterY, layout.Battery.Bounds.CenterY);
+        Assert.Equal(layout.Status.Bounds.Bottom, layout.Battery.Bounds.Bottom);
+        Assert.True(layout.Status.Bounds.Left >= layout.Navigation.Left);
+        Assert.True(layout.Status.Bounds.Right <= layout.Navigation.Right);
+        Assert.True(layout.Status.Bounds.Top >= layout.Navigation.Top);
+        Assert.True(layout.Status.Bounds.Bottom <= layout.Navigation.Bottom);
+        Assert.True(layout.Battery.Bounds.Left >= layout.Navigation.Left);
+        Assert.True(layout.Battery.Bounds.Right <= layout.Navigation.Right);
+        Assert.True(layout.Battery.Bounds.Top >= layout.Navigation.Top);
+        Assert.True(layout.Battery.Bounds.Bottom <= layout.Navigation.Bottom);
+        Assert.True(layout.Status.Bounds.Right < layout.Tabs[0].Bounds.Left);
+        Assert.True(layout.Tabs[^1].Bounds.Right < layout.Battery.Bounds.Left);
+        Assert.True(layout.ModsGear.Bounds.Left >= 0);
+        Assert.True(layout.ModsGear.Bounds.Right <= width);
+        Assert.True(layout.ModsGear.Bounds.Top >= 0);
+        Assert.True(layout.ModsGear.Bounds.Bottom <= layout.Status.Bounds.Top);
+        for (var index = 0; index < layout.Tabs.Count; index++)
+        {
+            var tab = layout.Tabs[index];
+            Assert.Equal(layout.Status.Bounds.CenterY, tab.Bounds.CenterY);
+            Assert.Equal(layout.Status.Bounds.Bottom, tab.Bounds.Bottom);
+            Assert.True(tab.Bounds.Top >= layout.Navigation.Top);
+            Assert.True(tab.Bounds.Bottom <= layout.Navigation.Bottom);
+            var selection = layout.SelectionFor(index);
+            Assert.True(selection.Top.Top >= layout.Navigation.Top);
+            Assert.True(selection.Bottom.Bottom <= layout.Status.Bounds.Bottom);
+        }
+    }
+
     [Fact]
     public void Selected_tab_has_two_fleurs_and_no_filled_tab_panel()
     {

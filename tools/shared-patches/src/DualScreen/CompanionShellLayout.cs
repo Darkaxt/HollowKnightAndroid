@@ -149,11 +149,17 @@ namespace DualSouls.DualScreen
             var bottomOrnament = new CompanionRect(0, content.Bottom, width, ornamentH);
             var navigation = new CompanionRect(0, bottomOrnament.Bottom, width, height - bottomOrnament.Bottom);
 
+            int statusW = Sx(126);
+            int statusH = Math.Max(MinimumTouchTarget, Sy(72));
+            int statusTop = height - statusH - Sy(10);
+            var status = new CompanionControlLayout(new CompanionRect(Sx(18), statusTop, statusW, statusH));
+            var battery = new CompanionControlLayout(new CompanionRect(width - Sx(18) - statusW, statusTop, statusW, statusH));
+
             int gutter = Sx(160);
             int tabsWidth = width - gutter * 2;
             int tabW = tabsWidth / pageIds.Count;
-            int tabTop = navigation.Top + Sy(20);
-            int tabH = Math.Max(MinimumTouchTarget, navigation.Height - Sy(30));
+            int tabTop = status.Bounds.Top;
+            int tabH = status.Bounds.Height;
             var tabs = new List<CompanionTabLayout>(pageIds.Count);
             for (int i = 0; i < pageIds.Count; i++)
             {
@@ -163,11 +169,6 @@ namespace DualSouls.DualScreen
                 tabs.Add(new CompanionTabLayout(pageIds[i], new CompanionRect(left, tabTop, right - left, tabH)));
             }
 
-            int statusW = Sx(126);
-            int statusH = Math.Max(MinimumTouchTarget, Sy(72));
-            int statusTop = height - statusH - Sy(10);
-            var status = new CompanionControlLayout(new CompanionRect(Sx(18), statusTop, statusW, statusH));
-            var battery = new CompanionControlLayout(new CompanionRect(width - Sx(18) - statusW, statusTop, statusW, statusH));
             int gearSize = Math.Max(MinimumTouchTarget, Sx(78));
             var gear = new CompanionControlLayout(new CompanionRect(status.Bounds.CenterX - gearSize / 2,
                                                                      status.Bounds.Top - gearSize,
@@ -187,7 +188,7 @@ namespace DualSouls.DualScreen
             int left = tab.CenterX - width / 2;
             return new CompanionSelectionLayout(
                 new CompanionRect(left, tab.Top - height + 8, width, height),
-                new CompanionRect(left, tab.Bottom - 8, width, height));
+                new CompanionRect(left, tab.Bottom - height, width, height));
         }
 
         public CompanionHit HitTest(float x, float y)

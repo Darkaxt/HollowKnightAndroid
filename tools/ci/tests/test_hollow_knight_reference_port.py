@@ -381,6 +381,18 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("sortingOrder = modsSortingOrder + 10", set_text)
         for required in ("hudGearAnchor", "hudGearH", "hudFpsB", "attrCam", "orthographicSize", "aspect", "tabY"):
             self.assertIn(required, position_gear)
+        gear_height = re.search(
+            r"float\s+height\s*=\s*(?P<expression>[^;]+);",
+            position_gear,
+        )
+        self.assertIsNotNone(gear_height, "missing stable Mods gear size")
+        self.assertEqual(
+            "Mathf.Max(scale * 0.045f, 0.01f)",
+            gear_height.group("expression").strip(),
+        )
+        self.assertNotIn("hudGearH", gear_height.group("expression"))
+        self.assertNotIn("hudFpsB", gear_height.group("expression"))
+        self.assertIn("hudFpsB.max.y", position_gear)
         for required in ("attrCam.rect", "Contains", "ViewportToWorldPoint", "gearSR.bounds", "hudFpsB", "Expand"):
             self.assertIn(required, gear_tap)
         self.assertIn("frameRoot", build_modal)
@@ -1167,7 +1179,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         position = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
         self.assertRegex(layout, r"compTabScale\s*=\s*2\.7f")
-        self.assertRegex(layout, r"compTabY\s*=\s*-0\.76f")
+        self.assertRegex(layout, r"compTabY\s*=\s*-0\.81f")
         self.assertIn("desiredGlyphCenter", position)
         self.assertIn("desiredGlyphCenter.x - glyphBounds.center.x", position)
         self.assertIn("desiredGlyphCenter.y - glyphBounds.center.y", position)
