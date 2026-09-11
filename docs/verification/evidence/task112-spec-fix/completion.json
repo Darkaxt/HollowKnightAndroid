@@ -1,12 +1,12 @@
 {
-  "scope": "Task112 corrected native Map ownership, property-block precedence, cold-text lifecycle isolation, and exact SkillGetMsg legal acknowledgment",
+  "scope": "Task112 corrected native Map ownership, property-block precedence, inactive cold-text presentation with explicit retryable lifecycle retirement, and exact SkillGetMsg legal acknowledgment",
   "gameVersion": "Linux Silksong 1.0.29980",
-  "sourceCommit": "155de3125003fa547316f1cc6843c70dd4d2e9df",
-  "sourceTree": "65c864ea2bde961dbc29821ac280f72ec72a0f0c",
+  "sourceCommit": "db0b7a9584631b485e4a5e80a3d61227f69a2ca6",
+  "sourceTree": "fc624d7617fc06811a51c28e811572ace220efe5",
   "cwd": "D:\\Temp\\HollowKnightAndroid-h1",
   "reviewedSourceCount": 83,
   "reviewedSourceManifest": "docs/verification/evidence/task112-spec-fix/reviewed-source-manifest.sha256",
-  "reviewedSourceManifestSha256": "b0802e9c236198f1eb738b12dd0e0ac6a28709c6322ad0babbd0fab44d436b49",
+  "reviewedSourceManifestSha256": "210ceddcd83764e1cc552fea1ca465e88478bacda4afc2adf5686358f269695e",
   "injectorSourceCount": 12,
   "injectorSourceManifest": "docs/verification/evidence/task112-spec-fix/injector-source-manifest.sha256",
   "injectorSourceManifestSha256": "2536b5bb2ed402d294204181bbe65e198018178a99fbf436f6b5fe23e3d1d01f",
@@ -25,16 +25,16 @@
       "tools/shared-patches-tests/obj/task112-spec-fix-final/managed/bin",
       "--nologo"
     ],
-    "startUtc": "2026-09-11T02:30:45Z",
-    "endUtc": "2026-09-11T02:30:47Z",
+    "startUtc": "2026-09-11T02:49:09Z",
+    "endUtc": "2026-09-11T02:49:11Z",
     "exitCode": 0,
     "warnings": 7,
     "errors": 0,
     "compiledSourceCount": 68,
-    "compiledSourceManifestSha256": "fb65e92ca61a60082a8a87faffbb7d276e4b790c7409cda7e6b378cef63eea03",
+    "compiledSourceManifestSha256": "b1e55151e22ef1d9f99003a74a67256f4cdadab7d511725fbf79861ea63ef8a4",
     "sourceManifest": "docs/verification/evidence/task112-spec-fix/source-manifest.sha256",
     "output": "tools/shared-patches-tests/obj/task112-spec-fix-final/managed/bin/PatchCheck.dll",
-    "outputSha256": "0eeb8405da584ab04857edf83dba45f4d40943810f94622aef916f4d2128da3d",
+    "outputSha256": "6497ff4fe2a42fe2e7e08a2f67cc72ea72401e7f8a2162cfe69c11848934dbb0",
     "log": "docs/verification/evidence/task112-spec-fix/compiler.log"
   },
   "legalAcknowledgementBridge": {
@@ -131,7 +131,7 @@
         "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_native_map_preserves_renderer_and_only_present_indexed_property_blocks",
         "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_native_map_outgoing_ticks_poll_freshness_refresh_donors_and_retire_stale_graph",
         "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_native_map_composes_cloned_renderer_hierarchy_directly_on_display_one",
-        "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_map_cold_generation_stays_inactive_and_publishes_renderer_only_state",
+        "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_map_cold_generation_stays_inactive_publishes_renderer_only_and_retires_exactly_once",
         "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_skill_get_routes_exact_registered_instance_without_progression_replay",
         "tools.ci.tests.test_dual_souls_ui_port.DualSoulsUiPortContractTest.test_registered_native_message_companion_dismissal_rewrites_only_armed_wait"
       ],
@@ -150,11 +150,11 @@
         "--TestCaseFilter:FullyQualifiedName~SilksongPortSelectionTests|FullyQualifiedName~SilksongPortOverlayTests"
       ],
       "exitCode": 0,
-      "passed": 258,
+      "passed": 259,
       "failed": 0,
       "skipped": 0,
       "log": "docs/verification/evidence/task112-spec-fix/focused-shared-fresh.log",
-      "assemblySha256": "bc4ec132810051d2b18c09659b54d4f537d2ad9c8d15eee66edb3251a313b9bd"
+      "assemblySha256": "32b483d77cf02b99c273cf658e9d48542ffccc69f3c9c4bbe2b0997eda44d7ef"
     },
     {
       "name": "full-python",
@@ -178,11 +178,11 @@
         "tools/shared-patches-tests/obj/task112-spec-fix-final/shared-tests/bin/SharedPatches.Tests.dll"
       ],
       "exitCode": 0,
-      "passed": 1529,
+      "passed": 1530,
       "failed": 0,
       "skipped": 0,
       "log": "docs/verification/evidence/task112-spec-fix/full-shared-fresh.log",
-      "assemblySha256": "bc4ec132810051d2b18c09659b54d4f537d2ad9c8d15eee66edb3251a313b9bd"
+      "assemblySha256": "32b483d77cf02b99c273cf658e9d48542ffccc69f3c9c4bbe2b0997eda44d7ef"
     },
     {
       "name": "bundle-surgery",
@@ -250,16 +250,16 @@
       "tools/shared-patches-tests/obj/task112-spec-fix-final/shared-tests/bin",
       "--nologo"
     ],
-    "startUtc": "2026-09-11T02:30:55Z",
-    "endUtc": "2026-09-11T02:30:58Z",
+    "startUtc": "2026-09-11T02:49:18Z",
+    "endUtc": "2026-09-11T02:49:22Z",
     "exitCode": 0,
     "warnings": 0,
     "errors": 0,
     "sourceCount": 87,
     "sourceManifest": "docs/verification/evidence/task112-spec-fix/shared-tests-source-manifest.sha256",
-    "sourceManifestSha256": "03a22a6903bcb17c3905adaeaf264726917f61d3224fca7d26385610f371eae8",
+    "sourceManifestSha256": "4b870621a3ecdd5ce2959edc8fa95c4eacc09229277057244b5393103c45225c",
     "output": "tools/shared-patches-tests/obj/task112-spec-fix-final/shared-tests/bin/SharedPatches.Tests.dll",
-    "outputSha256": "bc4ec132810051d2b18c09659b54d4f537d2ad9c8d15eee66edb3251a313b9bd",
+    "outputSha256": "32b483d77cf02b99c273cf658e9d48542ffccc69f3c9c4bbe2b0997eda44d7ef",
     "log": "docs/verification/evidence/task112-spec-fix/shared-tests-build.log"
   }
 }
