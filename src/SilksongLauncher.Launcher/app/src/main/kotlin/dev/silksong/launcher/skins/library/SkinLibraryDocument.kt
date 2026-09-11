@@ -24,6 +24,10 @@ data class SkinLibraryDocument(val mode: LibraryMode = LibraryMode.OFF, val sele
 object SkinLibraryCodec {
     const val MAX_BYTES = 256 * 1024
     const val PROFILE = "hollow-knight"
+    private fun requireProfile(profileId: String): String {
+        require(profileId == "hollow-knight" || profileId == "silksong") { "Unsupported skin library profile" }
+        return profileId
+    }
     private val gson = GsonBuilder().serializeNulls().create()
     private val id = Regex("[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?")
     fun digest(value: String) = value.matches(Regex("[0-9a-f]{64}"))
@@ -43,10 +47,11 @@ object SkinLibraryCodec {
         require(value.mode == LibraryMode.ROTATE || value.rotationRun == null) { "Rotation work requires ROTATE" }
         require(value.pendingPackId == null || (value.pendingPackId in ids && value.pendingPackId != value.selectedPackId && value.lastDeath > 0)) { "Invalid pending successor" }
     }
-    fun encode(value: SkinLibraryDocument): ByteArray {
+    fun encode(value: SkinLibraryDocument, profileId: String = PROFILE): ByteArray {
+        val owner = requireProfile(profileId)
         validate(value)
         val root = JsonObject().apply {
-            addProperty("schemaVersion", 1); addProperty("profileId", PROFILE); addProperty("mode", value.mode.name)
+            addProperty("schemaVersion", 1); addProperty("profileId", owner); addProperty("mode", value.mode.name)
             add("selectedPackId", value.selectedPackId?.let(::JsonPrimitive) ?: JsonNull.INSTANCE)
             add("packs", JsonArray().apply { value.packs.forEach { p -> add(JsonObject().apply {
                 addProperty("id", p.id); addProperty("name", p.name); addProperty("author", p.author)
@@ -59,12 +64,13 @@ object SkinLibraryCodec {
         }
         return gson.toJson(root).toByteArray(Charsets.UTF_8).also { require(it.size <= MAX_BYTES) { "Library document exceeds byte bound" } }
     }
-    fun decode(bytes: ByteArray): SkinLibraryDocument = try {
+    fun decode(bytes: ByteArray, profileId: String = PROFILE): SkinLibraryDocument = try {
+        val owner = requireProfile(profileId)
         val root = strictJson(bytes).asJsonObject
         if (root.has("rotationRun") || root.has("lastDeath") || root.has("pendingPackId"))
             keys(root, "schemaVersion", "profileId", "mode", "selectedPackId", "packs", "eligiblePackIds", "rotationRun", "lastDeath", "pendingPackId")
         else keys(root, "schemaVersion", "profileId", "mode", "selectedPackId", "packs", "eligiblePackIds")
-        require(root["schemaVersion"].toString() == "1" && text(root["profileId"]) == PROFILE) { "Unsupported library profile/schema" }
+        require(root["schemaVersion"].toString() == "1" && text(root["profileId"]) == owner) { "Unsupported library profile/schema" }
         val packs = root["packs"].asJsonArray.map { item -> item.asJsonObject.let { p ->
             keys(p, "id", "name", "author", "candidateKey", "treeSha256", "receiptSha256")
             LibraryPack(text(p["id"]), text(p["name"]), text(p["author"]), text(p["candidateKey"]), text(p["treeSha256"]), text(p["receiptSha256"]))

@@ -20,13 +20,14 @@ import java.util.concurrent.locks.ReentrantLock
 /** One Kotlin writer, shared by launcher controls and JNI. No managed file writer or legacy dual-read. */
 class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = AndroidSkinFileSystem(),
     internal val catalog: CatalogPathSet = CatalogPathSet.requirePinned()) {
+    val profileId: String = catalog.profile.profileId
     private val processLock = locks.computeIfAbsent(paths.root.absolutePath) { ReentrantLock(true) }
     private val authority = File(paths.root, "library.json")
     private val backup = File(paths.root, "library.backup.json")
     internal val quota by lazy { SkinQuota(paths.root, fs) }
     internal val objects by lazy { SkinObjectRepository(paths, fs, catalog) }
     internal val receipts by lazy { SkinImportReceiptRepository(paths, fs, catalog) }
-    init { require(paths.profileRoot.name == SkinLibraryCodec.PROFILE && paths.profileRoot.parentFile?.name == "profiles") { "Wrong skin profile owner" } }
+    init { require(paths.profileRoot.name == profileId && paths.profileRoot.parentFile?.name == "profiles") { "Wrong skin profile owner" } }
 
     internal fun startRuntime(): SkinResult<SkinLibraryDocument> = changeRotation { renewRotation(it) }
     private fun renewRotation(value: SkinLibraryDocument) = value.copy(
@@ -116,8 +117,8 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
             }
         }
         val current = if (fs.exists(authority)) boundedRead(authority, SkinLibraryCodec.MAX_BYTES) else null
-        val good = current?.let { runCatching { SkinLibraryCodec.decode(it) }.getOrNull() }
-        val saved = if (good == null && fs.exists(backup)) runCatching { SkinLibraryCodec.decode(boundedRead(backup, SkinLibraryCodec.MAX_BYTES)) }.getOrNull() else null
+        val good = current?.let { runCatching { SkinLibraryCodec.decode(it, profileId) }.getOrNull() }
+        val saved = if (good == null && fs.exists(backup)) runCatching { SkinLibraryCodec.decode(boundedRead(backup, SkinLibraryCodec.MAX_BYTES), profileId) }.getOrNull() else null
         if (current != null && good == null) writeAtomic(File(paths.root, "library.invalid.json"), current)
         val next = renewRotation((good ?: saved ?: SkinLibraryDocument()).copy(mode = LibraryMode.OFF))
         commit(next, preserveBackup = good != null)
@@ -133,7 +134,7 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
         if (!fs.exists(authority)) {
             require(!fs.exists(backup) && !fs.exists(File(paths.root, "library.invalid.json"))) { "Library publication is incomplete; recover configuration to OFF" }
             val legacy = File(paths.root, "registry")
-            val document = if (fs.exists(legacy)) {
+            val document = if (catalog.profile.legacyMigrationAllowed && fs.exists(legacy)) {
                 val old = SkinRegistryStore(paths.root, quota, fs).snapshotForLibrary().required().document
                 val packs = old.packs.sortedBy { it.id }.map { p -> LibraryPack(p.id, p.name, p.author, p.candidateKey, p.treeSha256, p.importReceiptSha256).also(::requireVerified) }
                 SkinLibraryDocument(selectedPackId = old.activation.selectedPackId, packs = packs,
@@ -142,15 +143,15 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
             commit(document)
         }
         val bytes = boundedRead(authority, SkinLibraryCodec.MAX_BYTES)
-        val value = SkinLibraryCodec.decode(bytes)
+        val value = SkinLibraryCodec.decode(bytes, profileId)
         // Also retries a previous uncertain rename barrier before admitting a configuration to runtime.
         fs.syncFile(authority); fs.syncDirectory(paths.root)
         return value
     }
-    internal fun configurationIdentity(document: SkinLibraryDocument) = SkinIdentity.sha256(SkinLibraryCodec.encode(document))
+    internal fun configurationIdentity(document: SkinLibraryDocument) = SkinIdentity.sha256(SkinLibraryCodec.encode(document, profileId))
     private fun commit(document: SkinLibraryDocument, preserveBackup: Boolean = true) {
-        val bytes = SkinLibraryCodec.encode(document)
-        val old = if (fs.exists(authority)) runCatching { boundedRead(authority, SkinLibraryCodec.MAX_BYTES).also { SkinLibraryCodec.decode(it) } }.getOrNull() else null
+        val bytes = SkinLibraryCodec.encode(document, profileId)
+        val old = if (fs.exists(authority)) runCatching { boundedRead(authority, SkinLibraryCodec.MAX_BYTES).also { SkinLibraryCodec.decode(it, profileId) } }.getOrNull() else null
         if (preserveBackup && old != null) writeAtomic(backup, old)
         else if (!fs.exists(backup)) writeAtomic(backup, bytes)
         try { writeAtomic(authority, bytes) }
@@ -245,9 +246,9 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
         private val locks = ConcurrentHashMap<String, ReentrantLock>()
         private val OBSERVATION_STATUSES = setOf("Applied", "Restored", "Unchanged", "AwaitingTargets", "Cancelled", "Rejected", "Failed", "RestoreFailed", "Blocked")
         internal fun production(context: android.content.Context, profile: dev.silksong.launcher.profiles.GameProfile): SkinLibraryStore {
-            require(profile == dev.silksong.launcher.profiles.HollowKnightProfile) { "Skins require the exact Hollow Knight profile" }
-            // Load the real packaged asset before constructing any catalog-dependent builder/repository.
-            val catalog = dev.silksong.launcher.skins.catalog.HollowKnightCatalogPaths.load(context.assets).required()
+            val skinProfile = dev.silksong.launcher.skins.catalog.SkinCatalogProfiles.require(profile)
+            // Load the exact packaged per-game asset before constructing any catalog-dependent builder/repository.
+            val catalog = dev.silksong.launcher.skins.catalog.SkinCatalogPaths.load(context.assets, skinProfile).required()
             val fs = AndroidSkinFileSystem(); val files = context.filesDir.absoluteFile
             val paths = dev.silksong.launcher.profiles.ProfilePaths(files, profile)
             for (directory in listOf(requireNotNull(paths.root.parentFile), paths.root)) {
