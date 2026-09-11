@@ -1183,6 +1183,31 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("desiredGlyphCenter", position)
         self.assertIn("desiredGlyphCenter.x - glyphBounds.center.x", position)
         self.assertIn("desiredGlyphCenter.y - glyphBounds.center.y", position)
+        self.assertRegex(
+            position,
+            r"(?s)var\s+rb\s*=\s*tr\.bounds;.*?"
+            r"if\s*\(TryTmpGlyphBoundsWorld\([^;]+?\)\)\s*"
+            r"rb\s*=\s*new Bounds\(\(glyphMin \+ glyphMax\) \* 0\.5f, glyphMax - glyphMin\);",
+        )
+        self.assertIn(
+            "if (col == activeCol) { if (!actHave) { actB = rb; actHave = true; } else actB.Encapsulate(rb); }",
+            position,
+        )
+
+    def test_tmp_glyph_bounds_world_encapsulates_every_rotated_corner(self):
+        charms = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Charms.cs")
+        )
+        bounds = method_body(
+            charms,
+            r"static\s+bool\s+TryTmpGlyphBoundsWorld\s*\([^)]*\)",
+        )
+
+        self.assertEqual(4, bounds.count("TransformPoint("))
+        self.assertIn("new Vector3(tb.min.x, tb.max.y, tb.min.z)", bounds)
+        self.assertIn("new Vector3(tb.max.x, tb.min.y, tb.min.z)", bounds)
+        self.assertIn("Vector3.Min", bounds)
+        self.assertIn("Vector3.Max", bounds)
 
     def test_frame_tab_labels_sort_above_chrome_and_fleurs_are_slot_bounded(self):
         frame = strip_csharp_comments(

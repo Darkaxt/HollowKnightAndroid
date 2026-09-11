@@ -583,12 +583,15 @@ public partial class HKDualScreen
         foreach (var (tmp2, t, col) in frameTabs)
         {
             if (tmp2 == null) continue;
-            // Use the TMP component's OWN co-located mesh renderer (tight glyph AABB) — NOT
-            // GetComponentsInChildren, which also grabbed a stray renderer reaching down to the tab's
-            // transform origin (panel bottom), inflating the bounds and dropping the line to the bottom.
+            // Prefer TMP's drawn-glyph bounds. Renderer bounds can retain lower
+            // line-box padding and leave the lower fleur far below visible ink.
+            // Keep the renderer as a fallback when TMP reflection is unavailable.
             var tr = (tmp2 as Component).GetComponent<Renderer>();
             if (tr == null) continue;
             var rb = tr.bounds;
+            Vector3 glyphMin, glyphMax;
+            if (TryTmpGlyphBoundsWorld((tmp2 as Component).transform, out glyphMin, out glyphMax))
+                rb = new Bounds((glyphMin + glyphMax) * 0.5f, glyphMax - glyphMin);
             if (rb.size.x < 1e-5f || rb.size.y < 1e-5f) continue;
             if (!rowHave) { rowB = rb; rowHave = true; } else rowB.Encapsulate(rb);
             if (col == activeCol) { if (!actHave) { actB = rb; actHave = true; } else actB.Encapsulate(rb); }

@@ -38,9 +38,12 @@ public partial class HKDualScreen
             if (_tmpTextBoundsPI == null) return false;
             Bounds tb = (Bounds)_tmpTextBoundsPI.GetValue(tmp, null);
             if (tb.size.sqrMagnitude < 1e-8f) return false;
-            wMin = tmpT.TransformPoint(tb.min); wMax = tmpT.TransformPoint(tb.max);
-            if (wMax.x < wMin.x) { var t2 = wMin.x; wMin.x = wMax.x; wMax.x = t2; }
-            if (wMax.y < wMin.y) { var t2 = wMin.y; wMin.y = wMax.y; wMax.y = t2; }
+            Vector3 p0 = tmpT.TransformPoint(tb.min);
+            Vector3 p1 = tmpT.TransformPoint(new Vector3(tb.min.x, tb.max.y, tb.min.z));
+            Vector3 p2 = tmpT.TransformPoint(new Vector3(tb.max.x, tb.min.y, tb.min.z));
+            Vector3 p3 = tmpT.TransformPoint(new Vector3(tb.max.x, tb.max.y, tb.min.z));
+            wMin = Vector3.Min(Vector3.Min(p0, p1), Vector3.Min(p2, p3));
+            wMax = Vector3.Max(Vector3.Max(p0, p1), Vector3.Max(p2, p3));
             return true;
         }
         catch { return false; }
