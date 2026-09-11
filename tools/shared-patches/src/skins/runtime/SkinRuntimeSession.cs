@@ -63,8 +63,14 @@ namespace DualSouls.Skins.Runtime
         public SkinApplyStatus Status { get; }
         public string Detail { get; }
         public IReadOnlyList<string> UnsupportedTargets { get; }
-        internal SkinApplyResult(SkinApplyStatus status, string detail = "", IEnumerable<string> unsupported = null)
-        { Status = status; Detail = detail; UnsupportedTargets = new List<string>(unsupported ?? Array.Empty<string>()).AsReadOnly(); }
+        public bool PreviousVisualsRestored { get; }
+        internal SkinApplyResult(SkinApplyStatus status, string detail = "", IEnumerable<string> unsupported = null,
+            bool previousVisualsRestored = false)
+        {
+            Status = status; Detail = detail;
+            UnsupportedTargets = new List<string>(unsupported ?? Array.Empty<string>()).AsReadOnly();
+            PreviousVisualsRestored = previousVisualsRestored;
+        }
     }
     public interface ISkinTextureDecoder { SkinTexture Decode(byte[] bytes, int width, int height); }
 
@@ -228,7 +234,8 @@ namespace DualSouls.Skins.Runtime
             Reap();
             if (retired.Count > 0)
                 return WithRetirement(new SkinApplyResult(SkinApplyStatus.AwaitingTargets,
-                    "Prior skin resources are still retiring; successor allocation is deferred."));
+                    "Prior skin resources are still retiring; successor allocation is deferred.",
+                    previousVisualsRestored: CurrentPack == null));
             if (ReferenceEquals(pack, CurrentPack) && pack.Mode == mode) return Refresh();
             var unsupported = pack.Textures.Keys.Where(x => !rules.IsSupported(x)).ToList();
             var candidate = new Dictionary<string, SkinTexture>(StringComparer.OrdinalIgnoreCase);
@@ -253,7 +260,8 @@ namespace DualSouls.Skins.Runtime
                     if (restoration.Status != SkinApplyStatus.Restored && restoration.Status != SkinApplyStatus.Unchanged)
                         return restoration;
                     return WithRetirement(new SkinApplyResult(SkinApplyStatus.AwaitingTargets,
-                        "Previous visuals restored; successor waits for confirmed resource retirement."));
+                        "Previous visuals restored; successor waits for confirmed resource retirement.",
+                        previousVisualsRestored: true));
                 }
                 mode = pack.Mode;
                 encodedAdmission = files.Values.Sum(x => x.Length);
@@ -455,7 +463,8 @@ namespace DualSouls.Skins.Runtime
                 catch (Exception error) { retirementError = "Cannot establish auxiliary resource reachability: " + error.Message; }
             }
             return retirementError.Length == 0 ? result : new SkinApplyResult(result.Status,
-                result.Detail + "; Resource retirement pending: " + retirementError, result.UnsupportedTargets);
+                result.Detail + "; Resource retirement pending: " + retirementError, result.UnsupportedTargets,
+                result.PreviousVisualsRestored);
         }
         public void TickTeardown()
         {

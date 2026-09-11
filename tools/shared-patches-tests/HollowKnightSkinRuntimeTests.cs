@@ -165,6 +165,62 @@ public sealed class HollowKnightSkinRuntimeTests
         Assert.Equal(22, rig.Loader.Created.Count);
     }
 
+    [Theory]
+    [InlineData("ON", 22)]
+    [InlineData("ROTATE", 20)]
+    public void Controller_publishes_vanilla_identity_while_memory_bound_successor_awaits_retirement(
+        string successorMode, int finalTextureCount)
+    {
+        var targets = Enumerable.Range(0, 11).Select(index => "T" + index + ".png").ToArray();
+        var rules = new SkinRuntimeRules("silksong", 11, targets.Contains,
+            (mode, target) => mode == "ON" || mode == "ROTATE" && Array.IndexOf(targets, target) < 9,
+            restoreBeforeRotation: true);
+        var rig = new Rig(2300, rules);
+        foreach (var target in targets) rig.Add(target);
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGNQSlv1HxkzkC4AAJHIIxEb9L/kAAAAAElFTkSuQmCC");
+        var first = rig.Pack("full-a", "ON", png, targets);
+        var second = rig.Pack("full-b", successorMode, png, targets);
+        var request = new SkinLibraryRequest {
+            ProfileId = "silksong", ConfigSha256 = new string('a', 64), Mode = "ON",
+            PackId = first.Id, TreeSha256 = new string('b', 64), Root = first.Root,
+            Textures = first.Textures.ToDictionary(x => x.Key, x => x.Value),
+        };
+        SkinLibraryObservation observed = null;
+        var controller = new SkinLibraryRuntimeController(rules, () => request,
+            pack => rig.Session.TryApply(pack), () => rig.Session.TryRestore(), value => observed = value,
+            () => rig.Session.Refresh());
+
+        controller.Tick();
+        Assert.Equal("full-a", observed.ActivePackId);
+        rig.Loader.DelayedRelease = true;
+        request.Mode = successorMode;
+        request.PackId = second.Id;
+        request.TreeSha256 = new string('c', 64);
+        request.Root = second.Root;
+        request.Textures = second.Textures.ToDictionary(x => x.Key, x => x.Value);
+
+        controller.Tick();
+
+        Assert.Equal("AwaitingTargets", observed.Status);
+        Assert.Null(observed.ActivePackId);
+        Assert.Null(observed.ActiveTreeSha256);
+        Assert.Null(rig.Session.CurrentPack);
+        Assert.All(rig.Slots, slot => Assert.Same(slot.Original, slot.Value));
+        Assert.Equal(11, rig.Loader.Created.Count);
+
+        controller.Tick();
+        Assert.Equal("AwaitingTargets", observed.Status);
+        Assert.Null(observed.ActivePackId);
+        Assert.Equal(11, rig.Loader.Created.Count);
+
+        foreach (var texture in rig.Loader.Created) texture.Released = true;
+        controller.Tick();
+        Assert.Equal("Applied", observed.Status);
+        Assert.Equal("full-b", observed.ActivePackId);
+        Assert.Equal(new string('c', 64), observed.ActiveTreeSha256);
+        Assert.Equal(finalTextureCount, rig.Loader.Created.Count);
+    }
+
     [Fact]
     public void Full_on_to_rotate_restores_hud_and_does_not_claim_new_mode_before_release()
     {

@@ -120,6 +120,10 @@ namespace DualSouls.Skins.Runtime
                 restored = false; activeMode = null;
                 result = apply(request.Mode == "ROTATE" ? cachedRotation : cached);
             }
+            if (result.PreviousVisualsRestored)
+            {
+                activeId = activeTree = activeMode = null;
+            }
             if (directApply) awaitingApply = result.Status == SkinApplyStatus.AwaitingTargets;
             if (result.Status == SkinApplyStatus.Applied || result.Status == SkinApplyStatus.Unchanged)
             {
