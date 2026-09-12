@@ -1058,6 +1058,28 @@ public sealed class HollowKnightSkinRuntimeTests
         }
         rig.Session.TryRestore();Assert.Same(knight.Original,knight.Value);Assert.Same(geo.Original,geo.Value);
     }
+    [Fact]
+    public void Fsm_state_list_is_not_read_until_fsm_is_initialized()
+    {
+        int reads = 0;
+        Assert.Null(SkinRuntimeFsmReadiness.ReadInitialized(false, () => { reads++; return new object(); }));
+        Assert.Equal(0, reads);
+        Assert.NotNull(SkinRuntimeFsmReadiness.ReadInitialized(true, () => { reads++; return new object(); }));
+        Assert.Equal(1, reads);
+    }
+
+    [Theory]
+    [InlineData(false, true, 0)]
+    [InlineData(true, false, 0)]
+    [InlineData(true, true, 1)]
+    public void Fsm_actions_are_read_only_after_fsm_and_state_are_ready(bool initialized, bool actionsLoaded, int expectedReads)
+    {
+        int reads = 0;
+        var actions = SkinRuntimeFsmReadiness.ReadActions(initialized, actionsLoaded, () => { reads++; return new object(); });
+        Assert.Equal(expectedReads, reads);
+        Assert.Equal(expectedReads == 1, actions != null);
+    }
+
     [Theory]
     [InlineData("owners")]
     [InlineData("scene")]

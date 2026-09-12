@@ -252,14 +252,22 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             target.GetComponents<PlayMakerFSM>().FirstOrDefault(x => x != null && x.FsmName == name);
         void AddFsmSprite(List<SkinSlot> slots, PlayMakerFSM fsm, string stateName, int index, string target)
         {
-            if (fsm == null || fsm.FsmStates == null) return;
-            var state = fsm.FsmStates.FirstOrDefault(x => x != null && x.Name == stateName);
+            var owner = fsm != null ? fsm.Fsm : null;
+            var states = owner != null ? SkinRuntimeFsmReadiness.ReadInitialized(owner.Initialized, () => owner.States) : null;
+            if (states == null) return;
+            var state = states.FirstOrDefault(x => x != null && x.Name == stateName);
             if (state == null) return;
-            if (state.Actions == null) state.LoadActions();
-            if (state.Actions == null || index < 0 || index >= state.Actions.Length || state.Actions[index] == null) return;
-            var action = state.Actions[index];
-            Func<bool> alive = () => fsm != null && fsm.FsmStates != null && fsm.FsmStates.Contains(state) &&
-                state.Actions != null && index < state.Actions.Length && ReferenceEquals(state.Actions[index], action);
+            var actions = SkinRuntimeFsmReadiness.ReadActions(owner.Initialized, state.ActionsLoaded, () => state.Actions);
+            if (actions == null || index < 0 || index >= actions.Length || actions[index] == null) return;
+            var action = actions[index];
+            Func<bool> alive = () =>
+            {
+                if (fsm == null || !ReferenceEquals(fsm.Fsm, owner)) return false;
+                var currentStates = SkinRuntimeFsmReadiness.ReadInitialized(owner.Initialized, () => owner.States);
+                if (currentStates == null || !currentStates.Contains(state)) return false;
+                var current = SkinRuntimeFsmReadiness.ReadActions(owner.Initialized, state.ActionsLoaded, () => state.Actions);
+                return current != null && index < current.Length && ReferenceEquals(current[index], action);
+            };
             foreach (var field in action.GetType().GetFields())
             {
                 if (field.FieldType == typeof(Sprite))
@@ -471,6 +479,14 @@ namespace DualSouls.Skins.HollowKnight.Runtime
 
 namespace DualSouls.Skins.HollowKnight.Runtime
 {
+    internal static class SkinRuntimeFsmReadiness
+    {
+        public static T ReadInitialized<T>(bool fsmInitialized, Func<T> read) where T : class =>
+            fsmInitialized ? read() : null;
+        public static T ReadActions<T>(bool fsmInitialized, bool actionsLoaded, Func<T> read) where T : class =>
+            fsmInitialized && actionsLoaded ? read() : null;
+    }
+
     // Local production scan cadence and observation cache; graphics/component boundaries stay in the runtime.
     internal sealed class SkinRuntimeRefreshSchedule
     {
