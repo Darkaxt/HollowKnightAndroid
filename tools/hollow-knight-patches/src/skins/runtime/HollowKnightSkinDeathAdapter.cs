@@ -65,8 +65,9 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         }
         public void HeroInPosition(object owner, object game)
         {
+            if (disposed || cancelled || Run == null || Occurrence == 0) return;
             var f = sample();
-            if (disposed || cancelled || Occurrence == 0 || !Owners(f, owner, game)) return;
+            if (!Owners(f, owner, game)) return;
             ObserveOwners(f); // sceneLoaded can bind a replacement before the next Update
             if (!positioned) { positioned = true; completed = false; stableFrames = 0; }
         }
@@ -77,12 +78,11 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         }
         public void Tick()
         {
-            if (disposed) return;
+            if (disposed || cancelled || Run == null) return;
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (managed) BindManaged();
 #endif
             var f = sample();
-            if (Run == null || cancelled) return;
             if (f.Manager != null && f.SaveId != saveId) { Cancel(); return; }
             ObserveOwners(f);
             if (f.Frame == sampledFrame) return;
@@ -130,12 +130,12 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         GameManager.EnterSceneEvent completionHandler;
         public HollowKnightSkinDeathAdapter(HollowKnightSkinRuntime runtime) : this(() => CaptureManaged(runtime))
         {
-            managed = true; BindManaged(); UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
+            managed = true; UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
         }
-        void OnSceneLoaded(Scene scene, LoadSceneMode mode) { BindManaged(); }
+        void OnSceneLoaded(Scene scene, LoadSceneMode mode) { if (Run != null && !cancelled) BindManaged(); }
         void BindManaged()
         {
-            var h = HeroController.instance; var m = GameManager.instance;
+            var h = HeroController.UnsafeInstance; var m = GameManager.UnsafeInstance;
             if (ReferenceEquals(h, boundHero) && ReferenceEquals(m, boundManager)) return;
             UnbindManaged(); boundHero = h; boundManager = m;
             if (h != null && m != null) {
@@ -153,7 +153,8 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         }
         static SkinDeathFrame CaptureManaged(HollowKnightSkinRuntime runtime)
         {
-            var h = HeroController.instance; var m = GameManager.instance; var cameras = GameCameras.instance;
+            var h = HeroController.UnsafeInstance; var m = GameManager.UnsafeInstance;
+            var cameras = m != null ? GameCameras.instance : null;
             var hud = cameras != null ? cameras.hudCanvas : null;
             var f = new SkinDeathFrame { Frame = Time.frameCount, Hero = h != null ? h : null, Manager = m != null ? m : null,
                 Hud = hud != null ? hud : null, SaveId = m != null ? m.profileID : 0 };

@@ -96,6 +96,28 @@ public class HollowKnightSkinDeathAdapterTests
         public void Respawn() { Confirm();Frame.Dead=false;Position();Scene();Step();Step(); }
     }
 
+    [Theory]
+    [InlineData("OFF")]
+    [InlineData("ON")]
+    public void Non_rotating_modes_do_not_sample_live_owners_each_frame(string mode)
+    {
+        int samples = 0;
+        var adapter = new HollowKnightSkinDeathAdapter(() =>
+        {
+            samples++;
+            return new SkinDeathFrame();
+        });
+        adapter.Configure(mode, null);
+        int configuredSamples = samples;
+
+        adapter.Tick();
+        adapter.HeroInPosition(new object(), new object());
+        adapter.SceneCompleted(new object(), new object());
+        adapter.Tick();
+
+        Assert.Equal(configuredSamples, samples);
+    }
+
     [Fact] public void ManagedDeathAdapterBoundaryExists()
     {
         Assert.NotNull(typeof(SkinRuntimeSession).Assembly.GetType("DualSouls.Skins.HollowKnight.Runtime.HollowKnightSkinDeathAdapter"));

@@ -1423,6 +1423,28 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertRegex(dispose, r"HKDualScreen|_reference|_dualSouls")
         self.assertRegex(dispose, r"Dispose|Shutdown|Teardown|Restore")
 
+    def test_skin_hot_path_uses_quiet_owner_reads_and_skips_incomplete_targets(self):
+        runtime = strip_csharp_comments(
+            read(SOURCE_ROOT / "skins" / "runtime" / "HollowKnightSkinRuntime.cs")
+        )
+        tick = method_body(runtime, r"public\s+void\s+Tick\s*\(\s*\)")
+        self.assertIn("GameManager.UnsafeInstance", tick)
+        self.assertIn("HeroController.UnsafeInstance", tick)
+        self.assertNotIn("HeroController.instance", tick)
+
+        death = strip_csharp_comments(
+            read(SOURCE_ROOT / "skins" / "runtime" / "HollowKnightSkinDeathAdapter.cs")
+        )
+        bind = method_body(death, r"void\s+BindManaged\s*\(\s*\)")
+        capture = method_body(
+            death,
+            r"static\s+SkinDeathFrame\s+CaptureManaged\s*\([^)]*\)",
+        )
+        self.assertIn("HeroController.UnsafeInstance", bind)
+        self.assertIn("GameManager.UnsafeInstance", bind)
+        self.assertIn("HeroController.UnsafeInstance", capture)
+        self.assertIn("GameManager.UnsafeInstance", capture)
+
     def test_h2_adapter_bootstrap_is_registered_as_an_entrypoint(self):
         entrypoints = json.loads(read(ENTRYPOINTS))["entryPoints"]
         matches = [

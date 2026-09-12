@@ -1081,6 +1081,24 @@ public sealed class HollowKnightSkinRuntimeTests
     }
 
     [Fact]
+    public void Missing_required_owners_do_not_run_expensive_discovery()
+    {
+        int caches = 0, refreshes = 0;
+        var schedule = new SkinRuntimeRefreshSchedule(
+            () => caches++,
+            () => true,
+            () => refreshes++);
+        schedule.Publish(new SkinApplyResult(SkinApplyStatus.AwaitingTargets));
+
+        schedule.Tick(0, null, null);
+        schedule.Tick(2.01f, new object(), null);
+        schedule.Tick(4.02f, null, new object());
+
+        Assert.Equal(0, caches);
+        Assert.Equal(0, refreshes);
+    }
+
+    [Fact]
     public void Stable_owners_stop_periodic_discovery_after_one_scheduled_refresh()
     {
         int caches = 0, refreshes = 0;
@@ -1099,6 +1117,34 @@ public sealed class HollowKnightSkinRuntimeTests
 
         Assert.Equal(1, caches);
         Assert.Equal(1, refreshes);
+    }
+
+    [Fact]
+    public void Settled_schedule_retries_cache_when_refresh_readiness_becomes_false()
+    {
+        int caches = 0, refreshes = 0;
+        bool canRefresh = true;
+        SkinRuntimeRefreshSchedule schedule = null;
+        schedule = new SkinRuntimeRefreshSchedule(
+            () => caches++,
+            () => canRefresh,
+            () =>
+            {
+                refreshes++;
+                schedule.Publish(new SkinApplyResult(SkinApplyStatus.Unchanged));
+            });
+        var hero = new object();
+        var hud = new object();
+
+        schedule.Tick(0, hero, hud);
+        canRefresh = false;
+        schedule.Tick(2.01f, hero, hud);
+        canRefresh = true;
+        schedule.Tick(4.02f, hero, hud);
+        schedule.Tick(10, hero, hud);
+
+        Assert.Equal(3, caches);
+        Assert.Equal(2, refreshes);
     }
 
     [Fact]

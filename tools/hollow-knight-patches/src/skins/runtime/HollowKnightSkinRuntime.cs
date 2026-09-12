@@ -57,8 +57,9 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         public void Tick()
         {
             if (disposed) return;
-            var nextHero = HeroController.instance;
-            var cameras = GameCameras.instance;
+            var manager = GameManager.UnsafeInstance;
+            var nextHero = manager != null ? HeroController.UnsafeInstance : null;
+            var cameras = manager != null ? GameCameras.instance : null;
             var nextHud = cameras != null ? cameras.hudCanvas : null;
             hero = nextHero; hud = nextHud;
             var before = LastResult;
@@ -517,7 +518,12 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             bool replaced = !ReferenceEquals(hero, nextHero) || !ReferenceEquals(hud, nextHud);
             if (replaced) Invalidate(); // before the gate/throttle can retain a stale successful observation
             hero = nextHero; hud = nextHud;
-            if (!replaced && settled) return;
+            if (nextHero == null || nextHud == null) return;
+            if (!replaced && settled)
+            {
+                if (canRefresh()) return;
+                settled = false;
+            }
             if (!replaced && now < nextScan) return;
             nextScan = now + 2f;
             cacheTargets();
