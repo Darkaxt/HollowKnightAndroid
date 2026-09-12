@@ -116,6 +116,34 @@ class SkinFileSystemContainmentTest {
     }
 
     @Test
+    fun `successful containment takes two mount snapshots instead of rereading per component`() {
+        val child = File(owner, "nested/child").apply {
+            parentFile.mkdirs()
+            writeText("payload")
+        }
+        var snapshots = 0
+        var directReads = 0
+        val provider = object : SkinMountIdentityProvider {
+            override fun identity(path: Path): SkinMountIdentity? {
+                directReads++
+                return SkinMountIdentity(device = "device-7", mountId = "profile-11")
+            }
+
+            override fun snapshot(): SkinMountIdentityProvider {
+                snapshots++
+                return SkinMountIdentityProvider {
+                    SkinMountIdentity(device = "device-7", mountId = "profile-11")
+                }
+            }
+        }
+
+        AndroidSkinFileSystem(provider).requireContained(child, owner)
+
+        assertEquals(2, snapshots)
+        assertEquals(0, directReads)
+    }
+
+    @Test
     fun `mountinfo parser selects one exact longest mount and verifies the real device`() {
         val rows = listOf(
             "10 1 8:1 / / rw - ext4 /dev/root rw",

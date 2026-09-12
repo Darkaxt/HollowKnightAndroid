@@ -29,6 +29,8 @@ internal data class SkinMountIdentity(val device: String, val mountId: String)
 
 internal fun interface SkinMountIdentityProvider {
     fun identity(path: Path): SkinMountIdentity?
+
+    fun snapshot(): SkinMountIdentityProvider = this
 }
 
 internal object SkinMountInfoParser {
@@ -88,9 +90,17 @@ private object PlatformSkinMountIdentityProvider : SkinMountIdentityProvider {
         val storeId = listOf(store.name(), store.type(), store.isReadOnly.toString(), store.totalSpace.toString()).joinToString("|")
         SkinMountIdentity(device = "$root|$storeId", mountId = "windows:$root|$storeId")
     } else {
-        val device = (Files.getAttribute(path, "unix:dev", NOFOLLOW_LINKS) as? Number)?.toLong()
-            ?: return null
-        SkinMountInfoParser.select(path, device, mountInfoBytes())
+        snapshot().identity(path)
+    }
+
+    override fun snapshot(): SkinMountIdentityProvider {
+        if (isWindowsHost()) return this
+        val mountInfo = mountInfoBytes()
+        return SkinMountIdentityProvider { path ->
+            val device = (Files.getAttribute(path, "unix:dev", NOFOLLOW_LINKS) as? Number)?.toLong()
+                ?: return@SkinMountIdentityProvider null
+            SkinMountInfoParser.select(path, device, mountInfo)
+        }
     }
 
     private fun mountInfoBytes(): ByteArray {
@@ -195,7 +205,8 @@ class AndroidSkinFileSystem private constructor(
         val targetPath = path.toPath().toAbsolutePath().normalize()
         require(targetPath.startsWith(ownerPath)) { "Path escapes its fixed owner" }
 
-        val ownerEvidence = evidence(ownerPath)
+        val beforeMounts = mountIdentityProvider.snapshot()
+        val ownerEvidence = evidence(ownerPath, beforeMounts)
         require(ownerEvidence.directory) { "Fixed owner is not a directory" }
         val ownerStore = ownerEvidence.store
         val ownerDevice = ownerEvidence.device
@@ -211,7 +222,7 @@ class AndroidSkinFileSystem private constructor(
                     require(allowMissingLeaf && index == relative.nameCount - 1) { "Contained path component is missing" }
                     break
                 }
-                val current = evidence(cursor)
+                val current = evidence(cursor, beforeMounts)
                 require(current.store == ownerStore) { "Contained path crosses a file-store boundary" }
                 require(current.device == ownerDevice) { "Contained path crosses a device boundary" }
                 require(current.mountId == ownerMount) { "Contained path crosses a mount boundary" }
@@ -224,8 +235,9 @@ class AndroidSkinFileSystem private constructor(
                 snapshots += cursor to current
             }
         }
+        val afterMounts = mountIdentityProvider.snapshot()
         for ((component, before) in snapshots) {
-            require(evidence(component).stableEquals(before)) { "Contained path identity changed" }
+            require(evidence(component, afterMounts).stableEquals(before)) { "Contained path identity changed" }
         }
     }
 
@@ -314,7 +326,9 @@ class AndroidSkinFileSystem private constructor(
 
     override fun sameFile(left: File, right: File): Boolean = Files.isSameFile(left.toPath(), right.toPath())
 
-    private fun evidence(path: Path): Evidence {
+    private fun evidence(path: Path): Evidence = evidence(path, mountIdentityProvider)
+
+    private fun evidence(path: Path, mounts: SkinMountIdentityProvider): Evidence {
         require(!Files.isSymbolicLink(path)) { "Symbolic or reparse path is forbidden" }
         val before = Files.readAttributes(path, BasicFileAttributes::class.java, NOFOLLOW_LINKS)
         require(!before.isSymbolicLink && !before.isOther) { "Alias or special path is forbidden" }
@@ -327,13 +341,13 @@ class AndroidSkinFileSystem private constructor(
             }
             require(links == 1L) { "Hard-linked filesystem node is forbidden" }
         }
-        val mountBefore = mountIdentityProvider.identity(path)
+        val mountBefore = mounts.identity(path)
             ?: throw IllegalStateException("Mount or device identity is unavailable")
         val key = identityKey(before)
         val store = fileStoreProvider(path)?.let(::storeEvidence)
         val after = Files.readAttributes(path, BasicFileAttributes::class.java, NOFOLLOW_LINKS)
         val afterKey = identityKey(after)
-        val mountAfter = mountIdentityProvider.identity(path)
+        val mountAfter = mounts.identity(path)
             ?: throw IllegalStateException("Mount or device identity is unavailable")
         require(mountBefore == mountAfter) { "Mount or device identity changed while inspected" }
         require(
