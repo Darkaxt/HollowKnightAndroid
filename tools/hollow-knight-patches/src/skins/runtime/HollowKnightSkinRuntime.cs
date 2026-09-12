@@ -43,7 +43,9 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             UnityEngine.SceneManagement.SceneManager.sceneUnloaded += SceneUnloaded;
             Current = this;
         }
-        public SkinApplyResult TryApply(SkinPack pack, CancellationToken cancellation = default) => Publish(session.TryApply(pack, cancellation));
+        public SkinApplyResult TryApply(SkinPack pack, CancellationToken cancellation = default) =>
+            Publish(HollowKnightSkinApplyGate.Run(hero != null && hud != null,
+                () => session.TryApply(pack, cancellation)));
         public SkinApplyResult TryRestore() => Publish(session.TryRestore());
         SkinApplyResult Publish(SkinApplyResult result)
         {
@@ -63,7 +65,8 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             var nextHud = cameras != null ? cameras.hudCanvas : null;
             hero = nextHero; hud = nextHud;
             var before = LastResult;
-            refreshSchedule.Tick(Time.unscaledTime, nextHero, nextHud);
+            refreshSchedule.Tick(Time.unscaledTime, nextHero, nextHud,
+                nextHero != null && nextHud != null);
             var result = LastResult;
             if (result != null && (result.Status == SkinApplyStatus.Failed || result.Status == SkinApplyStatus.RestoreFailed ||
                  result.Detail.Contains("Resource retirement pending")) &&
@@ -480,6 +483,18 @@ namespace DualSouls.Skins.HollowKnight.Runtime
 
 namespace DualSouls.Skins.HollowKnight.Runtime
 {
+    internal static class HollowKnightSkinApplyGate
+    {
+        public static SkinApplyResult Run(bool targetsReady, Func<SkinApplyResult> apply)
+        {
+            if (apply == null) throw new ArgumentNullException(nameof(apply));
+            return !targetsReady
+                ? new SkinApplyResult(SkinApplyStatus.AwaitingTargets,
+                    "Hero and HUD targets are not both available.")
+                : apply();
+        }
+    }
+
     internal static class SkinRuntimeFsmReadiness
     {
         public static T ReadInitialized<T>(bool fsmInitialized, Func<T> read) where T : class =>
@@ -513,12 +528,12 @@ namespace DualSouls.Skins.HollowKnight.Runtime
                 LastResult.Status == SkinApplyStatus.Unchanged || LastResult.Status == SkinApplyStatus.Restored)
                 LastResult = new SkinApplyResult(SkinApplyStatus.AwaitingTargets, "Scene targets changed; current visual refresh pending.");
         }
-        public void Tick(float now, object nextHero, object nextHud)
+        public void Tick(float now, object nextHero, object nextHud, bool targetsLive = true)
         {
             bool replaced = !ReferenceEquals(hero, nextHero) || !ReferenceEquals(hud, nextHud);
             if (replaced) Invalidate(); // before the gate/throttle can retain a stale successful observation
             hero = nextHero; hud = nextHud;
-            if (nextHero == null || nextHud == null) return;
+            if (!targetsLive || nextHero == null || nextHud == null) return;
             if (!replaced && settled)
             {
                 if (canRefresh()) return;

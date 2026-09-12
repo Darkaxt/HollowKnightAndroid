@@ -1081,6 +1081,44 @@ public sealed class HollowKnightSkinRuntimeTests
     }
 
     [Fact]
+    public void Skin_apply_waits_without_running_expensive_work_until_hero_and_hud_exist()
+    {
+        int applies = 0;
+        Func<SkinApplyResult> apply = () =>
+        {
+            applies++;
+            return new SkinApplyResult(SkinApplyStatus.Applied);
+        };
+
+        var missingHero = HollowKnightSkinApplyGate.Run(false, apply);
+        var missingHud = HollowKnightSkinApplyGate.Run(false, apply);
+        var ready = HollowKnightSkinApplyGate.Run(true, apply);
+
+        Assert.Equal(SkinApplyStatus.AwaitingTargets, missingHero.Status);
+        Assert.Equal(SkinApplyStatus.AwaitingTargets, missingHud.Status);
+        Assert.Equal(SkinApplyStatus.Applied, ready.Status);
+        Assert.Equal(1, applies);
+    }
+
+    [Fact]
+    public void Destroyed_owner_signal_skips_discovery_despite_non_null_identity_tokens()
+    {
+        int caches = 0, refreshes = 0;
+        var schedule = new SkinRuntimeRefreshSchedule(
+            () => caches++,
+            () => true,
+            () => refreshes++);
+        var hero = new object();
+        var hud = new object();
+
+        schedule.Tick(0, hero, hud, false);
+        schedule.Tick(2.01f, hero, hud, true);
+
+        Assert.Equal(1, caches);
+        Assert.Equal(1, refreshes);
+    }
+
+    [Fact]
     public void Missing_required_owners_do_not_run_expensive_discovery()
     {
         int caches = 0, refreshes = 0;
