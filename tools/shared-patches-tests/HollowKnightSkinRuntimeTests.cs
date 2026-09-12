@@ -1080,6 +1080,53 @@ public sealed class HollowKnightSkinRuntimeTests
         Assert.Equal(expectedReads == 1, actions != null);
     }
 
+    [Fact]
+    public void Stable_owners_stop_periodic_discovery_after_one_scheduled_refresh()
+    {
+        int caches = 0, refreshes = 0;
+        SkinRuntimeRefreshSchedule schedule = null;
+        schedule = new SkinRuntimeRefreshSchedule(
+            () => caches++,
+            () => true,
+            () => { refreshes++; schedule.Publish(new SkinApplyResult(SkinApplyStatus.Unchanged)); });
+        var hero = new object();
+        var hud = new object();
+        schedule.Publish(new SkinApplyResult(SkinApplyStatus.Applied));
+
+        schedule.Tick(0, hero, hud);
+        schedule.Tick(2.01f, hero, hud);
+        schedule.Tick(10, hero, hud);
+
+        Assert.Equal(1, caches);
+        Assert.Equal(1, refreshes);
+    }
+
+    [Fact]
+    public void Pending_resource_retirement_keeps_scheduled_refresh_retryable_until_reaped()
+    {
+        int refreshes = 0;
+        SkinRuntimeRefreshSchedule schedule = null;
+        schedule = new SkinRuntimeRefreshSchedule(
+            () => { },
+            () => true,
+            () =>
+            {
+                refreshes++;
+                schedule.Publish(new SkinApplyResult(
+                    SkinApplyStatus.Unchanged,
+                    refreshes == 1 ? "Resource retirement pending after unchanged refresh." : ""));
+            });
+        var hero = new object();
+        var hud = new object();
+        schedule.Publish(new SkinApplyResult(SkinApplyStatus.Applied));
+
+        schedule.Tick(0, hero, hud);
+        schedule.Tick(2.01f, hero, hud);
+        schedule.Tick(10, hero, hud);
+
+        Assert.Equal(2, refreshes);
+    }
+
     [Theory]
     [InlineData("owners")]
     [InlineData("scene")]

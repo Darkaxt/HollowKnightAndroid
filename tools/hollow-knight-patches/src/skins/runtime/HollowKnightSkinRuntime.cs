@@ -494,13 +494,19 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         readonly Func<bool> canRefresh;
         object hero, hud;
         float nextScan;
+        bool settled;
         public SkinApplyResult LastResult { get; private set; }
         public SkinRuntimeRefreshSchedule(Action cacheTargets, Func<bool> canRefresh, Action refresh)
         { this.cacheTargets = cacheTargets; this.canRefresh = canRefresh; this.refresh = refresh; }
-        public SkinApplyResult Publish(SkinApplyResult result) => LastResult = result;
+        public SkinApplyResult Publish(SkinApplyResult result)
+        {
+            settled = false;
+            return LastResult = result;
+        }
         public void Invalidate()
         {
             nextScan = 0f;
+            settled = false;
             // Success describes the old targets, not replacements. Keep current failures visible.
             if (LastResult == null || LastResult.Status == SkinApplyStatus.Applied ||
                 LastResult.Status == SkinApplyStatus.Unchanged || LastResult.Status == SkinApplyStatus.Restored)
@@ -511,10 +517,15 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             bool replaced = !ReferenceEquals(hero, nextHero) || !ReferenceEquals(hud, nextHud);
             if (replaced) Invalidate(); // before the gate/throttle can retain a stale successful observation
             hero = nextHero; hud = nextHud;
+            if (!replaced && settled) return;
             if (!replaced && now < nextScan) return;
             nextScan = now + 2f;
             cacheTargets();
-            if (canRefresh()) refresh();
+            if (!canRefresh()) return;
+            refresh();
+            settled = LastResult != null && !LastResult.Detail.Contains("Resource retirement pending") &&
+                (LastResult.Status == SkinApplyStatus.Applied || LastResult.Status == SkinApplyStatus.Unchanged ||
+                 LastResult.Status == SkinApplyStatus.Restored);
         }
     }
 }
