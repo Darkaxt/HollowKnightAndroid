@@ -56,16 +56,20 @@ internal class SkinLibraryUiServices(
                 SkinModeAdvancePort { services.mode.advance() }, modeAvailable = true, simplifiedAuthority = true,
                 recover = { requireNotNull(services.recover).invoke() })
         }
-        fun bound(store: dev.silksong.launcher.skins.library.SkinLibraryStore): SkinLibraryUiServices = SkinLibraryUiServices(
-            dev.silksong.launcher.profiles.GameProfiles.require(store.profileId), { SkinLibraryService.readLibrary(store) },
-            dev.silksong.launcher.skins.library.SkinLibraryImporter(store, dev.silksong.launcher.skins.importing.AndroidPngDecoder()),
-            object : SkinLibraryMutations {
-                override val available = true
-                override fun select(target: SkinReplaceTarget) = store.select(target.id)
-                override fun eligibility(target: SkinReplaceTarget, eligible: Boolean) = store.setEligibility(target.id, eligible)
-                override fun remove(target: SkinReplaceTarget) = store.remove(target.id)
-            }, SkinModeAdvancePort { store.advanceMode() }, modeAvailable = true, simplifiedAuthority = true, recover = store::recoverOff,
-        )
+        fun bound(store: dev.silksong.launcher.skins.library.SkinLibraryStore): SkinLibraryUiServices {
+            val receipts = SkinReceiptSummaryReader { digest -> store.receipts.verify(digest) }
+            return SkinLibraryUiServices(
+                dev.silksong.launcher.profiles.GameProfiles.require(store.profileId),
+                { SkinLibraryService.readLibrary(store, receipts) },
+                dev.silksong.launcher.skins.library.SkinLibraryImporter(store, dev.silksong.launcher.skins.importing.AndroidPngDecoder()),
+                object : SkinLibraryMutations {
+                    override val available = true
+                    override fun select(target: SkinReplaceTarget) = store.select(target.id)
+                    override fun eligibility(target: SkinReplaceTarget, eligible: Boolean) = store.setEligibility(target.id, eligible)
+                    override fun remove(target: SkinReplaceTarget) = store.remove(target.id)
+                }, SkinModeAdvancePort { store.advanceMode() }, modeAvailable = true, simplifiedAuthority = true, recover = store::recoverOff,
+            )
+        }
         fun production(filesDir: File, profile: GameProfile): SkinLibraryUiServices {
             val reader = SkinLibraryService.production(filesDir, profile)
             return SkinLibraryUiServices(profile, reader::refresh, UnavailableSkinImportService,

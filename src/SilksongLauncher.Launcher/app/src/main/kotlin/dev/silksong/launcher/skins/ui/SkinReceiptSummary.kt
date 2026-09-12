@@ -16,23 +16,31 @@ internal data class SkinReceiptSummary(
 internal class SkinReceiptSummaryReader(
     private val verify: (receiptSha256: String) -> SkinResult<SkinImportReceiptDocument>,
 ) {
-    fun read(candidateKey: String, receiptSha256: String): SkinReceiptSummary = try {
-        when (val result = verify(receiptSha256)) {
-            is SkinResult.Error -> SkinReceiptSummary(error = result)
-            is SkinResult.Ok -> {
-                val receipt = result.value
-                if (receipt.candidateKey != candidateKey) SkinReceiptSummary(error = SkinResult.Error(
-                    SkinImportCode.IMPORT_RECEIPT_CORRUPT, "Receipt candidate identity does not match this pack",
-                )) else SkinReceiptSummary(
-                    receipt.archiveName, receipt.signatureStatus,
-                    receipt.warnings.take(32).map { "${it.code}: ${it.sourceRawPathHex}" },
-                    (receipt.warnings.size - 32).coerceAtLeast(0),
-                )
+    private val verified = mutableMapOf<Pair<String, String>, SkinReceiptSummary>()
+
+    fun read(candidateKey: String, receiptSha256: String): SkinReceiptSummary {
+        val key = candidateKey to receiptSha256
+        verified[key]?.let { return it }
+        val summary = try {
+            when (val result = verify(receiptSha256)) {
+                is SkinResult.Error -> SkinReceiptSummary(error = result)
+                is SkinResult.Ok -> {
+                    val receipt = result.value
+                    if (receipt.candidateKey != candidateKey) SkinReceiptSummary(error = SkinResult.Error(
+                        SkinImportCode.IMPORT_RECEIPT_CORRUPT, "Receipt candidate identity does not match this pack",
+                    )) else SkinReceiptSummary(
+                        receipt.archiveName, receipt.signatureStatus,
+                        receipt.warnings.take(32).map { "${it.code}: ${it.sourceRawPathHex}" },
+                        (receipt.warnings.size - 32).coerceAtLeast(0),
+                    )
+                }
             }
+        } catch (error: Exception) {
+            SkinReceiptSummary(error = SkinResult.Error(SkinImportCode.IMPORT_RECEIPT_CORRUPT,
+                "Receipt details unavailable: ${error.message}"))
         }
-    } catch (error: Exception) {
-        SkinReceiptSummary(error = SkinResult.Error(SkinImportCode.IMPORT_RECEIPT_CORRUPT,
-            "Receipt details unavailable: ${error.message}"))
+        if (summary.error == null) verified[key] = summary
+        return summary
     }
 
     companion object {

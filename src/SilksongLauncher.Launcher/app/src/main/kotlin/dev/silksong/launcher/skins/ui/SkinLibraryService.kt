@@ -105,9 +105,11 @@ internal class SkinLibraryService(
         fun production(filesDir: File, profile: GameProfile): SkinLibraryService = SkinLibraryService(profile) {
             SkinResult.Error(SkinImportCode.DURABILITY_UNAVAILABLE, "Skin library requires the production Context binding")
         }
-        fun readLibrary(store: dev.silksong.launcher.skins.library.SkinLibraryStore): SkinResult<SkinLibraryViewState> = store.locked {
+        fun readLibrary(
+            store: dev.silksong.launcher.skins.library.SkinLibraryStore,
+            receipts: SkinReceiptSummaryReader = SkinReceiptSummaryReader { digest -> store.receipts.verify(digest) },
+        ): SkinResult<SkinLibraryViewState> = store.locked {
             val document = store.readLocked()
-            val receipts = SkinReceiptSummaryReader { digest -> store.receipts.verify(digest) }
             SkinResult.Ok(SkinLibraryViewState(
                 store.configurationIdentity(document), document.mode.name, document.selectedPackId, null,
                 document.eligiblePackIds, "NOT_USED", null, null, "NOT_USED",

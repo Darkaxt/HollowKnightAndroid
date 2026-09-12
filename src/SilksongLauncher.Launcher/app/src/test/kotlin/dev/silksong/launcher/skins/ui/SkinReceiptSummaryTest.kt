@@ -42,6 +42,32 @@ class SkinReceiptSummaryTest {
         assertEquals("IGNORED_UNKNOWN: 00", summary.warnings.first())
     }
 
+    @Test fun `successful content-addressed receipt summary is reused during one library session`() {
+        var verifications = 0
+        val reader = SkinReceiptSummaryReader {
+            verifications++
+            SkinResult.Ok(receipt(emptyList()))
+        }
+
+        repeat(3) { reader.read("a".repeat(64), "d".repeat(64)) }
+
+        assertEquals(1, verifications)
+    }
+
+    @Test fun `failed receipt read is retried then successful summary is reused`() {
+        var verifications = 0
+        val reader = SkinReceiptSummaryReader {
+            verifications++
+            if (verifications == 1) SkinResult.Error(SkinImportCode.DURABILITY_UNAVAILABLE, "busy")
+            else SkinResult.Ok(receipt(emptyList()))
+        }
+
+        assertNotNull(reader.read("a".repeat(64), "d".repeat(64)).error)
+        assertNull(reader.read("a".repeat(64), "d".repeat(64)).error)
+        assertNull(reader.read("a".repeat(64), "d".repeat(64)).error)
+        assertEquals(2, verifications)
+    }
+
     @Test fun `unavailable verifier cannot abort library status rendering`() {
         val summary = SkinReceiptSummaryReader { error("receipt reader unavailable") }
             .read("a".repeat(64), "d".repeat(64))

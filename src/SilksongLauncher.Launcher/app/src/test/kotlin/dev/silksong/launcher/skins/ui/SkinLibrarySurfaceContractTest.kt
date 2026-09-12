@@ -15,9 +15,10 @@ class SkinLibrarySurfaceContractTest {
 
     @Test fun `production library advertises enabled controls instead of historical retention blocker`() {
         val strings = xml("res/values/strings.xml").getElementsByTagName("string")
-        val message = (0 until strings.length).map { strings.item(it) as Element }
-            .single { it.getAttribute("name") == "skins_binding_unavailable" }.textContent
-        assertFalse("Production controls must no longer advertise unavailable preview", message.contains("changes are unavailable"))
+        val guidance = (0 until strings.length).map { strings.item(it) as Element }
+            .filter { it.getAttribute("name") in setOf("skins_guidance_hollow_knight", "skins_guidance_silksong") }
+        assertEquals(2, guidance.size)
+        assertTrue(guidance.all { !it.textContent.contains("changes are unavailable") })
     }
 
     @Test fun `controller exposes only a zero argument advance operation`() {

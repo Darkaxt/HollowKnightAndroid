@@ -94,8 +94,7 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
     fun advanceMode(): SkinResult<Unit> = mutate { value ->
         val mode = when (value.mode) { LibraryMode.OFF -> LibraryMode.ON; LibraryMode.ON -> LibraryMode.ROTATE; LibraryMode.ROTATE -> LibraryMode.OFF }
         if (mode != LibraryMode.OFF) {
-            val pack = value.packs.singleOrNull { it.id == value.selectedPackId } ?: error("Select a pack before turning skins ON")
-            requireVerified(pack)
+            require(value.packs.any { it.id == value.selectedPackId }) { "Select a pack before turning skins ON" }
         }
         renewRotation(value.copy(mode = mode))
     }

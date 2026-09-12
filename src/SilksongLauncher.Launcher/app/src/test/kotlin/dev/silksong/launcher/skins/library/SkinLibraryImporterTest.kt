@@ -36,6 +36,31 @@ class SkinLibraryImporterTest {
         assertEquals(bytes, root.walkTopDown().filter { it.isFile }.associate { it.relativeTo(root).path to it.readBytes().toList() })
         assertFalse(File(store.paths.root,"registry").exists())
     }
+    @Test fun `mode request leaves expensive payload verification to the game runtime`() {
+        val store = store(); val importer = SkinLibraryImporter(store, decoder)
+        importer.commitImport(importer.prepare(input()).required().handleId).required()
+        val pack = store.read().required().packs.single()
+        store.select(pack.id).required()
+        File(store.paths.objectRoot(pack.treeSha256), "pack/assets/Knight.png").writeBytes(byteArrayOf(0))
+
+        assertTrue(store.advanceMode() is SkinResult.Ok)
+        assertEquals(LibraryMode.ON, store.read().required().mode)
+        assertTrue(dev.silksong.launcher.runtime.SkinLibraryRuntimeAccess(store)
+            .readConfiguration().contains("\"ok\":false"))
+    }
+
+    @Test fun `bound library view reuses verified receipt summary across refreshes`() {
+        val store = store(); val importer = SkinLibraryImporter(store, decoder)
+        importer.commitImport(importer.prepare(input()).required().handleId).required()
+        val pack = store.read().required().packs.single()
+        val services = dev.silksong.launcher.skins.ui.SkinLibraryUiServices.bound(store)
+        val first = services.read().required().packs.single().receipt
+        File(store.paths.importReceiptRoot(pack.receiptSha256), "import-receipt.json").writeText("corrupt")
+
+        assertEquals(first, services.read().required().packs.single().receipt)
+        assertNull(first.error)
+    }
+
     @Test fun `same archive imported twice reuses installed immutable identity`() {
         val store = store(); val importer = SkinLibraryImporter(store, decoder)
         repeat(2) { importer.commitImport(importer.prepare(input()).required().handleId).required() }
