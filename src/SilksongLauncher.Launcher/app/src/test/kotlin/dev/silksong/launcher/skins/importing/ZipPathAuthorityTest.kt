@@ -119,7 +119,7 @@ class ZipPathAuthorityTest {
     }
 
     @Test
-    fun `rejects Unicode path extras but preserves bounded metadata warning`() {
+    fun `rejects malformed Unicode path extras but preserves bounded metadata warning`() {
         val unicodePathExtra = byteArrayOf(0x75, 0x70, 0x01, 0x00, 0x00)
         assertError(
             RawZipFixture.build(

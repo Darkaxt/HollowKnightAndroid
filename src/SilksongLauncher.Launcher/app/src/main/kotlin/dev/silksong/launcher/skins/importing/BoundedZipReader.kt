@@ -13,6 +13,9 @@ import java.io.File
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.channels.SeekableByteChannel
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
+import java.nio.charset.StandardCharsets
 import java.util.zip.CRC32
 import java.util.zip.DataFormatException
 import java.util.zip.Inflater
@@ -150,7 +153,7 @@ class BoundedZipReader(
         if (nameLength !in 1..limits.sourcePathBytes) path("ZIP entry name length is invalid")
         val rawName = archive.bytes(nameLength)
         val extras = archive.bytes(extraLength)
-        val ignoredExtra = parseExtras(extras)
+        val parsedExtras = parseExtras(extras, rawName)
         if (commentLength > limits.sourcePathBytes) limit("ZIP entry comment is too long")
         if (commentLength > 0) archive.skipExact(commentLength.toLong())
         val directory = rawName.last() == '/'.code.toByte()
@@ -158,7 +161,7 @@ class BoundedZipReader(
         if (directory && (crc != 0L || compressed != 0L || uncompressed != 0L)) corrupt("Directory entry has payload")
         return CentralRecord(
             index, rawName, flags, method, crc, compressed, uncompressed, localOffset,
-            directory, ignoredExtra || commentLength > 0,
+            directory, parsedExtras.ignored || commentLength > 0, parsedExtras.unicodePath,
         )
     }
 
@@ -181,7 +184,14 @@ class BoundedZipReader(
         if (flags != central.flags || method != central.method) corrupt("Local and central flags or methods differ")
         val localName = archive.bytes(nameLength)
         if (!localName.contentEquals(central.rawName)) corrupt("Local and central filename bytes differ")
-        val ignoredLocalExtra = parseExtras(archive.bytes(extraLength))
+        val localExtras = parseExtras(archive.bytes(extraLength), localName)
+        val centralUnicodePath = central.unicodePath
+        val localUnicodePath = localExtras.unicodePath
+        if (centralUnicodePath == null && localUnicodePath != null ||
+            centralUnicodePath != null && (localUnicodePath == null || !centralUnicodePath.contentEquals(localUnicodePath))
+        ) {
+            path("Local and central Unicode Path metadata differ")
+        }
         val descriptor = flags and DATA_DESCRIPTOR != 0
         if (!descriptor) {
             if (localCrc != central.crc32 || localCompressed != central.compressedSize || localUncompressed != central.uncompressedSize) {
@@ -228,7 +238,7 @@ class BoundedZipReader(
             dataEnd,
             central.directory,
             descriptorLength,
-            central.ignoredExtraMetadata || ignoredLocalExtra,
+            central.ignoredExtraMetadata || localExtras.ignored,
         )
     }
 
@@ -309,9 +319,10 @@ class BoundedZipReader(
         if (directory && type == 0x8000 || !directory && type == 0x4000) path("ZIP entry type disagrees with path")
     }
 
-    private fun parseExtras(bytes: ByteArray): Boolean {
+    private fun parseExtras(bytes: ByteArray, rawName: ByteArray): ParsedExtras {
         var offset = 0
         var ignored = false
+        var unicodePath: ByteArray? = null
         while (offset < bytes.size) {
             if (bytes.size - offset < 4) corrupt("Truncated ZIP extra field")
             val id = le16(bytes, offset)
@@ -320,12 +331,37 @@ class BoundedZipReader(
             if (length > bytes.size - offset) corrupt("ZIP extra field exceeds record")
             when (id) {
                 0x0001 -> unsupported("ZIP64 extra field is unsupported")
-                0x7075 -> path("Unicode Path extra field is forbidden")
+                0x7075 -> {
+                    if (unicodePath != null) path("Duplicate Unicode Path extra field")
+                    unicodePath = validateUnicodePath(bytes.copyOfRange(offset, offset + length), rawName)
+                }
                 else -> ignored = true
             }
             offset += length
         }
-        return ignored
+        return ParsedExtras(ignored, unicodePath)
+    }
+
+    private fun validateUnicodePath(payload: ByteArray, rawName: ByteArray): ByteArray {
+        if (payload.size < 5 || payload[0].toInt() and 0xff != 1) {
+            path("Unicode Path extra field is malformed")
+        }
+        if (le32(payload, 1) != CRC32().apply { update(rawName) }.value) {
+            path("Unicode Path extra field CRC differs from the entry name")
+        }
+        val unicodeName = payload.copyOfRange(5, payload.size)
+        try {
+            StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(unicodeName))
+        } catch (_: CharacterCodingException) {
+            path("Unicode Path extra field is not valid UTF-8")
+        }
+        if (!unicodeName.contentEquals(rawName)) {
+            path("Unicode Path extra field differs from the authoritative entry name")
+        }
+        return unicodeName
     }
 
     private fun enforceRatio(uncompressed: Long, compressed: Long, scope: String) {
@@ -397,6 +433,11 @@ class BoundedZipReader(
         }
     }
 
+    private data class ParsedExtras(
+        val ignored: Boolean,
+        val unicodePath: ByteArray?,
+    )
+
     private data class ParsedZip(
         val entries: List<RawZipEntry>,
         val ignoredExtraMetadata: Boolean,
@@ -413,6 +454,7 @@ class BoundedZipReader(
         val localOffset: Long,
         val directory: Boolean,
         val ignoredExtraMetadata: Boolean,
+        val unicodePath: ByteArray?,
     )
 
     private class ZipFailure(val code: SkinImportCode, detail: String) : RuntimeException(detail)

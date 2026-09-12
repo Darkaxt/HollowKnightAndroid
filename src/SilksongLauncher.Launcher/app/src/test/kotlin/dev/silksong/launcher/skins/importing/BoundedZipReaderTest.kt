@@ -10,6 +10,7 @@ import dev.silksong.launcher.skins.storage.SkinFileSystem
 import dev.silksong.launcher.skins.storage.SkinFileSystemSecurity
 import java.io.File
 import java.nio.file.Files
+import java.util.zip.CRC32
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -112,6 +113,67 @@ class BoundedZipReaderTest {
 
         val compressedTrailingByte = appendCompressedByte(RawZipFixture.one(data = "payload".toByteArray(), method = 8))
         assertError(compressedTrailingByte, SkinImportCode.ZIP_CORRUPT)
+    }
+
+    @Test
+    fun `accepts a valid redundant Unicode path extra used by CustomKnight archives`() {
+        val rawName = "Hylian Knight/Knight.png".toByteArray()
+        val unicodePath = unicodePathExtra(rawName)
+        val archive = RawZipFixture.build(
+            listOf(
+                RawZipFixture.Entry(
+                    rawName,
+                    byteArrayOf(1),
+                    centralExtra = unicodePath,
+                    localExtra = unicodePath,
+                ),
+            ),
+        )
+
+        assertOk(archive)
+    }
+
+    @Test
+    fun `rejects forged invalid and duplicate Unicode path extras`() {
+        val rawName = "Knight.png".toByteArray()
+        val valid = unicodePathExtra(rawName)
+        val forgedCrc = RawZipFixture.patchLe32(valid, 5, 1)
+        val alternatePath = unicodePathExtra(rawName, "../Knight.png".toByteArray())
+        val invalidUtf8 = unicodePathExtra(rawName, byteArrayOf(0xc3.toByte()))
+        val duplicate = valid + valid
+
+        for (extra in listOf(forgedCrc, alternatePath, invalidUtf8, duplicate)) {
+            assertError(
+                RawZipFixture.build(
+                    listOf(
+                        RawZipFixture.Entry(
+                            rawName,
+                            byteArrayOf(1),
+                            centralExtra = extra,
+                            localExtra = extra,
+                        ),
+                    ),
+                ),
+                SkinImportCode.PATH_REJECTED,
+            )
+        }
+    }
+
+    @Test
+    fun `rejects Unicode path metadata missing from the local header`() {
+        val rawName = "Hylian Knight/Knight.png".toByteArray()
+        val archive = RawZipFixture.build(
+            listOf(
+                RawZipFixture.Entry(
+                    rawName,
+                    byteArrayOf(1),
+                    centralExtra = unicodePathExtra(rawName),
+                    localExtra = ByteArray(0),
+                ),
+            ),
+        )
+
+        assertError(archive, SkinImportCode.PATH_REJECTED)
     }
 
     @Test
@@ -312,6 +374,15 @@ class BoundedZipReaderTest {
         bytes = RawZipFixture.patchLe32(bytes, built.centralOffset + 20, compressed)
         bytes = RawZipFixture.patchLe32(bytes, built.centralOffset + 24, uncompressed)
         return built.copy(bytes = bytes)
+    }
+
+    private fun unicodePathExtra(
+        rawName: ByteArray,
+        unicodeName: ByteArray = rawName,
+    ): ByteArray {
+        val crc = CRC32().apply { update(rawName) }.value
+        val payload = byteArrayOf(1) + ByteArray(4) { index -> (crc ushr (index * 8)).toByte() } + unicodeName
+        return byteArrayOf(0x75, 0x70, payload.size.toByte(), (payload.size ushr 8).toByte()) + payload
     }
 
     private fun assertOk(built: RawZipFixture.Built) {
