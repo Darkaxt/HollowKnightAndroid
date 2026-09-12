@@ -219,7 +219,7 @@ public partial class HKDualScreen
 
         scale = Mathf.Max(0.01f, attrCam.orthographicSize);
         aspect = Mathf.Max(0.01f, attrCam.aspect);
-        float height = Mathf.Max(scale * 0.045f, 0.01f);
+        float height = Mathf.Max(scale * 0.085f, 0.01f);
         Vector3 spriteSize = gearSR.sprite.bounds.size;
         float factor = height / Mathf.Max(0.001f, spriteSize.y);
         gearT.localScale = new Vector3(factor, factor, 1f);
