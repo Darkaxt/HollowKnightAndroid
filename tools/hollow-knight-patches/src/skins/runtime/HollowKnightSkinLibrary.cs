@@ -18,7 +18,7 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         readonly Func<string, bool> cancel;
         readonly Func<bool> readyToPoll;
         float nextPoll;
-        bool pending, disposed;
+        bool pending, settled, disposed;
         public bool CanRefresh => !disposed && (!pending || death.Ready);
 
         public HollowKnightSkinLibrary(Func<SkinLibraryRequest> read, Func<SkinPack, SkinApplyResult> apply,
@@ -39,6 +39,7 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         {
             if (disposed) return;
             death.Tick(); // actual owner/event/frame sampling must precede the one-second JNI throttle
+            if (settled && death.Occurrence == 0 && death.CancellationRun == null) return;
             if (!readyToPoll()) return;
             if (now < nextPoll) return;
             nextPoll = now + 1f;
@@ -80,11 +81,23 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             string run = observation.RotationRun; long occurrence = observation.PendingOccurrence;
             // Consume only the matching accepted rotation commit, not ordinary status/reportResult success.
             // Clear now so a real death before the next poll is not masked; false/busy stays frozen.
-            if (report(observation) && completes && run == death.Run && occurrence == death.Occurrence)
+            bool accepted = report(observation);
+            if (accepted && completes && run == death.Run && occurrence == death.Occurrence)
             {
                 death.Configure("ROTATE", run, occurrence, 0);
                 pending = false;
+                settled = true;
             }
+            else if (accepted && observation.PendingOccurrence == 0 &&
+                     (observation.Status == "Applied" || observation.Status == "Unchanged" ||
+                      observation.Status == "Restored"))
+                settled = true;
+        }
+        public void Invalidate()
+        {
+            if (disposed) return;
+            settled = false;
+            nextPoll = 0f;
         }
         public void Dispose()
         {

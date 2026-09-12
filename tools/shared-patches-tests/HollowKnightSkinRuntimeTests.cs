@@ -1239,7 +1239,7 @@ public sealed class HollowKnightSkinRuntimeTests
         Assert.Equal("b",r.Selected);Assert.Equal(0,r.Request.PendingOccurrence);Assert.NotSame(r.Knight.Original,r.Knight.Value);
         Assert.Same(r.Applied[1],r.Applied[2]);Assert.Equal(1,r.Confirms);Assert.Equal(stamp+1,r.Rendering.Session.SkinStamp);
         Assert.Same(r.Geo.Original,r.Geo.Value);
-        r.Request.Mode="OFF";r.Request.RotationRun=null;r.Tick(7.05f);
+        r.Request.Mode="OFF";r.Request.RotationRun=null;r.Library.Invalidate();r.Tick(7.05f);
         Assert.Same(r.Knight.Original,r.Knight.Value);Assert.Same(r.Geo.Original,r.Geo.Value);
     }
     [Fact]

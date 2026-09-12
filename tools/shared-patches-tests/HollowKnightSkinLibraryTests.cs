@@ -198,6 +198,60 @@ public class HollowKnightSkinLibraryTests
         controller.Tick(); Assert.Equal(3, restores); Assert.Equal("Restored", observed.Status);
         controller.Tick(); Assert.Equal(3, restores); Assert.Null(observed.ActivePackId);
     }
+    [Fact] public void Stable_apply_stops_repeated_configuration_and_report_polling()
+    {
+        var request = Request();
+        var death = new HollowKnightSkinDeathAdapter(LiveFrame);
+        int reads = 0, reports = 0, applies = 0, restores = 0;
+        using var library = new HollowKnightSkinLibrary(
+            () => { reads++; return request; },
+            _ => { applies++; return new SkinApplyResult(SkinApplyStatus.Unchanged); },
+            () => { restores++; return new SkinApplyResult(SkinApplyStatus.Restored); },
+            _ => { reports++; return true; },
+            () => new SkinApplyResult(SkinApplyStatus.Unchanged),
+            death,
+            (_, __) => true,
+            _ => true);
+
+        library.Tick(0);
+        library.Tick(1);
+        library.Tick(10);
+
+        Assert.Equal(1, reads);
+        Assert.Equal(1, reports);
+        Assert.Equal(1, applies);
+
+        request.Mode = "OFF";
+        library.Invalidate();
+        library.Tick(11);
+        Assert.Equal(2, reads);
+        Assert.Equal(2, reports);
+        Assert.Equal(1, restores);
+    }
+
+    [Fact] public void Stable_apply_retries_an_unaccepted_report_before_settling()
+    {
+        var request = Request();
+        var death = new HollowKnightSkinDeathAdapter(LiveFrame);
+        int reads = 0, reports = 0;
+        using var library = new HollowKnightSkinLibrary(
+            () => { reads++; return request; },
+            _ => new SkinApplyResult(SkinApplyStatus.Unchanged),
+            () => new SkinApplyResult(SkinApplyStatus.Restored),
+            _ => ++reports > 1,
+            () => new SkinApplyResult(SkinApplyStatus.Unchanged),
+            death,
+            (_, __) => true,
+            _ => true);
+
+        library.Tick(0);
+        library.Tick(1);
+        library.Tick(10);
+
+        Assert.Equal(2, reads);
+        Assert.Equal(2, reports);
+    }
+
     [Fact] public void Production_poll_skips_configuration_transport_until_visual_targets_are_live()
     {
         var request = Request();
@@ -265,7 +319,7 @@ public class HollowKnightSkinLibraryTests
         frame.SaveId++;frame.Frame++;library.Tick(.2f);Assert.Equal("first",death.CancellationRun);
         library.Tick(1);library.Tick(2);Assert.Equal(2,cancels);
         request.RotationRun="manual";library.Tick(3);Assert.Equal("manual",death.Run);Assert.Null(death.CancellationRun);
-        request.Mode="OFF";request.RotationRun=null;library.Tick(4);Assert.Null(death.Run);Assert.Equal(1,restores);
+        request.Mode="OFF";request.RotationRun=null;library.Invalidate();library.Tick(4);Assert.Null(death.Run);Assert.Equal(1,restores);
         library.Dispose();library.Tick(5);Assert.Equal(1,restores);
     }
     [Fact] public void Pending_restore_required_recovers_then_retries_without_advancing_candidate()

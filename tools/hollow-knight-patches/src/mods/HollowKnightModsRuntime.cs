@@ -86,6 +86,11 @@ namespace DualSouls.Mods.HollowKnight
             policy.Tick(decision);
         }
 
+        void OnApplicationPause(bool paused)
+        {
+            if (!paused && skinLibrary != null) skinLibrary.Invalidate();
+        }
+
         void OnDestroy()
         {
             if (!ReferenceEquals(Current, this)) return;
