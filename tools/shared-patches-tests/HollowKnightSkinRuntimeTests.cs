@@ -682,6 +682,20 @@ public sealed class HollowKnightSkinRuntimeTests
         Assert.Equal(1, rig.Session.SkinStamp); rig.Session.TryRestore(); Assert.All(outputs, x => Assert.True(x.Released));
     }
 
+    sealed class HudProbe : ISkinHudPixels
+    {
+        public int Width { get; } public int Height { get; }
+        public int SampleCount { get; private set; }
+        public HudProbe(int width, int height) { Width = width; Height = height; }
+        public SkinHudPixel Sample(float u, float v)
+        {
+            Assert.InRange(u, 0, 1); Assert.InRange(v, 0, 1); SampleCount++;
+            return default;
+        }
+        public SkinHudPixel Pixel(int x, int y) => default;
+        public void WriteRow(int x, int y, SkinHudPixel[] pixels, int count) { }
+    }
+
     sealed class Pixels : ISkinHudPixels
     {
         public int Width { get; } public int Height { get; }
@@ -769,6 +783,25 @@ public sealed class HollowKnightSkinRuntimeTests
             charmFsms = HollowKnightSkinTargets.CharmFsms, ambiguousAtlasBasenames = new[] { "Geo" },
             limitation = "Mechanism mappings only; actual live target presence and GPU rendering are not established by host tests."
         }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    [Fact]
+    public void Hud_repair_accepts_real_tk2d_subpixel_edge_epsilon()
+    {
+        var source = new HudProbe(2048, 2048); var output = new HudProbe(2048, 2048); var vanilla = new HudProbe(2048, 2048);
+        HollowKnightHudRepair.Repair(source, vanilla, output, new[] {
+            new SkinHudRect("coin_break0012", 0.9990229606628418f, -4.882812731921149e-7f,
+                0.9995121955871582f, 0.0004887695540674031f)
+        });
+        Assert.Equal(64, source.SampleCount);
+    }
+
+    [Fact]
+    public void Hud_repair_rejects_uv_excursion_beyond_one_vanilla_texel()
+    {
+        var source = new HudProbe(2048, 2048); var output = new HudProbe(2048, 2048); var vanilla = new HudProbe(2048, 2048);
+        Assert.Throws<InvalidDataException>(() => HollowKnightHudRepair.Repair(source, vanilla, output,
+            new[] { new SkinHudRect("bad", 0, -1.1f / 2048, 1, 1) }));
     }
 
     [Fact]

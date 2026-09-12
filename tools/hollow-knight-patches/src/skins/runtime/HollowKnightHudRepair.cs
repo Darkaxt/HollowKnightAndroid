@@ -56,16 +56,24 @@ namespace DualSouls.Skins.HollowKnight.Runtime
                 if (definitions.Count > 4096) throw new InvalidDataException("HUD definition count exceeds bound.");
                 var rects = new Dictionary<string, SkinHudRect>();
                 var blanks = new HashSet<string>();
+                var uTolerance = 1f / vanilla.Width;
+                var vTolerance = 1f / vanilla.Height;
                 foreach (var rect in definitions)
                 {
                     if (rect == null || string.IsNullOrEmpty(rect.Name) || rects.ContainsKey(rect.Name)) continue;
-                    if (!(rect.U0 >= 0 && rect.V0 >= 0 && rect.U1 <= 1 && rect.V1 <= 1 && rect.U1 > rect.U0 && rect.V1 > rect.V0))
+                    if (!Finite(rect.U0) || !Finite(rect.V0) || !Finite(rect.U1) || !Finite(rect.V1) ||
+                        !(rect.U1 > rect.U0 && rect.V1 > rect.V0) || rect.U0 < -uTolerance ||
+                        rect.V0 < -vTolerance || rect.U1 > 1 + uTolerance || rect.V1 > 1 + vTolerance)
                         throw new InvalidDataException("HUD UV rectangle is invalid.");
-                    rects.Add(rect.Name, rect); float alpha = 0;
+                    var clipped = new SkinHudRect(rect.Name, Math.Max(0, rect.U0), Math.Max(0, rect.V0),
+                        Math.Min(1, rect.U1), Math.Min(1, rect.V1));
+                    if (!(clipped.U1 > clipped.U0 && clipped.V1 > clipped.V0))
+                        throw new InvalidDataException("HUD UV rectangle is invalid.");
+                    rects.Add(clipped.Name, clipped); float alpha = 0;
                     for (int gy = 0; gy < 8; gy++) for (int gx = 0; gx < 8; gx++)
-                        alpha += Sample(skin, rect.U0 + (rect.U1 - rect.U0) * (gx + 0.5f) / 8,
-                            rect.V0 + (rect.V1 - rect.V0) * (gy + 0.5f) / 8).A;
-                    if (alpha / 64 < 0.01f) blanks.Add(rect.Name);
+                        alpha += Sample(skin, clipped.U0 + (clipped.U1 - clipped.U0) * (gx + 0.5f) / 8,
+                            clipped.V0 + (clipped.V1 - clipped.V0) * (gy + 0.5f) / 8).A;
+                    if (alpha / 64 < 0.01f) blanks.Add(clipped.Name);
                 }
                 foreach (var name in blanks)
                 {
@@ -114,6 +122,7 @@ namespace DualSouls.Skins.HollowKnight.Runtime
                 for (int i = 0; i < a.Length; i++) { float x = a[i] - ma, y = b[i] - mb; num += x * y; da += x * x; db += y * y; }
                 return num / ((float)Math.Sqrt(da * db) + 1e-6f);
             }
+            static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
             static int Clamp(int value, int min, int max) => Math.Max(min, Math.Min(max, value));
             static (int X, int Y, int W, int H) Bounds(ISkinHudPixels image, SkinHudRect rect)
             {
