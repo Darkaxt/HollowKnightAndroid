@@ -1,51 +1,12 @@
 # Hollow Knight Android
 
-Hollow Knight Android is an experimental, unified Android build system and
-launcher for **Hollow Knight** and **Hollow Knight: Silksong**. It takes
-user-supplied Linux game files, converts and compiles them for Android ARM64,
-and keeps both games behind one launcher, package identity, toolchain library,
-mod library, and—eventually—skin library.
+Hollow Knight Android is an experimental Android build system and launcher for
+**Hollow Knight** and **Hollow Knight: Silksong**. It converts user-supplied
+Linux game files for Android ARM64 and keeps both games behind one launcher and
+package identity.
 
-This repository is an implementation checkpoint, **not a finished public release**.
-The exact Hollow Knight `1.5.12620` Linux build now completes on-device
-conversion, ARM64 compilation, packaging, installation, first boot, and the
-playable-room gate on the AYN Thor. The fork-signed Silksong `1.0.29980`
-generation also builds and reaches live dual-display gameplay. Those runs
-prove the direct Unity display path. The separately authored Silksong
-companion UI is rejected prototype work. The corrected execution order now
-ports Hollow Knight's existing Dual Souls HUD/pages, Mods, and skins onto the
-direct-display technology first, proves that reference on the Thor, extracts
-shared contracts from it, and only then resumes the Silksong resident-object
-adaptation.
-
-The Hollow Knight companion is source-complete on the direct-display
-transport: the pinned Dual Souls HUD, frame, Inventory, Charms, Map,
-selection/prompts, tutorial/dialogue, item/lore, fade, touch, and restoration
-responsibilities are present, pass 30 focused contracts, and compile exactly
-against `1.5.12620`. Signed Thor evidence proves the live HUD routing, clean
-primary HUD, blurred/dimmed lower backdrop, Inventory/Charms/Map switching
-through the lower-panel controller, item selection/details/prompt, safe pane
-cloning, bounded tab ornaments, and the pause title surface. Menu-only signed
-run `33536682728` proved a default-off production frame fixture with native
-input lock/restore and no save or gameplay access. It proved the pinned Dual
-Souls `2.7` chrome scale but also proved that scale alone does not restore the
-three resident TMP glyphs. A controlled known-good-label probe ruled out the
-lower camera/layer, Map mask, and spatial stencil clipping. Signed runs
-`33520627292` and `33525049660` had earlier narrowed the lifecycle while
-preserving persistent opening-credit routing, live masks/Soul, primary cleanup,
-lower touch, and Inventory. The direct-clone lifecycle and pinned scale are now
-restored. Signed run `33544518172` then proved the interrupted-IL2CPP safeguard
-on ARM64, published clean exact generation
-`gen-49b4e6f5-be4b-4221-9904-b753c9734157`, and ran only the locked menu
-fixture. Separators, fleurs, and the battery icon rendered, but every detached
-native text clone remained clipped. Exact source/assembly analysis found the
-pinned reference's loose type-name filter retained Hollow Knight's
-`TextMeshProClipRect` driver outside its original inventory hierarchy. The
-clip-safe exact-type correction is source/host-complete at `00627e3`; its
-remaining physical label/teardown observation is batched into the complete
-Hollow Knight candidate rather than a signed micro-candidate. Two isolated
-`GameCameras` startup messages were traced to Hollow Knight's own
-`Platform:SetSceneLoadState`, not the patch.
+This repository does not contain Team Cherry game files and is not a finished
+public release.
 
 <p align="center">
   <img src="docs/icon.png" alt="Hollow Knight Android combined Hollow Knight and Silksong app icon" width="220" />
@@ -60,165 +21,104 @@ Hollow Knight candidate rather than a signed micro-candidate. Two isolated
 
 The supplied grids, heroes, logos, and individual game icons are preserved in
 [`docs/ui-source/steamgriddb`](docs/ui-source/steamgriddb/ATTRIBUTION.md) for the
-planned launcher redesign and per-game shortcuts. Generative image tools are
-not used for project artwork.
+launcher and per-game shortcuts. Generative image tools are not used for
+project artwork.
 
-## Current status
+## Features
 
-| Area | Current evidence | Remaining gate |
-|---|---|---|
-| Hollow Knight `1.5.12620` | Exact Linux manifest accepted; 1,005 serialized files converted with complete Vulkan coverage. Signed run `33544518172` cleanly converted, linked the 268,705,088-byte AArch64 library, published generation `gen-49b4e6f5-be4b-4221-9904-b753c9734157`, and proved the durable conversion marker. Cumulative evidence covers routed pages, lower touch, selection/prompt, backdrop, pause presentation, persistent opening-credit routing, live masks/Soul, and Inventory; H2 source/host implementation is complete at `00627e3` | Batch the remaining clip-safe label/teardown observation into the complete Hollow Knight candidate; do not create a signed H2 micro-candidate |
-| Silksong `1.0.29980` | Fork-signed `1.0.3` built the exact current source on the Thor, atomically published a verified ARM64 generation, reached gameplay, and rendered the redesigned companion directly on both physical displays | Prove lower-panel touch, effects, restart persistence, and two-game switching |
-| One launcher | Both profiles, independent storage, atomic generations, and cold-process selection exist and have host/emulator coverage | Prove both switch directions with the production ARM64 Unity processes |
-| Mods | The parent's build-time BepInEx 5/Harmony weaver is merged and routed through each selected profile's patch, IL2CPP, generation, and status paths | Real plugin compatibility for each game, compatibility manifests, dependencies, load order, and per-profile enablement remain unverified |
-| Built-in tweaks | Hollow Knight now has a host-verified capability catalog, shared controller, process-owned runtime, existing-layout Mods modal, and process-owned lifeblood renderer policy. `HKDualScreen` publishes only the live H2 fallback mode; display teardown cannot interrupt master `soft`/`vanilla`/`off`. Every `HKMOD-001`–`HKMOD-018` gameplay/progression capability remains visible but disabled as a tracked Final managed-rewrite deferral. The shared game-qualified controller still hosts the Silksong overlay and typed adapters | No H3 device/UI/live acceptance or signed build has occurred. H4 follows on the same branch; the complete H3/H4 slice receives one future explicitly authorized device gate, while deferred gameplay effects require their ledger acceptance conditions |
-| Skins | Shared death/respawn rotation state machine has host coverage; the MIT-licensed Hollow Knight reference already contains a CustomKnight-compatible texture engine and pack registry to port | First port and device-prove Hollow Knight scanning/application/rotation/rollback through controlled state injection, not gameplay; then extract the shared library and add Silksong mappings |
-| Dual screen | Hollow Knight H2 source/host implementation is complete at `00627e3`: 32 focused companion contracts, 122 Android tests, 58 shared tests, 38 bundle-surgery tests, and 112 Python tests pass; the exact Hollow Knight patch is 226,816 bytes. Run `33544518172` proved clean conversion/publication and the locked fixture, then isolated the remaining visual blocker to the inherited `TextMeshProClipRect` lifecycle. Detached labels now retain only the exact TMP graphic, disable the stale clip driver, and neutralize main/submesh clip bounds after mesh generation. Silksong UI work remains parked | Carry the unpassed clip-safe label/teardown and physical detach/true single-display observations into the complete Hollow Knight candidate. No H2 micro-candidate; later passes remain title/menu-fixture or controlled-injection only, without gameplay or save access |
-| Releases | Fork identity and GitHub signing pipeline have a signed dry-run proof | No release until source reproducibility, targeted device acceptance, migration, tag/version, and fresh-download gates pass |
-
-The detailed requirement ledger is
-[`docs/verification/design-traceability.md`](docs/verification/design-traceability.md).
-The current Hollow Knight device evidence is
-[`docs/verification/hollow-knight-first-boot.md`](docs/verification/hollow-knight-first-boot.md).
-The shared-transport implementation, signed candidate, Thor captures, cleanup,
-and remaining physical-topology deferral are recorded in
-[`docs/verification/hollow-knight-direct-display.md`](docs/verification/hollow-knight-direct-display.md).
-The corrected bottom-screen port contract, plan, and source matrix are recorded
-in
-[`docs/superpowers/specs/2026-08-31-dual-souls-ui-port-design.md`](docs/superpowers/specs/2026-08-31-dual-souls-ui-port-design.md),
-[`docs/superpowers/plans/2026-09-01-hollow-knight-first-dual-souls.md`](docs/superpowers/plans/2026-09-01-hollow-knight-first-dual-souls.md), the parked historical
-[`docs/superpowers/plans/2026-08-31-dual-souls-ui-port.md`](docs/superpowers/plans/2026-08-31-dual-souls-ui-port.md), and
-[`docs/verification/dual-souls-ui-port-matrix.md`](docs/verification/dual-souls-ui-port-matrix.md).
-The typed Silksong tweak seams and current host-only proof are recorded in
-[`docs/verification/silksong-mod-menu-source-audit.md`](docs/verification/silksong-mod-menu-source-audit.md).
-The signed Silksong production run and blocking companion-layout finding are
-recorded in
-[`docs/verification/silksong-device-2026-08-31.md`](docs/verification/silksong-device-2026-08-31.md).
-The isolated API 35 launcher run is recorded in
-[`docs/verification/emulator-lab-2026-08-31.md`](docs/verification/emulator-lab-2026-08-31.md).
-
-## Design
-
-- One installed package: `io.github.darkaxt.dualsouls`.
-- One dedicated launcher process; only one Unity game process is loaded at a
-  time.
-- Exact, fail-closed profiles for source validation, Unity version, conversion,
-  patches, saves, and feature adapters.
-- Independent profile generations under private app storage, published
-  atomically after verification.
-- Shared immutable toolchains by Unity version and content hash.
-- One Dual Souls bottom-screen composition across both games: Hollow Knight's
-  frame, hierarchy, navigation, selection, modal, and lifecycle patterns;
-  Silksong's resident sprites, fonts, data, terminology, and additional pages;
-  and SilksongAndroid's direct-display transport.
-- No Team Cherry game files, Steam credentials, generated game data, Unity
-  binaries, or private signing keys in this repository or its release APK.
-
-The approved architecture is documented in
-[`docs/superpowers/specs/2026-08-29-unified-hollow-knight-platform-design.md`](docs/superpowers/specs/2026-08-29-unified-hollow-knight-platform-design.md).
+- One launcher and installed package for both supported games.
+- On-device conversion and ARM64 compilation from user-supplied Linux files.
+- Independent game profiles, saves, generations, mod settings, and launch
+  state.
+- Dual-screen companion support on compatible Android handhelds.
+- Hollow Knight-style lower-screen HUD, pages, Mods controls, and skin support.
+- Build-time BepInEx 5 and Harmony compatibility for a supported subset of
+  managed mods.
+- Atomic generation publishing so an interrupted build cannot replace the last
+  working game generation.
 
 ## Supported inputs
 
 Only complete **Linux** builds are accepted. Windows and macOS builds are not
-interchangeable inputs, and files from different versions or platforms must
-never be mixed.
+interchangeable, and files from different versions or platforms must not be
+mixed.
 
 ### Hollow Knight
 
-- Production target: `1.5.12620`, Unity `6000.0.61f1`.
-- `1.5.12612` is retained only as a backward-compatibility reference.
-- The classic player layout is copied into the generated private player image;
-  the original source remains necessary for repair, rebuild, and updates.
+- Supported version: `1.5.12620`
+- Unity version: `6000.0.61f1`
 
-### Silksong
+The selected source remains necessary for repair, rebuilding, and updates.
 
-- Current profile: `1.0.29980`, Unity `6000.0.50f1` branch build.
-- Its multi-gigabyte Addressables content remains in the selected source folder
-  and is read there at runtime, so moving or deleting that folder breaks the
-  installed generation.
+### Hollow Knight: Silksong
 
-Steam-assisted acquisition remains optional. Users may instead select a
-complete, legitimately acquired Linux installation.
+- Supported version: `1.0.29980`
+- Unity version: `6000.0.50f1`
+
+Silksong reads its large Addressables content from the selected source folder at
+runtime. Moving or deleting that folder will break the installed game profile.
+
+Steam-assisted acquisition is optional. Users may instead select a complete,
+legitimately acquired Linux installation.
 
 ## Mod support (beta)
 
-The merged build-time implementation supports a useful subset of BepInEx 5
-plugins by weaving Harmony prefixes and postfixes into managed assemblies
-**before** IL2CPP conversion. There is no runtime JIT, so adding, removing, or
-replacing a DLL requires rebuilding the selected game profile. Enable/disable
-gates and configuration files are read at launch, so those changes require only
-a relaunch.
+The launcher can import BepInEx 5 mod folders and compile compatible Harmony
+prefixes and postfixes into each game's Android generation. Adding, removing,
+or replacing a plugin DLL requires rebuilding that game profile. Simple
+configuration and enablement changes take effect after relaunching the game.
 
-Open **Mods** for the currently selected game in the launcher, then choose
-**Install a mod from a folder**. The whole selected folder is copied, preserving
-a plugin's supporting libraries and packaged data. Both profiles discover DLLs
-from the shared mod library:
+Open **Mods** for the selected game in the launcher, choose **Install a mod from
+a folder**, and select the mod's complete folder. Supporting libraries and
+packaged data are copied with the plugin.
+
+Shared imported mods are stored under:
 
 ```text
 Android/data/io.github.darkaxt.dualsouls/files/mods
 ```
 
-Mutable state is isolated by exact profile. Configuration, disabled-plugin
-choices, and launch gates live under:
+Game-specific configuration and enablement are stored under:
 
 ```text
 Android/data/io.github.darkaxt.dualsouls/files/profiles/<profile-id>/mods
 ```
 
-If a rebuild is interrupted, resume it before playing. Completed conversion and
-native compilation work is reused, but the launcher does not run a partly
-installed generation. Plugins with definite missing APIs or required
-dependencies are marked failed and omitted rather than breaking compilation for
-other mods.
-
-The Mods screen reports each plugin as **built** or **not built** only from the
-selected profile's immutable current generation. That generation contains the
-exact plugin digests and weave report captured by its conversion; a failed
-candidate cannot replace the published status or launch gates. A rebuild reruns
-the required whole-program IL2CPP conversion, while the native compile hashes
-generated sources and rebuilds only what changed. Launching with a changed mod
-folder offers either that rebuild or the existing generation.
-
 Transpilers, runtime-computed patch targets, `Reflection.Emit`, and runtime DLL
-discovery cannot work in this architecture. The weaver reports unsupported
-patches before native compilation. Until the remaining Task 14 contracts are
-implemented, do not treat a plugin working in one game as evidence that it is
-compatible with the other.
+discovery are not supported. A mod working with one game does not imply that it
+works with the other.
 
 ### Configuration Manager
 
-The BepInEx shim surface supports mods that expose settings through
-[BepInEx's Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager/releases).
-Install its BepInEx 5 folder like any other mod; it is not bundled with the app.
-On Android its window opens once per **L3+R3** chord instead of requiring F1,
-remains pinned to a handheld-readable size, and restores the game's GUI skin
-when closed. The binding and `Settings scale` live in
-`profiles/<profile-id>/mods/config/BepInEx.cfg`, are read at startup, and can be
-changed without rebuilding.
+Mods that expose settings through
+[BepInEx Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager/releases)
+can use its BepInEx 5 release. Install its complete folder like any other mod;
+it is not bundled with this project.
 
-BepInEx and user mods are not shipped by this repository. The user's own device
-compiles selected plugin files into that user's game generation.
+On Android, press **L3+R3** to open or close the Configuration Manager. Its
+binding and interface scale can be changed in the selected profile's
+`BepInEx.cfg` file.
 
-### Mods tested with the Silksong profile
+### Mods tested with Silksong
 
-Official v1.1.0 reports these on-device results for the Silksong profile:
+The following mods have been tested with the supported Silksong profile:
 
 - [BepInEx 5 + Configuration Manager](https://www.nexusmods.com/hollowknightsilksong/mods/26)
 - [AutoMap](https://www.nexusmods.com/hollowknightsilksong/mods/31)
-- [SaveScopedConfig](https://www.nexusmods.com/hollowknightsilksong/mods/1123) — required by AutoMap
-- [Bonfire Teleport](https://www.nexusmods.com/hollowknightsilksong/mods/156) — use the top-screen full map to teleport
-- [Stakes of Marika – Rebirth Anywhere](https://www.nexusmods.com/hollowknightsilksong/mods/46) — partial; no custom spawn point
+- [SaveScopedConfig](https://www.nexusmods.com/hollowknightsilksong/mods/1123)
+- [Bonfire Teleport](https://www.nexusmods.com/hollowknightsilksong/mods/156)
+- [Stakes of Marika – Rebirth Anywhere](https://www.nexusmods.com/hollowknightsilksong/mods/46) — partial; custom spawn points are not supported
 - [Healthbar & Damage Show](https://www.nexusmods.com/hollowknightsilksong/mods/28)
 
-Other mods are not guaranteed to work, and compatibility in one game profile is
-not evidence for the other.
+Other mods are not guaranteed to work.
 
-## Building and verification
+## Building from source
 
 Prerequisites are an Android SDK, JDK 17 or newer, .NET 8, Git Bash on Windows,
-and the exact Unity Android/editor components resolved by the game profiles.
+and the Unity Android/editor components required by the supported game
+versions.
 
-The core host gates are:
+The main host checks are:
 
 ```sh
 make surgery
@@ -227,18 +127,15 @@ make test
 make check
 ```
 
-`make dev` additionally packages and installs a development APK, so use it only
-when device mutation is intended. The GitHub Actions signing workflow uses the
-fork's pinned package identity and signing certificate; it does not publish a
-release until explicitly dispatched and all release gates are satisfied.
+`make dev` also packages and installs a development APK, so run it only when a
+connected Android device is intended to be modified.
 
-## Project history and upstream
+## Project history
 
 This fork is based on
 [`jakobkhansen/SilksongAndroid`](https://github.com/jakobkhansen/SilksongAndroid).
 Its on-device toolchain, Vulkan player, dual-screen implementation, and
-build-time BepInEx work are the foundation being generalized into the unified
-platform.
+build-time BepInEx work form the foundation of this unified project.
 
 ## Legal
 
