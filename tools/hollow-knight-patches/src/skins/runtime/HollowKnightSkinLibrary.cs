@@ -16,15 +16,18 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         readonly Func<SkinLibraryObservation, bool> report;
         readonly Func<string, long, bool> confirm;
         readonly Func<string, bool> cancel;
+        readonly Func<bool> readyToPoll;
         float nextPoll;
         bool pending, disposed;
         public bool CanRefresh => !disposed && (!pending || death.Ready);
 
         public HollowKnightSkinLibrary(Func<SkinLibraryRequest> read, Func<SkinPack, SkinApplyResult> apply,
             Func<SkinApplyResult> restore, Func<SkinLibraryObservation, bool> report, Func<SkinApplyResult> observe,
-            HollowKnightSkinDeathAdapter death, Func<string, long, bool> confirm, Func<string, bool> cancel)
+            HollowKnightSkinDeathAdapter death, Func<string, long, bool> confirm, Func<string, bool> cancel,
+            Func<bool> readyToPoll = null)
         {
             this.read = read; this.report = report; this.death = death; this.confirm = confirm; this.cancel = cancel;
+            this.readyToPoll = readyToPoll ?? (() => true);
             controller = CreateController(apply, restore, observe);
         }
         SkinLibraryRuntimeController CreateController(Func<SkinPack, SkinApplyResult> apply,
@@ -36,6 +39,7 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         {
             if (disposed) return;
             death.Tick(); // actual owner/event/frame sampling must precede the one-second JNI throttle
+            if (!readyToPoll()) return;
             if (now < nextPoll) return;
             nextPoll = now + 1f;
             controller.Tick();
@@ -102,6 +106,7 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         public HollowKnightSkinLibrary(HollowKnightSkinRuntime runtime)
         {
             this.runtime = runtime;
+            readyToPoll = () => runtime.TargetsReady;
             death = new HollowKnightSkinDeathAdapter(runtime);
             read = ReadManaged; report = ReportManaged;
             confirm = (run, occurrence) => Bridge.CallStatic<bool>("confirmDeath", run, occurrence);

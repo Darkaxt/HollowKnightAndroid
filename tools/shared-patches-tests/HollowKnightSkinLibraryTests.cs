@@ -198,6 +198,32 @@ public class HollowKnightSkinLibraryTests
         controller.Tick(); Assert.Equal(3, restores); Assert.Equal("Restored", observed.Status);
         controller.Tick(); Assert.Equal(3, restores); Assert.Null(observed.ActivePackId);
     }
+    [Fact] public void Production_poll_skips_configuration_transport_until_visual_targets_are_live()
+    {
+        var request = Request();
+        var death = new HollowKnightSkinDeathAdapter(LiveFrame);
+        int reads = 0;
+        bool targetsReady = false;
+        using var library = new HollowKnightSkinLibrary(
+            () => { reads++; return request; },
+            _ => new SkinApplyResult(SkinApplyStatus.Applied),
+            () => new SkinApplyResult(SkinApplyStatus.Restored),
+            _ => true,
+            () => new SkinApplyResult(SkinApplyStatus.Unchanged),
+            death,
+            (_, __) => true,
+            _ => true,
+            () => targetsReady);
+
+        library.Tick(0);
+        library.Tick(10);
+        Assert.Equal(0, reads);
+
+        targetsReady = true;
+        library.Tick(10);
+        Assert.Equal(1, reads);
+    }
+
     [Fact] public void Production_poll_samples_each_frame_and_retries_same_confirm_and_report()
     {
         var request=Request();request.Mode="ROTATE";request.RotationRun=new string('d',32);
