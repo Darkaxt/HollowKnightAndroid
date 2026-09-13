@@ -13,6 +13,7 @@ import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import dev.silksong.launcher.profiles.GameProfiles
 import dev.silksong.launcher.profiles.SelectedGameStore
+import dev.silksong.launcher.skins.ui.SkinsActivity
 import dev.silksong.launcher.shortcuts.GameShortcutContract
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -103,13 +104,19 @@ class LauncherProfileSelectionTest {
     }
 
     @Test
-    fun `mods and settings remain separate routes under the selected profile`() {
+    fun `mods skins and settings are direct selected profile routes`() {
         SelectedGameStore(context).set(GameProfiles.require("hollow-knight"))
         val launcher = Robolectric.buildActivity(LauncherActivity::class.java).setup().get()
 
         launcher.findViewById<Button>(R.id.btn_mods).performClick()
         val modsIntent = shadowOf(launcher).nextStartedActivity
-        assertEquals(ModsActivity::class.java.name, modsIntent.component?.className)
+        assertEquals(BuiltInModsActivity::class.java.name, modsIntent.component?.className)
+
+        launcher.findViewById<Button>(R.id.btn_skins).performClick()
+        assertEquals(
+            SkinsActivity::class.java.name,
+            shadowOf(launcher).nextStartedActivity.component?.className,
+        )
 
         launcher.findViewById<Button>(R.id.btn_settings).performClick()
         assertEquals(
@@ -117,9 +124,19 @@ class LauncherProfileSelectionTest {
             shadowOf(launcher).nextStartedActivity.component?.className,
         )
 
-        val mods = Robolectric.buildActivity(ModsActivity::class.java, modsIntent).setup().get()
-        assertTrue(collectText(mods.findViewById(android.R.id.content)).contains("Mods — Hollow Knight"))
+        val mods = Robolectric.buildActivity(BuiltInModsActivity::class.java, modsIntent).setup().get()
+        assertTrue(collectText(mods.findViewById(android.R.id.content)).contains("MODS — HOLLOW KNIGHT"))
         assertEquals("hollow-knight", SelectedGameStore(context).get().id)
+    }
+
+    @Test
+    fun `settings has logs and genuine settings but no mods or skins routes`() {
+        val settings = Robolectric.buildActivity(SettingsActivity::class.java).setup().get()
+
+        assertEquals(0, settings.resources.getIdentifier("btn_settings_mods", "id", settings.packageName))
+        assertEquals(0, settings.resources.getIdentifier("btn_settings_skins", "id", settings.packageName))
+        settings.findViewById<Button>(R.id.btn_settings_logs).performClick()
+        assertEquals(LogActivity::class.java.name, shadowOf(settings).nextStartedActivity.component?.className)
     }
 
     @Test

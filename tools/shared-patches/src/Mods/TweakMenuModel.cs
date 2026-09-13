@@ -24,6 +24,9 @@ namespace DualSouls.Mods
             for (int i = 0; i < controller.Descriptors.Count; i++)
             {
                 TweakDescriptor descriptor = controller.Descriptors[i];
+                // Deferred descriptors remain in the adapter ledger but are not
+                // actionable menu rows.
+                if (!descriptor.IsAvailable) continue;
                 int groupIndex;
                 if (!groupIndexes.TryGetValue(descriptor.Group, out groupIndex))
                 {

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="btn_plugins" type="id" />
+    <item name="btn_mods_master" type="id" />
+    <item name="btn_reset_mods" type="id" />
+    <item name="builtin_mods_list" type="id" />
+    <item name="txt_mod_detail" type="id" />
+    <item name="txt_mod_status" type="id" />
+</resources>

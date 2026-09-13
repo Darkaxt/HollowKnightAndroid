@@ -52,7 +52,7 @@ namespace DualSouls.Mods.HollowKnight
 
             Session = new HollowKnightModsSession(
                 new HollowKnightGameTweakApi(),
-                new PlayerPrefsTweakStore(),
+                new LineFileTweakStore(LineFileTweakStore.ProfilePath(Application.persistentDataPath, "hollow-knight")),
                 VisibleRows);
             _lifebloodFlashPolicy = new HollowKnightLifebloodFlashPolicy();
             // A failed prior teardown keeps the skin owner alive and blocked for an explicit restore retry.

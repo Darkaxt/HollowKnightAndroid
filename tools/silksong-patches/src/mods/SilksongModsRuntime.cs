@@ -59,7 +59,7 @@ namespace DualSouls.Mods.Silksong
             Session = new TweakSession(
                 () => api.IsReady,
                 () => new SilksongTweakAdapter(api),
-                new PlayerPrefsTweakStore(),
+                new LineFileTweakStore(LineFileTweakStore.ProfilePath(Application.persistentDataPath, "silksong")),
                 VisibleRows);
             Skins = SilksongSkinRuntime.Current ?? new SilksongSkinRuntime();
             skinLibrary = new SilksongSkinLibrary(Skins);

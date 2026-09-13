@@ -62,17 +62,10 @@ public sealed class DsModsScreen
         _w = width;
         _h = height;
         _top = top;
-        _controller = new TweakController(
-            new SilksongTweakAdapter(new SilksongGameTweakApi()),
-            new PlayerPrefsTweakStore());
-
-        TweakActionResult initialized = _controller.Initialize();
-        if (!initialized.Success)
-        {
-            _message = initialized.Error;
-            _messageIsError = true;
-        }
-
+        SilksongModsRuntime runtime = SilksongModsRuntime.Current;
+        if (runtime == null || runtime.Session == null)
+            throw new InvalidOperationException("The process-owned Silksong Mods session is unavailable.");
+        _controller = SilksongModsRuntime.Current.Session.Controller;
         Build(parent);
     }
 
@@ -192,7 +185,7 @@ public sealed class DsModsScreen
         _resetHit = new Rect(_w - 300f, _h - 104f, 272f, ControlH);
         _reset = DsWidgets.Rect(_root, "reset");
         DsWidgets.Place(_reset, _resetHit.x, _resetHit.y, _resetHit.width, _resetHit.height);
-        var resetLabel = DsWidgets.Label(_reset, "label", "RESET VALUES", DsTheme.SmallSize,
+        var resetLabel = DsWidgets.Label(_reset, "label", "RESET ALL MODS", DsTheme.SmallSize,
                                          DsTheme.Ink, TmpAlign.Center, display: true);
         if (resetLabel != null) DsWidgets.Stretch(resetLabel.rectTransform);
     }

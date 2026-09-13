@@ -68,10 +68,9 @@
           instead of returning to the launcher.
 
           Both processes still share the same package (and therefore
-          the same app data dir + the same external files dir), so
-          SharedPreferences / save files / extracted bundles remain
-          accessible from both. They just can't share live in-memory
-          state — which we don't need.
+          the same app data dir + external profile roots). Cross-process
+          built-in Mods state uses an atomic profile file; live in-memory
+          state is deliberately not shared.
         -->
         <activity
             android:name="dev.silksong.launcher.LauncherActivity"
@@ -105,8 +104,15 @@
             android:process=":launcher"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
         <activity
+            android:name="dev.silksong.launcher.BuiltInModsActivity"
+            android:exported="false"
+            android:label="@string/action_mods"
+            android:process=":launcher"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+        <activity
             android:name="dev.silksong.launcher.ModsActivity"
             android:exported="false"
+            android:label="@string/action_plugins"
             android:process=":launcher"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
         <!--

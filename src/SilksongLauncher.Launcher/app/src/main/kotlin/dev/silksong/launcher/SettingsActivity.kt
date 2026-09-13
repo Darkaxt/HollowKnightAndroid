@@ -27,9 +27,6 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
-import android.view.View
-import dev.silksong.launcher.skins.ui.SkinLibraryService
-import dev.silksong.launcher.skins.ui.SkinsActivity
 import android.widget.Button
 import android.widget.Switch
 import dev.silksong.launcher.profiles.ProfileBuildPaths
@@ -114,17 +111,7 @@ class SettingsActivity : Activity() {
         btnClearBuild.isEnabled = BuildReset.hasBuild(buildPaths)
         btnClearBuild.alpha = if (btnClearBuild.isEnabled) 1f else 0.4f
 
-        // The same screen the porting flow offers, because the person who
-        // needs a log is as likely to have reached this screen as that one.
-        findViewById<Button>(R.id.btn_settings_mods).setOnClickListener {
-            startActivity(Intent(this, ModsActivity::class.java))
-        }
-        findViewById<Button>(R.id.btn_settings_skins).apply {
-            visibility = if (SkinLibraryService.isVisible(buildPaths.profile)) View.VISIBLE else View.GONE
-            setOnClickListener {
-                startActivity(Intent(this@SettingsActivity, SkinsActivity::class.java))
-            }
-        }
+        // Logs remain available for diagnosing genuine launcher settings/build issues.
         findViewById<Button>(R.id.btn_settings_logs).setOnClickListener {
             startActivity(Intent(this, LogActivity::class.java))
         }

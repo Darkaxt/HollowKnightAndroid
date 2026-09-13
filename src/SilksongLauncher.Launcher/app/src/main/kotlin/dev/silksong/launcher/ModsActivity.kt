@@ -1,4 +1,4 @@
-// ModsActivity — what is installed, what worked, and what to do about it.
+// ModsActivity — the secondary BepInEx plugin installer and manager.
 //
 // The screen exists because of one property of this design: mods are compiled
 // into the game rather than loaded by it, so a mod that cannot work fails at
@@ -139,7 +139,7 @@ class ModsActivity : Activity() {
         }
 
         root.addView(TextView(this).apply {
-            text = "Mods — ${profile.displayName}"
+            text = "Plugins — ${profile.displayName}"
             setTextColor(Color.WHITE)
             textSize = 22f
             setTypeface(typeface, Typeface.BOLD)
@@ -159,7 +159,7 @@ class ModsActivity : Activity() {
         // download, on the device it was downloaded to -- and the alternative
         // is asking somebody to find Android/data in a file manager that may
         // not show it.
-        importButton = button("Install a mod from a folder", primary = true) { pick() }
+        importButton = button("Install a plugin from a folder", primary = true) { pick() }
         root.addView(
             importButton,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -231,7 +231,7 @@ class ModsActivity : Activity() {
         }
         val model = (result as ModsDisplayCoordinator.Result.Ready).model
         if (model.rows.isEmpty()) {
-            list.addView(note("Nothing installed yet. Install a mod from a folder, above."))
+            list.addView(note("Nothing installed yet. Install a plugin from a folder, above."))
             list.addView(
                 note(
                     "Transpilers, patch targets chosen at runtime and Reflection.Emit " +

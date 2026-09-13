@@ -68,22 +68,13 @@ public sealed class TweakPresenterTests
     }
 
     [Fact]
-    public void RepeatedTapOnSelectedDeferredRowNeverResolvesToCycle()
+    public void DeferredRowsNeverProduceTouchablePresenterEntries()
     {
         var fixture = PresenterFixture.Create(visibleRows: 1);
-        fixture.Menu.MoveRow(2);
-        var deferredRow = new TweakPresenterHitMap(
-            default, default, default, default, default,
-            new[] { new TweakPresenterRect(0f, 0f, 1f, 1f) });
-        fixture.Menu.MoveRow(0);
-        Assert.Equal(2, fixture.Menu.SelectedRowIndex);
-        Assert.Equal(2, fixture.Menu.WindowStart);
 
-        var action = TweakPresenterInteraction.ResolveAction(
-            new TweakPresenterPoint(0.5f, 0.5f), deferredRow, fixture.Menu);
-
-        Assert.Equal(TweakPresenterActionKind.None, action.Kind);
-        Assert.False(fixture.Menu.Selected.IsAvailable);
+        Assert.All(fixture.Menu.CurrentRows, row => Assert.True(row.IsAvailable));
+        Assert.DoesNotContain(fixture.Menu.CurrentRows, row => row.Id == "deferred");
+        Assert.Equal(6, TweakPresenterListLayout.EntryCount(fixture.Menu));
     }
 
     [Fact]
@@ -675,7 +666,7 @@ public sealed class TweakPresenterTests
         var fixture = PresenterFixture.Create();
 
         Assert.Equal(0.65f, TweakPresenterListLayout.LeftFraction);
-        Assert.Equal(7, TweakPresenterListLayout.EntryCount(fixture.Menu));
+        Assert.Equal(6, TweakPresenterListLayout.EntryCount(fixture.Menu));
         Assert.Equal(TweakPresenterListEntryKind.Header,
             TweakPresenterListLayout.EntryAt(fixture.Menu, 0).Kind);
         Assert.Equal(TweakPresenterListEntryKind.Master,
@@ -694,7 +685,7 @@ public sealed class TweakPresenterTests
             Assert.Equal(row, entry.RowIndex);
         }
         Assert.Throws<System.ArgumentOutOfRangeException>(() =>
-            TweakPresenterListLayout.EntryAt(fixture.Menu, 7));
+            TweakPresenterListLayout.EntryAt(fixture.Menu, 6));
     }
 
     [Fact]

@@ -277,10 +277,8 @@
                     </FrameLayout>
                 </LinearLayout>
 
-                <!-- Mods beside Settings rather than inside it: a mod is
-                     installed by dropping a file in a folder, so the screen
-                     that says whether that worked is the one somebody comes
-                     back to. -->
+                <!-- Built-in Mods and Skins are primary profile actions. The
+                     separate plugin installer is reachable from Mods. -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -291,8 +289,23 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:layout_marginEnd="10dp"
+                        android:layout_marginEnd="6dp"
                         android:text="@string/action_mods"
+                        android:textSize="16sp"
+                        android:textColor="@color/text_on_control"
+                        android:backgroundTint="@color/surface_control"
+                        android:foreground="@drawable/focus_on_light"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp"
+                        android:minHeight="0dp" />
+
+                    <Button
+                        android:id="@+id/btn_skins"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="6dp"
+                        android:text="@string/action_skins"
                         android:textSize="16sp"
                         android:textColor="@color/text_on_control"
                         android:backgroundTint="@color/surface_control"

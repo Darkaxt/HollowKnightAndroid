@@ -29,8 +29,9 @@ public sealed class TweakMenuModelTests
         Assert.False(fixture.Model.MessageIsError);
         Assert.Equal(new[] { "COMBAT", "MOVEMENT" }, fixture.Model.Groups);
         Assert.Equal(
-            new[] { "damage_received", "unlimited_soul", "bench_teleport" },
+            new[] { "damage_received", "unlimited_soul", "one_hit_kills" },
             fixture.Model.CurrentRows.Select(row => row.Id));
+        Assert.DoesNotContain(fixture.Model.CurrentRows, row => !row.IsAvailable);
         Assert.Same(fixture.Adapter.Descriptors[0], fixture.Model.Selected);
     }
 
@@ -127,26 +128,23 @@ public sealed class TweakMenuModelTests
     }
 
     [Fact]
-    public void DeferredSelectionRejectsCyclingAndPreservesControllerError()
+    public void DeferredDescriptorsRemainInLedgerButNeverBecomeMenuRows()
     {
         var fixture = MenuFixture.Create(visibleRows: 2);
-        fixture.Model.MoveRow(2);
 
-        var result = fixture.Model.CycleSelected();
-
-        Assert.False(result.Success);
-        Assert.Equal(result.Error, fixture.Model.Message);
-        Assert.Contains("HKMOD-017", fixture.Model.Message);
-        Assert.Contains("No safe scene-transition seam is enabled.", fixture.Model.Message);
-        Assert.True(fixture.Model.MessageIsError);
-        Assert.Equal("bench_teleport", fixture.Model.Selected.Id);
-        Assert.Empty(fixture.Adapter.Applied);
+        Assert.Contains(fixture.Controller.Descriptors, row => !row.IsAvailable && row.Id == "bench_teleport");
+        Assert.DoesNotContain(
+            fixture.Model.Groups.SelectMany(index => fixture.Model.RowsForGroup(
+                fixture.Model.Groups.ToList().IndexOf(index))),
+            row => !row.IsAvailable);
     }
 
     [Fact]
     public void RowNavigationClearsErrorOnlyWhenSelectionChanges()
     {
         var fixture = MenuFixture.Create(visibleRows: 2);
+        Assert.True(fixture.Controller.SetMaster(true).Success);
+        fixture.Adapter.FailId = "one_hit_kills";
         fixture.Model.MoveRow(2);
         Assert.False(fixture.Model.CycleSelected().Success);
         string error = fixture.Model.Message;
@@ -309,6 +307,9 @@ public sealed class TweakMenuModelTests
                 "off", new[] { "off", "on" }),
             new TweakDescriptor(
                 "unlimited_soul", "COMBAT", "UNLIMITED SOUL", "Keep Soul available.",
+                "off", new[] { "off", "on" }),
+            new TweakDescriptor(
+                "one_hit_kills", "COMBAT", "ONE-HIT KILLS", "Defeat regular enemies in one hit.",
                 "off", new[] { "off", "on" }),
             TweakDescriptor.Deferred(
                 "bench_teleport", "COMBAT", "BENCH TELEPORT", "Travel to a recorded bench.",

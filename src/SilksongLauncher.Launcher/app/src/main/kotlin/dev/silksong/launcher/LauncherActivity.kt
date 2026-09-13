@@ -2,9 +2,8 @@
 // been built. GameActivity is a regular non-launchable Activity, invoked only
 // via the Intent in launchGame().
 //
-// One panel: a button stack (Log in, Pull saves, Push saves, Settings, Launch
-// game) beside a live mirror of LauncherLog, so the user can see what is
-// happening end to end. Login state is persisted via TokenStore.
+// One panel: profile-scoped built-in Mods, Skins and Settings actions beside a
+// live mirror of LauncherLog, plus account/cloud controls and game launch.
 
 package dev.silksong.launcher
 
@@ -45,6 +44,7 @@ import dev.silksong.launcher.runtime.RuntimeState
 import dev.silksong.launcher.shortcuts.GameShortcutContract
 import dev.silksong.launcher.shortcuts.GameShortcutController
 import dev.silksong.launcher.shortcuts.GameShortcutResult
+import dev.silksong.launcher.skins.ui.SkinsActivity
 
 class LauncherActivity : Activity() {
 
@@ -85,6 +85,7 @@ class LauncherActivity : Activity() {
     private lateinit var spinPull: ProgressBar
     private lateinit var spinPush: ProgressBar
     private lateinit var btnMods: Button
+    private lateinit var btnSkins: Button
     private lateinit var btnSettings: Button
     private lateinit var btnLogs: Button
     private lateinit var btnLaunch: Button
@@ -155,6 +156,7 @@ class LauncherActivity : Activity() {
         spinPull = findViewById(R.id.spin_pull)
         spinPush = findViewById(R.id.spin_push)
         btnMods = findViewById(R.id.btn_mods)
+        btnSkins = findViewById(R.id.btn_skins)
         btnSettings = findViewById(R.id.btn_settings)
         btnLogs = findViewById(R.id.btn_logs)
         btnLaunch = findViewById(R.id.btn_launch)
@@ -185,7 +187,10 @@ class LauncherActivity : Activity() {
         btnPull.setOnClickListener { onPullClicked() }
         btnPush.setOnClickListener { onPushClicked() }
         btnMods.setOnClickListener {
-            startActivity(Intent(this, ModsActivity::class.java))
+            startActivity(Intent(this, BuiltInModsActivity::class.java))
+        }
+        btnSkins.setOnClickListener {
+            startActivity(Intent(this, SkinsActivity::class.java))
         }
         btnSettings.setOnClickListener { onSettingsClicked() }
         btnLogs.setOnClickListener {
