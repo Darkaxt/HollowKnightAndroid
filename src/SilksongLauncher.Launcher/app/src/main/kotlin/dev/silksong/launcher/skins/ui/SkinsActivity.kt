@@ -114,7 +114,8 @@ class SkinsActivity : Activity() {
         findViewById<Button>(R.id.skins_import_all).isEnabled = screen.canImport && !screen.busy && screen.handles.isNotEmpty()
         findViewById<Button>(R.id.skins_cancel).isEnabled = screen.handles.isNotEmpty() || screen.busy || screen.cleanupPending
         findViewById<Button>(R.id.skins_advance_mode).isEnabled = screen.canAdvance && !screen.busy
-        findViewById<Button>(R.id.skins_library_details).isEnabled = screen.library != null
+        findViewById<Button>(R.id.skins_library_details).isEnabled =
+            screen.library != null || screen.refreshError != null || session.canRecover
         renderPrepared(screen)
         renderLibrary(screen)
     }
@@ -298,20 +299,28 @@ class SkinsActivity : Activity() {
 
     private fun showLibraryDetails(screen: SkinScreenState) {
         if (!acceptsCallback()) return
-        val state = screen.library ?: return
+        val state = screen.library
         val none = getString(R.string.skins_none)
-        val message = getString(
-            R.string.skins_library_details,
-            state.mode,
-            state.selectedPackId ?: none,
-            state.pendingPackId ?: none,
-            state.rotationOrder.joinToString(" → ").ifEmpty { none },
-            state.runtimeObservation ?: none,
-            state.interlock,
-            state.originalFailure ?: none,
-            state.rollbackFailure ?: none,
-            state.leaseObservation,
-        )
+        val message = if (state == null) {
+            getString(
+                R.string.skins_read_error,
+                screen.refreshError?.code?.name ?: none,
+                screen.refreshError?.detail ?: getString(R.string.skins_loading),
+            )
+        } else {
+            getString(
+                R.string.skins_library_details,
+                state.mode,
+                state.selectedPackId ?: none,
+                state.pendingPackId ?: none,
+                state.rotationOrder.joinToString(" → ").ifEmpty { none },
+                state.runtimeObservation ?: none,
+                state.interlock,
+                state.originalFailure ?: none,
+                state.rollbackFailure ?: none,
+                state.leaseObservation,
+            )
+        }
         val builder = AlertDialog.Builder(this)
             .setTitle(R.string.skins_library_details_title)
             .setMessage(message)

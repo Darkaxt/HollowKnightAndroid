@@ -161,6 +161,30 @@ class SkinsActivityTest {
         }
     }
 
+    @Test fun `read failure keeps Retry and OFF recovery reachable in Details`() {
+        val fixture = Fixture(readFailure = true, recoverAvailable = true)
+        SkinsActivity.withHostBinding(fixture.binding) {
+            SelectedGameStore(ApplicationProvider.getApplicationContext()).set(HollowKnightProfile)
+            val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
+            try {
+                fixture.idle()
+                val activity = controller.get()
+                val detailsButton = activity.findViewById<Button>(R.id.skins_library_details)
+                assertTrue("Details must remain reachable when the library read fails", detailsButton.isEnabled)
+                detailsButton.performClick()
+                val details = ShadowAlertDialog.getLatestAlertDialog()
+                assertTrue(details.findViewById<TextView>(android.R.id.message).text.toString().contains("refresh failed"))
+                assertEquals(activity.getString(R.string.skins_refresh),
+                    details.getButton(AlertDialog.BUTTON_NEUTRAL).text.toString())
+                assertEquals(activity.getString(R.string.skins_recover_off),
+                    details.getButton(AlertDialog.BUTTON_POSITIVE).text.toString())
+                details.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+                fixture.idle()
+                assertEquals(1, fixture.recoveries)
+            } finally { controller.pause().stop().destroy(); fixture.idle() }
+        }
+    }
+
     @Test fun `requested configuration and latest runtime report occupy separate compact views`() {
         val fixture = Fixture(runtimeObservation = "Last game report: Applied · target · complete · 10 ms UTC; refresh to retry status")
         SkinsActivity.withHostBinding(fixture.binding) {
@@ -435,6 +459,7 @@ class SkinsActivityTest {
         mutationsAvailable: Boolean = false,
         private val runtimeObservation: String? = null,
         private val mode: String = "OFF",
+        private val readFailure: Boolean = false,
         recoverAvailable: Boolean = false,
     ) {
         val worker = Queue(); var opens = 0; var cancels = 0
@@ -480,7 +505,8 @@ class SkinsActivityTest {
             }
         } else UnavailableSkinLibraryMutations
         val services = SkinLibraryUiServices(HollowKnightProfile, {
-            SkinResult.Ok(SkinLibraryViewState("c".repeat(64), mode, "target", null, emptyList(), "CLEAR", null, null, "CLEAR", listOf(
+            if (readFailure) SkinResult.Error(SkinImportCode.DURABILITY_UNAVAILABLE, "refresh failed")
+            else SkinResult.Ok(SkinLibraryViewState("c".repeat(64), mode, "target", null, emptyList(), "CLEAR", null, null, "CLEAR", listOf(
                 SkinPackRow("target", "Target", "Author", "f".repeat(64), "d".repeat(64), "e".repeat(64), true, false, SkinReceiptSummary())),
                 simplifiedAuthority = true, runtimeObservation = runtimeObservation))
         }, imports, mutations, UnavailableSkinModeAdvancePort,
