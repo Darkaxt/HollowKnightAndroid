@@ -32,6 +32,14 @@ IL2CPP_CONVERTER = (
     / "launcher"
     / "Il2cppConverter.kt"
 )
+ADAPTIVE_ICON_DIR = (
+    ROOT
+    / "tools"
+    / "depot-to-apk"
+    / "shell"
+    / "res"
+    / "mipmap-anydpi-v26"
+)
 
 
 def load_helper():
@@ -94,6 +102,23 @@ class ReleasePipelineContractTest(unittest.TestCase):
         self.assertIn('for f in "$d"/*; do', script)
         self.assertIn('[[ -f "$f" ]] || continue', script)
         self.assertNotIn('cp -f "$d"/* "$sh/res/$(basename "$d")/"', script)
+
+    def test_modern_round_icon_uses_the_same_adaptive_artwork(self):
+        regular = (ADAPTIVE_ICON_DIR / "ic_launcher.xml").read_text(encoding="utf-8")
+        round_icon = (ADAPTIVE_ICON_DIR / "ic_launcher_round.xml").read_text(
+            encoding="utf-8"
+        )
+
+        for layer in ("background", "foreground"):
+            reference = re.search(
+                rf'<{layer} android:drawable="([^"]+)"', regular
+            )
+            candidate = re.search(
+                rf'<{layer} android:drawable="([^"]+)"', round_icon
+            )
+            self.assertIsNotNone(reference)
+            self.assertIsNotNone(candidate)
+            self.assertEqual(reference.group(1), candidate.group(1))
 
     def test_apk_shell_exposes_launcher_as_its_only_launcher_entry_point(self):
         script = BUILD_SCRIPT.read_text(encoding="utf-8")
