@@ -63,12 +63,14 @@ public partial class HKDualScreen
     GameObject tweaksRoot;
     readonly List<GameObject> tweakRows = new List<GameObject>();
     readonly List<ModsLabel> tweakRowTexts = new List<ModsLabel>();
+    readonly List<ModsLabel> tweakRowValues = new List<ModsLabel>();
+    readonly List<ModsLabel> modsGroupHeaders = new List<ModsLabel>();
     readonly List<TweakPresenterRect> tweakRowHits =
         new List<TweakPresenterRect>();
 
     Transform gearT;
-    SpriteRenderer gearSR;
-    Texture2D gearTex;
+    Renderer gearSR;
+    ModsLabel modsEntryText;
     Vector3 hudGearAnchor;
     float hudGearH;
     bool hudGearOk;
@@ -76,23 +78,17 @@ public partial class HKDualScreen
 
     HollowKnightModsSession modsSession;
     TweakMenuModel modsMenu;
-    bool modsClosePending;
     int modsSortingOrder;
-    int modsBuiltVisibleRows = -1;
+    int modsBuiltEntryCount = -1;
+    int modsSelectedEntry = 1;
+    float modsListScroll;
+    float modsDragLastY;
+    bool modsDragValid;
 
-    ModsLabel modsTitleText;
-    ModsLabel modsMasterText;
-    ModsLabel modsGroupText;
+    ModsLabel modsDetailTitleText;
     ModsLabel modsDetailText;
     ModsLabel modsStatusText;
-    ModsLabel modsResetText;
-    ModsLabel modsCloseText;
-    TweakPresenterRect modsMasterHit;
-    TweakPresenterRect modsPreviousGroupHit;
-    TweakPresenterRect modsNextGroupHit;
-    TweakPresenterRect modsResetHit;
-    TweakPresenterRect modsCloseHit;
-    TweakPresenterHitMap modsHitMap;
+    TweakPresenterRect modsListHit;
 
     bool TryResolveModsPresenter(
         out HollowKnightModsSession session,
@@ -134,7 +130,7 @@ public partial class HKDualScreen
         DestroyModsModalView();
         modsSession = session;
         modsMenu = menu;
-        modsClosePending = false;
+        modsDragValid = false;
         if (transport != null)
             modsInteraction.ResetCleanTap(transport.CleanTapSequence);
         tweaksOpen = modsLifecycle.IsOpen;
@@ -144,55 +140,30 @@ public partial class HKDualScreen
     {
         if (gearT != null || frameRoot == null) return;
 
-        const int size = 64;
-        const float center = (size - 1) * 0.5f;
-        gearTex = Own(new Texture2D(size, size, TextureFormat.RGBA32, false));
-        gearTex.name = "HKDS Mods Gear";
-        gearTex.wrapMode = TextureWrapMode.Clamp;
-        gearTex.filterMode = FilterMode.Bilinear;
-        var pixels = new Color32[size * size];
-        for (int y = 0; y < size; y++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                float dx = x - center;
-                float dy = y - center;
-                float radius = Mathf.Sqrt(dx * dx + dy * dy);
-                float angle = Mathf.Atan2(dy, dx) + Mathf.PI;
-                int tooth = Mathf.FloorToInt(angle * 12f / (Mathf.PI * 2f));
-                float outer = (tooth & 1) == 0 ? 29f : 24.5f;
-                bool ink = radius >= 10.5f && radius <= outer;
-                pixels[y * size + x] = ink
-                    ? new Color32(238, 238, 230, 255)
-                    : new Color32(0, 0, 0, 0);
-            }
-        }
-        gearTex.SetPixels32(pixels);
-        gearTex.Apply(false);
-
-        var sprite = Own(Sprite.Create(
-            gearTex,
-            new Rect(0f, 0f, size, size),
-            new Vector2(0.5f, 0.5f),
-            100f));
-        sprite.name = "HKDS Mods Gear Sprite";
-
         int highestChromeOrder = 0;
         foreach (var renderer in frameRoot.GetComponentsInChildren<Renderer>(true))
             if (renderer != null && renderer.sortingOrder > highestChromeOrder)
                 highestChromeOrder = renderer.sortingOrder;
         modsSortingOrder = highestChromeOrder + 10;
 
-        var go = new GameObject("HKDS Mods Gear");
-        go.transform.SetParent(frameRoot.transform, false);
-        go.layer = ATTR_LAYER;
-        gearSR = go.AddComponent<SpriteRenderer>();
-        gearSR.sprite = sprite;
-        gearSR.color = Color.white;
+        Component donor = FindModsTextDonor();
+        if (donor == null) return;
+        modsEntryText = BuildModsEntryControl(donor);
+        if (modsEntryText == null) return;
+        SetLayerRecursive(modsEntryText.GameObject.transform, ATTR_LAYER);
+        SetModsText(modsEntryText, "MODS", Color.white);
+        gearT = modsEntryText.GameObject.transform;
+        gearSR = modsEntryText.Renderer;
         gearSR.sortingLayerName = "Inventory";
         gearSR.sortingOrder = modsSortingOrder;
         gearSR.enabled = false;
-        gearT = go.transform;
+    }
+
+    ModsLabel BuildModsEntryControl(Component donor)
+    {
+        GameObject entryObject;
+        return BuildModsLabel(
+            donor, "HKDS Native Mods Entry", frameRoot.transform, out entryObject);
     }
 
     void PositionGear(float scale, float aspect, float tabY)
@@ -215,13 +186,16 @@ public partial class HKDualScreen
         tweaksOpen = modsLifecycle.IsOpen;
         if (!tweaksOpen) RestoreModsCoveredContent();
         BuildModsGear();
-        if (gearT == null || gearSR == null || gearSR.sprite == null) return;
+        if (gearT == null || gearSR == null) return;
 
         scale = Mathf.Max(0.01f, attrCam.orthographicSize);
         aspect = Mathf.Max(0.01f, attrCam.aspect);
         float height = Mathf.Max(scale * 0.085f, 0.01f);
-        Vector3 spriteSize = gearSR.sprite.bounds.size;
-        float factor = height / Mathf.Max(0.001f, spriteSize.y);
+        gearSR.enabled = true;
+        gearT.localScale = Vector3.one;
+        Bounds entryBounds = gearSR.bounds;
+        if (entryBounds.size.y < 0.0001f) return;
+        float factor = height / entryBounds.size.y;
         gearT.localScale = new Vector3(factor, factor, 1f);
 
         Vector3 cameraPosition = attrCam.transform.position;
@@ -237,8 +211,11 @@ public partial class HKDualScreen
             Mathf.Max(hudGearAnchor.y + hudGearH * 1.45f, aboveReadout),
             minY,
             maxY);
-        gearT.position = new Vector3(x, y, hudGearAnchor.z - 0.15f);
+        Vector3 target = new Vector3(x, y, hudGearAnchor.z - 0.15f);
+        gearT.position = target;
         gearT.rotation = Quaternion.identity;
+        Bounds placed = gearSR.bounds;
+        gearT.position += target - placed.center;
         gearSR.enabled = true;
     }
 
@@ -286,7 +263,6 @@ public partial class HKDualScreen
         }
 
         menu.Open();
-        modsClosePending = false;
         modsLifecycle.SynchronizeOpen(menu.IsOpen);
         tweaksOpen = modsLifecycle.IsOpen;
         if (transport != null)
@@ -305,7 +281,7 @@ public partial class HKDualScreen
                 modsMenu.Close();
         }
         catch (Exception e) { WarnOnce("mods menu close", e); }
-        modsClosePending = false;
+        modsDragValid = false;
         modsLifecycle.SynchronizeOpen(false);
         modsPaint.Invalidate();
         RestoreModsCoveredContent();
@@ -366,12 +342,16 @@ public partial class HKDualScreen
         return null;
     }
 
-    ModsLabel BuildModsLabel(Component donor, string name, out GameObject labelObject)
+    ModsLabel BuildModsLabel(
+        Component donor,
+        string name,
+        Transform parent,
+        out GameObject labelObject)
     {
         labelObject = null;
-        if (donor == null || tweaksRoot == null) return null;
+        if (donor == null || parent == null) return null;
         var source = donor.gameObject;
-        var clone = Instantiate(source, tweaksRoot.transform);
+        var clone = Instantiate(source, parent);
         clone.name = name;
         clone.SetActive(false);
         SanitizeDetachedTmpClone(clone);
@@ -414,7 +394,8 @@ public partial class HKDualScreen
     void BuildModsModal(TweakMenuModel menu)
     {
         if (menu == null || frameRoot == null || compRoot == null) return;
-        if (tweaksRoot != null && modsBuiltVisibleRows == menu.VisibleRows) return;
+        int entryCount = TweakPresenterListLayout.EntryCount(menu);
+        if (tweaksRoot != null && modsBuiltEntryCount == entryCount) return;
         DestroyModsModalView();
 
         Component donor = FindModsTextDonor();
@@ -424,26 +405,37 @@ public partial class HKDualScreen
         tweaksRoot.layer = ATTR_LAYER;
         tweaksRoot.SetActive(false);
 
-        GameObject label;
-        modsTitleText = BuildModsLabel(donor, "Mods Title", out label);
-        modsMasterText = BuildModsLabel(donor, "Mods Master", out label);
-        modsGroupText = BuildModsLabel(donor, "Mods Group", out label);
-        for (int i = 0; i < menu.VisibleRows; i++)
+        for (int i = 0; i < entryCount; i++)
         {
-            ModsLabel rowText = BuildModsLabel(donor, "Mods Row " + i, out label);
-            tweakRows.Add(label);
-            tweakRowTexts.Add(rowText);
+            TweakPresenterListEntry entry =
+                TweakPresenterListLayout.EntryAt(menu, i);
+            GameObject labelObject;
+            ModsLabel label = BuildModsLabel(
+                donor, "Mods Entry " + i, tweaksRoot.transform, out labelObject);
+            tweakRows.Add(labelObject);
+            tweakRowTexts.Add(label);
             tweakRowHits.Add(default(TweakPresenterRect));
+            if (entry.Kind == TweakPresenterListEntryKind.Header)
+                modsGroupHeaders.Add(label);
+
+            ModsLabel value = null;
+            if (entry.Kind != TweakPresenterListEntryKind.Header)
+                value = BuildModsLabel(
+                    donor, "Mods Value " + i, tweaksRoot.transform, out labelObject);
+            tweakRowValues.Add(value);
         }
-        modsDetailText = BuildModsLabel(donor, "Mods Detail", out label);
-        modsStatusText = BuildModsLabel(donor, "Mods Status", out label);
-        modsResetText = BuildModsLabel(donor, "Mods Reset", out label);
-        modsCloseText = BuildModsLabel(donor, "Mods Close", out label);
+        GameObject detailObject;
+        modsDetailTitleText = BuildModsLabel(
+            donor, "Mods Detail Title", tweaksRoot.transform, out detailObject);
+        modsDetailText = BuildModsLabel(
+            donor, "Mods Detail", tweaksRoot.transform, out detailObject);
+        modsStatusText = BuildModsLabel(
+            donor, "Mods Status", tweaksRoot.transform, out detailObject);
 
         SanitizeDetachedTmpClone(tweaksRoot);
         SetLayerRecursive(tweaksRoot.transform, ATTR_LAYER);
         tweaksRoot.SetActive(true);
-        modsBuiltVisibleRows = menu.VisibleRows;
+        modsBuiltEntryCount = entryCount;
         modsLifecycle.MarkViewBuilt();
         if (modsSession != null)
         {
@@ -475,27 +467,70 @@ public partial class HKDualScreen
         label.Renderer.sortingOrder = modsSortingOrder + 10;
     }
 
-    void PlaceModsText(
+    void PlaceModsTextLeft(
         ModsLabel label,
-        Vector3 center,
-        float targetHeight,
+        Vector3 leftCenter,
+        float targetLineHeight,
         float maximumWidth)
     {
-        if (label == null || label.Renderer == null) return;
-        Renderer renderer = label.Renderer;
+        Bounds bounds;
+        if (!ScaleModsText(label, targetLineHeight, maximumWidth, out bounds)) return;
+        label.Text.transform.position += new Vector3(
+            leftCenter.x - bounds.min.x,
+            leftCenter.y - bounds.center.y,
+            leftCenter.z - bounds.center.z);
+    }
+
+    void PlaceModsTextRight(
+        ModsLabel label,
+        Vector3 rightCenter,
+        float targetLineHeight,
+        float maximumWidth)
+    {
+        Bounds bounds;
+        if (!ScaleModsText(label, targetLineHeight, maximumWidth, out bounds)) return;
+        label.Text.transform.position += new Vector3(
+            rightCenter.x - bounds.max.x,
+            rightCenter.y - bounds.center.y,
+            rightCenter.z - bounds.center.z);
+    }
+
+    void PlaceModsTextTopLeft(
+        ModsLabel label,
+        Vector3 topLeft,
+        float targetLineHeight,
+        float maximumWidth)
+    {
+        Bounds bounds;
+        if (!ScaleModsText(label, targetLineHeight, maximumWidth, out bounds)) return;
+        label.Text.transform.position += new Vector3(
+            topLeft.x - bounds.min.x,
+            topLeft.y - bounds.max.y,
+            topLeft.z - bounds.center.z);
+    }
+
+    bool ScaleModsText(
+        ModsLabel label,
+        float targetLineHeight,
+        float maximumWidth,
+        out Bounds bounds)
+    {
+        bounds = default(Bounds);
+        if (label == null || label.Renderer == null) return false;
         Transform transform = label.Text.transform;
         transform.localScale = Vector3.one;
-        Bounds bounds = renderer.bounds;
-        if (bounds.size.x < 0.0001f || bounds.size.y < 0.0001f) return;
-        float factor = targetHeight / Mathf.Max(0.0001f, bounds.size.y);
+        bounds = label.Renderer.bounds;
+        if (bounds.size.x < 0.0001f || bounds.size.y < 0.0001f) return false;
+        int lines = 1;
+        string text = label.LastText ?? "";
+        for (int i = 0; i < text.Length; i++) if (text[i] == '\n') lines++;
+        float singleLineHeight = bounds.size.y / Mathf.Max(1, lines);
+        float factor = targetLineHeight / Mathf.Max(0.0001f, singleLineHeight);
         if (bounds.size.x * factor > maximumWidth)
             factor = maximumWidth / Mathf.Max(0.0001f, bounds.size.x);
         transform.localScale = Vector3.one * Mathf.Max(0.0001f, factor);
-        bounds = renderer.bounds;
-        transform.position += new Vector3(
-            center.x - bounds.center.x,
-            center.y - bounds.center.y,
-            center.z - bounds.center.z);
+        bounds = label.Renderer.bounds;
+        return bounds.size.x >= 0.0001f && bounds.size.y >= 0.0001f;
     }
 
     bool TryGetModsGeometry(
@@ -558,17 +593,21 @@ public partial class HKDualScreen
             stamp = HashModsPaintString(
                 stamp, menu.Groups[menu.SelectedGroupIndex]);
 
-        IReadOnlyList<TweakDescriptor> rows = menu.CurrentRows;
-        int first = menu.WindowStart;
-        int end = Math.Min(rows.Count, first + menu.VisibleRows);
-        stamp = HashModsPaint(stamp, rows.Count);
-        for (int i = first; i < end; i++)
+        stamp = HashModsPaint(stamp, modsSelectedEntry);
+        stamp = HashModsPaint(stamp, TweakPresenterListLayout.EntryCount(menu));
+        for (int group = 0; group < menu.Groups.Count; group++)
         {
-            TweakDescriptor descriptor = rows[i];
-            stamp = HashModsPaintString(stamp, descriptor.Id);
-            stamp = HashModsPaint(stamp, descriptor.IsAvailable ? 1 : 0);
-            stamp = HashModsPaintString(
-                stamp, session.Controller.Value(descriptor.Id));
+            IReadOnlyList<TweakDescriptor> rows = menu.RowsForGroup(group);
+            stamp = HashModsPaintString(stamp, menu.Groups[group]);
+            stamp = HashModsPaint(stamp, rows.Count);
+            for (int row = 0; row < rows.Count; row++)
+            {
+                TweakDescriptor descriptor = rows[row];
+                stamp = HashModsPaintString(stamp, descriptor.Id);
+                stamp = HashModsPaint(stamp, descriptor.IsAvailable ? 1 : 0);
+                stamp = HashModsPaintString(
+                    stamp, session.Controller.Value(descriptor.Id));
+            }
         }
         return stamp;
     }
@@ -597,141 +636,174 @@ public partial class HKDualScreen
         if (!TryGetModsGeometry(out left, out right, out bottom, out top, out scale))
             throw new InvalidOperationException("The Mods context geometry is unavailable.");
 
+        int entryCount = TweakPresenterListLayout.EntryCount(menu);
+        if (entryCount == 0 || tweakRowTexts.Count != entryCount)
+            throw new InvalidOperationException("The Mods list geometry is incomplete.");
+        modsSelectedEntry = Mathf.Clamp(modsSelectedEntry, 1, entryCount - 1);
+
         float width = right - left;
         float height = top - bottom;
-        float centerX = (left + right) * 0.5f;
+        float split = left + width * TweakPresenterListLayout.LeftFraction;
+        float listLeft = left + width * 0.025f;
+        float listRight = split - width * 0.025f;
+        float listTop = top - height * 0.025f;
+        float listBottom = bottom + height * 0.025f;
+        float visibleHeight = listTop - listBottom;
+        float rowStep = height * 0.115f;
+        float lineHeight = rowStep * 0.45f;
         float z = compRoot.position.z - 0.3f;
-        float lineHeight = Mathf.Max(scale * 0.04f, height * 0.045f);
-
-        SetModsText(modsTitleText, "MODS", Color.white);
-        PlaceModsText(
-            modsTitleText,
-            new Vector3(centerX, top - height * 0.055f, z),
-            lineHeight * 1.25f,
-            width * 0.5f);
+        modsListScroll = TweakPresenterListLayout.ClampScroll(
+            modsListScroll, entryCount, rowStep, visibleHeight);
+        modsListHit = new TweakPresenterRect(
+            left, listBottom, split - left, visibleHeight);
 
         bool masterEnabled = session.Controller.MasterEnabled;
-        string master = masterEnabled ? "MASTER: ON  [TOGGLE]" : "MASTER: OFF  [TOGGLE]";
-        SetModsText(modsMasterText, master, masterEnabled
-            ? new Color(0.92f, 1f, 0.86f, 1f)
-            : new Color(0.82f, 0.82f, 0.82f, 1f));
-        float masterY = top - height * 0.14f;
-        PlaceModsText(modsMasterText, new Vector3(centerX, masterY, z), lineHeight, width * 0.78f);
-        modsMasterHit = new TweakPresenterRect(
-            left + width * 0.18f, masterY - height * 0.04f,
-            width * 0.64f, height * 0.08f);
-
-        string groupName = menu.Groups.Count == 0
-            ? "NO GROUPS"
-            : menu.Groups[menu.SelectedGroupIndex].ToUpperInvariant();
-        string group = "<  " + groupName + "  " +
-                       (menu.Groups.Count == 0 ? "0/0" :
-                        (menu.SelectedGroupIndex + 1) + "/" + menu.Groups.Count) +
-                       "  >";
-        float groupY = top - height * 0.225f;
-        SetModsText(modsGroupText, group, new Color(0.82f, 0.88f, 1f, 1f));
-        PlaceModsText(modsGroupText, new Vector3(centerX, groupY, z), lineHeight, width * 0.84f);
-        modsPreviousGroupHit = new TweakPresenterRect(
-            left, groupY - height * 0.045f, width * 0.28f, height * 0.09f);
-        modsNextGroupHit = new TweakPresenterRect(
-            right - width * 0.28f, groupY - height * 0.045f,
-            width * 0.28f, height * 0.09f);
-
-        IReadOnlyList<TweakDescriptor> rows = menu.CurrentRows;
-        int first = menu.WindowStart;
-        int visible = Mathf.Min(menu.VisibleRows, Mathf.Max(0, rows.Count - first));
-        float rowStep = height * 0.067f;
-        float firstRowY = top - height * 0.305f;
-        for (int i = 0; i < tweakRows.Count; i++)
+        for (int i = 0; i < entryCount; i++)
         {
-            bool show = i < visible && first + i < rows.Count;
+            TweakPresenterListEntry entry =
+                TweakPresenterListLayout.EntryAt(menu, i);
+            float y = listTop - rowStep * 0.5f - i * rowStep + modsListScroll;
+            bool shown = y + rowStep * 0.5f >= listBottom &&
+                         y - rowStep * 0.5f <= listTop;
             GameObject rowObject = tweakRows[i];
-            if (rowObject != null && rowObject.activeSelf != show)
-                rowObject.SetActive(show);
-            if (!show)
+            if (rowObject != null && rowObject.activeSelf != shown)
+                rowObject.SetActive(shown);
+            ModsLabel valueLabel = tweakRowValues[i];
+            if (valueLabel != null && valueLabel.GameObject.activeSelf != shown)
+                valueLabel.GameObject.SetActive(shown);
+            if (!shown)
             {
                 tweakRowHits[i] = default(TweakPresenterRect);
                 continue;
             }
 
-            int rowIndex = first + i;
-            TweakDescriptor descriptor = rows[rowIndex];
-            bool selected = rowIndex == menu.SelectedRowIndex;
-            string currentValue = descriptor.IsAvailable
-                ? FriendlyModsValue(session.Controller.Value(descriptor.Id))
-                : "DEFERRED";
-            string row = (selected ? "> " : "  ") +
-                         descriptor.Title.ToUpperInvariant() + "    " + currentValue;
+            bool selected = i == modsSelectedEntry;
+            string title;
+            string value = "";
             Color color;
-            if (!descriptor.IsAvailable)
-                color = selected
-                    ? new Color(1f, 0.72f, 0.38f, 1f)
-                    : new Color(0.64f, 0.50f, 0.36f, 1f);
-            else if (!masterEnabled)
-                color = selected
-                    ? new Color(0.78f, 0.78f, 0.78f, 1f)
-                    : new Color(0.54f, 0.54f, 0.54f, 1f);
+            if (entry.Kind == TweakPresenterListEntryKind.Header)
+            {
+                title = entry.GroupIndex < 0
+                    ? "GENERAL"
+                    : menu.Groups[entry.GroupIndex].ToUpperInvariant();
+                color = new Color(0.85f, 0.76f, 0.52f, 0.82f);
+            }
+            else if (entry.Kind == TweakPresenterListEntryKind.Master)
+            {
+                title = (selected ? "> " : "  ") + "MASTER";
+                value = masterEnabled ? "ON" : "OFF";
+                color = selected ? new Color(1f, 1f, 0.82f, 1f) : Color.white;
+            }
+            else if (entry.Kind == TweakPresenterListEntryKind.Reset)
+            {
+                title = (selected ? "> " : "  ") + "RESET ALL MODS";
+                color = selected ? new Color(1f, 0.85f, 0.52f, 1f) : Color.white;
+            }
             else
-                color = selected ? Color.white : new Color(0.72f, 0.76f, 0.82f, 1f);
-            float rowY = firstRowY - i * rowStep;
-            SetModsText(tweakRowTexts[i], row, color);
-            PlaceModsText(tweakRowTexts[i], new Vector3(centerX, rowY, z),
-                          lineHeight * 0.88f, width * 0.9f);
-            tweakRowHits[i] = new TweakPresenterRect(
-                left, rowY - rowStep * 0.48f, width, rowStep * 0.96f);
+            {
+                TweakDescriptor descriptor =
+                    menu.RowsForGroup(entry.GroupIndex)[entry.RowIndex];
+                title = (selected ? "> " : "  ") +
+                        descriptor.Title.ToUpperInvariant();
+                value = descriptor.IsAvailable
+                    ? FriendlyModsValue(session.Controller.Value(descriptor.Id))
+                    : "DEFERRED";
+                color = !descriptor.IsAvailable
+                    ? (selected ? new Color(1f, 0.72f, 0.38f, 1f)
+                                : new Color(0.64f, 0.50f, 0.36f, 1f))
+                    : !masterEnabled
+                        ? (selected ? new Color(0.78f, 0.78f, 0.78f, 1f)
+                                    : new Color(0.54f, 0.54f, 0.54f, 1f))
+                        : (selected ? new Color(1f, 1f, 0.82f, 1f)
+                                    : new Color(0.82f, 0.84f, 0.88f, 1f));
+            }
+
+            SetModsText(tweakRowTexts[i], title, color);
+            PlaceModsTextLeft(
+                tweakRowTexts[i], new Vector3(listLeft, y, z),
+                entry.Kind == TweakPresenterListEntryKind.Header
+                    ? lineHeight * 0.78f : lineHeight,
+                (listRight - listLeft) * 0.72f);
+            if (valueLabel != null)
+            {
+                SetModsText(valueLabel, value, color);
+                PlaceModsTextRight(
+                    valueLabel, new Vector3(listRight, y, z), lineHeight,
+                    (listRight - listLeft) * 0.30f);
+            }
+            tweakRowHits[i] = entry.Kind == TweakPresenterListEntryKind.Header
+                ? default(TweakPresenterRect)
+                : new TweakPresenterRect(
+                    left, y - rowStep * 0.5f, split - left, rowStep);
         }
 
-        TweakDescriptor selectedRow = menu.Selected;
-        string detail = selectedRow == null
-            ? "NO MOD IS SELECTED."
-            : selectedRow.Title.ToUpperInvariant() + "\n" + selectedRow.Description;
-        string status = menu.Message;
-        if (selectedRow != null && !selectedRow.IsAvailable)
+        TweakPresenterListEntry selectedEntry =
+            TweakPresenterListLayout.EntryAt(menu, modsSelectedEntry);
+        TweakDescriptor selectedRow = selectedEntry.Kind == TweakPresenterListEntryKind.Row
+            ? menu.RowsForGroup(selectedEntry.GroupIndex)[selectedEntry.RowIndex]
+            : null;
+        string detailTitle;
+        string detail;
+        if (selectedEntry.Kind == TweakPresenterListEntryKind.Master)
         {
-            detail += "\n" + selectedRow.TrackingId + ": " + selectedRow.UnavailableReason;
-            if (string.IsNullOrEmpty(status))
-                status = selectedRow.TrackingId + ": " + selectedRow.UnavailableReason;
+            detailTitle = "MASTER";
+            detail = "The gate for every available mod. OFF restores the game baseline."
+                   + "\n\nTap the row again to change.";
         }
-        else if (string.IsNullOrEmpty(status) && !masterEnabled)
-            status = "MASTER IS OFF - ENABLE IT TO CHANGE AVAILABLE MODS.";
+        else if (selectedEntry.Kind == TweakPresenterListEntryKind.Reset)
+        {
+            detailTitle = "RESET ALL MODS";
+            detail = "Return every mod value to its default."
+                   + "\n\nTap the row again to reset.";
+        }
+        else if (selectedRow != null)
+        {
+            detailTitle = selectedRow.Title.ToUpperInvariant();
+            detail = selectedRow.Description;
+            if (!selectedRow.IsAvailable)
+                detail += "\n\n" + selectedRow.TrackingId + ": " +
+                          selectedRow.UnavailableReason;
+            else
+                detail += "\n\nTap the row again to change.";
+        }
+        else
+        {
+            detailTitle = "MODS";
+            detail = "Choose a row on the left.";
+        }
+
+        string status = menu.Message;
+        if (string.IsNullOrEmpty(status) && selectedRow != null &&
+            !selectedRow.IsAvailable)
+            status = selectedRow.TrackingId + ": " + selectedRow.UnavailableReason;
+        else if (string.IsNullOrEmpty(status) && !masterEnabled &&
+                 selectedEntry.Kind == TweakPresenterListEntryKind.Row)
+            status = "MASTER IS OFF. ENABLE IT BEFORE CHANGING AVAILABLE MODS.";
         if (string.IsNullOrEmpty(status))
-            status = "TAP A SELECTED AVAILABLE ROW AGAIN TO CHANGE ITS VALUE.";
+            status = "GEAR OR TAB: CLOSE";
 
-        detail = WrapModsText(detail, 62);
-        status = WrapModsText(status, 70);
-        SetModsText(modsDetailText, detail, selectedRow != null && !selectedRow.IsAvailable
-            ? new Color(1f, 0.72f, 0.38f, 1f)
-            : new Color(0.86f, 0.88f, 0.92f, 1f));
-        PlaceModsText(modsDetailText,
-                      new Vector3(centerX, bottom + height * 0.225f, z),
-                      lineHeight * 1.8f, width * 0.88f);
-        SetModsText(modsStatusText, status, menu.MessageIsError
-            ? new Color(1f, 0.42f, 0.38f, 1f)
-            : new Color(0.66f, 0.78f, 0.9f, 1f));
-        PlaceModsText(modsStatusText,
-                      new Vector3(centerX, bottom + height * 0.12f, z),
-                      lineHeight * 1.25f, width * 0.88f);
-
-        float actionY = bottom + height * 0.045f;
-        SetModsText(modsResetText, "RESET", new Color(0.88f, 0.88f, 0.88f, 1f));
-        SetModsText(modsCloseText, "CLOSE / BACK", Color.white);
-        PlaceModsText(modsResetText,
-                      new Vector3(left + width * 0.27f, actionY, z),
-                      lineHeight, width * 0.3f);
-        PlaceModsText(modsCloseText,
-                      new Vector3(right - width * 0.27f, actionY, z),
-                      lineHeight, width * 0.38f);
-        modsResetHit = new TweakPresenterRect(
-            left, bottom, width * 0.5f, height * 0.09f);
-        modsCloseHit = new TweakPresenterRect(
-            centerX, bottom, width * 0.5f, height * 0.09f);
-        modsHitMap = new TweakPresenterHitMap(
-            modsCloseHit,
-            modsMasterHit,
-            modsPreviousGroupHit,
-            modsNextGroupHit,
-            modsResetHit,
-            tweakRowHits);
+        float detailLeft = split + width * 0.035f;
+        float detailWidth = right - detailLeft - width * 0.025f;
+        SetModsText(modsDetailTitleText, detailTitle, Color.white);
+        PlaceModsTextTopLeft(
+            modsDetailTitleText, new Vector3(detailLeft, listTop, z),
+            lineHeight * 1.05f, detailWidth);
+        SetModsText(modsDetailText, WrapModsText(detail, 25),
+            selectedRow != null && !selectedRow.IsAvailable
+                ? new Color(1f, 0.72f, 0.38f, 1f)
+                : new Color(0.86f, 0.88f, 0.92f, 1f));
+        PlaceModsTextTopLeft(
+            modsDetailText,
+            new Vector3(detailLeft, listTop - rowStep * 1.15f, z),
+            lineHeight * 0.72f, detailWidth);
+        SetModsText(modsStatusText, WrapModsText(status, 25),
+            menu.MessageIsError
+                ? new Color(1f, 0.42f, 0.38f, 1f)
+                : new Color(0.66f, 0.78f, 0.9f, 1f));
+        PlaceModsTextTopLeft(
+            modsStatusText,
+            new Vector3(detailLeft, bottom + height * 0.19f, z),
+            lineHeight * 0.68f, detailWidth);
     }
 
     static string FriendlyModsValue(string value)
@@ -794,38 +866,81 @@ public partial class HKDualScreen
         return true;
     }
 
+    void TweaksTouchTick(TweakMenuModel menu)
+    {
+        if (menu == null || transport == null || attrCam == null) return;
+        int touchCount = transport.TouchCount;
+        if (touchCount != 1)
+        {
+            modsDragValid = false;
+            return;
+        }
+
+        float nx = transport.T0X;
+        float ny = transport.T0Y;
+        Vector2 world;
+        bool onList = TryModsTouchWorld(nx, ny, out world) &&
+                      world.x >= modsListHit.X &&
+                      world.x <= modsListHit.X + modsListHit.Width;
+        if (!onList)
+        {
+            modsDragValid = false;
+            return;
+        }
+        if (modsDragValid)
+        {
+            float oldScroll = modsListScroll;
+            float left, right, bottom, top, scale;
+            if (TryGetModsGeometry(out left, out right, out bottom, out top, out scale))
+            {
+                float height = top - bottom;
+                modsListScroll += (modsDragLastY - ny) * 2f * attrCam.orthographicSize;
+                modsListScroll = TweakPresenterListLayout.ClampScroll(
+                    modsListScroll,
+                    TweakPresenterListLayout.EntryCount(menu),
+                    height * 0.115f,
+                    height * 0.95f);
+            }
+            if (Mathf.Abs(modsListScroll - oldScroll) > 0.0001f)
+                modsPaint.Invalidate();
+        }
+        modsDragLastY = ny;
+        modsDragValid = true;
+    }
+
     void HandleModsCleanTap(TweakMenuModel menu, Vector2 world)
     {
-        if (menu == null || modsHitMap == null) return;
-        TweakPresenterAction action = TweakPresenterInteraction.ResolveAction(
-            new TweakPresenterPoint(world.x, world.y), modsHitMap, menu);
-        switch (action.Kind)
+        if (menu == null) return;
+        var point = new TweakPresenterPoint(world.x, world.y);
+        int hit = -1;
+        for (int i = 0; i < tweakRowHits.Count; i++)
+            if (tweakRowHits[i].Contains(point)) { hit = i; break; }
+        if (hit < 0) return;
+
+        TweakPresenterListEntry entry =
+            TweakPresenterListLayout.EntryAt(menu, hit);
+        if (hit != modsSelectedEntry)
         {
-            case TweakPresenterActionKind.Close:
-                // Keep Menu.IsOpen authoritative through the raw-tap poll later
-                // this frame, then close at the start of the next presenter tick.
-                modsClosePending = true;
-                return;
-            case TweakPresenterActionKind.ToggleMaster:
-                menu.ToggleMaster();
-                return;
-            case TweakPresenterActionKind.PreviousGroup:
-                menu.MoveGroup(-1);
-                return;
-            case TweakPresenterActionKind.NextGroup:
-                menu.MoveGroup(1);
-                return;
-            case TweakPresenterActionKind.SelectRow:
-                menu.MoveRow(action.RowIndex - menu.SelectedRowIndex);
-                return;
-            case TweakPresenterActionKind.CycleSelected:
+            modsSelectedEntry = hit;
+            if (entry.Kind == TweakPresenterListEntryKind.Row)
+            {
+                menu.MoveGroup(entry.GroupIndex - menu.SelectedGroupIndex);
+                menu.MoveRow(entry.RowIndex - menu.SelectedRowIndex);
+            }
+            modsPaint.Invalidate();
+            return;
+        }
+
+        if (entry.Kind == TweakPresenterListEntryKind.Master)
+            menu.ToggleMaster();
+        else if (entry.Kind == TweakPresenterListEntryKind.Reset)
+            menu.Reset();
+        else if (entry.Kind == TweakPresenterListEntryKind.Row)
+        {
+            menu.MoveGroup(entry.GroupIndex - menu.SelectedGroupIndex);
+            menu.MoveRow(entry.RowIndex - menu.SelectedRowIndex);
+            if (menu.Selected != null && menu.Selected.IsAvailable)
                 menu.CycleSelected();
-                return;
-            case TweakPresenterActionKind.Reset:
-                menu.Reset();
-                return;
-            default:
-                return;
         }
     }
 
@@ -845,11 +960,6 @@ public partial class HKDualScreen
             RebindModsPresenter(session, menu);
             modsLifecycle.SynchronizeOpen(menu.IsOpen);
             tweaksOpen = modsLifecycle.IsOpen;
-            if (modsClosePending)
-            {
-                CloseTweaksPane();
-                return;
-            }
             if (!tweaksOpen)
             {
                 RestoreModsCoveredContent();
@@ -879,6 +989,7 @@ public partial class HKDualScreen
             }
             if (!tweaksRoot.activeSelf) tweaksRoot.SetActive(true);
 
+            TweaksTouchTick(menu);
             long geometryStamp = ComputeModsGeometryPaintStamp();
             int sequence = transport.CleanTapSequence;
             if (modsPaint.HasCurrentGeometry(geometryStamp) &&
@@ -916,21 +1027,15 @@ public partial class HKDualScreen
         tweaksRoot = null;
         tweakRows.Clear();
         tweakRowTexts.Clear();
+        tweakRowValues.Clear();
+        modsGroupHeaders.Clear();
         tweakRowHits.Clear();
-        modsTitleText = null;
-        modsMasterText = null;
-        modsGroupText = null;
+        modsDetailTitleText = null;
         modsDetailText = null;
         modsStatusText = null;
-        modsResetText = null;
-        modsCloseText = null;
-        modsBuiltVisibleRows = -1;
-        modsMasterHit = default(TweakPresenterRect);
-        modsPreviousGroupHit = default(TweakPresenterRect);
-        modsNextGroupHit = default(TweakPresenterRect);
-        modsResetHit = default(TweakPresenterRect);
-        modsCloseHit = default(TweakPresenterRect);
-        modsHitMap = null;
+        modsBuiltEntryCount = -1;
+        modsListHit = default(TweakPresenterRect);
+        modsDragValid = false;
         modsPaint.Invalidate();
     }
 
@@ -938,7 +1043,7 @@ public partial class HKDualScreen
     {
         gearT = null;
         gearSR = null;
-        gearTex = null;
+        modsEntryText = null;
         modsSortingOrder = 0;
         hudGearOk = false;
         hudGearH = 0f;
@@ -979,43 +1084,27 @@ public partial class HKDualScreen
         if (tweaksRoot != null) { Destroy(tweaksRoot); tweaksRoot = null; }
         tweakRows.Clear();
         tweakRowTexts.Clear();
+        tweakRowValues.Clear();
+        modsGroupHeaders.Clear();
         tweakRowHits.Clear();
-        modsTitleText = null;
-        modsMasterText = null;
-        modsGroupText = null;
+        modsDetailTitleText = null;
         modsDetailText = null;
         modsStatusText = null;
-        modsResetText = null;
-        modsCloseText = null;
-        modsBuiltVisibleRows = -1;
-        modsMasterHit = default(TweakPresenterRect);
-        modsPreviousGroupHit = default(TweakPresenterRect);
-        modsNextGroupHit = default(TweakPresenterRect);
-        modsResetHit = default(TweakPresenterRect);
-        modsCloseHit = default(TweakPresenterRect);
-        modsHitMap = null;
+        modsBuiltEntryCount = -1;
+        modsListHit = default(TweakPresenterRect);
         modsPaint.Invalidate();
-        Sprite gearSprite = gearSR != null ? gearSR.sprite : null;
         if (gearT != null) Destroy(gearT.gameObject);
-        if (gearSprite != null)
-        {
-            frameAssets.Remove(gearSprite);
-            Destroy(gearSprite);
-        }
-        if (gearTex != null)
-        {
-            frameAssets.Remove(gearTex);
-            Destroy(gearTex);
-        }
         gearT = null;
         gearSR = null;
-        gearTex = null;
+        modsEntryText = null;
         modsSortingOrder = 0;
         hudGearOk = false;
         hudGearH = 0f;
         hudGearAnchor = Vector3.zero;
         hudFpsB = default(Bounds);
-        modsClosePending = false;
+        modsDragValid = false;
+        modsListScroll = 0f;
+        modsSelectedEntry = 1;
         modsSession = null;
         modsMenu = null;
         modsInteraction.ResetCleanTap(int.MinValue);

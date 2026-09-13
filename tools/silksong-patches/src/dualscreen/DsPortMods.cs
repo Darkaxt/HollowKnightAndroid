@@ -1,10 +1,11 @@
-// DsPortMods — HK-style gear/modal presentation for the process-owned Silksong
-// tweak session. All text and ornaments are cloned from current resident native
-// InventoryPane visuals; the rejected synthetic shell path is not used.
+// DsPortMods — oracle-shaped 65/35 Mods presentation for the process-owned
+// Silksong tweak session. Text and ornaments come only from validated resident
+// InventoryPane UI; no synthetic artwork or gameplay capability lives here.
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.Text;
 using DualSouls.Mods;
 using DualSouls.Mods.Silksong;
 using UnityEngine;
@@ -22,6 +23,8 @@ public sealed class DsPortMods : IDisposable
     readonly DsPortFrame _frame;
     readonly Action<Func<DsGesture, bool>> _setConsumer;
     readonly List<NativeLabel> _rowLabels = new List<NativeLabel>();
+    readonly List<NativeLabel> _rowValueLabels = new List<NativeLabel>();
+    readonly List<NativeLabel> _groupLabels = new List<NativeLabel>();
     readonly List<Rect> _rowHits = new List<Rect>();
     readonly TweakPresenterPaintInvalidation _paint =
         new TweakPresenterPaintInvalidation();
@@ -30,25 +33,19 @@ public sealed class DsPortMods : IDisposable
     TweakMenuModel _menu;
     RectTransform _boundAnchor;
     GameObject _gear;
-    Mesh _gearMesh;
-    Material _gearMaterial;
+    NativeLabel _gearLabel;
     RectTransform _modal;
     DsRendererMaskCover _ground;
-    NativeLabel _title;
-    NativeLabel _master;
-    NativeLabel _group;
+    NativeLabel _detailTitle;
     NativeLabel _detail;
     NativeLabel _status;
-    NativeLabel _reset;
-    NativeLabel _close;
     GameObject _topOrnament;
     GameObject _bottomOrnament;
     Rect _gearHit;
-    Rect _masterHit;
-    Rect _previousGroupHit;
-    Rect _nextGroupHit;
-    Rect _resetHit;
-    Rect _closeHit;
+    Rect _listHit;
+    float _listScroll;
+    int _selectedEntry = 1;
+    int _builtEntryCount = -1;
     long _gearGeometryStamp = long.MinValue;
     bool _consumerAttached;
     bool _disposed;
@@ -97,7 +94,8 @@ public sealed class DsPortMods : IDisposable
         _frame.SetModsOpen(_menu.IsOpen);
         if (_menu.IsOpen)
         {
-            if (_modal == null) BuildModal();
+            int entryCount = TweakPresenterListLayout.EntryCount(_menu);
+            if (_modal == null || _builtEntryCount != entryCount) BuildModal();
             if (_modal != null)
             {
                 long modelStamp = TweakPresenterModelPaintStamp.Compute(
@@ -117,61 +115,87 @@ public sealed class DsPortMods : IDisposable
 
     public bool OnGesture(DsGesture gesture)
     {
-        if (_disposed || !_consumerAttached || _session == null || !_session.IsReady ||
-            gesture.Type != DsGestureType.Tap)
+        if (_disposed || !_consumerAttached || _session == null || !_session.IsReady)
             return false;
 
         Vector2 point = gesture.Position;
         if (!_menu.IsOpen)
         {
-            if (!_gearHit.Contains(point)) return false;
+            if (gesture.Type != DsGestureType.Tap || !_gearHit.Contains(point)) return false;
             _menu.Open();
             _frame.SetModsOpen(true);
+            _paint.Invalidate();
             return true;
         }
 
-        if (_closeHit.Contains(point))
+        if (gesture.Type == DsGestureType.Tap && _gearHit.Contains(point))
         {
             Close();
             return true;
         }
-        if (_masterHit.Contains(point))
+
+        // Let the native frame execute an exact tab tap before the modal consumes
+        // every other lower-panel gesture. TabPressed closes this pane first.
+        if (_frame.TryConsumeGesture(gesture)) return true;
+
+        if (gesture.Type == DsGestureType.Drag && _listHit.Contains(point))
         {
+            float oldScroll = _listScroll;
+            float height = DsPresentation.PanelH * 0.61f;
+            _listScroll += gesture.Delta.y;
+            _listScroll = TweakPresenterListLayout.ClampScroll(
+                _listScroll,
+                TweakPresenterListLayout.EntryCount(_menu),
+                height * 0.115f,
+                height * 0.95f);
+            if (Mathf.Abs(_listScroll - oldScroll) > 0.001f) _paint.Invalidate();
+            return true;
+        }
+
+        if (gesture.Type == DsGestureType.Tap)
+        {
+            for (int i = 0; i < _rowHits.Count; i++)
+            {
+                if (!_rowHits[i].Contains(point)) continue;
+                ActivateEntry(i);
+                return true;
+            }
+        }
+
+        return true; // Open modal owns every non-tab lower-panel gesture.
+    }
+
+    void ActivateEntry(int hit)
+    {
+        if (_menu == null || hit < 0 || hit >= TweakPresenterListLayout.EntryCount(_menu))
+            return;
+        TweakPresenterListEntry entry = TweakPresenterListLayout.EntryAt(_menu, hit);
+        if (entry.Kind == TweakPresenterListEntryKind.Header) return;
+        if (hit != _selectedEntry)
+        {
+            _selectedEntry = hit;
+            SynchronizeRowSelection(entry);
+            _paint.Invalidate();
+            return;
+        }
+
+        if (entry.Kind == TweakPresenterListEntryKind.Master)
             _menu.ToggleMaster();
-            return true;
-        }
-        if (_previousGroupHit.Contains(point))
-        {
-            _menu.MoveGroup(-1);
-            return true;
-        }
-        if (_nextGroupHit.Contains(point))
-        {
-            _menu.MoveGroup(1);
-            return true;
-        }
-        if (_resetHit.Contains(point))
-        {
+        else if (entry.Kind == TweakPresenterListEntryKind.Reset)
             _menu.Reset();
-            return true;
-        }
-
-        IReadOnlyList<TweakDescriptor> rows = _menu.CurrentRows;
-        int first = _menu.WindowStart;
-        for (int i = 0; i < _rowHits.Count && first + i < rows.Count; i++)
+        else if (entry.Kind == TweakPresenterListEntryKind.Row)
         {
-            if (!_rowHits[i].Contains(point)) continue;
-            int rowIndex = first + i;
-            if (_menu.SelectedRowIndex == rowIndex) _menu.CycleSelected();
-            else _menu.MoveRow(rowIndex - _menu.SelectedRowIndex);
-            return true;
+            SynchronizeRowSelection(entry);
+            if (_menu.Selected != null && _menu.Selected.IsAvailable)
+                _menu.CycleSelected();
         }
+    }
 
-        // An open modal owns its accepted content area even when no action was hit.
-        return point.x >= DsPresentation.PanelW * 0.04f &&
-               point.x <= DsPresentation.PanelW * 0.96f &&
-               point.y >= DsPresentation.PanelH * 0.15f &&
-               point.y <= DsPresentation.PanelH * 0.76f;
+    void SynchronizeRowSelection(TweakPresenterListEntry entry)
+    {
+        if (entry.Kind != TweakPresenterListEntryKind.Row) return;
+        _menu.MoveGroup(entry.GroupIndex - _menu.SelectedGroupIndex);
+        _menu.MoveRow(entry.RowIndex - _menu.SelectedRowIndex);
     }
 
     public void Close()
@@ -192,11 +216,8 @@ public sealed class DsPortMods : IDisposable
         _frame.SetModsOpen(false);
         DestroyModal();
         if (_gear != null) UnityEngine.Object.Destroy(_gear);
-        if (_gearMaterial != null) UnityEngine.Object.Destroy(_gearMaterial);
-        if (_gearMesh != null) UnityEngine.Object.Destroy(_gearMesh);
         _gear = null;
-        _gearMaterial = null;
-        _gearMesh = null;
+        _gearLabel = null;
         _boundAnchor = null;
         _gearGeometryStamp = long.MinValue;
         _paint.Invalidate();
@@ -224,45 +245,19 @@ public sealed class DsPortMods : IDisposable
         RectTransform anchor = _frame.ModsAnchor;
         if (anchor == null) return;
         _boundAnchor = anchor;
-
-        _gear = new GameObject("DsPortModsGear");
-        _gear.layer = DsPresentation.CONTENT_LAYER;
-        _gear.transform.SetParent(anchor, false);
-        var filter = _gear.AddComponent<MeshFilter>();
-        var renderer = _gear.AddComponent<MeshRenderer>();
-        const int segments = 24;
-        var vertices = new Vector3[segments * 2];
-        var triangles = new int[segments * 6];
-        for (int i = 0; i < segments; i++)
+        _gear = _frame.CloneModsLabel(anchor, "DsPortModsNativeEntry");
+        if (_gear == null) return;
+        PaneText text = _gear.GetComponentInChildren<PaneText>(true);
+        Renderer renderer = _gear.GetComponentInChildren<Renderer>(true);
+        if (text == null || renderer == null)
         {
-            float angle = Mathf.PI * 2f * i / segments;
-            float outer = (i & 1) == 0 ? 1f : 0.82f;
-            vertices[i * 2] = new Vector3(Mathf.Cos(angle) * 0.38f,
-                                          Mathf.Sin(angle) * 0.38f, 0f);
-            vertices[i * 2 + 1] = new Vector3(Mathf.Cos(angle) * outer,
-                                              Mathf.Sin(angle) * outer, 0f);
-            int next = (i + 1) % segments;
-            int triangle = i * 6;
-            triangles[triangle] = i * 2;
-            triangles[triangle + 1] = next * 2 + 1;
-            triangles[triangle + 2] = i * 2 + 1;
-            triangles[triangle + 3] = i * 2;
-            triangles[triangle + 4] = next * 2;
-            triangles[triangle + 5] = next * 2 + 1;
-        }
-        _gearMesh = new Mesh { name = "DsPortModsGearMesh", vertices = vertices, triangles = triangles };
-        _gearMesh.RecalculateBounds();
-        filter.sharedMesh = _gearMesh;
-        Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("UI/Default");
-        if (shader == null)
-        {
-            DetachPresentation();
+            UnityEngine.Object.Destroy(_gear);
+            _gear = null;
             return;
         }
-        _gearMaterial = new Material(shader) { name = "DsPortModsGearMaterial", color = Color.white };
-        renderer.sharedMaterial = _gearMaterial;
-        renderer.sortingLayerID = 0;
         renderer.sortingOrder = DsPortLayers.FRAME_RENDER_ORDER + 100;
+        _gearLabel = new NativeLabel { Root = _gear, Text = text, Renderer = renderer };
+        SetLabelText(_gearLabel, "MODS", Color.white);
         RefreshGearGeometry();
         _gearGeometryStamp = ComputeGeometryPaintStamp();
     }
@@ -270,14 +265,13 @@ public sealed class DsPortMods : IDisposable
     void RefreshGearGeometry()
     {
         RectTransform anchor = _frame.ModsAnchor;
-        if (_gear == null || anchor == null) return;
-        float size = Mathf.Max(1f, Mathf.Min(anchor.rect.width, anchor.rect.height)) * 0.36f;
-        _gear.transform.localScale = new Vector3(size, size, 1f);
-        _gear.transform.localPosition = Vector3.zero;
-
-        float w = Mathf.Max(1f, DsPresentation.PanelW);
-        float h = Mathf.Max(1f, DsPresentation.PanelH);
-        _gearHit = new Rect(w * 0.84f, h * 0.76f, w * 0.14f, h * 0.22f);
+        if (_gearLabel == null || anchor == null) return;
+        float panelW = Mathf.Max(1f, DsPresentation.PanelW);
+        float panelH = Mathf.Max(1f, DsPresentation.PanelH);
+        PlaceLabelCenter(_gearLabel, anchor, Vector2.zero,
+            panelH * 0.034f, panelW * 0.085f);
+        _gearHit = new Rect(panelW * 0.84f, panelH * 0.76f,
+                            panelW * 0.14f, panelH * 0.22f);
     }
 
     long ComputeGeometryPaintStamp()
@@ -304,6 +298,7 @@ public sealed class DsPortMods : IDisposable
     {
         RectTransform parent = _frame.ContentMask;
         if (parent == null || _menu == null) return;
+        DestroyModal();
         _modal = DsPortUtil.CreateRoot(parent, "DsPortModsModal",
             DsPresentation.CONTENT_LAYER, Vector2.zero, Vector2.one);
         _modal.SetAsLastSibling();
@@ -317,24 +312,36 @@ public sealed class DsPortMods : IDisposable
 
         _topOrnament = _frame.CloneModsOrnament(_modal, "DsPortModsTopFleur", true);
         _bottomOrnament = _frame.CloneModsOrnament(_modal, "DsPortModsBottomFleur", false);
-        _title = CreateLabel("DsPortModsTitle");
-        _master = CreateLabel("DsPortModsMaster");
-        _group = CreateLabel("DsPortModsGroup");
-        for (int i = 0; i < _menu.VisibleRows; i++)
-            _rowLabels.Add(CreateLabel("DsPortModsRow-" + i));
+        int entryCount = TweakPresenterListLayout.EntryCount(_menu);
+        for (int i = 0; i < entryCount; i++)
+        {
+            TweakPresenterListEntry entry = TweakPresenterListLayout.EntryAt(_menu, i);
+            NativeLabel label = CreateLabel("DsPortModsEntry-" + i);
+            _rowLabels.Add(label);
+            _rowHits.Add(default(Rect));
+            if (entry.Kind == TweakPresenterListEntryKind.Header) _groupLabels.Add(label);
+            _rowValueLabels.Add(entry.Kind == TweakPresenterListEntryKind.Header
+                ? null
+                : CreateLabel("DsPortModsValue-" + i));
+        }
+        _detailTitle = CreateLabel("DsPortModsDetailTitle");
         _detail = CreateLabel("DsPortModsDetail");
         _status = CreateLabel("DsPortModsStatus");
-        _reset = CreateLabel("DsPortModsReset");
-        _close = CreateLabel("DsPortModsClose");
 
-        if (_title == null || _master == null || _group == null ||
-            _detail == null || _status == null || _reset == null || _close == null)
+        if (_detailTitle == null || _detail == null || _status == null)
         {
             DetachPresentation();
             return;
         }
         for (int i = 0; i < _rowLabels.Count; i++)
-            if (_rowLabels[i] == null) { DetachPresentation(); return; }
+            if (_rowLabels[i] == null ||
+                (TweakPresenterListLayout.EntryAt(_menu, i).Kind !=
+                 TweakPresenterListEntryKind.Header && _rowValueLabels[i] == null))
+            {
+                DetachPresentation();
+                return;
+            }
+        _builtEntryCount = entryCount;
         _paint.Invalidate();
     }
 
@@ -361,102 +368,228 @@ public sealed class DsPortMods : IDisposable
         float left = -width * 0.5f;
         float bottom = -height * 0.5f;
         float top = height * 0.5f;
-        float line = height * 0.055f;
+        float split = left + width * TweakPresenterListLayout.LeftFraction;
+        float listLeft = left + width * 0.025f;
+        float listRight = split - width * 0.025f;
+        float listTop = top - height * 0.025f;
+        float listBottom = bottom + height * 0.025f;
+        float visibleHeight = listTop - listBottom;
+        float rowStep = height * 0.115f;
+        float line = rowStep * 0.45f;
+        int entryCount = TweakPresenterListLayout.EntryCount(_menu);
+        _selectedEntry = Mathf.Clamp(_selectedEntry, 1, entryCount - 1);
+        _listScroll = TweakPresenterListLayout.ClampScroll(
+            _listScroll, entryCount, rowStep, visibleHeight);
+        float panelContentCenterY = panelH * 0.455f;
+        _listHit = new Rect(panelW * 0.04f,
+            panelContentCenterY + listBottom,
+            width * TweakPresenterListLayout.LeftFraction,
+            visibleHeight);
+
         if (_ground != null)
             _ground.SetRect(Rect.MinMaxRect(
                 -panelW * 0.46f, -panelH * 0.305f,
                  panelW * 0.46f,  panelH * 0.305f));
 
-        SetLabel(_title, "MODS", Color.white, 0f, top - height * 0.06f, line * 1.2f, width * 0.5f);
         bool master = _session.Controller.MasterEnabled;
-        SetLabel(_master, master ? "MASTER: ON  [TOGGLE]" : "MASTER: OFF  [TOGGLE]",
-            master ? new Color(0.92f, 1f, 0.86f, 1f) : new Color(0.7f, 0.7f, 0.7f, 1f),
-            0f, top - height * 0.16f, line, width * 0.8f);
-
-        string groupName = _menu.Groups.Count == 0
-            ? "NO GROUPS"
-            : _menu.Groups[_menu.SelectedGroupIndex].ToUpperInvariant();
-        SetLabel(_group, "<  " + groupName + "  " +
-            (_menu.Groups.Count == 0 ? "0/0" : (_menu.SelectedGroupIndex + 1) + "/" + _menu.Groups.Count) + "  >",
-            new Color(0.82f, 0.88f, 1f, 1f), 0f, top - height * 0.27f, line, width * 0.84f);
-
-        _rowHits.Clear();
-        IReadOnlyList<TweakDescriptor> rows = _menu.CurrentRows;
-        int first = _menu.WindowStart;
-        float rowStep = height * 0.09f;
-        float firstRowY = top - height * 0.39f;
-        for (int i = 0; i < _rowLabels.Count; i++)
+        for (int i = 0; i < entryCount; i++)
         {
-            bool shown = first + i < rows.Count;
+            TweakPresenterListEntry entry = TweakPresenterListLayout.EntryAt(_menu, i);
+            float y = listTop - rowStep * 0.5f - i * rowStep + _listScroll;
+            bool shown = y + rowStep * 0.5f >= listBottom &&
+                         y - rowStep * 0.5f <= listTop;
             _rowLabels[i].Root.SetActive(shown);
-            if (!shown) continue;
-            int rowIndex = first + i;
-            TweakDescriptor descriptor = rows[rowIndex];
-            bool selected = rowIndex == _menu.SelectedRowIndex;
-            string value = Friendly(_session.Controller.Value(descriptor.Id));
-            Color color = !master
-                ? new Color(0.54f, 0.54f, 0.54f, 1f)
-                : selected ? Color.white : new Color(0.72f, 0.76f, 0.82f, 1f);
-            float y = firstRowY - i * rowStep;
-            SetLabel(_rowLabels[i], (selected ? "> " : "  ") +
-                descriptor.Title.ToUpperInvariant() + "    " + value,
-                color, 0f, y, line * 0.9f, width * 0.9f);
-            float panelY = panelH * 0.455f + y;
-            _rowHits.Add(new Rect(panelW * 0.04f, panelY - rowStep * 0.48f,
-                                  panelW * 0.92f, rowStep * 0.96f));
+            NativeLabel valueLabel = _rowValueLabels[i];
+            if (valueLabel != null) valueLabel.Root.SetActive(shown);
+            if (!shown)
+            {
+                _rowHits[i] = default(Rect);
+                continue;
+            }
+
+            bool selected = i == _selectedEntry;
+            string title;
+            string value = "";
+            Color color;
+            if (entry.Kind == TweakPresenterListEntryKind.Header)
+            {
+                title = entry.GroupIndex < 0
+                    ? "GENERAL"
+                    : _menu.Groups[entry.GroupIndex].ToUpperInvariant();
+                color = new Color(0.85f, 0.76f, 0.52f, 0.82f);
+            }
+            else if (entry.Kind == TweakPresenterListEntryKind.Master)
+            {
+                title = (selected ? "> " : "  ") + "MASTER";
+                value = master ? "ON" : "OFF";
+                color = selected ? new Color(1f, 1f, 0.82f, 1f) : Color.white;
+            }
+            else if (entry.Kind == TweakPresenterListEntryKind.Reset)
+            {
+                title = (selected ? "> " : "  ") + "RESET ALL MODS";
+                color = selected ? new Color(1f, 0.85f, 0.52f, 1f) : Color.white;
+            }
+            else
+            {
+                TweakDescriptor descriptor = _menu.RowsForGroup(entry.GroupIndex)[entry.RowIndex];
+                title = (selected ? "> " : "  ") + descriptor.Title.ToUpperInvariant();
+                value = descriptor.IsAvailable
+                    ? Friendly(_session.Controller.Value(descriptor.Id))
+                    : "DEFERRED";
+                color = !descriptor.IsAvailable
+                    ? (selected ? new Color(1f, 0.72f, 0.38f, 1f)
+                                : new Color(0.64f, 0.50f, 0.36f, 1f))
+                    : !master
+                        ? (selected ? new Color(0.78f, 0.78f, 0.78f, 1f)
+                                    : new Color(0.54f, 0.54f, 0.54f, 1f))
+                        : (selected ? new Color(1f, 1f, 0.82f, 1f)
+                                    : new Color(0.82f, 0.84f, 0.88f, 1f));
+            }
+
+            SetLabelText(_rowLabels[i], title, color);
+            PlaceLabelLeft(_rowLabels[i], listLeft, y,
+                entry.Kind == TweakPresenterListEntryKind.Header ? line * 0.78f : line,
+                (listRight - listLeft) * 0.72f);
+            if (valueLabel != null)
+            {
+                SetLabelText(valueLabel, value, color);
+                PlaceLabelRight(valueLabel, listRight, y, line,
+                    (listRight - listLeft) * 0.30f);
+            }
+            _rowHits[i] = entry.Kind == TweakPresenterListEntryKind.Header
+                ? default(Rect)
+                : new Rect(panelW * 0.04f,
+                    panelContentCenterY + y - rowStep * 0.5f,
+                    width * TweakPresenterListLayout.LeftFraction,
+                    rowStep);
         }
 
-        TweakDescriptor selectedRow = _menu.Selected;
-        string detail = selectedRow == null ? "NO MOD IS SELECTED." : selectedRow.Description;
+        TweakPresenterListEntry selectedEntry =
+            TweakPresenterListLayout.EntryAt(_menu, _selectedEntry);
+        TweakDescriptor selectedRow = selectedEntry.Kind == TweakPresenterListEntryKind.Row
+            ? _menu.RowsForGroup(selectedEntry.GroupIndex)[selectedEntry.RowIndex]
+            : null;
+        string detailTitle;
+        string detail;
+        if (selectedEntry.Kind == TweakPresenterListEntryKind.Master)
+        {
+            detailTitle = "MASTER";
+            detail = "The gate for every available mod. OFF restores the game baseline.\n\nTap the row again to change.";
+        }
+        else if (selectedEntry.Kind == TweakPresenterListEntryKind.Reset)
+        {
+            detailTitle = "RESET ALL MODS";
+            detail = "Return every mod value to its default.\n\nTap the row again to reset.";
+        }
+        else if (selectedRow != null)
+        {
+            detailTitle = selectedRow.Title.ToUpperInvariant();
+            detail = selectedRow.Description;
+            if (!selectedRow.IsAvailable)
+                detail += "\n\n" + selectedRow.TrackingId + ": " + selectedRow.UnavailableReason;
+            else
+                detail += "\n\nTap the row again to change.";
+        }
+        else
+        {
+            detailTitle = "MODS";
+            detail = "Choose a row on the left.";
+        }
+
         string status = _menu.Message;
-        if (string.IsNullOrEmpty(status) && !master)
-            status = "MASTER IS OFF - ENABLE IT TO CHANGE MODS.";
-        if (string.IsNullOrEmpty(status))
-            status = "TAP THE SELECTED ROW AGAIN TO CHANGE ITS VALUE.";
-        SetLabel(_detail, detail, new Color(0.86f, 0.88f, 0.92f, 1f),
-                 0f, bottom + height * 0.18f, line * 0.9f, width * 0.88f);
-        SetLabel(_status, status, _menu.MessageIsError
+        if (string.IsNullOrEmpty(status) && selectedRow != null && !selectedRow.IsAvailable)
+            status = selectedRow.TrackingId + ": " + selectedRow.UnavailableReason;
+        else if (string.IsNullOrEmpty(status) && !master &&
+                 selectedEntry.Kind == TweakPresenterListEntryKind.Row)
+            status = "MASTER IS OFF. ENABLE IT BEFORE CHANGING AVAILABLE MODS.";
+        if (string.IsNullOrEmpty(status)) status = "GEAR OR TAB: CLOSE";
+
+        float detailLeft = split + width * 0.035f;
+        float detailWidth = width - (detailLeft - left) - width * 0.025f;
+        SetLabelText(_detailTitle, detailTitle, Color.white);
+        PlaceLabelTopLeft(_detailTitle, detailLeft, listTop, line * 1.05f, detailWidth);
+        SetLabelText(_detail, Wrap(detail, 25),
+            selectedRow != null && !selectedRow.IsAvailable
+                ? new Color(1f, 0.72f, 0.38f, 1f)
+                : new Color(0.86f, 0.88f, 0.92f, 1f));
+        PlaceLabelTopLeft(_detail, detailLeft, listTop - rowStep * 1.15f,
+                          line * 0.72f, detailWidth);
+        SetLabelText(_status, Wrap(status, 25), _menu.MessageIsError
             ? new Color(1f, 0.42f, 0.38f, 1f)
-            : new Color(0.66f, 0.78f, 0.9f, 1f),
-            0f, bottom + height * 0.10f, line * 0.82f, width * 0.88f);
-        SetLabel(_reset, "RESET", Color.white,
-                 left + width * 0.27f, bottom + height * 0.035f, line, width * 0.3f);
-        SetLabel(_close, "CLOSE / BACK", Color.white,
-                 left + width * 0.73f, bottom + height * 0.035f, line, width * 0.38f);
+            : new Color(0.66f, 0.78f, 0.9f, 1f));
+        PlaceLabelTopLeft(_status, detailLeft, bottom + height * 0.19f,
+                          line * 0.68f, detailWidth);
 
-        float contentBottom = panelH * 0.15f;
-        float contentTop = panelH * 0.76f;
-        _masterHit = new Rect(panelW * 0.20f, contentTop - height * 0.21f,
-                              panelW * 0.60f, height * 0.10f);
-        _previousGroupHit = new Rect(panelW * 0.04f, contentTop - height * 0.34f,
-                                     panelW * 0.28f, height * 0.12f);
-        _nextGroupHit = new Rect(panelW * 0.68f, contentTop - height * 0.34f,
-                                 panelW * 0.28f, height * 0.12f);
-        _resetHit = new Rect(panelW * 0.04f, contentBottom, panelW * 0.46f, height * 0.09f);
-        _closeHit = new Rect(panelW * 0.50f, contentBottom, panelW * 0.46f, height * 0.09f);
-
-        PositionOrnament(_topOrnament, top - height * 0.105f, width * 0.25f);
-        PositionOrnament(_bottomOrnament, bottom + height * 0.075f, width * 0.18f);
+        PositionOrnament(_topOrnament, top - height * 0.02f, width * 0.16f);
+        PositionOrnament(_bottomOrnament, bottom + height * 0.02f, width * 0.13f);
     }
 
-    void SetLabel(NativeLabel label, string value, Color color,
-                  float x, float y, float targetHeight, float maximumWidth)
+    static void SetLabelText(NativeLabel label, string value, Color color)
     {
         label.Root.SetActive(true);
         label.Text.text = value ?? "";
         label.Text.color = color;
         label.Text.ForceMeshUpdate(true);
+    }
+
+    void PlaceLabelLeft(NativeLabel label, float x, float y,
+                        float targetLineHeight, float maximumWidth)
+    {
+        Bounds bounds;
+        if (!ScaleLabel(label, targetLineHeight, maximumWidth, out bounds)) return;
+        label.Root.transform.localPosition += new Vector3(x - bounds.min.x, y - bounds.center.y, 0f);
+    }
+
+    void PlaceLabelRight(NativeLabel label, float x, float y,
+                         float targetLineHeight, float maximumWidth)
+    {
+        Bounds bounds;
+        if (!ScaleLabel(label, targetLineHeight, maximumWidth, out bounds)) return;
+        label.Root.transform.localPosition += new Vector3(x - bounds.max.x, y - bounds.center.y, 0f);
+    }
+
+    void PlaceLabelTopLeft(NativeLabel label, float x, float y,
+                           float targetLineHeight, float maximumWidth)
+    {
+        Bounds bounds;
+        if (!ScaleLabel(label, targetLineHeight, maximumWidth, out bounds)) return;
+        label.Root.transform.localPosition += new Vector3(x - bounds.min.x, y - bounds.max.y, 0f);
+    }
+
+    bool ScaleLabel(NativeLabel label, float targetLineHeight,
+                    float maximumWidth, out Bounds bounds)
+    {
         label.Root.transform.localPosition = Vector3.zero;
         label.Root.transform.localRotation = Quaternion.identity;
         label.Root.transform.localScale = Vector3.one;
+        if (!TryBounds(label.Renderer, _modal, out bounds)) return false;
+        string value = label.Text.text ?? "";
+        int lines = 1;
+        for (int i = 0; i < value.Length; i++) if (value[i] == '\n') lines++;
+        float lineHeight = bounds.size.y / Mathf.Max(1, lines);
+        float factor = targetLineHeight / Mathf.Max(0.001f, lineHeight);
+        if (bounds.size.x * factor > maximumWidth)
+            factor = maximumWidth / Mathf.Max(0.001f, bounds.size.x);
+        label.Root.transform.localScale = Vector3.one * Mathf.Max(0.001f, factor);
+        return TryBounds(label.Renderer, _modal, out bounds);
+    }
+
+    static void PlaceLabelCenter(NativeLabel label, Transform relativeTo,
+                                 Vector2 center, float targetHeight, float maximumWidth)
+    {
+        label.Root.transform.localPosition = Vector3.zero;
+        label.Root.transform.localRotation = Quaternion.identity;
+        label.Root.transform.localScale = Vector3.one;
+        label.Text.ForceMeshUpdate(true);
         Bounds bounds;
-        if (!TryBounds(label.Renderer, _modal, out bounds)) return;
+        if (!TryBounds(label.Renderer, relativeTo, out bounds)) return;
         float factor = targetHeight / Mathf.Max(0.001f, bounds.size.y);
         if (bounds.size.x * factor > maximumWidth)
             factor = maximumWidth / Mathf.Max(0.001f, bounds.size.x);
         label.Root.transform.localScale = Vector3.one * Mathf.Max(0.001f, factor);
-        if (!TryBounds(label.Renderer, _modal, out bounds)) return;
-        label.Root.transform.localPosition += new Vector3(x - bounds.center.x, y - bounds.center.y, 0f);
+        if (!TryBounds(label.Renderer, relativeTo, out bounds)) return;
+        label.Root.transform.localPosition += new Vector3(
+            center.x - bounds.center.x, center.y - bounds.center.y, 0f);
     }
 
     void PositionOrnament(GameObject ornament, float y, float targetWidth)
@@ -498,6 +631,49 @@ public sealed class DsPortMods : IDisposable
         return have;
     }
 
+    static string Friendly(string value)
+    {
+        return string.IsNullOrEmpty(value)
+            ? "UNKNOWN"
+            : value.Replace('_', ' ').Replace('-', ' ').ToUpperInvariant();
+    }
+
+    static string Wrap(string value, int columns)
+    {
+        if (string.IsNullOrEmpty(value) || columns < 2) return value ?? "";
+        var output = new StringBuilder(value.Length + 16);
+        int lineLength = 0;
+        int index = 0;
+        while (index < value.Length)
+        {
+            if (value[index] == '\n')
+            {
+                output.Append('\n');
+                lineLength = 0;
+                index++;
+                continue;
+            }
+            while (index < value.Length && value[index] == ' ') index++;
+            int start = index;
+            while (index < value.Length && value[index] != ' ' && value[index] != '\n') index++;
+            int length = index - start;
+            if (length == 0) continue;
+            if (lineLength > 0 && lineLength + 1 + length > columns)
+            {
+                output.Append('\n');
+                lineLength = 0;
+            }
+            else if (lineLength > 0)
+            {
+                output.Append(' ');
+                lineLength++;
+            }
+            output.Append(value, start, length);
+            lineLength += length;
+        }
+        return output.ToString();
+    }
+
     void AttachConsumer()
     {
         if (_consumerAttached) return;
@@ -511,25 +687,18 @@ public sealed class DsPortMods : IDisposable
         _ground = null;
         if (_modal != null) UnityEngine.Object.Destroy(_modal.gameObject);
         _modal = null;
-        _title = null;
-        _master = null;
-        _group = null;
+        _detailTitle = null;
         _detail = null;
         _status = null;
-        _reset = null;
-        _close = null;
         _topOrnament = null;
         _bottomOrnament = null;
         _rowLabels.Clear();
+        _rowValueLabels.Clear();
+        _groupLabels.Clear();
         _rowHits.Clear();
+        _listHit = default(Rect);
+        _builtEntryCount = -1;
         _paint.Invalidate();
-    }
-
-    static string Friendly(string value)
-    {
-        return string.IsNullOrEmpty(value)
-            ? "UNKNOWN"
-            : value.Replace('_', ' ').Replace('-', ' ').ToUpperInvariant();
     }
 }
 #endif

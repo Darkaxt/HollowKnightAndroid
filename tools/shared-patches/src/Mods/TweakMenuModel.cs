@@ -50,7 +50,11 @@ namespace DualSouls.Mods
         public bool MessageIsError { get; private set; }
         public IReadOnlyList<string> Groups { get; }
         public IReadOnlyList<TweakDescriptor> CurrentRows =>
-            _rowsByGroup.Length == 0 ? EmptyRows : _rowsByGroup[SelectedGroupIndex];
+            RowsForGroup(SelectedGroupIndex);
+        public IReadOnlyList<TweakDescriptor> RowsForGroup(int groupIndex) =>
+            groupIndex < 0 || groupIndex >= _rowsByGroup.Length
+                ? EmptyRows
+                : _rowsByGroup[groupIndex];
         public TweakDescriptor Selected =>
             CurrentRows.Count == 0 ? null : CurrentRows[SelectedRowIndex];
 

@@ -39,6 +39,84 @@ namespace DualSouls.Mods
         }
     }
 
+    public enum TweakPresenterListEntryKind
+    {
+        Header,
+        Master,
+        Reset,
+        Row,
+    }
+
+    public readonly struct TweakPresenterListEntry
+    {
+        public TweakPresenterListEntry(
+            TweakPresenterListEntryKind kind,
+            int groupIndex = -1,
+            int rowIndex = -1)
+        {
+            Kind = kind;
+            GroupIndex = groupIndex;
+            RowIndex = rowIndex;
+        }
+
+        public TweakPresenterListEntryKind Kind { get; }
+        public int GroupIndex { get; }
+        public int RowIndex { get; }
+    }
+
+    /// <summary>Shared 65/35 flat-list grammar for both native Mods presenters.</summary>
+    public static class TweakPresenterListLayout
+    {
+        public const float LeftFraction = 0.65f;
+
+        public static int EntryCount(TweakMenuModel menu)
+        {
+            if (menu == null) return 0;
+            int count = 3; // GENERAL header, MASTER, RESET ALL MODS.
+            for (int group = 0; group < menu.Groups.Count; group++)
+                count += 1 + menu.RowsForGroup(group).Count;
+            return count;
+        }
+
+        public static TweakPresenterListEntry EntryAt(TweakMenuModel menu, int entryIndex)
+        {
+            if (menu == null) throw new ArgumentNullException(nameof(menu));
+            if (entryIndex < 0 || entryIndex >= EntryCount(menu))
+                throw new ArgumentOutOfRangeException(nameof(entryIndex));
+            if (entryIndex == 0)
+                return new TweakPresenterListEntry(TweakPresenterListEntryKind.Header);
+            if (entryIndex == 1)
+                return new TweakPresenterListEntry(TweakPresenterListEntryKind.Master);
+            if (entryIndex == 2)
+                return new TweakPresenterListEntry(TweakPresenterListEntryKind.Reset);
+
+            int cursor = 3;
+            for (int group = 0; group < menu.Groups.Count; group++)
+            {
+                if (entryIndex == cursor)
+                    return new TweakPresenterListEntry(
+                        TweakPresenterListEntryKind.Header, group);
+                cursor++;
+                int rows = menu.RowsForGroup(group).Count;
+                if (entryIndex < cursor + rows)
+                    return new TweakPresenterListEntry(
+                        TweakPresenterListEntryKind.Row, group, entryIndex - cursor);
+                cursor += rows;
+            }
+            throw new ArgumentOutOfRangeException(nameof(entryIndex));
+        }
+
+        public static float ClampScroll(
+            float scroll,
+            int entryCount,
+            float rowStep,
+            float visibleHeight)
+        {
+            float maximum = Math.Max(0f, entryCount * rowStep - visibleHeight);
+            return Math.Max(0f, Math.Min(scroll, maximum));
+        }
+    }
+
     public static class TweakPresenterGeometryPaintStamp
     {
         const long Offset = 1469598103934665603L;
@@ -112,19 +190,18 @@ namespace DualSouls.Mods
             stamp = Hash(stamp, menu.MessageIsError ? 1 : 0);
             stamp = Hash(stamp, controller.MasterEnabled ? 1 : 0);
             stamp = Hash(stamp, menu.Groups.Count);
-            if (menu.Groups.Count > 0)
-                stamp = Hash(stamp, menu.Groups[menu.SelectedGroupIndex]);
-
-            IReadOnlyList<TweakDescriptor> rows = menu.CurrentRows;
-            int first = menu.WindowStart;
-            int end = Math.Min(rows.Count, first + menu.VisibleRows);
-            stamp = Hash(stamp, rows.Count);
-            for (int i = first; i < end; i++)
+            for (int group = 0; group < menu.Groups.Count; group++)
             {
-                TweakDescriptor descriptor = rows[i];
-                stamp = Hash(stamp, descriptor.Id);
-                stamp = Hash(stamp, descriptor.IsAvailable ? 1 : 0);
-                stamp = Hash(stamp, controller.Value(descriptor.Id));
+                stamp = Hash(stamp, menu.Groups[group]);
+                IReadOnlyList<TweakDescriptor> rows = menu.RowsForGroup(group);
+                stamp = Hash(stamp, rows.Count);
+                for (int row = 0; row < rows.Count; row++)
+                {
+                    TweakDescriptor descriptor = rows[row];
+                    stamp = Hash(stamp, descriptor.Id);
+                    stamp = Hash(stamp, descriptor.IsAvailable ? 1 : 0);
+                    stamp = Hash(stamp, controller.Value(descriptor.Id));
+                }
             }
             return stamp;
         }

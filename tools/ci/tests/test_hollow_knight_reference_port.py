@@ -195,7 +195,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
 
         required_fields = (
             "tweaksOpen", "tweaksRoot", "tweakRows", "gearT", "gearSR",
-            "gearTex", "hudGearAnchor", "hudGearH", "hudGearOk", "hudFpsB",
+            "hudGearAnchor", "hudGearH", "hudGearOk", "hudFpsB",
         )
         for field in required_fields:
             with self.subTest(presenter_field=field):
@@ -274,10 +274,10 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         self.assertTrue(repaint, "missing bounded Mods repaint")
         for required in (
-            "VisibleRows", "CurrentRows", "WindowStart", "SelectedRowIndex",
-            "Controller.Value", "IsAvailable", '"DEFERRED"', "Description",
-            "TrackingId", "UnavailableReason", "Message", "MessageIsError",
-            '"MODS"',
+            "TweakPresenterListLayout.EntryCount", "TweakPresenterListLayout.EntryAt",
+            "RowsForGroup", "entry.RowIndex", "Controller.Value", "IsAvailable",
+            '"DEFERRED"', "Description", "TrackingId", "UnavailableReason",
+            "Message", "MessageIsError", '"MODS"',
         ):
             with self.subTest(repaint=required):
                 self.assertIn(required, repaint)
@@ -286,6 +286,43 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("InvalidOperationException", set_text)
         self.assertNotIn("new GameObject", repaint)
         self.assertNotIn("Instantiate(", repaint)
+
+    def test_h3_mods_modal_encodes_oracle_list_detail_and_touch_contract(self):
+        presenter = strip_csharp_comments(read(MODS_PRESENTER))
+        repaint = method_body(
+            presenter,
+            r"void\s+RepaintModsModal\s*\([^)]*\)",
+        )
+        touch = method_body(
+            presenter,
+            r"void\s+TweaksTouchTick\s*\([^)]*\)",
+        )
+        tap = method_body(
+            presenter,
+            r"void\s+HandleModsCleanTap\s*\([^)]*\)",
+        )
+
+        for token in (
+            "TweakPresenterListLayout.LeftFraction",
+            "modsGroupHeaders", "tweakRowValues", "modsListScroll",
+            "PlaceModsTextLeft", "PlaceModsTextRight", "PlaceModsTextTopLeft",
+            'selected ? "> " : "  "',
+        ):
+            with self.subTest(oracle_list_detail=token):
+                self.assertIn(token, presenter)
+        self.assertNotIn('"<  " + groupName', repaint)
+        self.assertNotIn('"    " + currentValue', repaint)
+        self.assertIn("transport.TouchCount", touch)
+        self.assertIn("transport.T0X", touch)
+        self.assertIn("transport.T0Y", touch)
+        self.assertIn("TweakPresenterListLayout.ClampScroll", touch)
+        self.assertIn("modsPaint.Invalidate()", touch)
+        self.assertIn("modsSelectedEntry", tap)
+        self.assertIn("menu.CycleSelected()", tap)
+        self.assertIn("menu.ToggleMaster()", tap)
+        self.assertIn("menu.Reset()", tap)
+        self.assertIn("modsListHit", presenter)
+        self.assertIn("width * TweakPresenterListLayout.LeftFraction", repaint)
 
     def test_h3_mods_view_teardown_detaches_without_stopping_active_mods(self):
         presenter = strip_csharp_comments(read(MODS_PRESENTER))
@@ -314,10 +351,10 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("SetPresenterAttached(false)", teardown)
         self.assertIn("Destroy(tweaksRoot)", teardown)
         self.assertIn("tweakRows.Clear()", teardown)
-        for cleared in ("tweaksRoot = null", "gearT = null", "gearSR = null", "gearTex = null"):
+        for cleared in ("tweaksRoot = null", "gearT = null", "gearSR = null"):
             self.assertIn(cleared, teardown)
-        self.assertIn("frameAssets.Remove(gearSprite)", teardown)
-        self.assertIn("frameAssets.Remove(gearTex)", teardown)
+        self.assertNotIn("frameAssets.Remove(gearSprite)", teardown)
+        self.assertNotIn("frameAssets.Remove(gearTex)", teardown)
         for forbidden in (
             ".Dispose(", "Controller.Dispose", "SetMaster(", "ToggleMaster(",
             "RestoreBaseline", "MasterEnabled =",
@@ -329,7 +366,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertNotIn("tweakRows.Clear()", companion_teardown)
         self.assertNotIn("tweaksOpen = false", companion_teardown)
         self.assertIn("ClearModsFrameReferences()", frame_teardown)
-        for cleared in ("gearT = null", "gearSR = null", "gearTex = null", "hudGearOk = false"):
+        for cleared in ("gearT = null", "gearSR = null", "hudGearOk = false"):
             self.assertIn(cleared, clear_frame)
         self.assertNotIn("Destroy(", clear_frame)
 
@@ -373,8 +410,10 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         tap = method_body(presenter, r"void\s+HandleModsCleanTap\s*\([^)]*\)")
         poll = method_body(select, r"void\s+PollTouch\s*\(\s*\)")
 
-        for required in ("frameRoot", "Texture2D", "Sprite.Create", "Own(", "ATTR_LAYER", "sortingOrder"):
+        for required in ("frameRoot", "FindModsTextDonor", "BuildModsEntryControl", "ATTR_LAYER", "sortingOrder"):
             self.assertIn(required, build_gear)
+        for synthetic in ("new Texture2D", "Sprite.Create", "SetPixels", "new Color32"):
+            self.assertNotIn(synthetic, build_gear)
         self.assertIn("frameRoot.GetComponentsInChildren<Renderer>(true)", build_gear)
         self.assertIn("modsSortingOrder = highestChromeOrder + 10", build_gear)
         self.assertIn("sortingOrder = modsSortingOrder", build_gear)
@@ -410,12 +449,8 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertNotRegex(tick, r"\bInput\.")
         for action in ("MoveGroup(", "MoveRow(", "ToggleMaster(", "CycleSelected(", "Reset("):
             self.assertIn(action, tap)
-        self.assertIn("modsClosePending = true", tap)
-        self.assertIn("CloseTweaksPane()", tick)
-        self.assertLess(
-            tick.index("if (modsClosePending)"),
-            tick.index("transport.CleanTapSequence"),
-        )
+        self.assertNotIn("PreviousGroup", tap)
+        self.assertNotIn("NextGroup", tap)
         self.assertIn("if (tweaksOpen) return", poll)
         self.assertRegex(
             poll,
@@ -482,8 +517,8 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
 
         for helper in (
             "TweakPresenterInteraction", "TweakPresenterLifecycle",
-            "TweakPresenterPaintInvalidation", "TryMapNormalizedTopLeft",
-            "ResolveAction(", "TryAcceptCleanTap(", "ShouldPaint(",
+            "TweakPresenterPaintInvalidation", "TweakPresenterListLayout",
+            "TryMapNormalizedTopLeft", "TryAcceptCleanTap(", "ShouldPaint(",
             "Acknowledge(", "HasCurrentGeometry(",
         ):
             self.assertIn(helper, presenter)

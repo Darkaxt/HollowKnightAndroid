@@ -212,6 +212,59 @@ public sealed class TweakPresenterTests
     }
 
     [Fact]
+    public void FlatListModelStampIncludesRowsOutsideTheSelectedGroup()
+    {
+        var controller = new TweakController(new MultiGroupAdapter(), new MemoryStore());
+        Assert.True(controller.Initialize().Success);
+        Assert.True(controller.SetMaster(true).Success);
+        var menu = new TweakMenuModel(controller, visibleRows: 3);
+        long before = TweakPresenterModelPaintStamp.Compute(this, menu, controller);
+
+        Assert.True(controller.Cycle("other").Success);
+        long after = TweakPresenterModelPaintStamp.Compute(this, menu, controller);
+
+        Assert.Equal(0, menu.SelectedGroupIndex);
+        Assert.NotEqual(before, after);
+    }
+
+    [Fact]
+    public void FlatListLayoutIncludesGeneralActionsAndGroupedRowsInStableOrder()
+    {
+        var fixture = PresenterFixture.Create();
+
+        Assert.Equal(0.65f, TweakPresenterListLayout.LeftFraction);
+        Assert.Equal(7, TweakPresenterListLayout.EntryCount(fixture.Menu));
+        Assert.Equal(TweakPresenterListEntryKind.Header,
+            TweakPresenterListLayout.EntryAt(fixture.Menu, 0).Kind);
+        Assert.Equal(TweakPresenterListEntryKind.Master,
+            TweakPresenterListLayout.EntryAt(fixture.Menu, 1).Kind);
+        Assert.Equal(TweakPresenterListEntryKind.Reset,
+            TweakPresenterListLayout.EntryAt(fixture.Menu, 2).Kind);
+
+        var group = TweakPresenterListLayout.EntryAt(fixture.Menu, 3);
+        Assert.Equal(TweakPresenterListEntryKind.Header, group.Kind);
+        Assert.Equal(0, group.GroupIndex);
+        for (int row = 0; row < fixture.Menu.RowsForGroup(0).Count; row++)
+        {
+            var entry = TweakPresenterListLayout.EntryAt(fixture.Menu, 4 + row);
+            Assert.Equal(TweakPresenterListEntryKind.Row, entry.Kind);
+            Assert.Equal(0, entry.GroupIndex);
+            Assert.Equal(row, entry.RowIndex);
+        }
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            TweakPresenterListLayout.EntryAt(fixture.Menu, 7));
+    }
+
+    [Fact]
+    public void FlatListScrollIsClampedToContentAndViewportGeometry()
+    {
+        Assert.Equal(0f, TweakPresenterListLayout.ClampScroll(-2f, 10, 12f, 48f));
+        Assert.Equal(36f, TweakPresenterListLayout.ClampScroll(36f, 10, 12f, 48f));
+        Assert.Equal(72f, TweakPresenterListLayout.ClampScroll(90f, 10, 12f, 48f));
+        Assert.Equal(0f, TweakPresenterListLayout.ClampScroll(8f, 3, 12f, 48f));
+    }
+
+    [Fact]
     public void PaintInvalidationTracksModelGeometryRebindBuildAndAcknowledgment()
     {
         var paint = new TweakPresenterPaintInvalidation();
@@ -324,6 +377,25 @@ public sealed class TweakPresenterTests
             TweakDescriptor.Deferred(
                 "deferred", "GROUP", "DEFERRED", "Deferred row.",
                 "TEST-001", "No supported behavior seam."),
+        };
+
+        public void CaptureBaseline() { }
+        public TweakActionResult Apply(string id, string value) => TweakActionResult.Ok();
+        public void RestoreBaseline() { }
+        public void Tick() { }
+    }
+
+    sealed class MultiGroupAdapter : ITweakAdapter
+    {
+        public string GameId => "multi-group-presenter-test";
+        public IReadOnlyList<TweakDescriptor> Descriptors { get; } = new[]
+        {
+            new TweakDescriptor(
+                "first", "FIRST GROUP", "FIRST", "First group row.",
+                "off", new[] { "off", "on" }),
+            new TweakDescriptor(
+                "other", "OTHER GROUP", "OTHER", "Other group row.",
+                "off", new[] { "off", "on" }),
         };
 
         public void CaptureBaseline() { }

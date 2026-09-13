@@ -302,6 +302,33 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertNotIn("DsModsScreen", bootstrap + port + presenter)
         self.assertIn("new DsModsScreen", shell)
 
+    def test_silksong_mods_presenter_encodes_oracle_list_detail_touch_and_resident_entry(self):
+        presenter_path = REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsPortMods.cs"
+        presenter = presenter_path.read_text(encoding="utf-8")
+
+        for token in (
+            "TweakPresenterListLayout.LeftFraction",
+            "TweakPresenterListLayout.EntryCount",
+            "TweakPresenterListLayout.EntryAt",
+            "_groupLabels", "_rowValueLabels", "_listScroll",
+            "PlaceLabelLeft", "PlaceLabelRight", "PlaceLabelTopLeft",
+            'selected ? "> " : "  "',
+            "DsGestureType.Drag", "ClampScroll",
+            "_frame.TryConsumeGesture(gesture)",
+            "return true; // Open modal owns every non-tab lower-panel gesture.",
+        ):
+            with self.subTest(oracle_contract=token):
+                self.assertIn(token, presenter)
+        self.assertIn("CloneModsLabel", presenter)
+        for synthetic in (
+            "new Mesh", "new Material", "Shader.Find", "Mathf.Cos", "Mathf.Sin",
+            "DsPortModsGearMesh", "DsPortModsGearMaterial",
+        ):
+            with self.subTest(synthetic_entry=synthetic):
+                self.assertNotIn(synthetic, presenter)
+        self.assertNotIn('"<  " + groupName', presenter)
+        self.assertNotIn('"    " + value', presenter)
+
     def test_silksong_skin_runtime_is_process_owned_independent_of_direct_display(self):
         runtime = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" / "SilksongModsRuntime.cs").read_text(encoding="utf-8")
         bootstrap = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DualScreenV2.cs").read_text(encoding="utf-8")
