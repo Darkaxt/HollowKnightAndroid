@@ -47,7 +47,8 @@ class BuiltInModsCatalogContractTest(unittest.TestCase):
                     "BuiltInModsActivity.kt").read_text(encoding="utf-8")
         launcher = (ROOT / "src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/"
                     "LauncherActivity.kt").read_text(encoding="utf-8")
-        game = (ROOT / "tools/depot-to-apk/shell/GameActivity.java").read_text(encoding="utf-8")
+        startup = (ROOT / "src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/runtime/"
+                   "GameProcessStartup.kt").read_text(encoding="utf-8")
         authority = (ROOT / "src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/runtime/"
                      "GameLifecycleAuthority.kt").read_text(encoding="utf-8")
 
@@ -55,9 +56,15 @@ class BuiltInModsCatalogContractTest(unittest.TestCase):
         self.assertNotIn("GameProcessInspector", activity)
         self.assertNotIn("runningAppProcesses", authority)
         self.assertNotIn("/proc", authority)
+        self.assertNotIn("game-lifecycle.state", authority)
+        self.assertNotIn("writeState", authority)
+        self.assertNotIn("writeText", authority)
         self.assertIn("markLaunchPending", launcher)
-        self.assertIn("markActivityStarted", game)
-        self.assertIn("markActivityStopped", game)
+        self.assertRegex(
+            launcher,
+            r"if \(returningFromGame\) \{\s*GameLifecycleAuthority[^\n]+\.clearLaunchPending\(\)",
+        )
+        self.assertIn("acquireForGame", startup)
 
     def test_production_runtimes_use_shared_profile_file_and_one_silksong_controller(self):
         hk = (ROOT / "tools/hollow-knight-patches/src/mods/HollowKnightModsRuntime.cs").read_text(encoding="utf-8")

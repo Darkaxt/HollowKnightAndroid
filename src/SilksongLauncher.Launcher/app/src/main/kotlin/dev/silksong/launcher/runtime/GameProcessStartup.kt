@@ -128,20 +128,6 @@ object GameProcessStartup {
     }
 
     @JvmStatic
-    fun markActivityStarted() {
-        synchronized(this) {
-            requireNotNull(lifecycleOwner) { "Game lifecycle authority was not initialized" }.markStarted()
-        }
-    }
-
-    @JvmStatic
-    fun markActivityStopped() {
-        synchronized(this) {
-            requireNotNull(lifecycleOwner) { "Game lifecycle authority was not initialized" }.markStopped()
-        }
-    }
-
-    @JvmStatic
     fun requireProfile(profileId: String) {
         check(GameProfiles.find(profileId) != null) { "Unsupported game profile: $profileId" }
         val startup = requireSnapshot()
@@ -166,7 +152,6 @@ object GameProcessStartup {
 
     internal fun resetForTests() {
         synchronized(this) {
-            runCatching { lifecycleOwner?.markStopped() }
             lifecycleOwner?.close()
             lifecycleOwner = null
             snapshot = null

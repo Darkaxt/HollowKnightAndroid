@@ -360,6 +360,7 @@ class LauncherActivity : Activity() {
         // "always on resume" so dismissing dialogs / opening
         // Settings + coming back doesn't trigger a push.
         if (returningFromGame) {
+            GameLifecycleAuthority.forModStateRoot(buildPaths.modStateRoot).clearLaunchPending()
             returningFromGame = false
             maybeAutoPush()
         }

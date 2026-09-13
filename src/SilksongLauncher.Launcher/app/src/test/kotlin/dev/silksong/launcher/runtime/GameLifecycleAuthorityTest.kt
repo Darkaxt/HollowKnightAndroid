@@ -12,8 +12,9 @@ import org.junit.rules.TemporaryFolder
 class GameLifecycleAuthorityTest {
     @get:Rule val temporary = TemporaryFolder()
 
-    @Test fun `missing state with exclusive lease is trustworthy inactive and holds lease through mutation`() {
-        val authority = GameLifecycleAuthority(temporary.newFolder())
+    @Test fun `exclusive transient lease is trustworthy inactive and holds through mutation`() {
+        val root = temporary.newFolder()
+        val authority = GameLifecycleAuthority(root)
 
         val result = authority.runIfInactive {
             assertThrows(IllegalStateException::class.java) { authority.acquireForGame() }
@@ -22,6 +23,8 @@ class GameLifecycleAuthorityTest {
 
         assertEquals(GameProcessState.INACTIVE, result.state)
         assertEquals("written", result.value)
+        assertEquals(listOf("game-lifecycle.lock"), root.list()?.sorted())
+        assertEquals(0L, File(root, "game-lifecycle.lock").length())
     }
 
     @Test fun `live game lease reports active and never runs mutation`() {
@@ -40,20 +43,19 @@ class GameLifecycleAuthorityTest {
         }
     }
 
-    @Test fun `crashed active owner fails unknown after operating system releases lease`() {
+    @Test fun `crashed owner becomes inactive when operating system releases transient lease`() {
         val authority = GameLifecycleAuthority(temporary.newFolder())
         authority.acquireForGame().close()
 
-        val result = authority.runIfInactive { error("must not mutate") }
+        val result = authority.runIfInactive { "safe" }
 
-        assertEquals(GameProcessState.UNKNOWN, result.state)
-        assertNull(result.value)
+        assertEquals(GameProcessState.INACTIVE, result.state)
+        assertEquals("safe", result.value)
     }
 
-    @Test fun `clean stop is inactive only after game lease is released`() {
+    @Test fun `game remains active until its transient lease is released`() {
         val authority = GameLifecycleAuthority(temporary.newFolder())
         val owner = authority.acquireForGame()
-        owner.markStopped()
 
         assertEquals(GameProcessState.ACTIVE, authority.runIfInactive { Unit }.state)
         owner.close()
@@ -67,20 +69,38 @@ class GameLifecycleAuthorityTest {
 
         assertEquals(GameProcessState.UNKNOWN, result.state)
         assertNull(result.value)
+        assertThrows(IllegalStateException::class.java) {
+            GameLifecycleAuthority(invalidRoot).markLaunchPending()
+        }
     }
 
-    @Test fun `launch pending and malformed state fail unknown while cancellation closes pending launch`() {
-        val pending = GameLifecycleAuthority(temporary.newFolder())
+    @Test fun `launch pending hands off to active game lease without an inactive gap`() {
+        val authority = GameLifecycleAuthority(temporary.newFolder())
+        authority.markLaunchPending()
+        val owner = authority.acquireForGame()
+        try {
+            assertEquals(GameProcessState.ACTIVE, authority.runIfInactive { Unit }.state)
+            authority.clearLaunchPending()
+            assertEquals(GameProcessState.ACTIVE, authority.runIfInactive { Unit }.state)
+        } finally {
+            owner.close()
+        }
+        assertEquals(GameProcessState.INACTIVE, authority.runIfInactive { Unit }.state)
+    }
+
+    @Test fun `launcher pending ownership is unknown until cancellation or return clears it`() {
+        val root = temporary.newFolder()
+        val pending = GameLifecycleAuthority(root)
         pending.markLaunchPending()
+
         assertEquals(GameProcessState.UNKNOWN, pending.runIfInactive { Unit }.state)
+        assertFalse(File(root, "game-lifecycle.state").exists())
+
         pending.markLaunchCancelled()
         assertEquals(GameProcessState.INACTIVE, pending.runIfInactive { Unit }.state)
 
-        val malformedRoot = temporary.newFolder()
-        File(malformedRoot, "game-lifecycle.state").writeText("garbage")
-        assertEquals(
-            GameProcessState.UNKNOWN,
-            GameLifecycleAuthority(malformedRoot).runIfInactive { Unit }.state,
-        )
+        pending.markLaunchPending()
+        pending.clearLaunchPending()
+        assertEquals(GameProcessState.INACTIVE, pending.runIfInactive { Unit }.state)
     }
 }
