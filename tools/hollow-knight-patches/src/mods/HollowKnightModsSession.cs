@@ -123,13 +123,17 @@ namespace DualSouls.Mods.HollowKnight
 
         public static bool RestoreCoveredContentImmediately(
             TweakPresenterLifecycle lifecycle,
-            Action restoreSurfaces)
+            Action restoreSurfaces,
+            Action drainPendingInput)
         {
             if (lifecycle == null) throw new ArgumentNullException(nameof(lifecycle));
             if (restoreSurfaces == null) throw new ArgumentNullException(nameof(restoreSurfaces));
+            if (drainPendingInput == null)
+                throw new ArgumentNullException(nameof(drainPendingInput));
             if (!lifecycle.CoveredContentStowed) return false;
 
             restoreSurfaces();
+            drainPendingInput();
             return lifecycle.RequestCoveredContentRestore();
         }
 
@@ -178,7 +182,8 @@ namespace DualSouls.Mods.HollowKnight
             ref bool mapDragValid,
             ref bool modsDragValid)
         {
-            if (!RejectAllLowerScreenInput(lifecycle)) return false;
+            if (lifecycle == null) throw new ArgumentNullException(nameof(lifecycle));
+            if (!lifecycle.OwnsInput) return false;
             lastTapSequence = tapSequence;
             lastCleanTapSequence = cleanTapSequence;
             pinchLastDistance = -1f;

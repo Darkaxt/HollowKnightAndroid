@@ -495,7 +495,8 @@ public partial class HKDualScreen
     {
         HollowKnightModsPresentationFlow.RestoreCoveredContentImmediately(
             modsLifecycle,
-            RestoreAllModsCoveredContentCore);
+            RestoreAllModsCoveredContentCore,
+            DrainPendingModsInputBeforeRelease);
     }
 
     void RestoreAllModsCoveredContentCore()

@@ -155,12 +155,16 @@ public partial class HKDualScreen
         if (!HollowKnightModsPresentationFlow.RejectAllLowerScreenInput(
                 modsLifecycle))
             return false;
+        return DrainOwnedModsInput();
+    }
 
+    bool DrainOwnedModsInput()
+    {
         int tapSequence = transport != null ? transport.TapSequence : lastTapSeq;
         int cleanTapSequence = transport != null
             ? transport.CleanTapSequence
             : lastCleanTapSeq;
-        bool rejected = HollowKnightModsPresentationFlow.RejectAndDrainLowerScreenInput(
+        bool drained = HollowKnightModsPresentationFlow.RejectAndDrainLowerScreenInput(
             modsLifecycle,
             tapSequence,
             cleanTapSequence,
@@ -169,14 +173,14 @@ public partial class HKDualScreen
             ref pinchLastDist,
             ref dragLastValid,
             ref modsDragValid);
-        if (rejected)
+        if (drained)
             modsInteraction.ResetCleanTap(cleanTapSequence);
-        return rejected;
+        return drained;
     }
 
     void DrainPendingModsInputBeforeRelease()
     {
-        RejectAndDrainPendingModsInput();
+        DrainOwnedModsInput();
     }
 
     // Convert a bottom-panel normalized touch (top-left origin) to an attrCam world point.
