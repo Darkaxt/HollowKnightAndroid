@@ -406,6 +406,10 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             presenter,
             r"void\s+StowModsCoveredContent\s*\(\s*\)",
         )
+        capture_surface = method_body(
+            presenter,
+            r"void\s+CaptureAndHideModsSurface\s*\([^)]*\)",
+        )
         tick = method_body(presenter, r"void\s+TweaksPaneTick\s*\([^)]*\)")
         tap = method_body(presenter, r"void\s+HandleModsCleanTap\s*\([^)]*\)")
         poll = method_body(select, r"void\s+PollTouch\s*\(\s*\)")
@@ -452,9 +456,9 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("transport.CleanTapSequence", tick)
         self.assertIn("StowModsCoveredContent()", tick)
         for covered in ("mapClone", "invCloneCache", "charmCloneCache"):
-            self.assertIn(covered, stow)
+            self.assertIn(covered, capture_surface)
         self.assertGreaterEqual(
-            stow.count("modsPageVisibility.CaptureAndHide("), 4
+            capture_surface.count("modsPageVisibility.CaptureAndHide("), 4
         )
         self.assertNotRegex(tick, r"\bInput\.")
         for action in ("MoveGroup(", "MoveRow(", "ToggleMaster(", "CycleSelected(", "Reset("):
@@ -588,6 +592,10 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             presenter,
             r"void\s+StowModsCoveredContent\s*\(\s*\)",
         )
+        capture_surface = method_body(
+            presenter,
+            r"void\s+CaptureAndHideModsSurface\s*\([^)]*\)",
+        )
         restore_core = method_body(
             presenter,
             r"void\s+RestoreModsCoveredContentCore\s*\(\s*\)",
@@ -599,6 +607,14 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         complete_restore = method_body(
             presenter,
             r"void\s+CompleteModsCoveredContentRestore\s*\(\s*\)",
+        )
+        hide_restore_cameras = method_body(
+            presenter,
+            r"void\s+HideModsRestoreCameras\s*\(\s*\)",
+        )
+        reveal_restore_cameras = method_body(
+            presenter,
+            r"void\s+RevealModsRestoreCameras\s*\(\s*\)",
         )
         immediate_restore = method_body(
             presenter,
@@ -648,19 +664,40 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         poll_touch = method_body(select, r"void\s+PollTouch\s*\(\s*\)")
         map_pinch = method_body(select, r"void\s+MapPinchTick\s*\(\s*\)")
 
+        self.assertIn("HollowKnightModsPresentationFlow.CoveredSurfaceCount", stow)
+        self.assertIn("HollowKnightModsPresentationFlow.CoveredSurfaceAt", stow)
+        self.assertIn("CaptureAndHideModsSurface", stow)
         for lease in (
             "modsPageVisibility", "modsFrameContentVisibility", "modsHudVisibility",
         ):
             with self.subTest(visibility_owner=lease):
-                self.assertIn(f"{lease}.CaptureAndHide", stow)
+                self.assertIn(f"{lease}.CaptureAndHide", capture_surface)
         for covered in (
             "slideOutClone", "mapClone", "invCloneCache", "charmCloneCache",
             "areaNameT", "equipRowRoot", "noMapT", "mapResetT", "selBox",
             "ctrlMyGlyph", "ctrlMyVerbT", "hudCam2",
         ):
             with self.subTest(covered_surface=covered):
-                self.assertIn(covered, stow)
-        self.assertNotIn("StowSlideClone()", stow)
+                self.assertIn(covered, capture_surface)
+        for role in (
+            "InterruptedSlide", "DetachedPromptGlyph", "DetachedPromptVerb",
+            "NativeHud",
+        ):
+            self.assertIn(f"HollowKnightModsCoveredSurface.{role}", capture_surface)
+        capture_flow = " ".join(capture_surface.split())
+        for role, target in (
+            ("InterruptedSlide", "slideOutClone"),
+            ("DetachedPromptGlyph", "ctrlMyGlyph"),
+            ("DetachedPromptVerb", "ctrlMyVerbT"),
+            ("NativeHud", "hudCam2"),
+        ):
+            self.assertRegex(
+                capture_flow,
+                rf"case HollowKnightModsCoveredSurface\.{role}:"
+                rf"(?:(?!case HollowKnightModsCoveredSurface).)*{target}"
+                rf"(?:(?!case HollowKnightModsCoveredSurface).)*break;",
+            )
+        self.assertNotIn("StowSlideClone()", capture_surface)
         for release_path in (close, rebind, teardown):
             self.assertNotIn("StowSlideClone()", release_path)
         for preserved_chrome in (
@@ -668,24 +705,31 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             "sepTopT", "sepBotT",
         ):
             with self.subTest(preserved_chrome=preserved_chrome):
-                self.assertNotIn(preserved_chrome, stow)
+                self.assertNotIn(preserved_chrome, stow + capture_surface)
         self.assertNotIn("tab.cur", restore_core)
         self.assertLess(tick.index("PositionFrame()"), tick.rindex("StowModsCoveredContent()"))
         self.assertLess(tick.rindex("StowModsCoveredContent()"), tick.index("BuildModsModal(menu)"))
 
         self.assertIn("RequestModsCoveredContentRelease()", close)
         self.assertNotIn("RestoreModsCoveredContentCore()", close)
-        self.assertIn("modsCompanionVisibility.CaptureAndHide(attrCam)", begin_restore)
-        self.assertLess(
-            begin_restore.index("modsCompanionVisibility.CaptureAndHide(attrCam)"),
-            begin_restore.index("RestoreModsCoveredContentCore()"),
+        self.assertIn(
+            "HollowKnightModsPresentationFlow.BeginCoveredContentRestore(",
+            begin_restore,
         )
-        self.assertIn("modsCompanionVisibility.Restore()", complete_restore)
-        self.assertIn("modsHudVisibility.Restore()", complete_restore)
-        self.assertLess(
-            complete_restore.index("modsCompanionVisibility.Restore()"),
-            complete_restore.index("TryCompleteCoveredContentRestore("),
+        self.assertIn(
+            "HollowKnightModsPresentationFlow.CompleteCoveredContentRestore(",
+            complete_restore,
         )
+        for callback in ("HideModsRestoreCameras", "RestoreModsCoveredContentCore"):
+            self.assertIn(callback, begin_restore)
+        self.assertIn("RevealModsRestoreCameras", complete_restore)
+        self.assertIn(
+            "modsCompanionVisibility.CaptureAndHide(attrCam)",
+            hide_restore_cameras,
+        )
+        self.assertIn("modsHudVisibility.CaptureAndHide(hudCam2)", hide_restore_cameras)
+        self.assertIn("modsCompanionVisibility.Restore()", reveal_restore_cameras)
+        self.assertIn("modsHudVisibility.Restore()", reveal_restore_cameras)
         immediate_restore_path = immediate_restore + restore_core
         for restored in (
             "modsPageVisibility.Restore()",

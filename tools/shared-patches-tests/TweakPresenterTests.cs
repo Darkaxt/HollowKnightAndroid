@@ -163,24 +163,69 @@ public sealed class TweakPresenterTests
     }
 
     [Fact]
-    public void HollowKnightExternalCloseDefersReleaseUntilOrdinaryLayout()
+    public void HollowKnightCoveredSurfacePlanIncludesInterruptedSlideAndDetachedPrompts()
+    {
+        var surfaces = new List<HollowKnightModsCoveredSurface>();
+        for (int i = 0;
+             i < HollowKnightModsPresentationFlow.CoveredSurfaceCount;
+             i++)
+            surfaces.Add(HollowKnightModsPresentationFlow.CoveredSurfaceAt(i));
+
+        Assert.Equal(new[]
+        {
+            HollowKnightModsCoveredSurface.MapPage,
+            HollowKnightModsCoveredSurface.InterruptedSlide,
+            HollowKnightModsCoveredSurface.InventoryPage,
+            HollowKnightModsCoveredSurface.CharmsPage,
+            HollowKnightModsCoveredSurface.AreaName,
+            HollowKnightModsCoveredSurface.EquipmentRow,
+            HollowKnightModsCoveredSurface.NoMap,
+            HollowKnightModsCoveredSurface.Notches,
+            HollowKnightModsCoveredSurface.MapMasks,
+            HollowKnightModsCoveredSurface.MapReset,
+            HollowKnightModsCoveredSurface.Selection,
+            HollowKnightModsCoveredSurface.DetachedPromptGlyph,
+            HollowKnightModsCoveredSurface.DetachedPromptVerb,
+            HollowKnightModsCoveredSurface.NativeHud,
+        }, surfaces);
+    }
+
+    [Fact]
+    public void HollowKnightExternalCloseGatesSurfaceRestoreAndRevealAroundLayout()
     {
         var lifecycle = OpenHollowKnightPresenter();
         lifecycle.RequestCoveredContentStow();
+        var events = new List<string>();
 
         var disposition = HollowKnightModsPresentationFlow.RequestCoveredContentRelease(
             lifecycle, coveredContentCanRender: true);
 
         Assert.Equal(HollowKnightModsRestoreDisposition.Deferred, disposition);
-        Assert.True(lifecycle.CoveredContentStowed);
-        Assert.True(lifecycle.CoveredContentRestorePending);
-        Assert.False(lifecycle.CoveredContentRestoreStarted);
-        Assert.True(lifecycle.OwnsInput);
-        Assert.True(lifecycle.TryBeginCoveredContentRestore());
-        Assert.True(lifecycle.CoveredContentRestoreStarted);
-        Assert.True(lifecycle.TryCompleteCoveredContentRestore(
-            ordinaryLayoutReady: true));
-        Assert.False(lifecycle.CoveredContentRestoreStarted);
+        Assert.False(HollowKnightModsPresentationFlow.CompleteCoveredContentRestore(
+            lifecycle, ordinaryLayoutReady: true, () => events.Add("reveal")));
+        Assert.Empty(events);
+        Assert.True(HollowKnightModsPresentationFlow.BeginCoveredContentRestore(
+            lifecycle,
+            () => events.Add("hide cameras"),
+            () => events.Add("restore surfaces")));
+        Assert.Equal(new[] { "hide cameras", "restore surfaces" }, events);
+        Assert.False(HollowKnightModsPresentationFlow.BeginCoveredContentRestore(
+            lifecycle,
+            () => events.Add("hide cameras"),
+            () => events.Add("restore surfaces again")));
+        Assert.Equal(
+            new[] { "hide cameras", "restore surfaces", "hide cameras" },
+            events);
+        Assert.False(HollowKnightModsPresentationFlow.CompleteCoveredContentRestore(
+            lifecycle, ordinaryLayoutReady: false, () => events.Add("reveal")));
+        Assert.DoesNotContain("reveal", events);
+        Assert.True(HollowKnightModsPresentationFlow.CompleteCoveredContentRestore(
+            lifecycle, ordinaryLayoutReady: true, () => events.Add("reveal")));
+        Assert.Equal(
+            new[] {
+                "hide cameras", "restore surfaces", "hide cameras", "reveal",
+            },
+            events);
         Assert.False(lifecycle.OwnsInput);
     }
 
@@ -259,24 +304,26 @@ public sealed class TweakPresenterTests
     }
 
     [Fact]
-    public void HollowKnightPendingReleaseDoesNotAlterSilksongPresenterSeams()
+    public void HollowKnightPendingReleaseDoesNotAlterSilksongFrameSelectionPath()
     {
         var hollowKnight = OpenHollowKnightPresenter();
         hollowKnight.RequestCoveredContentStow();
         HollowKnightModsPresentationFlow.RequestCoveredContentRelease(
             hollowKnight, coveredContentCanRender: true);
 
-        var silksong = PresenterFixture.Create();
-        silksong.Menu.Open();
-        var paint = new TweakPresenterPaintInvalidation();
-        long model = TweakPresenterModelPaintStamp.Compute(
-            silksong, silksong.Menu, silksong.Controller);
-        long geometry = GeometryStamp(bottom: -3f, top: 4f);
+        DsPortFrameDecision silksong = DsPortFrameState.Initial(3, 0);
+        silksong = DsPortFrameState.BeginSelection(silksong, 2);
 
         Assert.True(hollowKnight.CoveredContentRestorePending);
-        Assert.True(silksong.Menu.IsOpen);
-        Assert.Equal(7, TweakPresenterListLayout.EntryCount(silksong.Menu));
-        Assert.True(paint.ShouldPaint(model, geometry));
+        Assert.True(silksong.Sliding);
+        Assert.Equal(0, silksong.OutgoingIndex);
+        Assert.Equal(2, silksong.IncomingIndex);
+        Assert.True(DsPortFrameState.IsHostActive(silksong, 0));
+        Assert.True(DsPortFrameState.IsHostActive(silksong, 2));
+
+        silksong = DsPortFrameState.CompleteSelection(silksong);
+        Assert.False(silksong.Sliding);
+        Assert.Equal(2, silksong.SelectedIndex);
     }
 
     static TweakPresenterLifecycle OpenHollowKnightPresenter()

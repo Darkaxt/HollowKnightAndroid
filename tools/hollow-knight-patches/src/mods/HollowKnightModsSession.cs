@@ -50,6 +50,24 @@ namespace DualSouls.Mods.HollowKnight
         }
     }
 
+    internal enum HollowKnightModsCoveredSurface
+    {
+        InterruptedSlide,
+        MapPage,
+        InventoryPage,
+        CharmsPage,
+        AreaName,
+        EquipmentRow,
+        NoMap,
+        Notches,
+        MapMasks,
+        MapReset,
+        Selection,
+        DetachedPromptGlyph,
+        DetachedPromptVerb,
+        NativeHud,
+    }
+
     internal enum HollowKnightModsRestoreDisposition
     {
         None,
@@ -59,6 +77,33 @@ namespace DualSouls.Mods.HollowKnight
 
     internal static class HollowKnightModsPresentationFlow
     {
+        static readonly HollowKnightModsCoveredSurface[] CoveredSurfaces =
+        {
+            HollowKnightModsCoveredSurface.MapPage,
+            HollowKnightModsCoveredSurface.InterruptedSlide,
+            HollowKnightModsCoveredSurface.InventoryPage,
+            HollowKnightModsCoveredSurface.CharmsPage,
+            HollowKnightModsCoveredSurface.AreaName,
+            HollowKnightModsCoveredSurface.EquipmentRow,
+            HollowKnightModsCoveredSurface.NoMap,
+            HollowKnightModsCoveredSurface.Notches,
+            HollowKnightModsCoveredSurface.MapMasks,
+            HollowKnightModsCoveredSurface.MapReset,
+            HollowKnightModsCoveredSurface.Selection,
+            HollowKnightModsCoveredSurface.DetachedPromptGlyph,
+            HollowKnightModsCoveredSurface.DetachedPromptVerb,
+            HollowKnightModsCoveredSurface.NativeHud,
+        };
+
+        public static int CoveredSurfaceCount => CoveredSurfaces.Length;
+
+        public static HollowKnightModsCoveredSurface CoveredSurfaceAt(int index)
+        {
+            if (index < 0 || index >= CoveredSurfaces.Length)
+                throw new ArgumentOutOfRangeException(nameof(index));
+            return CoveredSurfaces[index];
+        }
+
         public static HollowKnightModsRestoreDisposition RequestCoveredContentRelease(
             TweakPresenterLifecycle lifecycle,
             bool coveredContentCanRender)
@@ -75,6 +120,37 @@ namespace DualSouls.Mods.HollowKnight
 
             lifecycle.RequestCoveredContentRestore();
             return HollowKnightModsRestoreDisposition.Immediate;
+        }
+
+        public static bool BeginCoveredContentRestore(
+            TweakPresenterLifecycle lifecycle,
+            Action hideCameras,
+            Action restoreSurfaces)
+        {
+            if (lifecycle == null) throw new ArgumentNullException(nameof(lifecycle));
+            if (hideCameras == null) throw new ArgumentNullException(nameof(hideCameras));
+            if (restoreSurfaces == null) throw new ArgumentNullException(nameof(restoreSurfaces));
+            if (!lifecycle.CoveredContentRestorePending) return false;
+
+            hideCameras();
+            if (!lifecycle.TryBeginCoveredContentRestore()) return false;
+            restoreSurfaces();
+            return true;
+        }
+
+        public static bool CompleteCoveredContentRestore(
+            TweakPresenterLifecycle lifecycle,
+            bool ordinaryLayoutReady,
+            Action revealCameras)
+        {
+            if (lifecycle == null) throw new ArgumentNullException(nameof(lifecycle));
+            if (revealCameras == null) throw new ArgumentNullException(nameof(revealCameras));
+            if (!ordinaryLayoutReady || !lifecycle.CoveredContentRestoreStarted)
+                return false;
+
+            revealCameras();
+            return lifecycle.TryCompleteCoveredContentRestore(
+                ordinaryLayoutReady: true);
         }
 
         public static bool RejectAllLowerScreenInput(

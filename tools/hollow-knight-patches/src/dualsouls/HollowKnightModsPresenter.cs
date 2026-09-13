@@ -371,39 +371,80 @@ public partial class HKDualScreen
     void StowModsCoveredContent()
     {
         modsLifecycle.RequestCoveredContentStow();
-        if (mapClone != null && mapClone.activeSelf)
-            mapStowStamp = MapContentStamp();
-        modsPageVisibility.CaptureAndHide(slideOutClone);
-        modsPageVisibility.CaptureAndHide(mapClone);
-        modsPageVisibility.CaptureAndHide(invCloneCache);
-        modsPageVisibility.CaptureAndHide(charmCloneCache);
+        for (int i = 0;
+             i < HollowKnightModsPresentationFlow.CoveredSurfaceCount;
+             i++)
+            CaptureAndHideModsSurface(
+                HollowKnightModsPresentationFlow.CoveredSurfaceAt(i));
+    }
 
-        if (areaNameT != null)
-            modsFrameContentVisibility.CaptureAndHide(areaNameR);
-        if (equipRowRoot != null)
-            for (int i = 0; i < equipCharmSRs.Count; i++)
-                modsFrameContentVisibility.CaptureAndHide(equipCharmSRs[i]);
-        if (noMapT != null)
+    void CaptureAndHideModsSurface(HollowKnightModsCoveredSurface surface)
+    {
+        switch (surface)
         {
-            modsFrameContentVisibility.CaptureAndHide(noMapR);
-            modsFrameContentVisibility.CaptureAndHide(benchPillSR);
+            case HollowKnightModsCoveredSurface.InterruptedSlide:
+                modsPageVisibility.CaptureAndHide(slideOutClone);
+                break;
+            case HollowKnightModsCoveredSurface.MapPage:
+                if (mapClone != null && mapClone.activeSelf)
+                    mapStowStamp = MapContentStamp();
+                modsPageVisibility.CaptureAndHide(mapClone);
+                break;
+            case HollowKnightModsCoveredSurface.InventoryPage:
+                modsPageVisibility.CaptureAndHide(invCloneCache);
+                break;
+            case HollowKnightModsCoveredSurface.CharmsPage:
+                modsPageVisibility.CaptureAndHide(charmCloneCache);
+                break;
+            case HollowKnightModsCoveredSurface.AreaName:
+                if (areaNameT != null)
+                    modsFrameContentVisibility.CaptureAndHide(areaNameR);
+                break;
+            case HollowKnightModsCoveredSurface.EquipmentRow:
+                if (equipRowRoot != null)
+                    for (int i = 0; i < equipCharmSRs.Count; i++)
+                        modsFrameContentVisibility.CaptureAndHide(equipCharmSRs[i]);
+                break;
+            case HollowKnightModsCoveredSurface.NoMap:
+                if (noMapT != null)
+                {
+                    modsFrameContentVisibility.CaptureAndHide(noMapR);
+                    modsFrameContentVisibility.CaptureAndHide(benchPillSR);
+                }
+                break;
+            case HollowKnightModsCoveredSurface.Notches:
+                for (int i = 0; i < notchSRs.Count; i++)
+                    modsFrameContentVisibility.CaptureAndHide(notchSRs[i]);
+                break;
+            case HollowKnightModsCoveredSurface.MapMasks:
+                modsFrameContentVisibility.CaptureAndHide(mapMaskTopR);
+                modsFrameContentVisibility.CaptureAndHide(mapMaskBotR);
+                break;
+            case HollowKnightModsCoveredSurface.MapReset:
+                if (mapResetT != null)
+                {
+                    modsFrameContentVisibility.CaptureAndHide(mapResetR);
+                    modsFrameContentVisibility.CaptureAndHide(mapResetPillSR);
+                }
+                break;
+            case HollowKnightModsCoveredSurface.Selection:
+                modsFrameContentVisibility.CaptureAndHide(selBox);
+                break;
+            case HollowKnightModsCoveredSurface.DetachedPromptGlyph:
+                modsFrameContentVisibility.CaptureAndHide(ctrlMyGlyph);
+                break;
+            case HollowKnightModsCoveredSurface.DetachedPromptVerb:
+            {
+                Renderer renderer = ctrlMyVerbT != null
+                    ? ctrlMyVerbT.GetComponent<Renderer>()
+                    : null;
+                modsFrameContentVisibility.CaptureAndHide(renderer);
+                break;
+            }
+            case HollowKnightModsCoveredSurface.NativeHud:
+                modsHudVisibility.CaptureAndHide(hudCam2);
+                break;
         }
-        for (int i = 0; i < notchSRs.Count; i++)
-            modsFrameContentVisibility.CaptureAndHide(notchSRs[i]);
-        modsFrameContentVisibility.CaptureAndHide(mapMaskTopR);
-        modsFrameContentVisibility.CaptureAndHide(mapMaskBotR);
-        if (mapResetT != null)
-        {
-            modsFrameContentVisibility.CaptureAndHide(mapResetR);
-            modsFrameContentVisibility.CaptureAndHide(mapResetPillSR);
-        }
-        modsFrameContentVisibility.CaptureAndHide(selBox);
-        modsFrameContentVisibility.CaptureAndHide(ctrlMyGlyph);
-        Renderer ctrlVerbRenderer = ctrlMyVerbT != null
-            ? ctrlMyVerbT.GetComponent<Renderer>()
-            : null;
-        modsFrameContentVisibility.CaptureAndHide(ctrlVerbRenderer);
-        modsHudVisibility.CaptureAndHide(hudCam2);
     }
 
     bool CanModsCoveredContentRender()
@@ -423,20 +464,30 @@ public partial class HKDualScreen
 
     void BeginModsCoveredContentRestore()
     {
-        if (!modsLifecycle.CoveredContentRestorePending) return;
+        HollowKnightModsPresentationFlow.BeginCoveredContentRestore(
+            modsLifecycle,
+            HideModsRestoreCameras,
+            RestoreModsCoveredContentCore);
+    }
+
+    void HideModsRestoreCameras()
+    {
         modsCompanionVisibility.CaptureAndHide(attrCam);
         modsHudVisibility.CaptureAndHide(hudCam2);
-        if (modsLifecycle.TryBeginCoveredContentRestore())
-            RestoreModsCoveredContentCore();
     }
 
     void CompleteModsCoveredContentRestore()
     {
-        if (!modsLifecycle.CoveredContentRestoreStarted) return;
+        HollowKnightModsPresentationFlow.CompleteCoveredContentRestore(
+            modsLifecycle,
+            ordinaryLayoutReady: true,
+            RevealModsRestoreCameras);
+    }
+
+    void RevealModsRestoreCameras()
+    {
         modsCompanionVisibility.Restore();
         modsHudVisibility.Restore();
-        modsLifecycle.TryCompleteCoveredContentRestore(
-            ordinaryLayoutReady: true);
     }
 
     void RestoreModsCoveredContentImmediately()
