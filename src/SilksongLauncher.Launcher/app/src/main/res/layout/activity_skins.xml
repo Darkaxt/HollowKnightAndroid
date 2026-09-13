@@ -4,101 +4,202 @@
     android:layout_height="match_parent"
     android:background="@color/surface"
     android:fillViewport="true">
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:padding="20dp">
+
+        <Button
+            android:id="@+id/skins_back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="120dp"
+            android:minHeight="48dp"
+            android:text="@string/skins_back"
+            android:textAllCaps="false">
+            <requestFocus />
+        </Button>
+
         <TextView
             android:id="@+id/skins_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
             android:text="@string/skins_title_hollow_knight"
             android:textColor="@color/text_primary"
-            android:textSize="22sp"
+            android:textSize="28sp"
             android:textStyle="bold" />
+
         <TextView
             android:id="@+id/skins_availability"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="8dp"
             android:text="@string/skins_guidance_hollow_knight"
-            android:textColor="@color/text_primary"
-            android:textSize="15sp" />
-        <TextView
-            android:id="@+id/skins_status"
+            android:textColor="@color/text_muted"
+            android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/skins_import"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:accessibilityLiveRegion="polite"
-            android:text="@string/skins_loading"
-            android:textColor="@color/text_primary"
-            android:textSize="16sp" />
-        <Button
-            android:id="@+id/skins_refresh"
+            android:layout_marginTop="20dp"
+            android:minHeight="56dp"
+            android:text="@string/skins_import"
+            android:textAllCaps="false"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/skins_notice"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:minHeight="48dp"
-            android:text="@string/skins_refresh" />
-        <Button
-            android:id="@+id/skins_advance_mode"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:enabled="false"
-            android:minHeight="48dp"
-            android:text="@string/skins_advance_mode" />
-        <Button
-            android:id="@+id/skins_prepare_file"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:enabled="false"
-            android:minHeight="48dp"
-            android:text="@string/skins_prepare_file" />
-        <Button
-            android:id="@+id/skins_prepare_folder"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:enabled="false"
-            android:minHeight="48dp"
-            android:text="@string/skins_prepare_folder" />
-        <TextView
-            android:id="@+id/skins_feedback"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
             android:accessibilityLiveRegion="polite"
+            android:maxLines="4"
             android:textColor="@color/text_primary"
-            android:textSize="15sp" />
+            android:textSize="15sp"
+            android:visibility="gone" />
+
         <LinearLayout
-            android:id="@+id/skins_prepared"
+            android:id="@+id/skins_prepared_section"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical" />
-        <Button
-            android:id="@+id/skins_import_all"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/skin_card_background"
+            android:orientation="vertical"
+            android:padding="14dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/skins_prepared_title"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:id="@+id/skins_prepared"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/skins_import_all"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:minHeight="48dp"
+                    android:text="@string/skins_import_all"
+                    android:textAllCaps="false" />
+
+                <Button
+                    android:id="@+id/skins_cancel"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:minHeight="48dp"
+                    android:text="@string/skins_cancel"
+                    android:textAllCaps="false" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/skins_configuration_card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:enabled="false"
-            android:text="@string/skins_import_all" />
-        <Button
-            android:id="@+id/skins_cancel"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/skin_card_background"
+            android:orientation="vertical"
+            android:padding="14dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/skins_configuration_title"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/skins_requested"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/skins_loading"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/skins_runtime"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:accessibilityLiveRegion="polite"
+                android:text="@string/skins_runtime_none"
+                android:textColor="@color/text_muted"
+                android:textSize="15sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/skins_advance_mode"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:minHeight="48dp"
+                    android:text="@string/skins_change_mode"
+                    android:textAllCaps="false" />
+
+                <Button
+                    android:id="@+id/skins_library_details"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:minHeight="48dp"
+                    android:text="@string/skins_details"
+                    android:textAllCaps="false" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/skins_installed_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:enabled="false"
-            android:text="@string/skins_cancel" />
+            android:layout_marginTop="24dp"
+            android:text="@string/skins_installed_title"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/skins_empty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/skins_empty"
+            android:textColor="@color/text_muted"
+            android:textSize="16sp"
+            android:visibility="gone" />
+
         <LinearLayout
             android:id="@+id/skins_packs"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical" />
-        <Button
-            android:id="@+id/skins_back"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:minHeight="48dp"
-            android:text="@string/settings_back" />
     </LinearLayout>
 </ScrollView>

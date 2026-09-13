@@ -10,10 +10,18 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
+internal enum class SkinNoticeKind {
+    CLEANUP_PENDING, PREPARATION_ACTIVE, PREPARING, PREPARED, NO_FILES, IMPORT_COMPLETE,
+    RECOVERED_OFF, MUTATION_UNAVAILABLE, OPERATION_COMPLETE, PREPARATION_CANCELLED,
+    PROFILE_CHANGED, ERROR,
+}
+internal data class SkinNotice(val kind: SkinNoticeKind, val arguments: List<Any> = emptyList())
+
 internal data class SkinScreenState(
     val library: SkinLibraryViewState? = null,
     val busy: Boolean = false,
     val message: String = "",
+    val notice: SkinNotice? = null,
     val refreshError: SkinResult.Error? = null,
     val preparationOwner: UUID? = null,
     val handles: List<SkinPreparationHandle> = emptyList(),
@@ -51,10 +59,15 @@ internal class SkinLibrarySession(
     fun prepare(document: String, folder: Boolean) = submit {
         if (!admitUi(services.imports.available)) return@submit
         if (synchronized(cleanupOwners) { cleanupOwners.any { it.services.profile == services.profile } }) {
-            state = state.copy(message = "Preparation cleanup pending; refresh to retry before importing")
+            state = state.copy(message = "Preparation cleanup pending; refresh to retry before importing",
+                notice = SkinNotice(SkinNoticeKind.CLEANUP_PENDING))
             return@submit
         }
-        if (workflow.handles().isNotEmpty()) { state = state.copy(message = "Import or cancel the current preparation first"); return@submit }
+        if (workflow.handles().isNotEmpty()) {
+            state = state.copy(message = "Import or cancel the current preparation first",
+                notice = SkinNotice(SkinNoticeKind.PREPARATION_ACTIVE))
+            return@submit
+        }
         state = state.copy(preparationOwner = UUID.randomUUID())
         val inputs = if (folder) saf.folder(document) else when (val file = saf.file(document)) {
             is SkinResult.Error -> file
@@ -63,15 +76,23 @@ internal class SkinLibrarySession(
         when (inputs) {
             is SkinResult.Error -> report(inputs)
             is SkinResult.Ok -> when (val result = workflow.prepare(inputs.value) { completed, total ->
-                state = state.copy(message = "Preparing $completed / $total"); emit()
+                state = state.copy(message = "Preparing $completed / $total",
+                    notice = SkinNotice(SkinNoticeKind.PREPARING, listOf(completed, total)))
+                emit()
             }) {
                 is SkinResult.Error -> report(result)
-                is SkinResult.Ok -> state = state.copy(message = result.value.joinToString("\n") { source ->
-                    when (val prepared = source.result) {
-                        is SkinResult.Error -> "${source.displayName}: ${prepared.code} · ${prepared.detail}"
-                        is SkinResult.Ok -> "${source.displayName}: ${prepared.value.candidates.size} candidate results; review before importing"
-                    }
-                }.ifEmpty { "No immediate regular files were found" })
+                is SkinResult.Ok -> state = state.copy(
+                    message = result.value.joinToString("\n") { source ->
+                        when (val prepared = source.result) {
+                            is SkinResult.Error -> "${source.displayName}: ${prepared.code} · ${prepared.detail}"
+                            is SkinResult.Ok -> "${source.displayName}: ${prepared.value.candidates.size} candidate results; review before importing"
+                        }
+                    }.ifEmpty { "No immediate regular files were found" },
+                    notice = result.value.firstNotNullOfOrNull { it.result as? SkinResult.Error }?.let {
+                        SkinNotice(SkinNoticeKind.ERROR, listOf(it.code.name, it.detail))
+                    } ?: if (result.value.isEmpty()) SkinNotice(SkinNoticeKind.NO_FILES)
+                    else SkinNotice(SkinNoticeKind.PREPARED, listOf(workflow.handles().sumOf { it.candidates.size })),
+                )
             }
         }
     }
@@ -80,10 +101,15 @@ internal class SkinLibrarySession(
         if (!admitUi(services.imports.available)) return@submit
         when (val result = workflow.importAll()) {
             is SkinResult.Error -> report(result)
-            is SkinResult.Ok -> state = state.copy(message = result.value.joinToString("\n") { outcome ->
-                outcome.error?.let { "${it.code} · ${it.detail}; refresh library before any retry" }
-                    ?: outcome.results.joinToString("\n", transform = ::importText)
-            })
+            is SkinResult.Ok -> state = state.copy(
+                message = result.value.joinToString("\n") { outcome ->
+                    outcome.error?.let { "${it.code} · ${it.detail}; refresh library before any retry" }
+                        ?: outcome.results.joinToString("\n", transform = ::importText)
+                },
+                notice = result.value.firstNotNullOfOrNull { it.error }?.let {
+                    SkinNotice(SkinNoticeKind.ERROR, listOf(it.code.name, it.detail))
+                } ?: SkinNotice(SkinNoticeKind.IMPORT_COMPLETE, listOf(result.value.sumOf { it.results.size })),
+            )
         }
         readLibrary(preserveMessage = true)
     }
@@ -95,19 +121,22 @@ internal class SkinLibrarySession(
             is SkinResult.Error -> report(confirmation)
             is SkinResult.Ok -> when (val result = workflow.replace(confirmation.value)) {
                 is SkinResult.Error -> report(result)
-                is SkinResult.Ok -> state = state.copy(message = importText(result.value))
+                is SkinResult.Ok -> state = state.copy(message = importText(result.value),
+                    notice = SkinNotice(SkinNoticeKind.IMPORT_COMPLETE, listOf(1)))
             }
         }
         readLibrary(preserveMessage = true)
     }
 
     fun select(target: SkinReplaceTarget) = edit { services.mutations.select(target) }
+    fun enable(target: SkinReplaceTarget) = edit { services.mutations.enable(target) }
+    fun disable(target: SkinReplaceTarget) = edit { services.mutations.disable(target) }
     fun eligibility(target: SkinReplaceTarget, eligible: Boolean) = edit { services.mutations.eligibility(target, eligible) }
     fun remove(target: SkinReplaceTarget) = edit { services.mutations.remove(target) }
     val canRecover: Boolean get() = services.recover != null
     fun recoverOff() = submit {
         val recover = services.recover ?: return@submit
-        report(recover(), "OFF configuration saved; game process will restore on its next poll")
+        report(recover(), "OFF configuration saved; game process will restore on its next poll", SkinNoticeKind.RECOVERED_OFF)
         readLibrary(preserveMessage = true)
     }
     private fun edit(action: () -> SkinResult<Unit>) = submit {
@@ -167,14 +196,15 @@ internal class SkinLibrarySession(
             SkinResult.Error(SkinImportCode.DURABILITY_UNAVAILABLE, "Cleanup transport failed: ${error.message}")
         }
         state = state.copy(cleanupPending = result is SkinResult.Error || workflow.handles().isNotEmpty())
-        report(result, "Preparation cancelled")
+        report(result, "Preparation cancelled", SkinNoticeKind.PREPARATION_CANCELLED)
     }
 
     private fun admitUi(available: Boolean): Boolean {
         // Fresh observation is only a UI preflight. Each injected mutation service must gate independently.
         readLibrary()
         if (!available || state.library == null || (!services.simplifiedAuthority && state.library?.leaseObservation != "CLEAR")) {
-            state = state.copy(message = "Mutation unavailable: service disabled or session ACTIVE/UNKNOWN")
+            state = state.copy(message = "Mutation unavailable: service disabled or session ACTIVE/UNKNOWN",
+                notice = SkinNotice(SkinNoticeKind.MUTATION_UNAVAILABLE))
             return false
         }
         return true
@@ -186,7 +216,8 @@ internal class SkinLibrarySession(
         when (result) {
             is SkinResult.Error -> {
                 state = state.copy(library = null, canImport = false, canEdit = false, canAdvance = false,
-                    refreshError = result, message = if (preserveMessage) state.message else "")
+                    refreshError = result, message = if (preserveMessage) state.message else "",
+                    notice = if (preserveMessage) state.notice else null)
             }
             is SkinResult.Ok -> {
                 val clear = services.simplifiedAuthority || result.value.leaseObservation == "CLEAR"
@@ -194,18 +225,26 @@ internal class SkinLibrarySession(
                     canImport = clear && services.imports.available,
                     canEdit = clear && services.mutations.available,
                     canAdvance = clear && services.modeAvailable,
-                    message = if (preserveMessage) state.message else "")
+                    message = if (preserveMessage) state.message else "",
+                    notice = if (preserveMessage) state.notice else null)
             }
         }
     }
-    private fun report(result: SkinResult<*>, success: String = "Library operation completed; no live apply is claimed") {
-        state = state.copy(message = when (result) {
-            is SkinResult.Error -> "${result.code} · ${result.detail}"
-            is SkinResult.Ok -> success
-        })
+    private fun report(
+        result: SkinResult<*>,
+        success: String = "Library operation completed; no live apply is claimed",
+        successKind: SkinNoticeKind = SkinNoticeKind.OPERATION_COMPLETE,
+    ) {
+        state = when (result) {
+            is SkinResult.Error -> state.copy(
+                message = "${result.code} · ${result.detail}",
+                notice = SkinNotice(SkinNoticeKind.ERROR, listOf(result.code.name, result.detail)),
+            )
+            is SkinResult.Ok -> state.copy(message = success, notice = SkinNotice(successKind))
+        }
     }
     private fun importText(result: SkinImportSummary) =
-        "${result.rawPrefixHex}: ${result.code} · ${result.installedId.orEmpty()} · ${result.detail}" +
+        "${result.code} · ${result.detail}" +
             if (result.warnings.isEmpty()) "" else "\n" + result.warnings.joinToString("\n")
 
     private fun submit(force: Boolean = false, allowClosed: Boolean = false, action: () -> Unit) {
@@ -216,7 +255,8 @@ internal class SkinLibrarySession(
         worker.execute {
             try {
                 if (!allowClosed && (ended.get() || currentProfile() != services.profile)) {
-                    state = state.copy(message = "Selected profile changed or this screen closed; operation cancelled")
+                    state = state.copy(message = "Selected profile changed or this screen closed; operation cancelled",
+                        notice = SkinNotice(SkinNoticeKind.PROFILE_CHANGED))
                 } else action()
             } catch (error: Exception) {
                 state = state.copy(canImport = false, canEdit = false, canAdvance = false)

@@ -30,6 +30,40 @@ class SkinLibrarySessionTest {
         assertNotEquals("CLEAR", session.state.library?.leaseObservation)
         session.close(); fixture.worker.runAll()
     }
+    @Test fun `direct enable and disable use the serialized mutation worker`() {
+        val fixture = Fixture()
+        val target = SkinReplaceTarget("target", "a".repeat(64), "b".repeat(64), "c".repeat(64))
+        fixture.session.refresh(); fixture.worker.runAll()
+
+        fixture.session.enable(target)
+        assertTrue(fixture.session.state.busy)
+        assertTrue(fixture.directActions.isEmpty())
+        fixture.worker.runAll()
+        assertEquals(listOf("enable:target"), fixture.directActions)
+
+        fixture.committed = false
+        fixture.session.refresh(); fixture.worker.runAll()
+        fixture.session.disable(target)
+        assertTrue(fixture.directActions.size == 1)
+        fixture.worker.runAll()
+        assertEquals(listOf("enable:target", "disable:target"), fixture.directActions)
+        fixture.session.close(); fixture.worker.runAll()
+    }
+
+    @Test fun `profile change cancels queued direct action before mutation`() {
+        val fixture = Fixture()
+        val target = SkinReplaceTarget("target", "a".repeat(64), "b".repeat(64), "c".repeat(64))
+        fixture.session.refresh(); fixture.worker.runAll()
+        fixture.session.enable(target)
+        fixture.profile = SilksongProfile
+
+        fixture.worker.runAll()
+
+        assertTrue(fixture.directActions.isEmpty())
+        assertTrue(fixture.session.state.message.contains("profile", ignoreCase = true))
+        fixture.session.close(); fixture.worker.runAll()
+    }
+
     @Test fun `provider IO is queued and never performed by prepare caller`() {
         val fixture = Fixture()
         fixture.session.refresh(); fixture.worker.runAll()
@@ -314,6 +348,7 @@ class SkinLibrarySessionTest {
         var profile: GameProfile = HollowKnightProfile
         var observation = "CLEAR"; var providerReads = 0; var cancels = 0; var blockCancel = false; var throwCancel = false; var throwRead = false
         var uncertainCommit = false; var throwAfterCommit = false; var committed = false
+        val directActions = mutableListOf<String>()
         val imports = object : SkinImportService {
             override val available = true
             override fun prepare(input: SkinImportInput): SkinResult<SkinPreparationHandle> {
@@ -345,6 +380,14 @@ class SkinLibrarySessionTest {
         }, imports, object : SkinLibraryMutations {
             override val available = true
             override fun select(target: SkinReplaceTarget) = mutationResult()
+            override fun enable(target: SkinReplaceTarget): SkinResult<Unit> {
+                directActions += "enable:${target.id}"
+                return mutationResult()
+            }
+            override fun disable(target: SkinReplaceTarget): SkinResult<Unit> {
+                directActions += "disable:${target.id}"
+                return mutationResult()
+            }
             override fun eligibility(target: SkinReplaceTarget, eligible: Boolean) = mutationResult()
         }, SkinModeAdvancePort { mutationResult() }, modeAvailable = true)
         private fun mutationResult(): SkinResult<Unit> {

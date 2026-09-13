@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Looper
+import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -32,18 +34,165 @@ import java.util.concurrent.Executor
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class SkinsActivityTest {
+    @Test fun `Import skin dialog offers exact file and folder intents and cancellation is silent`() {
+        val fixture = Fixture()
+        SkinsActivity.withHostBinding(fixture.binding) {
+            SelectedGameStore(ApplicationProvider.getApplicationContext()).set(HollowKnightProfile)
+            val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
+            try {
+                fixture.idle()
+                val activity = controller.get()
+                activity.findViewById<Button>(R.id.skins_import).performClick()
+                var dialog = ShadowAlertDialog.getLatestAlertDialog()
+                assertTrue(allText(dialog.window!!.decorView as ViewGroup)
+                    .contains(activity.getString(R.string.skins_import_source_title)))
+                assertEquals(listOf(
+                    activity.getString(R.string.skins_choose_archive),
+                    activity.getString(R.string.skins_choose_folder),
+                ), (0 until dialog.listView.adapter.count).map { dialog.listView.adapter.getItem(it).toString() })
+                dialog.listView.performItemClick(dialog.listView.getChildAt(0), 0, 0)
+                var launch = shadowOf(activity).nextStartedActivityForResult
+                assertEquals(Intent.ACTION_OPEN_DOCUMENT, launch.intent.action)
+                assertTrue(launch.intent.hasCategory(Intent.CATEGORY_OPENABLE))
+                assertEquals("*/*", launch.intent.type)
+                val messageBeforePickerCancel = activity.findViewById<TextView>(R.id.skins_notice).text
+                shadowOf(activity).receiveResult(launch.intent, Activity.RESULT_CANCELED, null)
+                fixture.idle()
+                assertEquals(messageBeforePickerCancel, activity.findViewById<TextView>(R.id.skins_notice).text)
+                assertEquals(0, fixture.opens)
+
+                activity.findViewById<Button>(R.id.skins_import).performClick()
+                dialog = ShadowAlertDialog.getLatestAlertDialog()
+                dialog.listView.performItemClick(dialog.listView.getChildAt(1), 1, 1)
+                launch = shadowOf(activity).nextStartedActivityForResult
+                assertEquals(Intent.ACTION_OPEN_DOCUMENT_TREE, launch.intent.action)
+
+                activity.findViewById<Button>(R.id.skins_import).performClick()
+                dialog = ShadowAlertDialog.getLatestAlertDialog()
+                val messageBefore = activity.findViewById<TextView>(R.id.skins_notice).text
+                dialog.cancel()
+                fixture.idle()
+                assertEquals(messageBefore, activity.findViewById<TextView>(R.id.skins_notice).text)
+                assertEquals(0, fixture.opens)
+                assertEquals(0, fixture.cancels)
+            } finally { controller.pause().stop().destroy(); fixture.idle() }
+        }
+    }
+
+    @Test fun `pack card keeps technical data in Details and direct actions use session callbacks`() {
+        val fixture = Fixture(mutationsAvailable = true)
+        SkinsActivity.withHostBinding(fixture.binding) {
+            SelectedGameStore(ApplicationProvider.getApplicationContext()).set(HollowKnightProfile)
+            val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
+            try {
+                fixture.idle()
+                val activity = controller.get()
+                val packList = activity.findViewById<LinearLayout>(R.id.skins_packs)
+                val visible = allText(packList)
+                assertTrue(visible.contains("Target"))
+                assertTrue(visible.contains("Author"))
+                assertFalse(visible.contains("target"))
+                assertFalse(visible.contains("d".repeat(64)))
+                assertFalse(visible.contains("e".repeat(64)))
+
+                descendantButtons(packList).single { it.text == activity.getString(R.string.skins_enable) }.performClick()
+                fixture.idle()
+                assertEquals(listOf("enable:target"), fixture.directActions)
+
+                descendantButtons(packList).single { it.text == activity.getString(R.string.skins_details) }.performClick()
+                val details = ShadowAlertDialog.getLatestAlertDialog()
+                val detailText = details.findViewById<TextView>(android.R.id.message).text.toString()
+                assertTrue(detailText.contains("target"))
+                assertTrue(detailText.contains("d".repeat(64)))
+                assertTrue(detailText.contains("e".repeat(64)))
+                details.dismiss()
+
+                descendantButtons(packList).single { it.text == activity.getString(R.string.skins_delete) }.performClick()
+                ShadowAlertDialog.getLatestAlertDialog().getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+                fixture.idle()
+                assertEquals(listOf("target"), fixture.removed)
+            } finally { controller.pause().stop().destroy(); fixture.idle() }
+        }
+    }
+
+    @Test fun `selected live card exposes Disable and blocks Delete with visible reason`() {
+        val fixture = Fixture(mutationsAvailable = true, mode = "ON")
+        SkinsActivity.withHostBinding(fixture.binding) {
+            SelectedGameStore(ApplicationProvider.getApplicationContext()).set(HollowKnightProfile)
+            val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
+            try {
+                fixture.idle()
+                val activity = controller.get()
+                val packList = activity.findViewById<LinearLayout>(R.id.skins_packs)
+                val buttons = descendantButtons(packList)
+                val delete = buttons.single { it.text == activity.getString(R.string.skins_delete) }
+                assertFalse(delete.isEnabled)
+                assertTrue(allText(packList).contains(activity.getString(R.string.skins_delete_blocked)))
+                buttons.single { it.text == activity.getString(R.string.skins_disable) }.performClick()
+                fixture.idle()
+                assertEquals(listOf("disable:target"), fixture.directActions)
+            } finally { controller.pause().stop().destroy(); fixture.idle() }
+        }
+    }
+
+    @Test fun `library Details retains full authority report with Refresh and recovery`() {
+        val fixture = Fixture(
+            runtimeObservation = "Last game report: Applied · target · complete · 10 ms UTC; refresh to retry status",
+            recoverAvailable = true,
+        )
+        SkinsActivity.withHostBinding(fixture.binding) {
+            SelectedGameStore(ApplicationProvider.getApplicationContext()).set(HollowKnightProfile)
+            val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
+            try {
+                fixture.idle()
+                val activity = controller.get()
+                activity.findViewById<Button>(R.id.skins_library_details).performClick()
+                val details = ShadowAlertDialog.getLatestAlertDialog()
+                val text = details.findViewById<TextView>(android.R.id.message).text.toString()
+                assertTrue(text.contains("target"))
+                assertTrue(text.contains("Last game report"))
+                assertTrue(text.contains("Lease"))
+                assertEquals(activity.getString(R.string.skins_refresh),
+                    details.getButton(AlertDialog.BUTTON_NEUTRAL).text.toString())
+                details.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+                fixture.idle()
+                assertEquals(1, fixture.recoveries)
+            } finally { controller.pause().stop().destroy(); fixture.idle() }
+        }
+    }
+
+    @Test fun `requested configuration and latest runtime report occupy separate compact views`() {
+        val fixture = Fixture(runtimeObservation = "Last game report: Applied · target · complete · 10 ms UTC; refresh to retry status")
+        SkinsActivity.withHostBinding(fixture.binding) {
+            SelectedGameStore(ApplicationProvider.getApplicationContext()).set(HollowKnightProfile)
+            val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
+            try {
+                fixture.idle()
+                val activity = controller.get()
+                val requested = activity.findViewById<TextView>(R.id.skins_requested).text.toString()
+                val runtime = activity.findViewById<TextView>(R.id.skins_runtime).text.toString()
+                assertTrue(requested.contains("OFF"))
+                assertTrue(requested.contains("Target"))
+                assertFalse(requested.contains("Applied"))
+                assertTrue(runtime.contains("Applied"))
+                assertFalse(runtime.contains("target"))
+                assertFalse(runtime.contains("10 ms"))
+            } finally { controller.pause().stop().destroy(); fixture.idle() }
+        }
+    }
+
     @Test fun `default production surface enables ordinary ZIP picker and mode control`() {
         SelectedGameStore(ApplicationProvider.getApplicationContext()).set(HollowKnightProfile)
         val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
         try {
             val activity = controller.get()
             val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5)
-            while (!activity.findViewById<Button>(R.id.skins_prepare_file).isEnabled && System.nanoTime() < deadline) {
+            while (!activity.findViewById<Button>(R.id.skins_import).isEnabled && System.nanoTime() < deadline) {
                 Thread.sleep(20); shadowOf(Looper.getMainLooper()).idle()
             }
-            assertTrue(activity.findViewById<Button>(R.id.skins_prepare_file).isEnabled)
+            assertTrue(activity.findViewById<Button>(R.id.skins_import).isEnabled)
             assertTrue(activity.findViewById<Button>(R.id.skins_advance_mode).isEnabled)
-            activity.findViewById<Button>(R.id.skins_prepare_file).performClick()
+            openArchivePicker(activity)
             assertEquals(Intent.ACTION_OPEN_DOCUMENT, shadowOf(activity).nextStartedActivityForResult.intent.action)
         } finally { controller.pause().stop().destroy() }
     }
@@ -56,7 +205,7 @@ class SkinsActivityTest {
             val activity = controller.get()
             try {
                 fixture.idle()
-                activity.findViewById<Button>(R.id.skins_prepare_file).performClick()
+                openArchivePicker(activity)
                 val launch = shadowOf(activity).nextStartedActivityForResult
                 assertEquals(Intent.ACTION_OPEN_DOCUMENT, launch.intent.action)
                 assertEquals("*/*", launch.intent.type)
@@ -64,11 +213,7 @@ class SkinsActivityTest {
                 assertEquals(0, fixture.opens)
                 fixture.idle()
                 assertEquals(1, fixture.opens)
-                val buttons = activity.findViewById<LinearLayout>(R.id.skins_packs)
-                val replace = (0 until buttons.childCount).map { buttons.getChildAt(it) }.filterIsInstance<Button>()
-                    .single { it.text.toString().startsWith("Replace") }
-                replace.performClick()
-                val picker = ShadowAlertDialog.getLatestAlertDialog()
+                val picker = openReplacementSource(activity)
                 assertTrue(fixture.replaced.isEmpty())
                 picker.listView.performItemClick(picker.listView.getChildAt(1), 1, 1)
                 val confirmation = ShadowAlertDialog.getLatestAlertDialog()
@@ -83,6 +228,28 @@ class SkinsActivityTest {
         }
     }
 
+    @Test fun `prepared rows stay concise while Details retains candidate diagnostics`() {
+        val fixture = Fixture()
+        SkinsActivity.withHostBinding(fixture.binding) {
+            SelectedGameStore(ApplicationProvider.getApplicationContext()).set(HollowKnightProfile)
+            val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
+            try {
+                fixture.idle()
+                val activity = controller.get()
+                openArchivePicker(activity)
+                val launch = shadowOf(activity).nextStartedActivityForResult
+                shadowOf(activity).receiveResult(launch.intent, Activity.RESULT_OK,
+                    Intent().setData(Uri.parse("content://test/document/input")))
+                fixture.idle()
+                val prepared = activity.findViewById<LinearLayout>(R.id.skins_prepared)
+                assertFalse(allText(prepared).contains("a".repeat(64)))
+                descendantButtons(prepared).first().performClick()
+                val details = ShadowAlertDialog.getLatestAlertDialog()
+                assertTrue(details.findViewById<TextView>(android.R.id.message).text.toString().contains("a".repeat(64)))
+            } finally { controller.pause().stop().destroy(); fixture.idle() }
+        }
+    }
+
     @Test fun `configuration recreation retains prepared handle and terminal exit cancels it`() {
         val fixture = Fixture()
         SkinsActivity.withHostBinding(fixture.binding) {
@@ -91,7 +258,7 @@ class SkinsActivityTest {
             try {
                 fixture.idle()
                 val activity = controller.get()
-                activity.findViewById<Button>(R.id.skins_prepare_file).performClick()
+                openArchivePicker(activity)
                 val launch = shadowOf(activity).nextStartedActivityForResult
                 shadowOf(activity).receiveResult(launch.intent, Activity.RESULT_OK, Intent().setData(Uri.parse("content://test/document/input")))
                 fixture.idle()
@@ -113,14 +280,11 @@ class SkinsActivityTest {
             try {
                 fixture.idle()
                 val activity = controller.get()
-                activity.findViewById<Button>(R.id.skins_prepare_file).performClick()
+                openArchivePicker(activity)
                 val launch = shadowOf(activity).nextStartedActivityForResult
                 shadowOf(activity).receiveResult(launch.intent, Activity.RESULT_OK, Intent().setData(Uri.parse("content://test/document/input")))
                 fixture.idle()
-                val packs = activity.findViewById<LinearLayout>(R.id.skins_packs)
-                (0 until packs.childCount).map { packs.getChildAt(it) }.filterIsInstance<Button>()
-                    .single { it.text.toString().startsWith("Replace") }.performClick()
-                val picker = ShadowAlertDialog.getLatestAlertDialog()
+                val picker = openReplacementSource(activity)
                 picker.listView.performItemClick(picker.listView.getChildAt(0), 0, 0)
                 val staleConfirmation = ShadowAlertDialog.getLatestAlertDialog()
                 controller.recreate(); fixture.idle()
@@ -141,17 +305,14 @@ class SkinsActivityTest {
                 fixture.idle()
                 val activity = controller.get()
                 fun prepare() {
-                    activity.findViewById<Button>(R.id.skins_prepare_file).performClick()
+                    openArchivePicker(activity)
                     val launch = shadowOf(activity).nextStartedActivityForResult
                     shadowOf(activity).receiveResult(launch.intent, Activity.RESULT_OK,
                         Intent().setData(Uri.parse("content://test/document/input")))
                     fixture.idle()
                 }
                 prepare()
-                val packs = activity.findViewById<LinearLayout>(R.id.skins_packs)
-                (0 until packs.childCount).map { packs.getChildAt(it) }.filterIsInstance<Button>()
-                    .single { it.text.toString().startsWith("Replace") }.performClick()
-                val oldPicker = ShadowAlertDialog.getLatestAlertDialog()
+                val oldPicker = openReplacementSource(activity)
                 oldPicker.listView.performItemClick(oldPicker.listView.getChildAt(0), 0, 0)
                 val oldConfirmation = ShadowAlertDialog.getLatestAlertDialog()
                 oldConfirmation.getButton(AlertDialog.BUTTON_POSITIVE).performClick(); fixture.idle()
@@ -171,8 +332,7 @@ class SkinsActivityTest {
                 assertEquals(1, fixture.replaced.size)
                 assertTrue(activity.findViewById<Button>(R.id.skins_import_all).isEnabled)
                 // B's own cancellation is still reachable and releases exactly B.
-                (0 until packs.childCount).map { packs.getChildAt(it) }.filterIsInstance<Button>()
-                    .single { it.text.toString().startsWith("Replace") }.performClick()
+                openReplacementSource(activity)
                 ShadowAlertDialog.getLatestAlertDialog().getButton(AlertDialog.BUTTON_NEGATIVE).performClick(); fixture.idle()
                 assertEquals(1, fixture.cancels)
                 assertFalse(activity.findViewById<Button>(R.id.skins_import_all).isEnabled)
@@ -196,8 +356,7 @@ class SkinsActivityTest {
         val view = (services.read() as SkinResult.Ok).value; val pack = view.packs.single()
         assertEquals("OFF",view.mode); assertFalse(pack.selected); assertFalse(pack.rotationEligible)
         val target = SkinReplaceTarget(pack.id,view.generationSha256,pack.treeSha256,pack.importReceiptSha256)
-        assertTrue(services.mutations.select(target) is SkinResult.Ok)
-        assertTrue(services.mode.advance() is SkinResult.Ok)
+        assertTrue(services.mutations.enable(target) is SkinResult.Ok)
         val store = dev.silksong.launcher.skins.library.SkinLibraryStore.production(isolated,HollowKnightProfile)
         val wire = com.google.gson.JsonParser.parseString(dev.silksong.launcher.runtime.SkinLibraryRuntimeAccess(store).readConfiguration()).asJsonObject
         assertTrue(wire["ok"].asBoolean); assertEquals("ON",wire["mode"].asString)
@@ -220,7 +379,7 @@ class SkinsActivityTest {
         val hollowKnight = text(HollowKnightProfile)
         assertTrue(hollowKnight.first.contains("Hollow Knight"))
         assertTrue(hollowKnight.second.contains("CustomKnight"))
-        assertTrue(hollowKnight.second.lowercase().contains("launch hollow knight"))
+        assertTrue(hollowKnight.second.contains("original game files"))
 
         val silksong = text(SilksongProfile)
         assertTrue(silksong.first.contains("Silksong"))
@@ -228,8 +387,8 @@ class SkinsActivityTest {
         assertFalse(silksong.second.contains("CustomKnight"))
         assertFalse(silksong.second.contains("not enabled"))
         assertFalse(silksong.second.contains("launch Hollow Knight"))
-        assertTrue(silksong.second.contains("11"))
-        assertTrue(silksong.second.contains("death rotation"))
+        assertFalse(silksong.second.contains("11"))
+        assertTrue(silksong.second.contains("Silksong"))
     }
 
     @Test fun `status read error does not claim that no changes were made`() {
@@ -237,14 +396,52 @@ class SkinsActivityTest {
         assertFalse(context.getString(R.string.skins_read_error, "ERROR", "refresh failed").contains("No changes were made"))
     }
 
+    private fun openArchivePicker(activity: SkinsActivity) {
+        activity.findViewById<Button>(R.id.skins_import).performClick()
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        dialog.listView.performItemClick(dialog.listView.getChildAt(0), 0, 0)
+    }
+
+    private fun openReplacementSource(activity: SkinsActivity): AlertDialog {
+        val packs = activity.findViewById<LinearLayout>(R.id.skins_packs)
+        descendantButtons(packs).single { it.text == activity.getString(R.string.skins_details) }.performClick()
+        val details = ShadowAlertDialog.getLatestAlertDialog()
+        val replace = details.getButton(AlertDialog.BUTTON_POSITIVE)
+        assertTrue("Prepared replacement entry must be enabled", replace.isEnabled)
+        assertTrue(replace.performClick())
+        shadowOf(Looper.getMainLooper()).idle()
+        return ShadowAlertDialog.getLatestAlertDialog().also { assertNotSame(details, it) }
+    }
+
+    private fun descendantButtons(root: ViewGroup): List<Button> = buildList {
+        for (index in 0 until root.childCount) when (val child = root.getChildAt(index)) {
+            is Button -> add(child)
+            is ViewGroup -> addAll(descendantButtons(child))
+        }
+    }
+    private fun allText(root: ViewGroup): String = buildList {
+        for (index in 0 until root.childCount) when (val child = root.getChildAt(index)) {
+            is TextView -> add(child.text.toString())
+            is ViewGroup -> add(allText(child))
+        }
+    }.joinToString("\n")
+
     private class Queue : Executor {
         val tasks = ArrayDeque<Runnable>()
         override fun execute(command: Runnable) { tasks += command }
         fun runAll() { while (tasks.isNotEmpty()) tasks.removeFirst().run() }
     }
-    private class Fixture {
+    private class Fixture(
+        mutationsAvailable: Boolean = false,
+        private val runtimeObservation: String? = null,
+        private val mode: String = "OFF",
+        recoverAvailable: Boolean = false,
+    ) {
         val worker = Queue(); var opens = 0; var cancels = 0
         val replaced = mutableListOf<SkinReplaceRequest>()
+        val directActions = mutableListOf<String>()
+        val removed = mutableListOf<String>()
+        var recoveries = 0
         val imports = object : SkinImportService {
             override val available = true
             override fun prepare(input: SkinImportInput): SkinResult<SkinPreparationHandle> {
@@ -265,10 +462,31 @@ class SkinsActivityTest {
             override fun children(tree: String): SkinDocumentCursor = error("unused")
             override fun open(document: String) = ByteArrayInputStream(byteArrayOf(1)).also { opens++ }
         }
+        private val mutations = if (mutationsAvailable) object : SkinLibraryMutations {
+            override val available = true
+            override fun select(target: SkinReplaceTarget) = SkinResult.Ok(Unit)
+            override fun enable(target: SkinReplaceTarget): SkinResult<Unit> {
+                directActions += "enable:${target.id}"
+                return SkinResult.Ok(Unit)
+            }
+            override fun disable(target: SkinReplaceTarget): SkinResult<Unit> {
+                directActions += "disable:${target.id}"
+                return SkinResult.Ok(Unit)
+            }
+            override fun eligibility(target: SkinReplaceTarget, eligible: Boolean) = SkinResult.Ok(Unit)
+            override fun remove(target: SkinReplaceTarget): SkinResult<Unit> {
+                removed += target.id
+                return SkinResult.Ok(Unit)
+            }
+        } else UnavailableSkinLibraryMutations
         val services = SkinLibraryUiServices(HollowKnightProfile, {
-            SkinResult.Ok(SkinLibraryViewState("c".repeat(64), "OFF", "target", null, emptyList(), "CLEAR", null, null, "CLEAR", listOf(
-                SkinPackRow("target", "Target", "Author", "f".repeat(64), "d".repeat(64), "e".repeat(64), true, false, SkinReceiptSummary()))))
-        }, imports, UnavailableSkinLibraryMutations, UnavailableSkinModeAdvancePort)
+            SkinResult.Ok(SkinLibraryViewState("c".repeat(64), mode, "target", null, emptyList(), "CLEAR", null, null, "CLEAR", listOf(
+                SkinPackRow("target", "Target", "Author", "f".repeat(64), "d".repeat(64), "e".repeat(64), true, false, SkinReceiptSummary())),
+                simplifiedAuthority = true, runtimeObservation = runtimeObservation))
+        }, imports, mutations, UnavailableSkinModeAdvancePort,
+            simplifiedAuthority = true,
+            recover = if (recoverAvailable) ({ recoveries++; SkinResult.Ok(Unit) }) else null,
+        )
         val binding = SkinActivityHostBinding(services, provider, worker)
         fun idle() { shadowOf(Looper.getMainLooper()).idle(); worker.runAll(); shadowOf(Looper.getMainLooper()).idle() }
     }

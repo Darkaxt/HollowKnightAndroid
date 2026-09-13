@@ -18,8 +18,15 @@ internal class GatedSkinLibraryMutations private constructor(
     override val available = true
     override fun select(target: SkinReplaceTarget): SkinResult<Unit> =
         change(target, SkinRegistryMutations().select(target.id))
+    override fun enable(target: SkinReplaceTarget): SkinResult<Unit> = directActionUnavailable()
+    override fun disable(target: SkinReplaceTarget): SkinResult<Unit> = directActionUnavailable()
     override fun eligibility(target: SkinReplaceTarget, eligible: Boolean): SkinResult<Unit> =
         change(target, SkinRegistryMutations().setEligibility(target.id, eligible))
+
+    private fun directActionUnavailable() = SkinResult.Error(
+        SkinImportCode.DURABILITY_UNAVAILABLE,
+        "Direct skin actions require the unified Kotlin library authority",
+    )
 
     private fun change(target: SkinReplaceTarget, mutation: RegistryMutation): SkinResult<Unit> = try {
         locks.withSessionThenRegistry {

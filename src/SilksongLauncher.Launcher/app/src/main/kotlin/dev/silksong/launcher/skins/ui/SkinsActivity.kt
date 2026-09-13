@@ -6,6 +6,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.LayoutInflater
+import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -13,16 +15,18 @@ import dev.silksong.launcher.R
 import dev.silksong.launcher.profiles.GameProfile
 import dev.silksong.launcher.profiles.SelectedGameStore
 import dev.silksong.launcher.skins.contracts.SkinImportCode
+import dev.silksong.launcher.skins.registry.CandidatePreparationSummary
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
 internal data class SkinActivityHostBinding(val services: SkinLibraryUiServices, val provider: SkinDocumentProvider, val worker: Executor)
 
-/** Launcher controls for the single Kotlin library authority; runtime reports remain observations only. */
+/** Touch-first controls for the single Kotlin library authority; runtime reports remain observations only. */
 class SkinsActivity : Activity() {
     private lateinit var profile: GameProfile
     private lateinit var session: SkinLibrarySession
     private lateinit var packs: LinearLayout
+    private lateinit var prepared: LinearLayout
     private var dialog: AlertDialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,10 +35,11 @@ class SkinsActivity : Activity() {
         profile = SelectedGameStore(this).get()
         if (!SkinLibraryService.isVisible(profile)) { retained?.close(); finish(); return }
         setContentView(R.layout.activity_skins)
-        val presentation = SkinProfilePresentation.require(profile)
-        findViewById<TextView>(R.id.skins_title).setText(presentation.title)
-        findViewById<TextView>(R.id.skins_availability).setText(presentation.guidance)
+        val profilePresentation = SkinProfilePresentation.require(profile)
+        findViewById<TextView>(R.id.skins_title).setText(profilePresentation.title)
+        findViewById<TextView>(R.id.skins_availability).setText(profilePresentation.guidance)
         packs = findViewById(R.id.skins_packs)
+        prepared = findViewById(R.id.skins_prepared)
         val application = applicationContext
         val binding = hostBinding
         require(binding == null || binding.services.profile == profile) { "Host service uses another profile" }
@@ -45,15 +50,14 @@ class SkinsActivity : Activity() {
             binding?.worker ?: Executors.newSingleThreadExecutor { action -> Thread(action, "skin-library-worker") },
             { action -> Handler(Looper.getMainLooper()).post(action) },
         )
-        if (binding != null) findViewById<TextView>(R.id.skins_availability).setText(R.string.skins_host_preview)
-        findViewById<Button>(R.id.skins_refresh).setOnClickListener { SkinLibrarySession.retryPendingCleanup(); session.refresh() }
-        findViewById<Button>(R.id.skins_back).setOnClickListener { session.close(); finish() }
-        findViewById<Button>(R.id.skins_prepare_file).setOnClickListener { pick(false) }
-        findViewById<Button>(R.id.skins_prepare_folder).setOnClickListener { pick(true) }
-        findViewById<Button>(R.id.skins_import_all).setOnClickListener { session.importAll() }
-        findViewById<Button>(R.id.skins_cancel).setOnClickListener { session.cancel() }
-        findViewById<Button>(R.id.skins_advance_mode).setOnClickListener { session.advanceMode() }
+        findViewById<Button>(R.id.skins_back).setOnClickListener { if (acceptsCallback()) { session.close(); finish() } }
+        findViewById<Button>(R.id.skins_import).setOnClickListener { if (acceptsCallback()) showImportSource() }
+        findViewById<Button>(R.id.skins_import_all).setOnClickListener { if (acceptsCallback()) session.importAll() }
+        findViewById<Button>(R.id.skins_cancel).setOnClickListener { if (acceptsCallback()) session.cancel() }
+        findViewById<Button>(R.id.skins_advance_mode).setOnClickListener { if (acceptsCallback()) session.advanceMode() }
+        findViewById<Button>(R.id.skins_library_details).setOnClickListener { if (acceptsCallback()) showLibraryDetails(session.state) }
     }
+
     override fun onStart() { super.onStart(); if (::session.isInitialized) session.attach(::render) }
     override fun onResume() {
         super.onResume()
@@ -71,8 +75,20 @@ class SkinsActivity : Activity() {
     }
     @Deprecated("Platform Activity back handling")
     override fun onBackPressed() { if (::session.isInitialized) session.close(); super.onBackPressed() }
+
     private fun sameProfile() = SelectedGameStore(this).get() == profile
     private fun acceptsCallback() = !isDestroyed && !isFinishing && sameProfile()
+
+    private fun showImportSource() {
+        if (!sameProfile() || !session.state.canImport || session.state.busy || session.state.handles.isNotEmpty()) return
+        dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.skins_import_source_title)
+            .setItems(arrayOf(getString(R.string.skins_choose_archive), getString(R.string.skins_choose_folder))) { _, which ->
+                if (acceptsCallback()) pick(folder = which == 1)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
 
     private fun pick(folder: Boolean) {
         if (!sameProfile() || !session.state.canImport || session.state.busy) return
@@ -80,8 +96,9 @@ class SkinsActivity : Activity() {
         else Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         try { startActivityForResult(intent, if (folder) FOLDER else FILE) }
-        catch (error: Exception) { findViewById<TextView>(R.id.skins_feedback).text = error.message }
+        catch (error: Exception) { showNotice(error.message.orEmpty()) }
     }
+
     @Deprecated("Platform Activity result handling")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -92,66 +109,227 @@ class SkinsActivity : Activity() {
 
     private fun render(screen: SkinScreenState) {
         if (isFinishing || isDestroyed || !sameProfile()) return
-        findViewById<TextView>(R.id.skins_feedback).text = screen.message
-        findViewById<Button>(R.id.skins_refresh).isEnabled = !screen.busy
-        findViewById<Button>(R.id.skins_prepare_file).isEnabled = screen.canImport && !screen.busy && screen.handles.isEmpty()
-        findViewById<Button>(R.id.skins_prepare_folder).isEnabled = screen.canImport && !screen.busy && screen.handles.isEmpty()
+        showNotice(screen.notice?.let(::noticeText) ?: screen.message)
+        findViewById<Button>(R.id.skins_import).isEnabled = screen.canImport && !screen.busy && screen.handles.isEmpty()
         findViewById<Button>(R.id.skins_import_all).isEnabled = screen.canImport && !screen.busy && screen.handles.isNotEmpty()
         findViewById<Button>(R.id.skins_cancel).isEnabled = screen.handles.isNotEmpty() || screen.busy || screen.cleanupPending
         findViewById<Button>(R.id.skins_advance_mode).isEnabled = screen.canAdvance && !screen.busy
-        val prepared = findViewById<LinearLayout>(R.id.skins_prepared)
-        prepared.removeAllViews()
-        screen.handles.forEach { handle -> handle.candidates.forEach { candidate ->
-            addText(prepared, "${candidate.name.orEmpty()} · ${candidate.rawPrefixHex}\n${candidate.code} · ${candidate.detail}\n${candidate.candidateKey.orEmpty()}")
-        } }
-        packs.removeAllViews()
-        if (session.canRecover) addButton(getString(R.string.skins_recover_off), !screen.busy) { session.recoverOff() }
-        val state = screen.library
-        val status = findViewById<TextView>(R.id.skins_status)
-        if (state == null) {
-            status.text = getString(R.string.skins_read_error, screen.refreshError?.code?.name ?: "UNKNOWN",
-                screen.refreshError?.detail ?: "Library status has not been read")
-            return
+        findViewById<Button>(R.id.skins_library_details).isEnabled = screen.library != null
+        renderPrepared(screen)
+        renderLibrary(screen)
+    }
+
+    private fun noticeText(notice: SkinNotice): String {
+        val resource = when (notice.kind) {
+            SkinNoticeKind.CLEANUP_PENDING -> R.string.skins_notice_cleanup_pending
+            SkinNoticeKind.PREPARATION_ACTIVE -> R.string.skins_notice_preparation_active
+            SkinNoticeKind.PREPARING -> R.string.skins_notice_preparing
+            SkinNoticeKind.PREPARED -> R.string.skins_notice_prepared
+            SkinNoticeKind.NO_FILES -> R.string.skins_notice_no_files
+            SkinNoticeKind.IMPORT_COMPLETE -> R.string.skins_notice_import_complete
+            SkinNoticeKind.RECOVERED_OFF -> R.string.skins_notice_recovered
+            SkinNoticeKind.MUTATION_UNAVAILABLE -> R.string.skins_notice_mutation_unavailable
+            SkinNoticeKind.OPERATION_COMPLETE -> R.string.skins_notice_operation_complete
+            SkinNoticeKind.PREPARATION_CANCELLED -> R.string.skins_notice_cancelled
+            SkinNoticeKind.PROFILE_CHANGED -> R.string.skins_notice_profile_changed
+            SkinNoticeKind.ERROR -> R.string.skins_notice_error
         }
-        val none = getString(R.string.skins_none)
-        status.text = if (state.simplifiedAuthority) getString(R.string.skins_library_status, state.mode,
-            state.selectedPackId ?: none, state.rotationOrder.joinToString(" → ").ifEmpty { none }, state.runtimeObservation.orEmpty())
-        else getString(R.string.skins_status, state.mode, state.activePackId ?: getString(R.string.skins_vanilla),
-            state.selectedPackId ?: none, state.rotationOrder.joinToString(" → ").ifEmpty { none },
-            state.interlock, state.originalFailure ?: none, state.rollbackFailure ?: none, state.leaseObservation)
-        if (state.packs.isEmpty()) addText(packs, getString(R.string.skins_empty))
-        state.packs.forEach { pack ->
-            addText(packs, getString(R.string.skins_pack_details, pack.name, pack.author, pack.id,
-                pack.candidateKey, pack.treeSha256, pack.importReceiptSha256, yesNo(pack.selected), yesNo(pack.rotationEligible)))
-            val receipt = pack.receipt
-            val error = receipt.error
-            if (error != null) addText(packs, getString(R.string.skins_receipt_error, error.code.name, error.detail))
-            else {
-                addText(packs, getString(R.string.skins_receipt_details, receipt.archiveName ?: none,
-                    receipt.sourceStatus ?: none, receipt.warnings.joinToString("\n").ifEmpty { none }))
-                if (receipt.omittedWarnings > 0) addText(packs, getString(R.string.skins_more_warnings, receipt.omittedWarnings))
-            }
-            val target = SkinReplaceTarget(pack.id, state.generationSha256, pack.treeSha256, pack.importReceiptSha256)
-            addButton(getString(R.string.skins_select, pack.name), screen.canEdit && !screen.busy && !pack.selected) { session.select(target) }
-            addButton(getString(if (pack.rotationEligible) R.string.skins_exclude else R.string.skins_include, pack.name), screen.canEdit && !screen.busy) {
-                session.eligibility(target, !pack.rotationEligible)
-            }
-            if (state.simplifiedAuthority) addButton(getString(R.string.skins_remove, pack.name), screen.canEdit && !screen.busy) {
-                dialog = AlertDialog.Builder(this).setTitle(getString(R.string.skins_remove, pack.name))
-                    .setMessage(R.string.skins_remove_detail)
-                    .setPositiveButton(android.R.string.ok) { _, _ -> if (acceptsCallback()) session.remove(target) }
-                    .setNegativeButton(android.R.string.cancel, null).show()
-            }
-            addButton(getString(R.string.skins_replace, pack.name), screen.canImport && !screen.busy && (pack.selected || state.simplifiedAuthority) && screen.handles.any {
-                it.candidates.any { candidate -> candidate.code == SkinImportCode.OK && candidate.candidateKey != null }
-            }) { chooseSource(screen, pack.name, target) }
+        return getString(resource, *notice.arguments.toTypedArray())
+    }
+
+    private fun showNotice(message: String) {
+        val notice = findViewById<TextView>(R.id.skins_notice)
+        notice.text = message.lineSequence().take(3).joinToString("\n")
+        notice.visibility = if (notice.text.isBlank()) View.GONE else View.VISIBLE
+    }
+
+    private fun renderPrepared(screen: SkinScreenState) {
+        val section = findViewById<View>(R.id.skins_prepared_section)
+        section.visibility = if (screen.handles.isEmpty()) View.GONE else View.VISIBLE
+        prepared.removeAllViews()
+        screen.handles.flatMap { it.candidates }.forEach { candidate ->
+            val row = LayoutInflater.from(this).inflate(R.layout.item_skin_candidate, prepared, false)
+            val ready = candidate.code == SkinImportCode.OK && candidate.candidateKey != null
+            val name = candidate.name?.takeIf(String::isNotBlank) ?: getString(R.string.skins_candidate_unnamed)
+            row.findViewById<TextView>(R.id.skin_candidate_summary).text = getString(
+                if (ready) R.string.skins_candidate_ready else R.string.skins_candidate_issue,
+                name,
+            )
+            row.findViewById<Button>(R.id.skin_candidate_details).setOnClickListener { showCandidateDetails(name, candidate) }
+            prepared.addView(row)
         }
     }
+
+    private fun showCandidateDetails(name: String, candidate: CandidatePreparationSummary) {
+        if (!acceptsCallback()) return
+        dialog = AlertDialog.Builder(this)
+            .setTitle(name)
+            .setMessage(getString(
+                R.string.skins_candidate_details,
+                name,
+                candidate.code.name,
+                candidate.candidateKey ?: getString(R.string.skins_none),
+                candidate.rawPrefixHex,
+                candidate.detail,
+            ))
+            .setPositiveButton(R.string.skins_close, null)
+            .show()
+    }
+
+    private fun renderLibrary(screen: SkinScreenState) {
+        packs.removeAllViews()
+        val state = screen.library
+        if (state == null) {
+            findViewById<TextView>(R.id.skins_requested).text = getString(
+                R.string.skins_read_error,
+                screen.refreshError?.code?.name ?: getString(R.string.skins_none),
+                screen.refreshError?.detail ?: getString(R.string.skins_loading),
+            )
+            findViewById<TextView>(R.id.skins_runtime).setText(R.string.skins_runtime_unavailable)
+            findViewById<View>(R.id.skins_empty).visibility = View.GONE
+            return
+        }
+        val library = SkinPresentationMapper.library(state)
+        findViewById<TextView>(R.id.skins_requested).text = getString(
+            R.string.skins_requested,
+            library.requestedMode,
+            library.selectedPackName ?: getString(R.string.skins_none),
+        )
+        findViewById<TextView>(R.id.skins_runtime).text = when (library.runtime.kind) {
+            SkinRuntimeKind.NONE -> getString(R.string.skins_runtime_none)
+            SkinRuntimeKind.UNAVAILABLE -> getString(R.string.skins_runtime_unavailable)
+            SkinRuntimeKind.REPORT -> getString(
+                if (library.runtime.olderConfiguration) R.string.skins_runtime_report_old else R.string.skins_runtime_report,
+                library.runtime.status,
+            )
+        }
+        findViewById<View>(R.id.skins_empty).visibility = if (library.packs.isEmpty()) View.VISIBLE else View.GONE
+        library.packs.forEach { addPack(screen, state, it) }
+    }
+
+    private fun addPack(screen: SkinScreenState, state: SkinLibraryViewState, item: SkinPackPresentation) {
+        val row = LayoutInflater.from(this).inflate(R.layout.item_skin_pack, packs, false)
+        val pack = item.row
+        row.findViewById<TextView>(R.id.skin_pack_name).text = pack.name
+        row.findViewById<TextView>(R.id.skin_pack_author).text = getString(
+            R.string.skins_pack_author,
+            pack.author.ifBlank { getString(R.string.skins_unknown) },
+        )
+        row.findViewById<TextView>(R.id.skin_pack_state).setText(when (item.badge) {
+            SkinPackBadge.INSTALLED -> R.string.skins_badge_installed
+            SkinPackBadge.ROTATION_INCLUDED -> R.string.skins_badge_rotation
+            SkinPackBadge.SELECTED_OFF -> R.string.skins_badge_selected_off
+            SkinPackBadge.ENABLED -> R.string.skins_badge_enabled
+            SkinPackBadge.ROTATING -> R.string.skins_badge_rotating
+            SkinPackBadge.PENDING -> R.string.skins_badge_pending
+        })
+        row.findViewById<View>(R.id.skin_pack_delete_reason).visibility =
+            if (item.deleteBlock == null) View.GONE else View.VISIBLE
+        val target = SkinReplaceTarget(pack.id, state.generationSha256, pack.treeSha256, pack.importReceiptSha256)
+        row.findViewById<Button>(R.id.skin_pack_toggle).apply {
+            setText(if (item.primaryAction == SkinPackPrimaryAction.DISABLE) R.string.skins_disable else R.string.skins_enable)
+            isEnabled = screen.canEdit && !screen.busy && state.simplifiedAuthority
+            setOnClickListener {
+                if (!acceptsCallback()) return@setOnClickListener
+                if (item.primaryAction == SkinPackPrimaryAction.DISABLE) session.disable(target) else session.enable(target)
+            }
+        }
+        row.findViewById<Button>(R.id.skin_pack_delete).apply {
+            isEnabled = screen.canEdit && !screen.busy && state.simplifiedAuthority && item.deleteBlock == null
+            setOnClickListener { confirmDelete(pack.name, target) }
+        }
+        row.findViewById<Button>(R.id.skin_pack_details).setOnClickListener { showPackDetails(screen, state, item, target) }
+        packs.addView(row)
+    }
+
+    private fun confirmDelete(name: String, target: SkinReplaceTarget) {
+        if (!acceptsCallback()) return
+        dialog = AlertDialog.Builder(this)
+            .setTitle(getString(R.string.skins_delete_title, name))
+            .setMessage(R.string.skins_delete_detail)
+            .setPositiveButton(R.string.skins_delete) { _, _ -> if (acceptsCallback()) session.remove(target) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showPackDetails(
+        screen: SkinScreenState,
+        state: SkinLibraryViewState,
+        item: SkinPackPresentation,
+        target: SkinReplaceTarget,
+    ) {
+        if (!acceptsCallback()) return
+        val pack = item.row
+        val receipt = pack.receipt
+        val none = getString(R.string.skins_none)
+        val receiptText = receipt.error?.let { getString(R.string.skins_receipt_error, it.code.name, it.detail) }
+            ?: getString(
+                R.string.skins_receipt_details,
+                receipt.archiveName ?: none,
+                receipt.sourceStatus ?: none,
+                receipt.warnings.joinToString("\n").ifEmpty { none },
+            ) + if (receipt.omittedWarnings > 0) "\n${getString(R.string.skins_more_warnings, receipt.omittedWarnings)}" else ""
+        val detail = getString(
+            R.string.skins_pack_details,
+            pack.id,
+            pack.candidateKey,
+            pack.treeSha256,
+            pack.importReceiptSha256,
+            yesNo(pack.selected),
+            yesNo(pack.id == state.pendingPackId),
+            yesNo(pack.rotationEligible),
+            receiptText,
+        )
+        val canEdit = screen.canEdit && !screen.busy
+        val canReplace = screen.canImport && !screen.busy && (pack.selected || state.simplifiedAuthority) && readySources(screen).isNotEmpty()
+        val shown = AlertDialog.Builder(this)
+            .setTitle(pack.name)
+            .setMessage(detail)
+            .setNeutralButton(if (pack.rotationEligible) R.string.skins_rotation_exclude else R.string.skins_rotation_include) { _, _ ->
+                if (acceptsCallback()) session.eligibility(target, !pack.rotationEligible)
+            }
+            .setPositiveButton(R.string.skins_replace) { _, _ -> if (acceptsCallback()) chooseSource(screen, pack.name, target) }
+            .setNegativeButton(R.string.skins_close, null)
+            .show()
+        shown.getButton(AlertDialog.BUTTON_NEUTRAL).isEnabled = canEdit
+        shown.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = canReplace
+        dialog = shown
+    }
+
+    private fun showLibraryDetails(screen: SkinScreenState) {
+        if (!acceptsCallback()) return
+        val state = screen.library ?: return
+        val none = getString(R.string.skins_none)
+        val message = getString(
+            R.string.skins_library_details,
+            state.mode,
+            state.selectedPackId ?: none,
+            state.pendingPackId ?: none,
+            state.rotationOrder.joinToString(" → ").ifEmpty { none },
+            state.runtimeObservation ?: none,
+            state.interlock,
+            state.originalFailure ?: none,
+            state.rollbackFailure ?: none,
+            state.leaseObservation,
+        )
+        val builder = AlertDialog.Builder(this)
+            .setTitle(R.string.skins_library_details_title)
+            .setMessage(message)
+            .setNeutralButton(R.string.skins_refresh) { _, _ -> if (acceptsCallback()) session.refresh() }
+            .setNegativeButton(R.string.skins_close, null)
+        if (session.canRecover) builder.setPositiveButton(R.string.skins_recover_off) { _, _ ->
+            if (acceptsCallback()) session.recoverOff()
+        }
+        dialog = builder.show()
+    }
+
+    private fun readySources(screen: SkinScreenState) = screen.handles.flatMap { handle ->
+        handle.candidates.filter { it.code == SkinImportCode.OK && it.candidateKey != null }.map { handle.handleId to it }
+    }
+
     private fun chooseSource(screen: SkinScreenState, targetName: String, target: SkinReplaceTarget) {
         val preparationOwner = screen.preparationOwner ?: return
-        val sources = screen.handles.flatMap { handle -> handle.candidates.filter {
-            it.code == SkinImportCode.OK && it.candidateKey != null
-        }.map { handle.handleId to it } }
+        val sources = readySources(screen)
         if (sources.isEmpty()) return
         dialog = AlertDialog.Builder(this).setTitle(R.string.skins_choose_source)
             .setItems(sources.map { "${it.second.name} · ${it.second.rawPrefixHex} · ${it.second.candidateKey}" }.toTypedArray()) { _, index ->
@@ -160,27 +338,20 @@ class SkinsActivity : Activity() {
                 dialog = AlertDialog.Builder(this).setTitle(R.string.skins_confirm)
                     .setMessage(getString(R.string.skins_confirm_replace, targetName, source.name,
                         source.candidateKey, target.generationSha256, target.treeSha256, target.receiptSha256))
-                    .setPositiveButton(R.string.skins_confirm) { _, _ -> if (acceptsCallback()) session.replace(handle, requireNotNull(source.candidateKey), target) }
+                    .setPositiveButton(R.string.skins_confirm) { _, _ ->
+                        if (acceptsCallback()) session.replace(handle, requireNotNull(source.candidateKey), target)
+                    }
                     .setNegativeButton(android.R.string.cancel) { _, _ -> if (acceptsCallback()) session.cancel(preparationOwner) }
-                    .setOnCancelListener { if (acceptsCallback()) session.cancel(preparationOwner) }.show()
+                    .setOnCancelListener { if (acceptsCallback()) session.cancel(preparationOwner) }
+                    .show()
             }
             .setNegativeButton(android.R.string.cancel) { _, _ -> if (acceptsCallback()) session.cancel(preparationOwner) }
-            .setOnCancelListener { if (acceptsCallback()) session.cancel(preparationOwner) }.show()
+            .setOnCancelListener { if (acceptsCallback()) session.cancel(preparationOwner) }
+            .show()
     }
+
     private fun yesNo(value: Boolean) = getString(if (value) R.string.skins_yes else R.string.skins_no)
-    private fun addButton(label: String, enabled: Boolean, action: () -> Unit) {
-        packs.addView(Button(this).apply {
-            text = label; isEnabled = enabled; minHeight = (48 * resources.displayMetrics.density).toInt()
-            layoutParams = LinearLayout.LayoutParams(-1, -2)
-            setOnClickListener { if (sameProfile()) action() }
-        })
-    }
-    private fun addText(parent: LinearLayout, value: String) {
-        parent.addView(TextView(this).apply {
-            text = value; textSize = 15f; setTextColor(getColor(R.color.text_primary)); setTextIsSelectable(true)
-            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = (16 * resources.displayMetrics.density).toInt() }
-        })
-    }
+
     companion object {
         private const val FILE = 4501
         private const val FOLDER = 4502

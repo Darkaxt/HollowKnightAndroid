@@ -8,6 +8,8 @@ import java.io.File
 internal interface SkinLibraryMutations {
     val available: Boolean
     fun select(target: SkinReplaceTarget): SkinResult<Unit>
+    fun enable(target: SkinReplaceTarget): SkinResult<Unit>
+    fun disable(target: SkinReplaceTarget): SkinResult<Unit>
     fun eligibility(target: SkinReplaceTarget, eligible: Boolean): SkinResult<Unit>
     fun remove(target: SkinReplaceTarget): SkinResult<Unit> = SkinResult.Error(SkinImportCode.DURABILITY_UNAVAILABLE, "Removal unavailable")
 }
@@ -15,6 +17,8 @@ internal interface SkinLibraryMutations {
 internal object UnavailableSkinLibraryMutations : SkinLibraryMutations {
     override val available = false
     override fun select(target: SkinReplaceTarget): SkinResult<Unit> = unavailable()
+    override fun enable(target: SkinReplaceTarget): SkinResult<Unit> = unavailable()
+    override fun disable(target: SkinReplaceTarget): SkinResult<Unit> = unavailable()
     override fun eligibility(target: SkinReplaceTarget, eligible: Boolean): SkinResult<Unit> = unavailable()
     private fun unavailable() = SkinResult.Error(SkinImportCode.DURABILITY_UNAVAILABLE,
         "Library mutations are unavailable until production storage binding is approved")
@@ -49,6 +53,8 @@ internal class SkinLibraryUiServices(
             val mutations = object : SkinLibraryMutations {
                 override val available = true
                 override fun select(target: SkinReplaceTarget) = services.mutations.select(target)
+                override fun enable(target: SkinReplaceTarget) = services.mutations.enable(target)
+                override fun disable(target: SkinReplaceTarget) = services.mutations.disable(target)
                 override fun eligibility(target: SkinReplaceTarget, eligible: Boolean) = services.mutations.eligibility(target, eligible)
                 override fun remove(target: SkinReplaceTarget) = services.mutations.remove(target)
             }
@@ -65,6 +71,8 @@ internal class SkinLibraryUiServices(
                 object : SkinLibraryMutations {
                     override val available = true
                     override fun select(target: SkinReplaceTarget) = store.select(target.id)
+                    override fun enable(target: SkinReplaceTarget) = store.enable(target.id)
+                    override fun disable(target: SkinReplaceTarget) = store.disable(target.id)
                     override fun eligibility(target: SkinReplaceTarget, eligible: Boolean) = store.setEligibility(target.id, eligible)
                     override fun remove(target: SkinReplaceTarget) = store.remove(target.id)
                 }, SkinModeAdvancePort { store.advanceMode() }, modeAvailable = true, simplifiedAuthority = true, recover = store::recoverOff,

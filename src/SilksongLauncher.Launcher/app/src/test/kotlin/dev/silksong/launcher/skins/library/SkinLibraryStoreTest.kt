@@ -2,8 +2,14 @@ package dev.silksong.launcher.skins.library
 
 import dev.silksong.launcher.skins.catalog.SkinCatalogPaths
 import dev.silksong.launcher.skins.catalog.SkinCatalogProfiles
+import dev.silksong.launcher.skins.contracts.DecodeResult
 import dev.silksong.launcher.skins.contracts.SkinResult
+import dev.silksong.launcher.skins.fixtures.FastSkinFileSystem
 import dev.silksong.launcher.skins.fixtures.PinnedCatalogFixture
+import dev.silksong.launcher.skins.fixtures.RawZipFixture
+import dev.silksong.launcher.skins.fixtures.TinyPngFixture
+import dev.silksong.launcher.skins.importing.PngDecoder
+import dev.silksong.launcher.skins.importing.SkinImportInput
 import dev.silksong.launcher.skins.storage.SkinPaths
 import org.junit.Assert.*
 import org.junit.Rule
@@ -18,6 +24,13 @@ class SkinLibraryStoreTest {
     private fun store(): SkinLibraryStore {
         PinnedCatalogFixture.load()
         return SkinLibraryStore(SkinPaths(File(temporary.root, "profiles/hollow-knight").apply { mkdirs() }))
+    }
+    private fun fastStore(): SkinLibraryStore {
+        PinnedCatalogFixture.load()
+        return SkinLibraryStore(
+            SkinPaths(File(temporary.root, "profiles/hollow-knight").apply { mkdirs() }),
+            FastSkinFileSystem(),
+        )
     }
     private fun silksongStore(): SkinLibraryStore {
         val profile = SkinCatalogProfiles.Silksong
@@ -208,6 +221,93 @@ class SkinLibraryStoreTest {
         val packs = listOf("a","b","c").map { LibraryPack(it,it,"Unknown",it.repeat(64),it.repeat(64),it.repeat(64)) }
         File(store.paths.root,"library.json").writeBytes(SkinLibraryCodec.encode(SkinLibraryDocument(LibraryMode.ROTATE,selected,packs,ring)))
         return store
+    }
+
+    @Test fun `direct enable verifies selects and turns OFF to ON in one mutation`() {
+        val store = fastStore()
+        val pack = importPack(store, "Azure")
+
+        assertTrue(store.enable(pack.id) is SkinResult.Ok)
+
+        val enabled = store.read().required()
+        assertEquals(LibraryMode.ON, enabled.mode)
+        assertEquals(pack.id, enabled.selectedPackId)
+        assertNull(enabled.rotationRun)
+    }
+
+    @Test fun `direct enable preserves ROTATE while renewing its state atomically`() {
+        val store = fastStore()
+        val first = importPack(store, "First")
+        val second = importPack(store, "Second")
+        val oldRun = "1".repeat(32)
+        File(store.paths.root, "library.json").writeBytes(SkinLibraryCodec.encode(SkinLibraryDocument(
+            mode = LibraryMode.ROTATE,
+            selectedPackId = first.id,
+            packs = listOf(first, second),
+            eligiblePackIds = listOf(first.id, second.id),
+            rotationRun = oldRun,
+            lastDeath = 4,
+            pendingPackId = second.id,
+            queuedDeathOccurrences = listOf(5),
+        )))
+
+        assertTrue(store.enable(second.id) is SkinResult.Ok)
+
+        val enabled = store.read().required()
+        assertEquals(LibraryMode.ROTATE, enabled.mode)
+        assertEquals(second.id, enabled.selectedPackId)
+        assertEquals(listOf(first.id, second.id), enabled.eligiblePackIds)
+        assertNotEquals(oldRun, enabled.rotationRun)
+        assertEquals(0L, enabled.lastDeath)
+        assertNull(enabled.pendingPackId)
+        assertTrue(enabled.queuedDeathOccurrences.isEmpty())
+    }
+
+    @Test fun `direct disable requires selected active pack and retains selection and rotation order`() {
+        val store = fastStore()
+        val first = importPack(store, "First")
+        val second = importPack(store, "Second")
+        File(store.paths.root, "library.json").writeBytes(SkinLibraryCodec.encode(SkinLibraryDocument(
+            mode = LibraryMode.ROTATE,
+            selectedPackId = first.id,
+            packs = listOf(first, second),
+            eligiblePackIds = listOf(second.id, first.id),
+            rotationRun = "2".repeat(32),
+        )))
+
+        assertTrue(store.disable(second.id) is SkinResult.Error)
+        assertTrue(store.disable(first.id) is SkinResult.Ok)
+
+        val disabled = store.read().required()
+        assertEquals(LibraryMode.OFF, disabled.mode)
+        assertEquals(first.id, disabled.selectedPackId)
+        assertEquals(listOf(second.id, first.id), disabled.eligiblePackIds)
+        assertNull(disabled.rotationRun)
+        assertTrue(store.disable(first.id) is SkinResult.Error)
+    }
+
+    @Test fun `failed direct enable leaves the prior authority unchanged`() {
+        val store = fastStore()
+        store.read().required()
+        val unverified = LibraryPack("missing", "Missing", "Unknown", "a".repeat(64), "b".repeat(64), "c".repeat(64))
+        File(store.paths.root, "library.json").writeBytes(SkinLibraryCodec.encode(SkinLibraryDocument(packs = listOf(unverified))))
+        val before = File(store.paths.root, "library.json").readBytes().toList()
+
+        assertTrue(store.enable(unverified.id) is SkinResult.Error)
+        assertEquals(before, File(store.paths.root, "library.json").readBytes().toList())
+    }
+
+    private fun importPack(store: SkinLibraryStore, name: String): LibraryPack {
+        val decoder = PngDecoder { _, info ->
+            SkinResult.Ok(DecodeResult(info.width, info.height, info.width.toLong() * info.height))
+        }
+        val archive = RawZipFixture.build(listOf(
+            RawZipFixture.Entry("$name/Knight.png".toByteArray(), TinyPngFixture.rgba()),
+        )).bytes
+        val importer = SkinLibraryImporter(store, decoder)
+        val handle = (importer.prepare(SkinImportInput.SelectedFile("$name.zip") { archive.inputStream() }) as SkinResult.Ok).value
+        assertTrue(importer.commitImport(handle.handleId) is SkinResult.Ok)
+        return store.read().required().packs.single { it.name == name }
     }
 
     @Test fun `missing runtime observation instruction names the owning profile`() {

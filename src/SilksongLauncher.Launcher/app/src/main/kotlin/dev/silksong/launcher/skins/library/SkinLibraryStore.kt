@@ -87,6 +87,19 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
         requireVerified(pack)
         renewRotation(value.copy(selectedPackId = id))
     }
+    fun enable(id: String): SkinResult<Unit> = mutate { value ->
+        val pack = requireNotNull(value.packs.singleOrNull { it.id == id }) { "Pack was removed; refresh and retry" }
+        requireVerified(pack)
+        renewRotation(value.copy(
+            mode = if (value.mode == LibraryMode.OFF) LibraryMode.ON else value.mode,
+            selectedPackId = id,
+        ))
+    }
+    fun disable(id: String): SkinResult<Unit> = mutate { value ->
+        require(value.packs.any { it.id == id }) { "Pack was removed; refresh and retry" }
+        require(value.selectedPackId == id && value.mode != LibraryMode.OFF) { "Only the selected enabled skin can be disabled" }
+        renewRotation(value.copy(mode = LibraryMode.OFF))
+    }
     fun setEligibility(id: String, eligible: Boolean): SkinResult<Unit> = mutate { value ->
         require(value.packs.any { it.id == id }) { "Pack was removed; refresh and retry" }
         value.copy(eligiblePackIds = if (eligible) (value.eligiblePackIds + id).distinct() else value.eligiblePackIds - id)
