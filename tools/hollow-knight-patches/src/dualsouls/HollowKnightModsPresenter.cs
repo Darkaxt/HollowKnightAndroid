@@ -69,8 +69,9 @@ public partial class HKDualScreen
         new List<TweakPresenterRect>();
 
     Transform gearT;
-    Renderer gearSR;
-    ModsLabel modsEntryText;
+    SpriteRenderer gearSR;
+    Texture2D gearTex;
+    Sprite gearSprite;
     Vector3 hudGearAnchor;
     float hudGearH;
     bool hudGearOk;
@@ -146,24 +147,60 @@ public partial class HKDualScreen
                 highestChromeOrder = renderer.sortingOrder;
         modsSortingOrder = highestChromeOrder + 10;
 
-        Component donor = FindModsTextDonor();
-        if (donor == null) return;
-        modsEntryText = BuildModsEntryControl(donor);
-        if (modsEntryText == null) return;
-        SetLayerRecursive(modsEntryText.GameObject.transform, ATTR_LAYER);
-        SetModsText(modsEntryText, "MODS", Color.white);
-        gearT = modsEntryText.GameObject.transform;
-        gearSR = modsEntryText.Renderer;
+        gearTex = Own(MakeGearTex(48));
+        gearSprite = Own(Sprite.Create(
+            gearTex,
+            new Rect(0f, 0f, 48f, 48f),
+            new Vector2(0.5f, 0.5f),
+            100f));
+        var gear = new GameObject("HKDS Mods Gear");
+        gear.transform.SetParent(frameRoot.transform, false);
+        SetLayerRecursive(gear.transform, ATTR_LAYER);
+        gearSR = gear.AddComponent<SpriteRenderer>();
+        gearSR.sprite = gearSprite;
         gearSR.sortingLayerName = "Inventory";
         gearSR.sortingOrder = modsSortingOrder;
         gearSR.enabled = false;
+        gearT = gear.transform;
     }
 
-    ModsLabel BuildModsEntryControl(Component donor)
+    static Texture2D MakeGearTex(int size)
     {
-        GameObject entryObject;
-        return BuildModsLabel(
-            donor, "HKDS Native Mods Entry", frameRoot.transform, out entryObject);
+        var texture = new Texture2D(
+            size, size, TextureFormat.RGBA32, false)
+        {
+            filterMode = FilterMode.Bilinear,
+            wrapMode = TextureWrapMode.Clamp,
+        };
+        var pixels = new Color32[size * size];
+        float center = (size - 1) * 0.5f;
+        float outerRadius = size * 0.34f;
+        float innerRadius = size * 0.22f;
+        float holeRadius = size * 0.10f;
+        float toothLength = size * 0.115f;
+        var white = new Color32(255, 255, 255, 235);
+        var clear = new Color32(0, 0, 0, 0);
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x - center;
+                float dy = y - center;
+                float distance = Mathf.Sqrt(dx * dx + dy * dy);
+                bool enabled = distance <= outerRadius && distance >= holeRadius;
+                if (!enabled && distance < outerRadius + toothLength &&
+                    distance > innerRadius)
+                {
+                    float angle = Mathf.Atan2(dy, dx);
+                    float sector = Mathf.Repeat(
+                        angle / (Mathf.PI * 2f) * 8f, 1f);
+                    if (sector < 0.30f)
+                        enabled = distance <= outerRadius + toothLength;
+                }
+                pixels[y * size + x] = enabled ? white : clear;
+            }
+        texture.SetPixels32(pixels);
+        texture.Apply(false);
+        return texture;
     }
 
     void PositionGear(float scale, float aspect, float tabY)
@@ -1043,7 +1080,8 @@ public partial class HKDualScreen
     {
         gearT = null;
         gearSR = null;
-        modsEntryText = null;
+        gearTex = null;
+        gearSprite = null;
         modsSortingOrder = 0;
         hudGearOk = false;
         hudGearH = 0f;
@@ -1094,9 +1132,12 @@ public partial class HKDualScreen
         modsListHit = default(TweakPresenterRect);
         modsPaint.Invalidate();
         if (gearT != null) Destroy(gearT.gameObject);
+        if (gearSprite != null) Destroy(gearSprite);
+        if (gearTex != null) Destroy(gearTex);
         gearT = null;
         gearSR = null;
-        modsEntryText = null;
+        gearTex = null;
+        gearSprite = null;
         modsSortingOrder = 0;
         hudGearOk = false;
         hudGearH = 0f;

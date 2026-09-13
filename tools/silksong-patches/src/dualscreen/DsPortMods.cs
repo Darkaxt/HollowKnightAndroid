@@ -1,6 +1,6 @@
 // DsPortMods — oracle-shaped 65/35 Mods presentation for the process-owned
-// Silksong tweak session. Text and ornaments come only from validated resident
-// InventoryPane UI; no synthetic artwork or gameplay capability lives here.
+// Silksong tweak session. Text and ornaments come from validated resident
+// InventoryPane UI; the Mods entry uses the oracle's procedural cog.
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System;
@@ -26,6 +26,7 @@ public sealed class DsPortMods : IDisposable
     readonly List<NativeLabel> _rowValueLabels = new List<NativeLabel>();
     readonly List<NativeLabel> _groupLabels = new List<NativeLabel>();
     readonly List<Rect> _rowHits = new List<Rect>();
+    readonly Vector3[] _contentCorners = new Vector3[4];
     readonly TweakPresenterPaintInvalidation _paint =
         new TweakPresenterPaintInvalidation();
 
@@ -33,7 +34,9 @@ public sealed class DsPortMods : IDisposable
     TweakMenuModel _menu;
     RectTransform _boundAnchor;
     GameObject _gear;
-    NativeLabel _gearLabel;
+    SpriteRenderer _gearRenderer;
+    Texture2D _gearTexture;
+    Sprite _gearSprite;
     RectTransform _modal;
     DsRendererMaskCover _ground;
     NativeLabel _detailTitle;
@@ -141,7 +144,7 @@ public sealed class DsPortMods : IDisposable
         if (gesture.Type == DsGestureType.Drag && _listHit.Contains(point))
         {
             float oldScroll = _listScroll;
-            float height = DsPresentation.PanelH * 0.61f;
+            float height = _modal != null ? _modal.rect.height : 0f;
             _listScroll += gesture.Delta.y;
             _listScroll = TweakPresenterListLayout.ClampScroll(
                 _listScroll,
@@ -216,8 +219,12 @@ public sealed class DsPortMods : IDisposable
         _frame.SetModsOpen(false);
         DestroyModal();
         if (_gear != null) UnityEngine.Object.Destroy(_gear);
+        if (_gearSprite != null) UnityEngine.Object.Destroy(_gearSprite);
+        if (_gearTexture != null) UnityEngine.Object.Destroy(_gearTexture);
         _gear = null;
-        _gearLabel = null;
+        _gearRenderer = null;
+        _gearSprite = null;
+        _gearTexture = null;
         _boundAnchor = null;
         _gearGeometryStamp = long.MinValue;
         _paint.Invalidate();
@@ -245,51 +252,148 @@ public sealed class DsPortMods : IDisposable
         RectTransform anchor = _frame.ModsAnchor;
         if (anchor == null) return;
         _boundAnchor = anchor;
-        _gear = _frame.CloneModsLabel(anchor, "DsPortModsNativeEntry");
-        if (_gear == null) return;
-        PaneText text = _gear.GetComponentInChildren<PaneText>(true);
-        Renderer renderer = _gear.GetComponentInChildren<Renderer>(true);
-        if (text == null || renderer == null)
-        {
-            UnityEngine.Object.Destroy(_gear);
-            _gear = null;
-            return;
-        }
-        renderer.sortingOrder = DsPortLayers.FRAME_RENDER_ORDER + 100;
-        _gearLabel = new NativeLabel { Root = _gear, Text = text, Renderer = renderer };
-        SetLabelText(_gearLabel, "MODS", Color.white);
+        _gearTexture = MakeGearTex(48);
+        _gearSprite = Sprite.Create(
+            _gearTexture,
+            new Rect(0f, 0f, 48f, 48f),
+            new Vector2(0.5f, 0.5f),
+            100f);
+        _gear = new GameObject("DsPortModsGear");
+        _gear.layer = DsPresentation.CONTENT_LAYER;
+        _gear.transform.SetParent(anchor, false);
+        _gearRenderer = _gear.AddComponent<SpriteRenderer>();
+        _gearRenderer.sprite = _gearSprite;
+        _gearRenderer.color = Color.white;
+        _gearRenderer.sortingOrder = DsPortLayers.FRAME_RENDER_ORDER + 100;
         RefreshGearGeometry();
         _gearGeometryStamp = ComputeGeometryPaintStamp();
     }
 
+    static Texture2D MakeGearTex(int size)
+    {
+        var texture = new Texture2D(
+            size, size, TextureFormat.RGBA32, false)
+        {
+            filterMode = FilterMode.Bilinear,
+            wrapMode = TextureWrapMode.Clamp,
+        };
+        var pixels = new Color32[size * size];
+        float center = (size - 1) * 0.5f;
+        float outerRadius = size * 0.34f;
+        float innerRadius = size * 0.22f;
+        float holeRadius = size * 0.10f;
+        float toothLength = size * 0.115f;
+        var white = new Color32(255, 255, 255, 235);
+        var clear = new Color32(0, 0, 0, 0);
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x - center;
+                float dy = y - center;
+                float distance = Mathf.Sqrt(dx * dx + dy * dy);
+                bool enabled = distance <= outerRadius && distance >= holeRadius;
+                if (!enabled && distance < outerRadius + toothLength &&
+                    distance > innerRadius)
+                {
+                    float angle = Mathf.Atan2(dy, dx);
+                    float sector = Mathf.Repeat(
+                        angle / (Mathf.PI * 2f) * 8f, 1f);
+                    if (sector < 0.30f)
+                        enabled = distance <= outerRadius + toothLength;
+                }
+                pixels[y * size + x] = enabled ? white : clear;
+            }
+        texture.SetPixels32(pixels);
+        texture.Apply(false);
+        return texture;
+    }
+
     void RefreshGearGeometry()
     {
-        RectTransform anchor = _frame.ModsAnchor;
-        if (_gearLabel == null || anchor == null) return;
+        if (_gearRenderer == null || _frame.ModsAnchor == null) return;
         float panelW = Mathf.Max(1f, DsPresentation.PanelW);
         float panelH = Mathf.Max(1f, DsPresentation.PanelH);
-        PlaceLabelCenter(_gearLabel, anchor, Vector2.zero,
-            panelH * 0.034f, panelW * 0.085f);
+        _gear.transform.localPosition = Vector3.zero;
+        _gear.transform.localRotation = Quaternion.identity;
+        _gear.transform.localScale = Vector3.one;
+        float height = panelH * 0.034f;
+        float scale = height / Mathf.Max(0.001f, _gearSprite.bounds.size.y);
+        _gear.transform.localScale = new Vector3(scale, scale, 1f);
         _gearHit = new Rect(panelW * 0.84f, panelH * 0.76f,
                             panelW * 0.14f, panelH * 0.22f);
     }
 
+    bool TryGetContentPanelRect(out Rect panelRect)
+    {
+        panelRect = new Rect();
+        RectTransform content = _frame.ContentMask;
+        RectTransform panel = content != null ? content.parent as RectTransform : null;
+        if (content == null || panel == null) return false;
+
+        content.GetWorldCorners(_contentCorners);
+        float minX = float.PositiveInfinity;
+        float minY = float.PositiveInfinity;
+        float maxX = float.NegativeInfinity;
+        float maxY = float.NegativeInfinity;
+        for (int i = 0; i < _contentCorners.Length; i++)
+        {
+            Vector3 point = panel.InverseTransformPoint(_contentCorners[i]);
+            float x = point.x - panel.rect.xMin;
+            float y = point.y - panel.rect.yMin;
+            minX = Mathf.Min(minX, x);
+            minY = Mathf.Min(minY, y);
+            maxX = Mathf.Max(maxX, x);
+            maxY = Mathf.Max(maxY, y);
+        }
+        panelRect = Rect.MinMaxRect(minX, minY, maxX, maxY);
+        return panelRect.width > 0.001f && panelRect.height > 0.001f;
+    }
+
+    bool TryMapModalRectToPanel(Rect localRect, out Rect panelRect)
+    {
+        panelRect = new Rect();
+        RectTransform content = _frame.ContentMask;
+        RectTransform panel = content != null ? content.parent as RectTransform : null;
+        if (_modal == null || panel == null) return false;
+
+        _contentCorners[0] = new Vector3(localRect.xMin, localRect.yMin, 0f);
+        _contentCorners[1] = new Vector3(localRect.xMin, localRect.yMax, 0f);
+        _contentCorners[2] = new Vector3(localRect.xMax, localRect.yMax, 0f);
+        _contentCorners[3] = new Vector3(localRect.xMax, localRect.yMin, 0f);
+        float minX = float.PositiveInfinity;
+        float minY = float.PositiveInfinity;
+        float maxX = float.NegativeInfinity;
+        float maxY = float.NegativeInfinity;
+        for (int i = 0; i < _contentCorners.Length; i++)
+        {
+            Vector3 world = _modal.TransformPoint(_contentCorners[i]);
+            Vector3 point = panel.InverseTransformPoint(world);
+            float x = point.x - panel.rect.xMin;
+            float y = point.y - panel.rect.yMin;
+            minX = Mathf.Min(minX, x);
+            minY = Mathf.Min(minY, y);
+            maxX = Mathf.Max(maxX, x);
+            maxY = Mathf.Max(maxY, y);
+        }
+        panelRect = Rect.MinMaxRect(minX, minY, maxX, maxY);
+        return panelRect.width > 0.001f && panelRect.height > 0.001f;
+    }
+
     long ComputeGeometryPaintStamp()
     {
-        float panelW = Mathf.Max(1f, DsPresentation.PanelW);
-        float panelH = Mathf.Max(1f, DsPresentation.PanelH);
+        Rect contentPanel;
+        if (!TryGetContentPanelRect(out contentPanel)) return long.MinValue;
+        RectTransform content = _frame.ContentMask;
         Rect anchor = _frame.ModsAnchor != null ? _frame.ModsAnchor.rect : new Rect();
-        Rect content = _frame.ContentMask != null ? _frame.ContentMask.rect : new Rect();
-        Vector3 scale = _frame.ContentMask != null
-            ? _frame.ContentMask.lossyScale
-            : Vector3.one;
+        Rect local = content.rect;
         long geometry = TweakPresenterGeometryPaintStamp.Compute(
-            -panelW * 0.5f, panelW * 0.5f,
-            -panelH * 0.5f, panelH * 0.5f,
-            scale.x,
+            contentPanel.xMin, contentPanel.xMax,
+            contentPanel.yMin, contentPanel.yMax,
+            content.lossyScale.y,
             anchor.x, anchor.y, anchor.width, anchor.height,
-            content.x, content.y, scale.z,
-            content.width, content.height);
+            content.anchorMin.y, content.anchorMax.y,
+            content.anchoredPosition.y,
+            local.width, local.height);
         return TweakPresenterGeometryPaintStamp.WithLayoutRevision(
             geometry, _frame.LayoutRevision);
     }
@@ -306,9 +410,7 @@ public sealed class DsPortMods : IDisposable
         _ground = new DsRendererMaskCover(
             _modal, "DsPortModsGround", DsPresentation.CONTENT_LAYER,
             DsPortLayers.PAGE_RENDER_ORDER - 10);
-        _ground.SetRect(Rect.MinMaxRect(
-            -DsPresentation.PanelW * 0.46f, -DsPresentation.PanelH * 0.305f,
-             DsPresentation.PanelW * 0.46f,  DsPresentation.PanelH * 0.305f));
+        _ground.SetRect(_modal.rect);
 
         _topOrnament = _frame.CloneModsOrnament(_modal, "DsPortModsTopFleur", true);
         _bottomOrnament = _frame.CloneModsOrnament(_modal, "DsPortModsBottomFleur", false);
@@ -361,13 +463,13 @@ public sealed class DsPortMods : IDisposable
 
     void Paint()
     {
-        float panelW = Mathf.Max(1f, DsPresentation.PanelW);
-        float panelH = Mathf.Max(1f, DsPresentation.PanelH);
-        float width = panelW * 0.92f;
-        float height = panelH * 0.61f;
-        float left = -width * 0.5f;
-        float bottom = -height * 0.5f;
-        float top = height * 0.5f;
+        if (_modal == null) return;
+        Rect modalRect = _modal.rect;
+        float width = modalRect.width;
+        float height = modalRect.height;
+        float left = modalRect.xMin;
+        float bottom = modalRect.yMin;
+        float top = modalRect.yMax;
         float split = left + width * TweakPresenterListLayout.LeftFraction;
         float listLeft = left + width * 0.025f;
         float listRight = split - width * 0.025f;
@@ -380,16 +482,11 @@ public sealed class DsPortMods : IDisposable
         _selectedEntry = Mathf.Clamp(_selectedEntry, 1, entryCount - 1);
         _listScroll = TweakPresenterListLayout.ClampScroll(
             _listScroll, entryCount, rowStep, visibleHeight);
-        float panelContentCenterY = panelH * 0.455f;
-        _listHit = new Rect(panelW * 0.04f,
-            panelContentCenterY + listBottom,
-            width * TweakPresenterListLayout.LeftFraction,
-            visibleHeight);
+        TryMapModalRectToPanel(
+            new Rect(left, listBottom, split - left, visibleHeight),
+            out _listHit);
 
-        if (_ground != null)
-            _ground.SetRect(Rect.MinMaxRect(
-                -panelW * 0.46f, -panelH * 0.305f,
-                 panelW * 0.46f,  panelH * 0.305f));
+        if (_ground != null) _ground.SetRect(modalRect);
 
         bool master = _session.Controller.MasterEnabled;
         for (int i = 0; i < entryCount; i++)
@@ -456,12 +553,16 @@ public sealed class DsPortMods : IDisposable
                 PlaceLabelRight(valueLabel, listRight, y, line,
                     (listRight - listLeft) * 0.30f);
             }
-            _rowHits[i] = entry.Kind == TweakPresenterListEntryKind.Header
-                ? default(Rect)
-                : new Rect(panelW * 0.04f,
-                    panelContentCenterY + y - rowStep * 0.5f,
-                    width * TweakPresenterListLayout.LeftFraction,
-                    rowStep);
+            if (entry.Kind == TweakPresenterListEntryKind.Header)
+                _rowHits[i] = default(Rect);
+            else
+            {
+                Rect rowHit;
+                TryMapModalRectToPanel(
+                    new Rect(left, y - rowStep * 0.5f, split - left, rowStep),
+                    out rowHit);
+                _rowHits[i] = rowHit;
+            }
         }
 
         TweakPresenterListEntry selectedEntry =
@@ -572,24 +673,6 @@ public sealed class DsPortMods : IDisposable
             factor = maximumWidth / Mathf.Max(0.001f, bounds.size.x);
         label.Root.transform.localScale = Vector3.one * Mathf.Max(0.001f, factor);
         return TryBounds(label.Renderer, _modal, out bounds);
-    }
-
-    static void PlaceLabelCenter(NativeLabel label, Transform relativeTo,
-                                 Vector2 center, float targetHeight, float maximumWidth)
-    {
-        label.Root.transform.localPosition = Vector3.zero;
-        label.Root.transform.localRotation = Quaternion.identity;
-        label.Root.transform.localScale = Vector3.one;
-        label.Text.ForceMeshUpdate(true);
-        Bounds bounds;
-        if (!TryBounds(label.Renderer, relativeTo, out bounds)) return;
-        float factor = targetHeight / Mathf.Max(0.001f, bounds.size.y);
-        if (bounds.size.x * factor > maximumWidth)
-            factor = maximumWidth / Mathf.Max(0.001f, bounds.size.x);
-        label.Root.transform.localScale = Vector3.one * Mathf.Max(0.001f, factor);
-        if (!TryBounds(label.Renderer, relativeTo, out bounds)) return;
-        label.Root.transform.localPosition += new Vector3(
-            center.x - bounds.center.x, center.y - bounds.center.y, 0f);
     }
 
     void PositionOrnament(GameObject ornament, float y, float targetWidth)

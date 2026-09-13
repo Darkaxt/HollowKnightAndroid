@@ -316,18 +316,34 @@ class ProfileModPipelineContractTest(unittest.TestCase):
             "DsGestureType.Drag", "ClampScroll",
             "_frame.TryConsumeGesture(gesture)",
             "return true; // Open modal owns every non-tab lower-panel gesture.",
+            "MakeGearTex(48)", "new Texture2D", "SetPixels32",
+            "Sprite.Create", "AddComponent<SpriteRenderer>",
         ):
             with self.subTest(oracle_contract=token):
                 self.assertIn(token, presenter)
-        self.assertIn("CloneModsLabel", presenter)
+        self.assertNotIn('SetLabelText(_gearLabel, "MODS"', presenter)
+        self.assertNotIn('CloneModsLabel(anchor, "DsPortModsNativeEntry")', presenter)
         for synthetic in (
             "new Mesh", "new Material", "Shader.Find", "Mathf.Cos", "Mathf.Sin",
             "DsPortModsGearMesh", "DsPortModsGearMaterial",
         ):
-            with self.subTest(synthetic_entry=synthetic):
+            with self.subTest(unrelated_synthetic_entry=synthetic):
                 self.assertNotIn(synthetic, presenter)
         self.assertNotIn('"<  " + groupName', presenter)
         self.assertNotIn('"    " + value', presenter)
+
+    def test_silksong_mods_hit_geometry_tracks_live_content_mask_placement(self):
+        presenter = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsPortMods.cs").read_text(encoding="utf-8")
+
+        self.assertIn("TryGetContentPanelRect", presenter)
+        self.assertIn("GetWorldCorners", presenter)
+        self.assertIn("TryMapModalRectToPanel", presenter)
+        self.assertIn("_frame.ContentMask", presenter)
+        self.assertIn("contentPanel.yMin", presenter)
+        self.assertIn("contentPanel.yMax", presenter)
+        self.assertIn("_modal.rect", presenter)
+        self.assertNotIn("panelH * 0.455f", presenter)
+        self.assertNotIn("PanelH * 0.61f", presenter)
 
     def test_silksong_skin_runtime_is_process_owned_independent_of_direct_display(self):
         runtime = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" / "SilksongModsRuntime.cs").read_text(encoding="utf-8")

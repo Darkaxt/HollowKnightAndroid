@@ -410,10 +410,18 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         tap = method_body(presenter, r"void\s+HandleModsCleanTap\s*\([^)]*\)")
         poll = method_body(select, r"void\s+PollTouch\s*\(\s*\)")
 
-        for required in ("frameRoot", "FindModsTextDonor", "BuildModsEntryControl", "ATTR_LAYER", "sortingOrder"):
+        for required in (
+            "frameRoot", "MakeGearTex(48)", "Sprite.Create", "SpriteRenderer",
+            "ATTR_LAYER", "sortingOrder",
+        ):
             self.assertIn(required, build_gear)
-        for synthetic in ("new Texture2D", "Sprite.Create", "SetPixels", "new Color32"):
-            self.assertNotIn(synthetic, build_gear)
+        self.assertIn("new Texture2D", presenter)
+        self.assertIn("SetPixels32", presenter)
+        self.assertIn("new Color32", presenter)
+        self.assertIn("Own(MakeGearTex(48))", build_gear)
+        self.assertNotIn("FindModsTextDonor", build_gear)
+        self.assertNotIn("BuildModsEntryControl", build_gear)
+        self.assertNotIn('"MODS"', build_gear)
         self.assertIn("frameRoot.GetComponentsInChildren<Renderer>(true)", build_gear)
         self.assertIn("modsSortingOrder = highestChromeOrder + 10", build_gear)
         self.assertIn("sortingOrder = modsSortingOrder", build_gear)
