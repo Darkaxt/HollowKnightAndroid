@@ -137,6 +137,51 @@ public sealed class TweakPresenterTests
     }
 
     [Fact]
+    public void SurfaceOwnershipReassertsExclusiveVisibilityAndRestoresExactBaseline()
+    {
+        var visible = new SurfaceNode { State = true };
+        var alreadyHidden = new SurfaceNode { State = false };
+        var ownership = new TweakPresenterSurfaceOwnership<SurfaceNode, bool>(
+            node => node.State,
+            (node, state) => node.State = state,
+            false);
+
+        Assert.True(ownership.CaptureAndHide(visible));
+        Assert.True(ownership.CaptureAndHide(alreadyHidden));
+        Assert.False(visible.State);
+        Assert.False(alreadyHidden.State);
+
+        visible.State = true;
+        Assert.False(ownership.CaptureAndHide(visible));
+        Assert.False(visible.State);
+
+        ownership.Restore();
+        Assert.True(visible.State);
+        Assert.False(alreadyHidden.State);
+        Assert.False(ownership.HasCapturedState);
+    }
+
+    [Theory]
+    [InlineData(0f, 1f, -1f, 1f, true)]
+    [InlineData(0f, 1.01f, -1f, 1f, false)]
+    [InlineData(-1.01f, 1f, -1f, 1f, false)]
+    public void RowFitsRequiresTheWholeRowInsideTheOwnedRegion(
+        float rowBottom,
+        float rowTop,
+        float regionBottom,
+        float regionTop,
+        bool expected)
+    {
+        Assert.Equal(expected, TweakPresenterListLayout.RowFits(
+            rowBottom, rowTop, regionBottom, regionTop));
+    }
+
+    sealed class SurfaceNode
+    {
+        public bool State { get; set; }
+    }
+
+    [Fact]
     public void CoveredContentAndDetachLifecycleDecisionsAreIdempotent()
     {
         var paint = new TweakPresenterPaintInvalidation();

@@ -453,7 +453,9 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("StowModsCoveredContent()", tick)
         for covered in ("mapClone", "invCloneCache", "charmCloneCache"):
             self.assertIn(covered, stow)
-        self.assertGreaterEqual(stow.count("SetActive(false)"), 3)
+        self.assertGreaterEqual(
+            stow.count("modsPageVisibility.CaptureAndHide("), 4
+        )
         self.assertNotRegex(tick, r"\bInput\.")
         for action in ("MoveGroup(", "MoveRow(", "ToggleMaster(", "CycleSelected(", "Reset("):
             self.assertIn(action, tap)
@@ -575,6 +577,68 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("modsLifecycle.Rebind(", rebind)
         self.assertIn("modsPaint.Invalidate()", close)
         self.assertIn("RequestCoveredContentStow()", stow)
+
+    def test_h3_mods_surface_exclusively_owns_and_exactly_restores_covered_content(self):
+        presenter = strip_csharp_comments(read(MODS_PRESENTER))
+        stow = method_body(
+            presenter,
+            r"void\s+StowModsCoveredContent\s*\(\s*\)",
+        )
+        restore_core = method_body(
+            presenter,
+            r"void\s+RestoreModsCoveredContentCore\s*\(\s*\)",
+        )
+        tick = method_body(
+            presenter,
+            r"void\s+TweaksPaneTick\s*\([^)]*\)",
+        )
+        repaint = method_body(
+            presenter,
+            r"void\s+RepaintModsModal\s*\([^)]*\)",
+        )
+        teardown = method_body(
+            presenter,
+            r"void\s+TeardownModsPresenter\s*\(\s*\)",
+        )
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        update_companion = method_body(
+            frame,
+            r"void\s+UpdateCompanion\s*\([^)]*\)",
+        )
+
+        for lease in (
+            "modsPageVisibility", "modsFrameContentVisibility", "modsHudVisibility",
+        ):
+            with self.subTest(visibility_owner=lease):
+                self.assertIn(f"{lease}.CaptureAndHide", stow)
+                self.assertIn(f"{lease}.Restore()", restore_core)
+        for covered in (
+            "slideOutClone", "mapClone", "invCloneCache", "charmCloneCache",
+            "areaNameT", "equipRowRoot", "noMapT", "mapResetT", "selBox",
+            "hudCam2",
+        ):
+            with self.subTest(covered_surface=covered):
+                self.assertIn(covered, stow)
+        self.assertNotIn("StowSlideClone()", stow)
+        for preserved_chrome in (
+            "statsR", "battIconSR", "battLevelR", "gearSR", "frameTabs",
+            "sepTopT", "sepBotT",
+        ):
+            with self.subTest(preserved_chrome=preserved_chrome):
+                self.assertNotIn(preserved_chrome, stow)
+        self.assertNotIn("tab.cur", restore_core)
+        self.assertLess(tick.index("PositionFrame()"), tick.rindex("StowModsCoveredContent()"))
+        self.assertLess(tick.rindex("StowModsCoveredContent()"), tick.index("BuildModsModal(menu)"))
+        self.assertLess(teardown.index("RestoreModsCoveredContent()"), teardown.index("modsLifecycle.Detach()"))
+        self.assertRegex(
+            " ".join(update_companion.split()),
+            r"if\s*\(tweaksOpen\s*&&\s*\(!HkStageHooks\.TweaksAvailable\s*\|\|\s*!HkStageHooks\.TweaksMenuVisible\)\)\s*CloseTweaksPane\(\)",
+        )
+
+        self.assertIn("TweakPresenterListLayout.RowFits", repaint)
+        self.assertIn("PlaceModsTextBottomLeft", repaint)
 
     def test_h3_mods_presenter_has_no_copied_h3_or_native_bridge_surface(self):
         compiled = "\n".join(

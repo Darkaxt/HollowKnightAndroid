@@ -106,6 +106,16 @@ namespace DualSouls.Mods
             throw new ArgumentOutOfRangeException(nameof(entryIndex));
         }
 
+        public static bool RowFits(
+            float rowBottom,
+            float rowTop,
+            float regionBottom,
+            float regionTop)
+        {
+            return rowTop >= rowBottom && regionTop > regionBottom &&
+                   rowBottom >= regionBottom && rowTop <= regionTop;
+        }
+
         public static float ClampScroll(
             float scroll,
             int entryCount,
@@ -373,6 +383,65 @@ namespace DualSouls.Mods
         public bool ClosePreviousMenu { get; }
         public bool DetachPreviousPresenter { get; }
         public bool RestoreCoveredContent { get; }
+    }
+
+    /// <summary>
+    /// Captures presentation state once, reasserts exclusive ownership while held,
+    /// and restores each target to its exact captured value.
+    /// </summary>
+    public sealed class TweakPresenterSurfaceOwnership<TTarget, TState>
+        where TTarget : class
+    {
+        readonly struct Entry
+        {
+            internal Entry(TTarget target, TState state)
+            {
+                Target = target;
+                State = state;
+            }
+
+            internal TTarget Target { get; }
+            internal TState State { get; }
+        }
+
+        readonly Func<TTarget, TState> _read;
+        readonly Action<TTarget, TState> _write;
+        readonly TState _hidden;
+        readonly List<Entry> _entries = new List<Entry>();
+
+        public TweakPresenterSurfaceOwnership(
+            Func<TTarget, TState> read,
+            Action<TTarget, TState> write,
+            TState hidden)
+        {
+            _read = read ?? throw new ArgumentNullException(nameof(read));
+            _write = write ?? throw new ArgumentNullException(nameof(write));
+            _hidden = hidden;
+        }
+
+        public bool HasCapturedState => _entries.Count != 0;
+
+        public bool CaptureAndHide(TTarget target)
+        {
+            if (target == null) return false;
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                if (!ReferenceEquals(_entries[i].Target, target)) continue;
+                _write(target, _hidden);
+                return false;
+            }
+
+            _entries.Add(new Entry(target, _read(target)));
+            _write(target, _hidden);
+            return true;
+        }
+
+        public void Restore()
+        {
+            for (int i = _entries.Count - 1; i >= 0; i--)
+                _write(_entries[i].Target, _entries[i].State);
+            _entries.Clear();
+        }
     }
 
     /// <summary>Tracks presentation lifecycle decisions, never behavior state.</summary>

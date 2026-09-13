@@ -90,6 +90,45 @@ public partial class HKDualScreen
     ModsLabel modsDetailText;
     ModsLabel modsStatusText;
     TweakPresenterRect modsListHit;
+    readonly TweakPresenterSurfaceOwnership<GameObject, bool> modsPageVisibility =
+        new TweakPresenterSurfaceOwnership<GameObject, bool>(
+            ReadModsObjectVisibility, WriteModsObjectVisibility, false);
+    readonly TweakPresenterSurfaceOwnership<Renderer, bool> modsFrameContentVisibility =
+        new TweakPresenterSurfaceOwnership<Renderer, bool>(
+            ReadModsRendererVisibility, WriteModsRendererVisibility, false);
+    readonly TweakPresenterSurfaceOwnership<Camera, int> modsHudVisibility =
+        new TweakPresenterSurfaceOwnership<Camera, int>(
+            ReadModsCameraMask, WriteModsCameraMask, 0);
+
+    static bool ReadModsObjectVisibility(GameObject target)
+    {
+        return target != null && target.activeSelf;
+    }
+
+    static void WriteModsObjectVisibility(GameObject target, bool visible)
+    {
+        if (target != null && target.activeSelf != visible) target.SetActive(visible);
+    }
+
+    static bool ReadModsRendererVisibility(Renderer target)
+    {
+        return target != null && target.enabled;
+    }
+
+    static void WriteModsRendererVisibility(Renderer target, bool visible)
+    {
+        if (target != null && target.enabled != visible) target.enabled = visible;
+    }
+
+    static int ReadModsCameraMask(Camera target)
+    {
+        return target != null ? target.cullingMask : 0;
+    }
+
+    static void WriteModsCameraMask(Camera target, int mask)
+    {
+        if (target != null && target.cullingMask != mask) target.cullingMask = mask;
+    }
 
     bool TryResolveModsPresenter(
         out HollowKnightModsSession session,
@@ -328,45 +367,52 @@ public partial class HKDualScreen
 
     void StowModsCoveredContent()
     {
-        if (!modsLifecycle.RequestCoveredContentStow()) return;
-        if (slideOutClone != null) StowSlideClone();
+        modsLifecycle.RequestCoveredContentStow();
         if (mapClone != null && mapClone.activeSelf)
-        {
             mapStowStamp = MapContentStamp();
-            mapClone.SetActive(false);
+        modsPageVisibility.CaptureAndHide(slideOutClone);
+        modsPageVisibility.CaptureAndHide(mapClone);
+        modsPageVisibility.CaptureAndHide(invCloneCache);
+        modsPageVisibility.CaptureAndHide(charmCloneCache);
+
+        if (areaNameT != null)
+            modsFrameContentVisibility.CaptureAndHide(areaNameR);
+        if (equipRowRoot != null)
+            for (int i = 0; i < equipCharmSRs.Count; i++)
+                modsFrameContentVisibility.CaptureAndHide(equipCharmSRs[i]);
+        if (noMapT != null)
+        {
+            modsFrameContentVisibility.CaptureAndHide(noMapR);
+            modsFrameContentVisibility.CaptureAndHide(benchPillSR);
         }
-        if (invCloneCache != null && invCloneCache.activeSelf)
-            invCloneCache.SetActive(false);
-        if (charmCloneCache != null && charmCloneCache.activeSelf)
-            charmCloneCache.SetActive(false);
+        for (int i = 0; i < notchSRs.Count; i++)
+            modsFrameContentVisibility.CaptureAndHide(notchSRs[i]);
+        modsFrameContentVisibility.CaptureAndHide(mapMaskTopR);
+        modsFrameContentVisibility.CaptureAndHide(mapMaskBotR);
+        if (mapResetT != null)
+        {
+            modsFrameContentVisibility.CaptureAndHide(mapResetR);
+            modsFrameContentVisibility.CaptureAndHide(mapResetPillSR);
+        }
+        modsFrameContentVisibility.CaptureAndHide(selBox);
+        modsHudVisibility.CaptureAndHide(hudCam2);
     }
 
     void RestoreModsCoveredContent()
     {
-        if (!modsLifecycle.RequestCoveredContentRestore()) return;
+        if (!modsLifecycle.RequestCoveredContentRestore() &&
+            !modsPageVisibility.HasCapturedState &&
+            !modsFrameContentVisibility.HasCapturedState &&
+            !modsHudVisibility.HasCapturedState)
+            return;
         RestoreModsCoveredContentCore();
     }
 
     void RestoreModsCoveredContentCore()
     {
-        if (tab.cur == COMP_MAP)
-        {
-            if (mapClone != null && !mapClone.activeSelf) mapClone.SetActive(true);
-            return;
-        }
-        if (tab.cur == COMP_INV)
-        {
-            paneClone = invCloneCache;
-            if (invCloneCache != null && !invCloneCache.activeSelf)
-                invCloneCache.SetActive(true);
-            return;
-        }
-        if (tab.cur == COMP_CHARM)
-        {
-            paneClone = charmCloneCache;
-            if (charmCloneCache != null && !charmCloneCache.activeSelf)
-                charmCloneCache.SetActive(true);
-        }
+        modsFrameContentVisibility.Restore();
+        modsPageVisibility.Restore();
+        modsHudVisibility.Restore();
     }
 
     Component FindModsTextDonor()
@@ -536,20 +582,51 @@ public partial class HKDualScreen
         ModsLabel label,
         Vector3 topLeft,
         float targetLineHeight,
-        float maximumWidth)
+        float maximumWidth,
+        float maximumHeight = float.MaxValue)
     {
         Bounds bounds;
-        if (!ScaleModsText(label, targetLineHeight, maximumWidth, out bounds)) return;
+        if (!ScaleModsText(
+                label, targetLineHeight, maximumWidth, maximumHeight, out bounds))
+            return;
         label.Text.transform.position += new Vector3(
             topLeft.x - bounds.min.x,
             topLeft.y - bounds.max.y,
             topLeft.z - bounds.center.z);
     }
 
+    void PlaceModsTextBottomLeft(
+        ModsLabel label,
+        Vector3 bottomLeft,
+        float targetLineHeight,
+        float maximumWidth,
+        float maximumHeight)
+    {
+        Bounds bounds;
+        if (!ScaleModsText(
+                label, targetLineHeight, maximumWidth, maximumHeight, out bounds))
+            return;
+        label.Text.transform.position += new Vector3(
+            bottomLeft.x - bounds.min.x,
+            bottomLeft.y - bounds.min.y,
+            bottomLeft.z - bounds.center.z);
+    }
+
     bool ScaleModsText(
         ModsLabel label,
         float targetLineHeight,
         float maximumWidth,
+        out Bounds bounds)
+    {
+        return ScaleModsText(
+            label, targetLineHeight, maximumWidth, float.MaxValue, out bounds);
+    }
+
+    bool ScaleModsText(
+        ModsLabel label,
+        float targetLineHeight,
+        float maximumWidth,
+        float maximumHeight,
         out Bounds bounds)
     {
         bounds = default(Bounds);
@@ -565,6 +642,8 @@ public partial class HKDualScreen
         float factor = targetLineHeight / Mathf.Max(0.0001f, singleLineHeight);
         if (bounds.size.x * factor > maximumWidth)
             factor = maximumWidth / Mathf.Max(0.0001f, bounds.size.x);
+        if (bounds.size.y * factor > maximumHeight)
+            factor = maximumHeight / Mathf.Max(0.0001f, bounds.size.y);
         transform.localScale = Vector3.one * Mathf.Max(0.0001f, factor);
         bounds = label.Renderer.bounds;
         return bounds.size.x >= 0.0001f && bounds.size.y >= 0.0001f;
@@ -700,8 +779,11 @@ public partial class HKDualScreen
             TweakPresenterListEntry entry =
                 TweakPresenterListLayout.EntryAt(menu, i);
             float y = listTop - rowStep * 0.5f - i * rowStep + modsListScroll;
-            bool shown = y + rowStep * 0.5f >= listBottom &&
-                         y - rowStep * 0.5f <= listTop;
+            bool shown = TweakPresenterListLayout.RowFits(
+                y - rowStep * 0.5f,
+                y + rowStep * 0.5f,
+                listBottom,
+                listTop);
             GameObject rowObject = tweakRows[i];
             if (rowObject != null && rowObject.activeSelf != shown)
                 rowObject.SetActive(shown);
@@ -821,6 +903,10 @@ public partial class HKDualScreen
 
         float detailLeft = split + width * 0.035f;
         float detailWidth = right - detailLeft - width * 0.025f;
+        float statusBottom = bottom + height * 0.025f;
+        float statusHeight = height * 0.16f;
+        float detailTop = listTop - rowStep * 1.15f;
+        float detailBottom = statusBottom + statusHeight + height * 0.035f;
         SetModsText(modsDetailTitleText, detailTitle, Color.white);
         PlaceModsTextTopLeft(
             modsDetailTitleText, new Vector3(detailLeft, listTop, z),
@@ -831,16 +917,17 @@ public partial class HKDualScreen
                 : new Color(0.86f, 0.88f, 0.92f, 1f));
         PlaceModsTextTopLeft(
             modsDetailText,
-            new Vector3(detailLeft, listTop - rowStep * 1.15f, z),
-            lineHeight * 0.72f, detailWidth);
+            new Vector3(detailLeft, detailTop, z),
+            lineHeight * 0.72f, detailWidth,
+            Mathf.Max(lineHeight, detailTop - detailBottom));
         SetModsText(modsStatusText, WrapModsText(status, 25),
             menu.MessageIsError
                 ? new Color(1f, 0.42f, 0.38f, 1f)
                 : new Color(0.66f, 0.78f, 0.9f, 1f));
-        PlaceModsTextTopLeft(
+        PlaceModsTextBottomLeft(
             modsStatusText,
-            new Vector3(detailLeft, bottom + height * 0.19f, z),
-            lineHeight * 0.68f, detailWidth);
+            new Vector3(detailLeft, statusBottom, z),
+            lineHeight * 0.68f, detailWidth, statusHeight);
     }
 
     static string FriendlyModsValue(string value)
@@ -1012,6 +1099,7 @@ public partial class HKDualScreen
                 BuildFrame();
                 PositionFrame();
             }
+            StowModsCoveredContent();
             if (frameRoot == null)
             {
                 CloseTweaksPane();
@@ -1109,6 +1197,7 @@ public partial class HKDualScreen
                 currentMenu.Close();
         }
         catch (Exception e) { WarnOnce("mods current menu close", e); }
+        RestoreModsCoveredContent();
         bool detachAttachedPresenter = modsLifecycle.PresenterAttached;
         modsLifecycle.Detach();
         try

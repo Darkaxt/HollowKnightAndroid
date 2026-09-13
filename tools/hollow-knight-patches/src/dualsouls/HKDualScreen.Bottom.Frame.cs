@@ -1072,6 +1072,10 @@ public partial class HKDualScreen
     {
         EnsureCompRoot();
 
+        if (tweaksOpen &&
+            (!HkStageHooks.TweaksAvailable || !HkStageHooks.TweaksMenuVisible))
+            CloseTweaksPane();
+
         // B8: the Tweaks pane occupies the context box while open (gear icon toggles it). It stows the
         // normal content pane and owns the camera; tab taps close it (PollTouch). Gated on the hub checkbox.
         if (HkStageHooks.TweaksAvailable && tweaksOpen && HkStageHooks.TweaksMenuVisible)
