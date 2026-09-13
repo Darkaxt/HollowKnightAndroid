@@ -17,9 +17,7 @@ import dev.silksong.launcher.builtinmods.BuiltInModsController
 import dev.silksong.launcher.builtinmods.LineModStateStore
 import dev.silksong.launcher.profiles.ProfileBuildPaths
 import dev.silksong.launcher.profiles.SelectedGameStore
-import dev.silksong.launcher.runtime.GameProcessInspector
-import dev.silksong.launcher.runtime.LauncherRuntimeProvider
-import dev.silksong.launcher.runtime.RuntimeRequest
+import dev.silksong.launcher.runtime.GameLifecycleAuthority
 import java.io.File
 
 /** Launcher presentation of the selected game's built-in typed Mods/Cheats catalog. */
@@ -28,14 +26,13 @@ class BuiltInModsActivity : Activity() {
     private val paths by lazy {
         ProfileBuildPaths(filesDir, requireNotNull(getExternalFilesDir(null)), profile)
     }
-    private val runtime by lazy { LauncherRuntimeProvider.from(this) }
-    private val request by lazy { RuntimeRequest(this, profile, paths) }
     private val controller by lazy {
         BuiltInModsController(
             profile.id,
             BuiltInModCatalog.forGame(profile.id),
             LineModStateStore(File(paths.modStateRoot, "builtin-state.txt")),
-        ) { GameProcessInspector.inspect(this, runtime.gameProcessName(request)) }
+            GameLifecycleAuthority.forModStateRoot(paths.modStateRoot),
+        )
     }
 
     private lateinit var list: LinearLayout

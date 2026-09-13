@@ -46,6 +46,7 @@ object ProcessRole {
 object GameProcessStartup {
     @Volatile
     private var snapshot: GameProcessStartupSnapshot? = null
+    private var lifecycleOwner: GameLifecycleAuthority.GameLifecycleOwner? = null
 
     fun prepare(context: Context): GameProcessStartupSnapshot {
         val processName = ProcessRole.currentName(context)
@@ -59,6 +60,11 @@ object GameProcessStartup {
             requireNotNull(context.getExternalFilesDir(null)) { "No external files directory" },
             profile,
         )
+        synchronized(this) {
+            if (lifecycleOwner == null) {
+                lifecycleOwner = GameLifecycleAuthority.forModStateRoot(paths.modStateRoot).acquireForGame()
+            }
+        }
         val resolved = resolve(context, profile, paths)
         synchronized(this) {
             val existing = snapshot
@@ -122,6 +128,20 @@ object GameProcessStartup {
     }
 
     @JvmStatic
+    fun markActivityStarted() {
+        synchronized(this) {
+            requireNotNull(lifecycleOwner) { "Game lifecycle authority was not initialized" }.markStarted()
+        }
+    }
+
+    @JvmStatic
+    fun markActivityStopped() {
+        synchronized(this) {
+            requireNotNull(lifecycleOwner) { "Game lifecycle authority was not initialized" }.markStopped()
+        }
+    }
+
+    @JvmStatic
     fun requireProfile(profileId: String) {
         check(GameProfiles.find(profileId) != null) { "Unsupported game profile: $profileId" }
         val startup = requireSnapshot()
@@ -145,6 +165,12 @@ object GameProcessStartup {
     }
 
     internal fun resetForTests() {
-        synchronized(this) { snapshot = null; SkinLibraryRuntimeBridge.resetForTests() }
+        synchronized(this) {
+            runCatching { lifecycleOwner?.markStopped() }
+            lifecycleOwner?.close()
+            lifecycleOwner = null
+            snapshot = null
+            SkinLibraryRuntimeBridge.resetForTests()
+        }
     }
 }

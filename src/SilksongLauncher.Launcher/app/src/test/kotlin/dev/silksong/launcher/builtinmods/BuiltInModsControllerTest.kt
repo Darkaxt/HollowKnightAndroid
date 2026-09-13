@@ -1,6 +1,6 @@
 package dev.silksong.launcher.builtinmods
 
-import dev.silksong.launcher.runtime.GameProcessState
+import dev.silksong.launcher.runtime.GameLifecycleAuthority
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -80,17 +80,26 @@ class BuiltInModsControllerTest {
         assertFalse(ssFile.exists())
     }
 
-    @Test fun `active and unknown process states fail closed without writing`() {
-        for (state in listOf(GameProcessState.ACTIVE, GameProcessState.UNKNOWN)) {
-            val file = File(temporary.newFolder(), "state.txt")
-            val controller = controller("silksong", file) { state }
-
-            val result = controller.setMaster(true)
-
-            assertFalse(result.success)
-            assertTrue(result.message.contains("closed", ignoreCase = true))
-            assertFalse(file.exists())
+    @Test fun `active and unknown lifecycle authority fail closed without writing`() {
+        val activeFile = File(temporary.newFolder(), "state.txt")
+        val activeAuthority = GameLifecycleAuthority(temporary.newFolder())
+        val owner = activeAuthority.acquireForGame()
+        try {
+            assertMutationBlocked(controller("silksong", activeFile, activeAuthority), activeFile)
+        } finally {
+            owner.close()
         }
+
+        val unknownFile = File(temporary.newFolder(), "state.txt")
+        val unknownAuthority = GameLifecycleAuthority(temporary.newFolder()).apply { markLaunchPending() }
+        assertMutationBlocked(controller("silksong", unknownFile, unknownAuthority), unknownFile)
+    }
+
+    private fun assertMutationBlocked(controller: BuiltInModsController, file: File) {
+        val result = controller.setMaster(true)
+        assertFalse(result.success)
+        assertTrue(result.message.contains("closed", ignoreCase = true))
+        assertFalse(file.exists())
     }
 
     @Test fun `reload observes state written by the game process`() {
@@ -110,11 +119,11 @@ class BuiltInModsControllerTest {
     private fun controller(
         gameId: String,
         file: File,
-        processState: () -> GameProcessState = { GameProcessState.INACTIVE },
+        authority: GameLifecycleAuthority = GameLifecycleAuthority(File(file.parentFile, "lifecycle")),
     ) = BuiltInModsController(
         gameId,
         BuiltInModCatalog.forGame(gameId),
         LineModStateStore(file),
-        processState,
+        authority,
     )
 }

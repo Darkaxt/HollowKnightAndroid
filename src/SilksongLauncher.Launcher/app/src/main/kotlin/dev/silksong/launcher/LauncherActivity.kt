@@ -34,6 +34,7 @@ import dev.silksong.launcher.profiles.LegacySilksongAdopter
 import dev.silksong.launcher.profiles.ProfileBuildPaths
 import dev.silksong.launcher.profiles.SelectedGameStore
 import dev.silksong.launcher.runtime.EvidenceKind
+import dev.silksong.launcher.runtime.GameLifecycleAuthority
 import dev.silksong.launcher.runtime.GameProcessInspector
 import dev.silksong.launcher.runtime.GameProcessState
 import dev.silksong.launcher.runtime.LaunchEligibility
@@ -821,6 +822,8 @@ class LauncherActivity : Activity() {
     private fun startGameActivity() {
         // Also covers returns from asynchronous cloud sync and dex repair.
         if (!ensureLaunchEligible()) return
+        val lifecycleAuthority = GameLifecycleAuthority.forModStateRoot(buildPaths.modStateRoot)
+        var launchPending = false
         try {
             val intent = runtime.gameIntent(runtimeRequest)
             LauncherLog.log("Launching ${intent.component?.className} for ${profile.id}")
@@ -849,9 +852,15 @@ class LauncherActivity : Activity() {
                 buildPaths.modStateRoot,
                 GenerationPublisher(buildPaths.profilePaths),
             )
+            lifecycleAuthority.markLaunchPending()
+            launchPending = true
             returningFromGame = true
             startActivity(intent)
         } catch (t: Throwable) {
+            if (launchPending) {
+                runCatching { lifecycleAuthority.markLaunchCancelled() }
+                    .onFailure { LauncherLog.log("Could not cancel pending game launch", it) }
+            }
             returningFromGame = false
             LauncherLog.log("Failed to launch game: ${t.message}")
         }

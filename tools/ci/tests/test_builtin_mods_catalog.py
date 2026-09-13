@@ -42,6 +42,23 @@ class BuiltInModsCatalogContractTest(unittest.TestCase):
                   "builtinmods/BuiltInModCatalog.kt").read_text(encoding="utf-8")
         visible = kotlin.split("val deferred", 1)[0]
         self.assertNotIn("HKMOD-", visible)
+    def test_builtin_mod_mutations_use_explicit_game_lifecycle_lease_without_process_scanning(self):
+        activity = (ROOT / "src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/"
+                    "BuiltInModsActivity.kt").read_text(encoding="utf-8")
+        launcher = (ROOT / "src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/"
+                    "LauncherActivity.kt").read_text(encoding="utf-8")
+        game = (ROOT / "tools/depot-to-apk/shell/GameActivity.java").read_text(encoding="utf-8")
+        authority = (ROOT / "src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/runtime/"
+                     "GameLifecycleAuthority.kt").read_text(encoding="utf-8")
+
+        self.assertIn("GameLifecycleAuthority", activity)
+        self.assertNotIn("GameProcessInspector", activity)
+        self.assertNotIn("runningAppProcesses", authority)
+        self.assertNotIn("/proc", authority)
+        self.assertIn("markLaunchPending", launcher)
+        self.assertIn("markActivityStarted", game)
+        self.assertIn("markActivityStopped", game)
+
     def test_production_runtimes_use_shared_profile_file_and_one_silksong_controller(self):
         hk = (ROOT / "tools/hollow-knight-patches/src/mods/HollowKnightModsRuntime.cs").read_text(encoding="utf-8")
         ss = (ROOT / "tools/silksong-patches/src/mods/SilksongModsRuntime.cs").read_text(encoding="utf-8")

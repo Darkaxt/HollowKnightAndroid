@@ -1,5 +1,6 @@
 package dev.silksong.launcher.builtinmods
 
+import dev.silksong.launcher.runtime.GameLifecycleAuthority
 import dev.silksong.launcher.runtime.GameProcessState
 
 data class BuiltInModsSnapshot(
@@ -17,7 +18,7 @@ class BuiltInModsController(
     private val gameId: String,
     descriptors: List<BuiltInModDescriptor>,
     private val store: LineModStateStore,
-    private val processState: () -> GameProcessState,
+    private val lifecycleAuthority: GameLifecycleAuthority,
 ) {
     private val descriptors = descriptors.filter { it.actionable }
     private var snapshot = load()
@@ -65,16 +66,16 @@ class BuiltInModsController(
         return BuiltInModsSnapshot(persisted[masterKey] == "1", descriptors, values)
     }
 
-    private inline fun mutate(action: () -> BuiltInModsResult): BuiltInModsResult {
-        val state = processState()
-        if (state != GameProcessState.INACTIVE) {
-            val certainty = if (state == GameProcessState.ACTIVE) "is running" else "state could not be verified"
+    private fun mutate(action: () -> BuiltInModsResult): BuiltInModsResult {
+        val guarded = runCatching { lifecycleAuthority.runIfInactive(action) }.getOrElse {
+            reload()
+            return BuiltInModsResult(false, "Mods state was not changed: ${it.message ?: "storage failed"}")
+        }
+        if (guarded.state != GameProcessState.INACTIVE) {
+            val certainty = if (guarded.state == GameProcessState.ACTIVE) "is running" else "state could not be verified"
             return BuiltInModsResult(false, "The selected game $certainty and must be closed before changing Mods.")
         }
-        return runCatching(action).getOrElse {
-            reload()
-            BuiltInModsResult(false, "Mods state was not changed: ${it.message ?: "storage failed"}")
-        }
+        return requireNotNull(guarded.value)
     }
 
     private val prefix get() = "dualsouls.mods.$gameId."

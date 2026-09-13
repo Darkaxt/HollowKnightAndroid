@@ -901,8 +901,15 @@ public class GameActivity extends PlayerActivity
         });
     }
 
+    @Override protected void onStart()
+    {
+        super.onStart();
+        dev.silksong.launcher.runtime.GameProcessStartup.markActivityStarted();
+    }
+
     @Override protected void onStop()
     {
+        dev.silksong.launcher.runtime.GameProcessStartup.markActivityStopped();
         boot("stopped");
         java.io.File f = extFile(ALIVE);
         if (f != null) f.delete();
