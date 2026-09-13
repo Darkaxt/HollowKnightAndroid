@@ -1382,6 +1382,12 @@ public partial class HKDualScreen
 
     void TeardownCompanion()
     {
+        bool attrCameraWasEnabled = attrCam != null && attrCam.enabled;
+        bool hudCameraWasEnabled = hudCam2 != null && hudCam2.enabled;
+        if (attrCam != null) { attrCam.enabled = false; attrCam.cullingMask = 0; }
+        if (hudCam2 != null) hudCam2.enabled = false;
+        TeardownModsPresenter();   // role cameras are disabled before covered content is restored
+        if (attrCam != null) attrCam.cullingMask = 0;
         ReleaseLowerHudFixtureInputLock();
         if (mapClone != null) { Destroy(mapClone); mapClone = null; mapGm = null; mapContentVisible = false; mapAreaBValid = false; mapAreaBFor = null; mapFitIsArea = false; }
         if (invCloneCache != null) { Destroy(invCloneCache); invCloneCache = null; }
@@ -1399,8 +1405,9 @@ public partial class HKDualScreen
         try { if (ctrlMyVerbTmp != null) { var vr = (ctrlMyVerbTmp as Component).GetComponent<Renderer>(); if (vr != null) vr.enabled = false; } } catch { }
         prewarmDone = false;
         mapSrcRef = null; paneSrcRef = null; invStamp = int.MinValue; charmStamp = int.MinValue;
-        TeardownModsPresenter();   // Mods presentation detaches without disposing the process-owned session
         TeardownFrame();
+        if (attrCam != null) attrCam.enabled = attrCameraWasEnabled;
+        if (hudCam2 != null) hudCam2.enabled = hudCameraWasEnabled;
         tab.built = -1;
         fit.valid = false;
     }

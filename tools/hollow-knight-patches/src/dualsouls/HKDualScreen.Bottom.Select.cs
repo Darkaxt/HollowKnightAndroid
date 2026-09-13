@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DualSouls.Mods.HollowKnight;
 using UnityEngine;
 
 // [B5] BOTTOM SCREEN — tap-to-select + control prompt (cross-cutting for Inventory + Charms). Touch bridge poll,
@@ -162,6 +163,8 @@ public partial class HKDualScreen
     // a clean tap on the map area resets the view. Runs off HKAux's live multi-pointer bridge.
     void MapPinchTick()
     {
+        if (HollowKnightModsPresentationFlow.RejectAllLowerScreenInput(modsLifecycle))
+            return;
         if (cfg.compMapPinch != 1 || transport == null || attrCam == null) return;
         try
         {
@@ -247,6 +250,8 @@ public partial class HKDualScreen
 
     void PollTouch()
     {
+        if (HollowKnightModsPresentationFlow.RejectAllLowerScreenInput(modsLifecycle))
+            return;
         // DEBUG sim-tap: fire a synthetic item tap at (compSimTapX, compSimTapY) when compSimTapN changes.
         if (cfg.debug == 1 && cfg.compSimTapN != lastSimTapN)
         {
@@ -292,7 +297,13 @@ public partial class HKDualScreen
                     if (dx < bestDx) { bestDx = dx; hitTab = TAB_TO_COL[Mathf.Clamp(col2, 0, 2)]; }
                 }
             }
-            if (hitTab >= 0) { CloseTweaksPane(); tab.tap = hitTab; Dbg($"HKDS tab tapped -> tab={tab.tap}"); }   // a tab tap always leaves the tweaks pane
+            if (hitTab >= 0)
+            {
+                if (HollowKnightModsPresentationFlow.CanCloseFromLowerScreenInput(modsLifecycle))
+                    CloseTweaksPane();
+                tab.tap = hitTab;
+                Dbg($"HKDS tab tapped -> tab={tab.tap}");
+            }
             else Dbg("HKDS tab-band tap outside tabs (fps/battery) -> ignored");
         }
         catch (Exception e) { Dbg($"HKDS touch err {e.Message}"); }

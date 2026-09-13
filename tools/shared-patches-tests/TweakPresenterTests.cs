@@ -1,4 +1,5 @@
 using DualSouls.Mods;
+using DualSouls.Mods.HollowKnight;
 using Xunit;
 
 namespace SharedPatches.Tests;
@@ -161,154 +162,129 @@ public sealed class TweakPresenterTests
         Assert.False(ownership.HasCapturedState);
     }
 
-    [Theory]
-    [InlineData("gear")]
-    [InlineData("tab")]
-    [InlineData("availability loss")]
-    [InlineData("external menu close")]
-    public void HollowKnightModsCloseDefersConcreteSurfaceRevealUntilOrdinaryGeometry(
-        string closePath)
+    [Fact]
+    public void HollowKnightExternalCloseDefersReleaseUntilOrdinaryLayout()
     {
-        var paint = new TweakPresenterPaintInvalidation();
-        var lifecycle = new TweakPresenterLifecycle(paint);
-        lifecycle.Rebind(new object(), new object(), true);
+        var lifecycle = OpenHollowKnightPresenter();
+        lifecycle.RequestCoveredContentStow();
 
-        var mapPage = new SurfaceNode { State = true };
-        var inventoryPage = new SurfaceNode { State = false };
-        var interruptedSlide = new SurfaceNode { State = true };
-        var locationAndSelection = new SurfaceNode { State = true };
-        var detachedPromptGlyph = new SurfaceNode { State = true };
-        var detachedPromptVerb = new SurfaceNode { State = false };
-        var nativeHudCamera = new SurfaceNode { State = true };
-        var companionCamera = new SurfaceNode { State = true };
-        var covered = new TweakPresenterSurfaceOwnership<SurfaceNode, bool>(
-            node => node.State,
-            (node, state) => node.State = state,
-            false);
-        var nativeHud = new TweakPresenterSurfaceOwnership<SurfaceNode, bool>(
-            node => node.State,
-            (node, state) => node.State = state,
-            false);
-        var companion = new TweakPresenterSurfaceOwnership<SurfaceNode, bool>(
-            node => node.State,
-            (node, state) => node.State = state,
-            false);
+        var disposition = HollowKnightModsPresentationFlow.RequestCoveredContentRelease(
+            lifecycle, coveredContentCanRender: true);
 
-        Assert.True(lifecycle.RequestCoveredContentStow());
-        foreach (var surface in new[] {
-                     mapPage, inventoryPage, interruptedSlide,
-                     locationAndSelection, detachedPromptGlyph, detachedPromptVerb,
-                 })
-            covered.CaptureAndHide(surface);
-        nativeHud.CaptureAndHide(nativeHudCamera);
-
-        Assert.True(lifecycle.OwnsInput);
-        Assert.All(new[] {
-            mapPage, inventoryPage, interruptedSlide, locationAndSelection,
-            detachedPromptGlyph, detachedPromptVerb, nativeHudCamera,
-        }, surface => Assert.False(surface.State));
-
-        mapPage.State = true;
-        detachedPromptGlyph.State = true;
-        Assert.False(covered.CaptureAndHide(mapPage));
-        Assert.False(covered.CaptureAndHide(detachedPromptGlyph));
-        Assert.False(mapPage.State);
-        Assert.False(detachedPromptGlyph.State);
-
-        lifecycle.SynchronizeOpen(false);
-        Assert.True(lifecycle.RequestCoveredContentRestoreAfterLayout());
-        Assert.True(lifecycle.OwnsInput);
+        Assert.Equal(HollowKnightModsRestoreDisposition.Deferred, disposition);
+        Assert.True(lifecycle.CoveredContentStowed);
         Assert.True(lifecycle.CoveredContentRestorePending);
-        Assert.False(mapPage.State);
-        Assert.False(detachedPromptGlyph.State);
-
-        companion.CaptureAndHide(companionCamera);
+        Assert.False(lifecycle.CoveredContentRestoreStarted);
+        Assert.True(lifecycle.OwnsInput);
         Assert.True(lifecycle.TryBeginCoveredContentRestore());
-        covered.Restore();
-
-        Assert.True(mapPage.State);
-        Assert.False(inventoryPage.State);
-        Assert.True(interruptedSlide.State);
-        Assert.True(locationAndSelection.State);
-        Assert.True(detachedPromptGlyph.State);
-        Assert.False(detachedPromptVerb.State);
-        Assert.False(companionCamera.State);
-        Assert.False(nativeHudCamera.State);
-        Assert.False(mapPage.State && companionCamera.State);
-
-        string cameraFrameGeometry = "mods";
-        Assert.False(lifecycle.TryCompleteCoveredContentRestore(
-            ordinaryLayoutReady: false));
-        Assert.Equal("mods", cameraFrameGeometry);
-        Assert.True(lifecycle.OwnsInput);
-
-        cameraFrameGeometry = "ordinary";
-        companion.Restore();
-        nativeHud.Restore();
-        Assert.True(lifecycle.OwnsInput);
+        Assert.True(lifecycle.CoveredContentRestoreStarted);
         Assert.True(lifecycle.TryCompleteCoveredContentRestore(
             ordinaryLayoutReady: true));
-
-        Assert.Equal("ordinary", cameraFrameGeometry);
-        Assert.True(companionCamera.State);
-        Assert.True(nativeHudCamera.State);
-        Assert.True(mapPage.State && companionCamera.State);
+        Assert.False(lifecycle.CoveredContentRestoreStarted);
         Assert.False(lifecycle.OwnsInput);
-        Assert.False(lifecycle.CoveredContentRestorePending);
-        Assert.False(string.IsNullOrEmpty(closePath));
     }
 
     [Fact]
-    public void HollowKnightModsTeardownRestoresConcreteSurfaceStateImmediately()
+    public void HollowKnightActivePresenterTeardownKeepsReleasePendingAfterDetach()
+    {
+        var lifecycle = OpenHollowKnightPresenter();
+        lifecycle.MarkPresenterAttached();
+        lifecycle.RequestCoveredContentStow();
+
+        var disposition = HollowKnightModsPresentationFlow.RequestCoveredContentRelease(
+            lifecycle, coveredContentCanRender: true);
+        Assert.True(lifecycle.Detach());
+
+        Assert.Equal(HollowKnightModsRestoreDisposition.Deferred, disposition);
+        Assert.False(lifecycle.PresenterAttached);
+        Assert.False(lifecycle.IsOpen);
+        Assert.True(lifecycle.CoveredContentStowed);
+        Assert.True(lifecycle.CoveredContentRestorePending);
+        Assert.True(lifecycle.OwnsInput);
+    }
+
+    [Fact]
+    public void HollowKnightClosedOwnerRebindKeepsActiveCameraReleasePending()
+    {
+        var lifecycle = OpenHollowKnightPresenter();
+        lifecycle.MarkPresenterAttached();
+        lifecycle.RequestCoveredContentStow();
+
+        var decision = lifecycle.Rebind(new object(), new object(), false);
+        var disposition = HollowKnightModsPresentationFlow.RequestCoveredContentRelease(
+            lifecycle, coveredContentCanRender: true);
+
+        Assert.True(decision.RestoreCoveredContent);
+        Assert.Equal(HollowKnightModsRestoreDisposition.Deferred, disposition);
+        Assert.False(lifecycle.PresenterAttached);
+        Assert.False(lifecycle.IsOpen);
+        Assert.True(lifecycle.CoveredContentStowed);
+        Assert.True(lifecycle.CoveredContentRestorePending);
+        Assert.True(lifecycle.OwnsInput);
+    }
+
+    [Fact]
+    public void HollowKnightDisabledCameraTeardownMayRestoreImmediately()
+    {
+        var lifecycle = OpenHollowKnightPresenter();
+        lifecycle.RequestCoveredContentStow();
+
+        var disposition = HollowKnightModsPresentationFlow.RequestCoveredContentRelease(
+            lifecycle, coveredContentCanRender: false);
+        lifecycle.Detach();
+
+        Assert.Equal(HollowKnightModsRestoreDisposition.Immediate, disposition);
+        Assert.False(lifecycle.CoveredContentStowed);
+        Assert.False(lifecycle.CoveredContentRestorePending);
+        Assert.False(lifecycle.OwnsInput);
+    }
+
+    [Fact]
+    public void HollowKnightPendingReleaseRejectsEveryInputAndCannotCloseAgain()
+    {
+        var lifecycle = OpenHollowKnightPresenter();
+        lifecycle.RequestCoveredContentStow();
+        Assert.False(HollowKnightModsPresentationFlow.RejectAllLowerScreenInput(
+            lifecycle));
+        Assert.True(HollowKnightModsPresentationFlow.CanCloseFromLowerScreenInput(
+            lifecycle));
+
+        HollowKnightModsPresentationFlow.RequestCoveredContentRelease(
+            lifecycle, coveredContentCanRender: true);
+
+        Assert.True(HollowKnightModsPresentationFlow.RejectAllLowerScreenInput(
+            lifecycle));
+        Assert.False(HollowKnightModsPresentationFlow.CanCloseFromLowerScreenInput(
+            lifecycle));
+    }
+
+    [Fact]
+    public void HollowKnightPendingReleaseDoesNotAlterSilksongPresenterSeams()
+    {
+        var hollowKnight = OpenHollowKnightPresenter();
+        hollowKnight.RequestCoveredContentStow();
+        HollowKnightModsPresentationFlow.RequestCoveredContentRelease(
+            hollowKnight, coveredContentCanRender: true);
+
+        var silksong = PresenterFixture.Create();
+        silksong.Menu.Open();
+        var paint = new TweakPresenterPaintInvalidation();
+        long model = TweakPresenterModelPaintStamp.Compute(
+            silksong, silksong.Menu, silksong.Controller);
+        long geometry = GeometryStamp(bottom: -3f, top: 4f);
+
+        Assert.True(hollowKnight.CoveredContentRestorePending);
+        Assert.True(silksong.Menu.IsOpen);
+        Assert.Equal(7, TweakPresenterListLayout.EntryCount(silksong.Menu));
+        Assert.True(paint.ShouldPaint(model, geometry));
+    }
+
+    static TweakPresenterLifecycle OpenHollowKnightPresenter()
     {
         var lifecycle = new TweakPresenterLifecycle(
             new TweakPresenterPaintInvalidation());
         lifecycle.Rebind(new object(), new object(), true);
-        var page = new SurfaceNode { State = true };
-        var detachedPrompt = new SurfaceNode { State = true };
-        var hudCamera = new SurfaceNode { State = true };
-        var ownership = new TweakPresenterSurfaceOwnership<SurfaceNode, bool>(
-            node => node.State,
-            (node, state) => node.State = state,
-            false);
-
-        lifecycle.RequestCoveredContentStow();
-        ownership.CaptureAndHide(page);
-        ownership.CaptureAndHide(detachedPrompt);
-        ownership.CaptureAndHide(hudCamera);
-        lifecycle.SynchronizeOpen(false);
-
-        Assert.True(lifecycle.RequestCoveredContentRestore());
-        ownership.Restore();
-        Assert.True(lifecycle.Detach());
-
-        Assert.True(page.State);
-        Assert.True(detachedPrompt.State);
-        Assert.True(hudCamera.State);
-        Assert.False(lifecycle.OwnsInput);
-        Assert.False(lifecycle.CoveredContentRestorePending);
-    }
-
-    [Fact]
-    public void HollowKnightDeferredRestoreStateIsIsolatedFromSilksongPresenterState()
-    {
-        var hollowKnight = new TweakPresenterLifecycle(
-            new TweakPresenterPaintInvalidation());
-        var silksong = new TweakPresenterLifecycle(
-            new TweakPresenterPaintInvalidation());
-        hollowKnight.Rebind(new object(), new object(), true);
-        silksong.Rebind(new object(), new object(), true);
-
-        hollowKnight.RequestCoveredContentStow();
-        hollowKnight.SynchronizeOpen(false);
-        hollowKnight.RequestCoveredContentRestoreAfterLayout();
-
-        Assert.True(hollowKnight.CoveredContentRestorePending);
-        Assert.True(hollowKnight.OwnsInput);
-        Assert.True(silksong.IsOpen);
-        Assert.True(silksong.OwnsInput);
-        Assert.False(silksong.CoveredContentStowed);
-        Assert.False(silksong.CoveredContentRestorePending);
+        return lifecycle;
     }
 
     [Theory]

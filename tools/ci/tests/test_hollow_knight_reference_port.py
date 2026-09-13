@@ -379,8 +379,8 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         self.assertIn("TeardownModsPresenter()", display_active)
         self.assertLess(
-            display_active.index("TeardownModsPresenter()"),
             display_active.index("SetRoleCamerasEnabled(false)"),
+            display_active.index("TeardownModsPresenter()"),
         )
 
     def test_h3_mods_presenter_uses_frame_geometry_and_the_clean_touch_stream(self):
@@ -462,9 +462,13 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertNotIn("PreviousGroup", tap)
         self.assertNotIn("NextGroup", tap)
         self.assertIn("if (modsLifecycle.OwnsInput) return", poll)
-        self.assertRegex(
+        self.assertIn(
+            "HollowKnightModsPresentationFlow.RejectAllLowerScreenInput(modsLifecycle)",
             poll,
-            r"if\s*\(hitTab\s*>=\s*0\)\s*\{\s*CloseTweaksPane\(\);\s*tab\.tap\s*=\s*hitTab",
+        )
+        self.assertRegex(
+            " ".join(poll.split()),
+            r"if\s*\(hitTab\s*>=\s*0\)\s*\{\s*if\s*\(HollowKnightModsPresentationFlow\.CanCloseFromLowerScreenInput\(modsLifecycle\)\)\s*CloseTweaksPane\(\);\s*tab\.tap\s*=\s*hitTab",
         )
 
     def test_h3_mods_presenter_bounds_idle_paint_and_uses_shared_behavior_helpers(self):
@@ -604,6 +608,10 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             presenter,
             r"void\s+CloseTweaksPane\s*\(\s*\)",
         )
+        rebind = method_body(
+            presenter,
+            r"void\s+RebindModsPresenter\s*\([^)]*\)",
+        )
         tick = method_body(
             presenter,
             r"void\s+TweaksPaneTick\s*\([^)]*\)",
@@ -623,10 +631,22 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             frame,
             r"void\s+UpdateCompanion\s*\([^)]*\)",
         )
+        teardown_companion = method_body(
+            frame,
+            r"void\s+TeardownCompanion\s*\(\s*\)",
+        )
+        direct_display = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.DirectDisplay.cs")
+        )
+        set_direct_display_active = method_body(
+            direct_display,
+            r"internal\s+void\s+SetDirectDisplayActive\s*\([^)]*\)",
+        )
         select = strip_csharp_comments(
             read(REFERENCE_ROOT / "HKDualScreen.Bottom.Select.cs")
         )
         poll_touch = method_body(select, r"void\s+PollTouch\s*\(\s*\)")
+        map_pinch = method_body(select, r"void\s+MapPinchTick\s*\(\s*\)")
 
         for lease in (
             "modsPageVisibility", "modsFrameContentVisibility", "modsHudVisibility",
@@ -641,6 +661,8 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             with self.subTest(covered_surface=covered):
                 self.assertIn(covered, stow)
         self.assertNotIn("StowSlideClone()", stow)
+        for release_path in (close, rebind, teardown):
+            self.assertNotIn("StowSlideClone()", release_path)
         for preserved_chrome in (
             "statsR", "battIconSR", "battLevelR", "gearSR", "frameTabs",
             "sepTopT", "sepBotT",
@@ -651,7 +673,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertLess(tick.index("PositionFrame()"), tick.rindex("StowModsCoveredContent()"))
         self.assertLess(tick.rindex("StowModsCoveredContent()"), tick.index("BuildModsModal(menu)"))
 
-        self.assertIn("RequestCoveredContentRestoreAfterLayout()", close)
+        self.assertIn("RequestModsCoveredContentRelease()", close)
         self.assertNotIn("RestoreModsCoveredContentCore()", close)
         self.assertIn("modsCompanionVisibility.CaptureAndHide(attrCam)", begin_restore)
         self.assertLess(
@@ -672,11 +694,30 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             "modsCompanionVisibility.Restore()",
         ):
             self.assertIn(restored, immediate_restore_path)
-        self.assertLess(
-            teardown.index("RestoreModsCoveredContentImmediately()"),
-            teardown.index("modsLifecycle.Detach()"),
+        self.assertIn("RequestModsCoveredContentRelease()", rebind)
+        self.assertNotIn("RestoreModsCoveredContentImmediately()", rebind)
+        self.assertIn("RequestModsCoveredContentRelease()", teardown)
+        self.assertNotIn("RestoreModsCoveredContentImmediately()", teardown)
+        pending_input_guard = (
+            "HollowKnightModsPresentationFlow.RejectAllLowerScreenInput(modsLifecycle)"
         )
-        self.assertIn("modsLifecycle.OwnsInput", poll_touch)
+        can_close_input = (
+            "HollowKnightModsPresentationFlow.CanCloseFromLowerScreenInput(modsLifecycle)"
+        )
+        self.assertIn(pending_input_guard, poll_touch)
+        self.assertIn(pending_input_guard, map_pinch)
+        self.assertIn(can_close_input, poll_touch)
+        self.assertLess(poll_touch.index(pending_input_guard), poll_touch.index("cfg.debug"))
+        self.assertLess(poll_touch.index(pending_input_guard), poll_touch.index("GearTapN"))
+        self.assertLess(poll_touch.index(pending_input_guard), poll_touch.index("hitTab >= 0"))
+        self.assertLess(
+            teardown_companion.index("attrCam.cullingMask = 0"),
+            teardown_companion.index("TeardownModsPresenter()"),
+        )
+        self.assertLess(
+            set_direct_display_active.index("SetRoleCamerasEnabled(false)"),
+            set_direct_display_active.index("TeardownModsPresenter()"),
+        )
         self.assertLess(
             update_companion.index("BeginModsCoveredContentRestore()"),
             update_companion.index("if (tweaksRoot != null"),

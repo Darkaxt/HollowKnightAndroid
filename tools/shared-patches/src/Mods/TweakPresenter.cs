@@ -462,6 +462,7 @@ namespace DualSouls.Mods
         public bool PresenterAttached { get; private set; }
         public bool CoveredContentStowed { get; private set; }
         public bool CoveredContentRestorePending { get; private set; }
+        public bool CoveredContentRestoreStarted => _coveredContentRestoreStarted;
         public bool OwnsInput => IsOpen || CoveredContentStowed;
 
         public TweakPresenterRebindDecision Rebind(
@@ -487,9 +488,6 @@ namespace DualSouls.Mods
             IsOpen = menuIsOpen;
             ViewValid = false;
             PresenterAttached = false;
-            CoveredContentStowed = false;
-            CoveredContentRestorePending = false;
-            _coveredContentRestoreStarted = false;
             _paint.Invalidate();
             return decision;
         }
@@ -561,16 +559,13 @@ namespace DualSouls.Mods
         public bool Detach()
         {
             bool changed = _owner != null || _menu != null || IsOpen ||
-                           ViewValid || PresenterAttached || CoveredContentStowed;
+                           ViewValid || PresenterAttached;
             if (!changed) return false;
             _owner = null;
             _menu = null;
             IsOpen = false;
             ViewValid = false;
             PresenterAttached = false;
-            CoveredContentStowed = false;
-            CoveredContentRestorePending = false;
-            _coveredContentRestoreStarted = false;
             _paint.Invalidate();
             return true;
         }

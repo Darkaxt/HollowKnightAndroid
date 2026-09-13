@@ -167,8 +167,8 @@ public partial class HKDualScreen
                 modsSession.SetPresenterAttached(false);
         }
         catch (Exception e) { WarnOnce("mods old presenter detach", e); }
-        if (decision.RestoreCoveredContent)
-            RestoreModsCoveredContentImmediately();
+        if (decision.RestoreCoveredContent && (menu == null || !menu.IsOpen))
+            RequestModsCoveredContentRelease();
 
         DestroyModsModalView();
         modsSession = session;
@@ -337,7 +337,9 @@ public partial class HKDualScreen
         RebindModsPresenter(session, menu);
         if (menu.IsOpen)
         {
-            CloseTweaksPane();
+            if (HollowKnightModsPresentationFlow.CanCloseFromLowerScreenInput(
+                    modsLifecycle))
+                CloseTweaksPane();
             return;
         }
 
@@ -361,8 +363,7 @@ public partial class HKDualScreen
         }
         catch (Exception e) { WarnOnce("mods menu close", e); }
         modsDragValid = false;
-        modsLifecycle.SynchronizeOpen(false);
-        modsLifecycle.RequestCoveredContentRestoreAfterLayout();
+        RequestModsCoveredContentRelease();
         modsPaint.Invalidate();
         tweaksOpen = modsLifecycle.IsOpen;
     }
@@ -405,6 +406,21 @@ public partial class HKDualScreen
         modsHudVisibility.CaptureAndHide(hudCam2);
     }
 
+    bool CanModsCoveredContentRender()
+    {
+        return (attrCam != null && attrCam.enabled) ||
+               (hudCam2 != null && hudCam2.enabled);
+    }
+
+    void RequestModsCoveredContentRelease()
+    {
+        HollowKnightModsRestoreDisposition disposition =
+            HollowKnightModsPresentationFlow.RequestCoveredContentRelease(
+                modsLifecycle, CanModsCoveredContentRender());
+        if (disposition == HollowKnightModsRestoreDisposition.Immediate)
+            RestoreModsCoveredContentImmediately();
+    }
+
     void BeginModsCoveredContentRestore()
     {
         if (!modsLifecycle.CoveredContentRestorePending) return;
@@ -416,7 +432,7 @@ public partial class HKDualScreen
 
     void CompleteModsCoveredContentRestore()
     {
-        if (!modsLifecycle.CoveredContentRestorePending) return;
+        if (!modsLifecycle.CoveredContentRestoreStarted) return;
         modsCompanionVisibility.Restore();
         modsHudVisibility.Restore();
         modsLifecycle.TryCompleteCoveredContentRestore(
@@ -1108,7 +1124,7 @@ public partial class HKDualScreen
             tweaksOpen = modsLifecycle.IsOpen;
             if (!tweaksOpen)
             {
-                modsLifecycle.RequestCoveredContentRestoreAfterLayout();
+                RequestModsCoveredContentRelease();
                 return;
             }
 
@@ -1218,7 +1234,7 @@ public partial class HKDualScreen
                 currentMenu.Close();
         }
         catch (Exception e) { WarnOnce("mods current menu close", e); }
-        RestoreModsCoveredContentImmediately();
+        RequestModsCoveredContentRelease();
         bool detachAttachedPresenter = modsLifecycle.PresenterAttached;
         modsLifecycle.Detach();
         try

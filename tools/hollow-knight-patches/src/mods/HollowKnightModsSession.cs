@@ -49,4 +49,46 @@ namespace DualSouls.Mods.HollowKnight
             _session.Dispose();
         }
     }
+
+    internal enum HollowKnightModsRestoreDisposition
+    {
+        None,
+        Deferred,
+        Immediate,
+    }
+
+    internal static class HollowKnightModsPresentationFlow
+    {
+        public static HollowKnightModsRestoreDisposition RequestCoveredContentRelease(
+            TweakPresenterLifecycle lifecycle,
+            bool coveredContentCanRender)
+        {
+            if (lifecycle == null) throw new ArgumentNullException(nameof(lifecycle));
+            lifecycle.SynchronizeOpen(false);
+            if (!lifecycle.CoveredContentStowed)
+                return HollowKnightModsRestoreDisposition.None;
+            if (coveredContentCanRender)
+            {
+                lifecycle.RequestCoveredContentRestoreAfterLayout();
+                return HollowKnightModsRestoreDisposition.Deferred;
+            }
+
+            lifecycle.RequestCoveredContentRestore();
+            return HollowKnightModsRestoreDisposition.Immediate;
+        }
+
+        public static bool RejectAllLowerScreenInput(
+            TweakPresenterLifecycle lifecycle)
+        {
+            if (lifecycle == null) throw new ArgumentNullException(nameof(lifecycle));
+            return lifecycle.CoveredContentRestorePending;
+        }
+
+        public static bool CanCloseFromLowerScreenInput(
+            TweakPresenterLifecycle lifecycle)
+        {
+            if (lifecycle == null) throw new ArgumentNullException(nameof(lifecycle));
+            return lifecycle.IsOpen && !lifecycle.CoveredContentRestorePending;
+        }
+    }
 }
