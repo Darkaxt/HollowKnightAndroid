@@ -80,10 +80,11 @@ class HollowKnightFirstPlanTests(unittest.TestCase):
         self.assertIn("Historical DELETE_AFTER rows are future dispositions", historical)
         self.assertIn("## 2026-09-08 execution addendum — Silksong host continuation", read(PLAN))
 
-    def test_every_public_authority_links_the_new_plan(self):
-        for document in (UNIFIED_SPEC, OLD_PLAN, MATRIX, README):
+    def test_internal_authorities_link_the_new_plan_but_public_readme_does_not(self):
+        for document in (UNIFIED_SPEC, OLD_PLAN, MATRIX):
             with self.subTest(document=document.name):
                 self.assertIn(PLAN.name, read(document))
+        self.assertNotIn(PLAN.name, read(README))
 
     def test_plan_requires_stage_by_stage_specification_reconciliation(self):
         plan = read(PLAN)

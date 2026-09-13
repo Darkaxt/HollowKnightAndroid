@@ -157,6 +157,18 @@ def authored_port_visual_violations(name: str, source: str):
         allocation = "_image = go.AddComponent<UnityEngine.UI.Image>();"
         if fade and all(token in fade for token in required) and allocation in fade:
             source = source.replace(fade, fade.replace(allocation, "", 1), 1)
+    # The original Dual Souls Mods affordance is one procedural cog. Admit its
+    # single validated Sprite.Create call without allowing authored page chrome.
+    if name == "DsPortMods.cs":
+        gear = csharp_method_body(source, r"void\s+BuildGear\s*\(\s*\)")
+        required = (
+            "MakeGearTex(48)",
+            "_gearSprite = Sprite.Create(",
+            'new GameObject("DsPortModsGear")',
+            "_gear.AddComponent<SpriteRenderer>()",
+        )
+        if gear and all(token in gear for token in required):
+            source = source.replace(gear, gear.replace("Sprite.Create(", "", 1), 1)
     rejected = (
         "DsWidgets.Fleur", "DsTheme.White", "DsTheme.Disc",
         "AddComponent<Image>", "AddComponent<UnityEngine.UI.Image>",
