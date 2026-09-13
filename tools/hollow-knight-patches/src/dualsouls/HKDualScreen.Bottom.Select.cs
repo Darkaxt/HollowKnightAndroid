@@ -268,7 +268,7 @@ public partial class HKDualScreen
             if (GearTapN(nx, ny)) { ToggleTweaksPane(); return; }
             if (ny < cfg.compTabBandY)   // ABOVE the tab row -> an item tap on the Inventory/Charms pane (tab band is only the bottom strip)
             {
-                if (tweaksOpen) return;   // B8: pane rows are handled by the clean-tap stream (TweaksTouchTick)
+                if (modsLifecycle.OwnsInput) return;   // Mods keeps lower-screen input until ordinary geometry is restored
                 if (cfg.compTapSelect == 1 && (tab.cur == COMP_INV || tab.cur == COMP_CHARM)) PollItemTap(nx, ny);
                 return;
             }

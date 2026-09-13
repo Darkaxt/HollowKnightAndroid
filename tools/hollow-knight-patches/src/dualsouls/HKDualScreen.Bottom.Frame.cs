@@ -1075,6 +1075,7 @@ public partial class HKDualScreen
         if (tweaksOpen &&
             (!HkStageHooks.TweaksAvailable || !HkStageHooks.TweaksMenuVisible))
             CloseTweaksPane();
+        BeginModsCoveredContentRestore();
 
         // B8: the Tweaks pane occupies the context box while open (gear icon toggles it). It stows the
         // normal content pane and owns the camera; tab taps close it (PollTouch). Gated on the hub checkbox.
@@ -1156,6 +1157,7 @@ public partial class HKDualScreen
         if (cfg.compFrame == 1) { BuildFrame(); PositionFrame(); }
         else if (frameRoot != null) TeardownFrame();
         ReassertControlPrompt();   // re-pin the control-prompt line at pre-render (beats ActionButtonIcon's Update)
+        CompleteModsCoveredContentRestore();
         if (cfg.debug == 1 && (Time.frameCount % 90) == 0)   // frame-count gate: compFrameTick only advances on the pane tabs, so on the Map tab the old %90 was true EVERY frame -> logcat flood at debug=1
             Debug.Log($"HKDS mapframe attrPos={attrCam.transform.position} ortho={attrCam.orthographicSize:F1} centered={fit.valid} c={fit.center}");
     }

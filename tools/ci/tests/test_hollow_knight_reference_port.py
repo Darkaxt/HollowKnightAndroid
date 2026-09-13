@@ -461,7 +461,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             self.assertIn(action, tap)
         self.assertNotIn("PreviousGroup", tap)
         self.assertNotIn("NextGroup", tap)
-        self.assertIn("if (tweaksOpen) return", poll)
+        self.assertIn("if (modsLifecycle.OwnsInput) return", poll)
         self.assertRegex(
             poll,
             r"if\s*\(hitTab\s*>=\s*0\)\s*\{\s*CloseTweaksPane\(\);\s*tab\.tap\s*=\s*hitTab",
@@ -588,6 +588,22 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             presenter,
             r"void\s+RestoreModsCoveredContentCore\s*\(\s*\)",
         )
+        begin_restore = method_body(
+            presenter,
+            r"void\s+BeginModsCoveredContentRestore\s*\(\s*\)",
+        )
+        complete_restore = method_body(
+            presenter,
+            r"void\s+CompleteModsCoveredContentRestore\s*\(\s*\)",
+        )
+        immediate_restore = method_body(
+            presenter,
+            r"void\s+RestoreModsCoveredContentImmediately\s*\(\s*\)",
+        )
+        close = method_body(
+            presenter,
+            r"void\s+CloseTweaksPane\s*\(\s*\)",
+        )
         tick = method_body(
             presenter,
             r"void\s+TweaksPaneTick\s*\([^)]*\)",
@@ -607,17 +623,20 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             frame,
             r"void\s+UpdateCompanion\s*\([^)]*\)",
         )
+        select = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Select.cs")
+        )
+        poll_touch = method_body(select, r"void\s+PollTouch\s*\(\s*\)")
 
         for lease in (
             "modsPageVisibility", "modsFrameContentVisibility", "modsHudVisibility",
         ):
             with self.subTest(visibility_owner=lease):
                 self.assertIn(f"{lease}.CaptureAndHide", stow)
-                self.assertIn(f"{lease}.Restore()", restore_core)
         for covered in (
             "slideOutClone", "mapClone", "invCloneCache", "charmCloneCache",
             "areaNameT", "equipRowRoot", "noMapT", "mapResetT", "selBox",
-            "hudCam2",
+            "ctrlMyGlyph", "ctrlMyVerbT", "hudCam2",
         ):
             with self.subTest(covered_surface=covered):
                 self.assertIn(covered, stow)
@@ -631,7 +650,41 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertNotIn("tab.cur", restore_core)
         self.assertLess(tick.index("PositionFrame()"), tick.rindex("StowModsCoveredContent()"))
         self.assertLess(tick.rindex("StowModsCoveredContent()"), tick.index("BuildModsModal(menu)"))
-        self.assertLess(teardown.index("RestoreModsCoveredContent()"), teardown.index("modsLifecycle.Detach()"))
+
+        self.assertIn("RequestCoveredContentRestoreAfterLayout()", close)
+        self.assertNotIn("RestoreModsCoveredContentCore()", close)
+        self.assertIn("modsCompanionVisibility.CaptureAndHide(attrCam)", begin_restore)
+        self.assertLess(
+            begin_restore.index("modsCompanionVisibility.CaptureAndHide(attrCam)"),
+            begin_restore.index("RestoreModsCoveredContentCore()"),
+        )
+        self.assertIn("modsCompanionVisibility.Restore()", complete_restore)
+        self.assertIn("modsHudVisibility.Restore()", complete_restore)
+        self.assertLess(
+            complete_restore.index("modsCompanionVisibility.Restore()"),
+            complete_restore.index("TryCompleteCoveredContentRestore("),
+        )
+        immediate_restore_path = immediate_restore + restore_core
+        for restored in (
+            "modsPageVisibility.Restore()",
+            "modsFrameContentVisibility.Restore()",
+            "modsHudVisibility.Restore()",
+            "modsCompanionVisibility.Restore()",
+        ):
+            self.assertIn(restored, immediate_restore_path)
+        self.assertLess(
+            teardown.index("RestoreModsCoveredContentImmediately()"),
+            teardown.index("modsLifecycle.Detach()"),
+        )
+        self.assertIn("modsLifecycle.OwnsInput", poll_touch)
+        self.assertLess(
+            update_companion.index("BeginModsCoveredContentRestore()"),
+            update_companion.index("if (tweaksRoot != null"),
+        )
+        self.assertLess(
+            update_companion.index("PositionFrame()"),
+            update_companion.index("CompleteModsCoveredContentRestore()"),
+        )
         self.assertRegex(
             " ".join(update_companion.split()),
             r"if\s*\(tweaksOpen\s*&&\s*\(!HkStageHooks\.TweaksAvailable\s*\|\|\s*!HkStageHooks\.TweaksMenuVisible\)\)\s*CloseTweaksPane\(\)",

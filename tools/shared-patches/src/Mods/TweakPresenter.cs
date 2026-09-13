@@ -450,6 +450,7 @@ namespace DualSouls.Mods
         readonly TweakPresenterPaintInvalidation _paint;
         object _owner;
         object _menu;
+        bool _coveredContentRestoreStarted;
 
         public TweakPresenterLifecycle(TweakPresenterPaintInvalidation paint)
         {
@@ -460,6 +461,8 @@ namespace DualSouls.Mods
         public bool ViewValid { get; private set; }
         public bool PresenterAttached { get; private set; }
         public bool CoveredContentStowed { get; private set; }
+        public bool CoveredContentRestorePending { get; private set; }
+        public bool OwnsInput => IsOpen || CoveredContentStowed;
 
         public TweakPresenterRebindDecision Rebind(
             object owner,
@@ -485,6 +488,8 @@ namespace DualSouls.Mods
             ViewValid = false;
             PresenterAttached = false;
             CoveredContentStowed = false;
+            CoveredContentRestorePending = false;
+            _coveredContentRestoreStarted = false;
             _paint.Invalidate();
             return decision;
         }
@@ -511,6 +516,36 @@ namespace DualSouls.Mods
         {
             if (CoveredContentStowed) return false;
             CoveredContentStowed = true;
+            CoveredContentRestorePending = false;
+            _coveredContentRestoreStarted = false;
+            return true;
+        }
+
+        public bool RequestCoveredContentRestoreAfterLayout()
+        {
+            if (!CoveredContentStowed || CoveredContentRestorePending) return false;
+            CoveredContentRestorePending = true;
+            _coveredContentRestoreStarted = false;
+            return true;
+        }
+
+        public bool TryBeginCoveredContentRestore()
+        {
+            if (!CoveredContentStowed || !CoveredContentRestorePending ||
+                _coveredContentRestoreStarted)
+                return false;
+            _coveredContentRestoreStarted = true;
+            return true;
+        }
+
+        public bool TryCompleteCoveredContentRestore(bool ordinaryLayoutReady)
+        {
+            if (!ordinaryLayoutReady || !CoveredContentStowed ||
+                !CoveredContentRestorePending || !_coveredContentRestoreStarted)
+                return false;
+            CoveredContentStowed = false;
+            CoveredContentRestorePending = false;
+            _coveredContentRestoreStarted = false;
             return true;
         }
 
@@ -518,6 +553,8 @@ namespace DualSouls.Mods
         {
             if (!CoveredContentStowed) return false;
             CoveredContentStowed = false;
+            CoveredContentRestorePending = false;
+            _coveredContentRestoreStarted = false;
             return true;
         }
 
@@ -532,6 +569,8 @@ namespace DualSouls.Mods
             ViewValid = false;
             PresenterAttached = false;
             CoveredContentStowed = false;
+            CoveredContentRestorePending = false;
+            _coveredContentRestoreStarted = false;
             _paint.Invalidate();
             return true;
         }
