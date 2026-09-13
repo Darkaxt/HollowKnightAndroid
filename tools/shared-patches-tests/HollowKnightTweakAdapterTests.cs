@@ -9,13 +9,17 @@ namespace SharedPatches.Tests;
 
 public sealed class HollowKnightTweakAdapterTests
 {
-    private static readonly string[] DeferredIds =
+    private static readonly string[] GameplayIds =
     {
         "damage_received",
         "nail_damage",
         "one_hit_kills",
         "run_speed",
         "unlimited_soul",
+    };
+
+    private static readonly string[] DeferredIds =
+    {
         "charm_costs",
         "unlimited_notches",
         "equip_anywhere",
@@ -33,11 +37,6 @@ public sealed class HollowKnightTweakAdapterTests
 
     private static readonly string[] DeferredGroups =
     {
-        "COMBAT",
-        "COMBAT",
-        "COMBAT",
-        "PLAYER",
-        "PLAYER",
         "CHARMS",
         "CHARMS",
         "CHARMS",
@@ -54,13 +53,88 @@ public sealed class HollowKnightTweakAdapterTests
     };
 
     [Fact]
+    public void DamageReceivedAppliesNoMaskLossThroughTypedApi()
+    {
+        var api = new RecordingApi();
+        var adapter = new HollowKnightTweakAdapter(api);
+
+        TweakDescriptor row = adapter.Descriptors.Single(item => item.Id == "damage_received");
+        TweakActionResult result = adapter.Apply("damage_received", "no_mask_loss");
+
+        Assert.True(row.IsAvailable);
+        Assert.Equal(new[] { "vanilla", "no_mask_loss", "invincible" }, row.Values);
+        Assert.True(result.Success);
+        Assert.Equal(new[] { "damage:NoMaskLoss" }, api.Calls);
+    }
+
+    [Fact]
+    public void NailDamageAppliesMultiplierThroughTypedApi()
+    {
+        var api = new RecordingApi();
+        var adapter = new HollowKnightTweakAdapter(api);
+
+        TweakDescriptor row = adapter.Descriptors.Single(item => item.Id == "nail_damage");
+        TweakActionResult result = adapter.Apply("nail_damage", "x3");
+
+        Assert.True(row.IsAvailable);
+        Assert.Equal(new[] { "x1", "x2", "x3", "x5" }, row.Values);
+        Assert.True(result.Success);
+        Assert.Equal(new[] { "nail:3" }, api.Calls);
+    }
+
+    [Fact]
+    public void OneHitKillsEnablesThroughTypedApi()
+    {
+        var api = new RecordingApi();
+        var adapter = new HollowKnightTweakAdapter(api);
+
+        TweakDescriptor row = adapter.Descriptors.Single(item => item.Id == "one_hit_kills");
+        TweakActionResult result = adapter.Apply("one_hit_kills", "on");
+
+        Assert.True(row.IsAvailable);
+        Assert.Equal(new[] { "off", "on" }, row.Values);
+        Assert.True(result.Success);
+        Assert.Equal(new[] { "one-hit:True" }, api.Calls);
+    }
+
+    [Fact]
+    public void RunSpeedAppliesMultiplierThroughTypedApi()
+    {
+        var api = new RecordingApi();
+        var adapter = new HollowKnightTweakAdapter(api);
+
+        TweakDescriptor row = adapter.Descriptors.Single(item => item.Id == "run_speed");
+        TweakActionResult result = adapter.Apply("run_speed", "plus_50");
+
+        Assert.True(row.IsAvailable);
+        Assert.Equal(new[] { "vanilla", "plus_25", "plus_50" }, row.Values);
+        Assert.True(result.Success);
+        Assert.Equal(new[] { "run:1.5" }, api.Calls);
+    }
+
+    [Fact]
+    public void UnlimitedSoulEnablesThroughTypedApi()
+    {
+        var api = new RecordingApi();
+        var adapter = new HollowKnightTweakAdapter(api);
+
+        TweakDescriptor row = adapter.Descriptors.Single(item => item.Id == "unlimited_soul");
+        TweakActionResult result = adapter.Apply("unlimited_soul", "on");
+
+        Assert.True(row.IsAvailable);
+        Assert.Equal(new[] { "off", "on" }, row.Values);
+        Assert.True(result.Success);
+        Assert.Equal(new[] { "soul:True" }, api.Calls);
+    }
+
+    [Fact]
     public void CatalogHasExactGameIdAndOrder()
     {
         var adapter = new HollowKnightTweakAdapter(new RecordingApi());
-        string[] expectedIds = { "companion_backdrop", "lifeblood_flash" };
+        string[] presentationIds = { "companion_backdrop", "lifeblood_flash" };
 
         Assert.Equal("hollow-knight", adapter.GameId);
-        Assert.Equal(expectedIds.Concat(DeferredIds), adapter.Descriptors.Select(row => row.Id));
+        Assert.Equal(presentationIds.Concat(GameplayIds).Concat(DeferredIds), adapter.Descriptors.Select(row => row.Id));
     }
 
     [Fact]
@@ -112,7 +186,7 @@ public sealed class HollowKnightTweakAdapterTests
     }
 
     [Fact]
-    public void EveryAllowedPresentationValueHasOneExactDispatch()
+    public void EveryAllowedValueHasOneExactTypedDispatch()
     {
         var expected = new Dictionary<string, Dictionary<string, string>>
         {
@@ -126,6 +200,35 @@ public sealed class HollowKnightTweakAdapterTests
                 ["soft"] = "flash:Soft",
                 ["vanilla"] = "flash:Vanilla",
                 ["off"] = "flash:Off",
+            },
+            ["damage_received"] = new()
+            {
+                ["vanilla"] = "damage:restore",
+                ["no_mask_loss"] = "damage:NoMaskLoss",
+                ["invincible"] = "damage:Invincible",
+            },
+            ["nail_damage"] = new()
+            {
+                ["x1"] = "nail:restore",
+                ["x2"] = "nail:2",
+                ["x3"] = "nail:3",
+                ["x5"] = "nail:5",
+            },
+            ["one_hit_kills"] = new()
+            {
+                ["off"] = "one-hit:restore",
+                ["on"] = "one-hit:True",
+            },
+            ["run_speed"] = new()
+            {
+                ["vanilla"] = "run:restore",
+                ["plus_25"] = "run:1.25",
+                ["plus_50"] = "run:1.5",
+            },
+            ["unlimited_soul"] = new()
+            {
+                ["off"] = "soul:restore",
+                ["on"] = "soul:True",
             },
         };
         var catalog = new HollowKnightTweakAdapter(new RecordingApi());
@@ -152,8 +255,8 @@ public sealed class HollowKnightTweakAdapterTests
     public void DeferredRowsHaveExactUniqueTrackingMapAndRemainVisible()
     {
         var adapter = new HollowKnightTweakAdapter(new RecordingApi());
-        var deferredRows = adapter.Descriptors.Skip(2).ToArray();
-        string[] expectedTrackingIds = Enumerable.Range(1, 18)
+        var deferredRows = adapter.Descriptors.Where(row => !row.IsAvailable).ToArray();
+        string[] expectedTrackingIds = Enumerable.Range(6, 13)
             .Select(number => $"HKMOD-{number:000}")
             .ToArray();
 
@@ -331,6 +434,94 @@ public sealed class HollowKnightTweakAdapterTests
         Assert.Equal(expected, resolved.SoftAlpha);
     }
 
+    [Theory]
+    [InlineData("damage_received")]
+    [InlineData("nail_damage")]
+    [InlineData("one_hit_kills")]
+    [InlineData("run_speed")]
+    [InlineData("unlimited_soul")]
+    public void GameplayFeatureDirectDefaultRestoresItsBaseline(string id)
+    {
+        var api = new RecordingApi();
+        var adapter = new HollowKnightTweakAdapter(api);
+        TweakDescriptor row = adapter.Descriptors.Single(item => item.Id == id);
+
+        Assert.True(adapter.Apply(id, row.Values[1]).Success);
+        Assert.Contains(id, api.ActiveGameplay);
+
+        Assert.True(adapter.Apply(id, row.DefaultValue).Success);
+        Assert.DoesNotContain(id, api.ActiveGameplay);
+    }
+
+    [Theory]
+    [InlineData("damage_received")]
+    [InlineData("nail_damage")]
+    [InlineData("one_hit_kills")]
+    [InlineData("run_speed")]
+    [InlineData("unlimited_soul")]
+    public void GameplayFeatureMasterOffRestoresCapturedBaseline(string id)
+    {
+        var api = new RecordingApi();
+        var controller = new TweakController(
+            new HollowKnightTweakAdapter(api), new MemoryStore());
+        Assert.True(controller.Initialize().Success);
+        Assert.True(controller.SetMaster(true).Success);
+        Assert.True(controller.Cycle(id).Success);
+        Assert.Contains(id, api.ActiveGameplay);
+
+        Assert.True(controller.SetMaster(false).Success);
+
+        Assert.Empty(api.ActiveGameplay);
+        Assert.Equal("restore", api.Calls.Last());
+    }
+
+    [Theory]
+    [InlineData("damage_received")]
+    [InlineData("nail_damage")]
+    [InlineData("one_hit_kills")]
+    [InlineData("run_speed")]
+    [InlineData("unlimited_soul")]
+    public void GameplayFeatureResetRestoresCapturedBaseline(string id)
+    {
+        var api = new RecordingApi();
+        var controller = new TweakController(
+            new HollowKnightTweakAdapter(api), new MemoryStore());
+        Assert.True(controller.Initialize().Success);
+        Assert.True(controller.SetMaster(true).Success);
+        Assert.True(controller.Cycle(id).Success);
+        Assert.Contains(id, api.ActiveGameplay);
+
+        Assert.True(controller.Reset().Success);
+
+        Assert.Empty(api.ActiveGameplay);
+        Assert.Equal("restore", api.Calls.Last());
+        Assert.Equal(
+            controller.Descriptors.Single(item => item.Id == id).DefaultValue,
+            controller.Value(id));
+    }
+
+    [Theory]
+    [InlineData("damage_received")]
+    [InlineData("nail_damage")]
+    [InlineData("one_hit_kills")]
+    [InlineData("run_speed")]
+    [InlineData("unlimited_soul")]
+    public void GameplayFeatureSessionTeardownRestoresCapturedBaseline(string id)
+    {
+        var api = new RecordingApi();
+        var session = new HollowKnightModsSession(api, new MemoryStore(), visibleRows: 5);
+        session.Tick();
+        Assert.True(session.Controller.SetMaster(true).Success);
+        Assert.True(session.Controller.Cycle(id).Success);
+        Assert.Contains(id, api.ActiveGameplay);
+
+        session.Dispose();
+
+        Assert.True(session.TeardownComplete);
+        Assert.Empty(api.ActiveGameplay);
+        Assert.Equal("restore", api.Calls.Last());
+    }
+
     [Fact]
     public void CaptureApplyAndRestorePreserveApiCallOrder()
     {
@@ -380,7 +571,7 @@ public sealed class HollowKnightTweakAdapterTests
         var api = new RecordingApi();
         var adapter = new HollowKnightTweakAdapter(api);
 
-        foreach (TweakDescriptor row in adapter.Descriptors.Skip(2))
+        foreach (TweakDescriptor row in adapter.Descriptors.Where(item => !item.IsAvailable))
         {
             TweakActionResult result = adapter.Apply(row.Id, row.DefaultValue);
 
@@ -456,10 +647,15 @@ public sealed class HollowKnightTweakAdapterTests
         public bool IsReady { get; set; } = true;
         public bool ThrowOnMutation { get; set; }
         public List<string> Calls { get; } = new();
+        public HashSet<string> ActiveGameplay { get; } = new();
 
         public void CaptureBaseline() => Calls.Add("capture");
 
-        public void RestoreBaseline() => Calls.Add("restore");
+        public void RestoreBaseline()
+        {
+            Calls.Add("restore");
+            ActiveGameplay.Clear();
+        }
 
         public void SetCompanionBackdropBlack(bool black)
         {
@@ -471,10 +667,88 @@ public sealed class HollowKnightTweakAdapterTests
             Record($"flash:{mode}");
         }
 
+        public void SetDamageMode(HollowKnightDamageMode mode)
+        {
+            Record($"damage:{mode}");
+            ActiveGameplay.Add("damage_received");
+        }
+
+        public void RestoreDamageMode()
+        {
+            Record("damage:restore");
+            ActiveGameplay.Remove("damage_received");
+        }
+
+        public void SetNailDamageMultiplier(int multiplier)
+        {
+            Record($"nail:{multiplier}");
+            ActiveGameplay.Add("nail_damage");
+        }
+
+        public void RestoreNailDamage()
+        {
+            Record("nail:restore");
+            ActiveGameplay.Remove("nail_damage");
+        }
+
+        public void SetOneHitKills(bool enabled)
+        {
+            Record($"one-hit:{enabled}");
+            if (enabled) ActiveGameplay.Add("one_hit_kills");
+        }
+
+        public void RestoreOneHitKills()
+        {
+            Record("one-hit:restore");
+            ActiveGameplay.Remove("one_hit_kills");
+        }
+
+        public void SetRunSpeedMultiplier(float multiplier)
+        {
+            Record($"run:{multiplier}");
+            ActiveGameplay.Add("run_speed");
+        }
+
+        public void RestoreRunSpeed()
+        {
+            Record("run:restore");
+            ActiveGameplay.Remove("run_speed");
+        }
+
+        public void SetUnlimitedSoul(bool enabled)
+        {
+            Record($"soul:{enabled}");
+            if (enabled) ActiveGameplay.Add("unlimited_soul");
+        }
+
+        public void RestoreUnlimitedSoul()
+        {
+            Record("soul:restore");
+            ActiveGameplay.Remove("unlimited_soul");
+        }
+
+        public void TickGameplay()
+        {
+        }
+
         private void Record(string call)
         {
             Calls.Add(call);
             if (ThrowOnMutation) throw new InvalidOperationException("game rejected presentation change");
+        }
+    }
+
+    private sealed class MemoryStore : Dictionary<string, string>, ITweakStore
+    {
+        public string Read(string key) => TryGetValue(key, out string value) ? value : null;
+
+        public void Write(string key, string value)
+        {
+            this[key] = value;
+        }
+
+        public void Flush()
+        {
         }
     }
 }

@@ -6,6 +6,7 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <AssemblyName>SharedPatches.Tests</AssemblyName>
+    <DefineConstants>HOLLOW_KNIGHT_GAMEPLAY_TESTS</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -34,6 +35,7 @@
     <Compile Include="../silksong-patches/src/skins/runtime/*.cs" Link="SilksongSkins/Runtime/%(Filename)%(Extension)" />
     <Compile Include="..\silksong-patches\src\mods\SilksongTweakAdapter.cs" Link="Silksong\SilksongTweakAdapter.cs" Condition="Exists('..\silksong-patches\src\mods\SilksongTweakAdapter.cs')" />
     <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightTweakAdapter.cs" Link="HollowKnight\HollowKnightTweakAdapter.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightTweakAdapter.cs')" />
+    <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightGameTweakApi.cs" Link="HollowKnight\HollowKnightGameTweakApi.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightGameTweakApi.cs')" />
     <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightFlashPolicyCore.cs" Link="HollowKnight\HollowKnightFlashPolicyCore.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightFlashPolicyCore.cs')" />
     <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightModsSession.cs" Link="HollowKnight\HollowKnightModsSession.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightModsSession.cs')" />
   </ItemGroup>

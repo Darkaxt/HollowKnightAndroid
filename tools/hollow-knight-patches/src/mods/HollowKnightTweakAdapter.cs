@@ -4,6 +4,12 @@ using DualSouls.Mods;
 
 namespace DualSouls.Mods.HollowKnight
 {
+    public enum HollowKnightDamageMode
+    {
+        NoMaskLoss,
+        Invincible,
+    }
+
     public enum HollowKnightFlashMode
     {
         Soft,
@@ -11,7 +17,7 @@ namespace DualSouls.Mods.HollowKnight
         Off,
     }
 
-    /// <summary>Typed boundary for the two fork-owned, presentation-only Hollow Knight capabilities.</summary>
+    /// <summary>Typed boundary for fork-owned Hollow Knight presentation and gameplay capabilities.</summary>
     public interface IHollowKnightTweakApi
     {
         bool IsReady { get; }
@@ -19,6 +25,17 @@ namespace DualSouls.Mods.HollowKnight
         void RestoreBaseline();
         void SetCompanionBackdropBlack(bool black);
         void SetLifebloodFlash(HollowKnightFlashMode mode);
+        void SetDamageMode(HollowKnightDamageMode mode);
+        void RestoreDamageMode();
+        void SetNailDamageMultiplier(int multiplier);
+        void RestoreNailDamage();
+        void SetOneHitKills(bool enabled);
+        void RestoreOneHitKills();
+        void SetRunSpeedMultiplier(float multiplier);
+        void RestoreRunSpeed();
+        void SetUnlimitedSoul(bool enabled);
+        void RestoreUnlimitedSoul();
+        void TickGameplay();
     }
 
     /// <summary>Hollow Knight catalog adapter for the shared built-in Mods contract.</summary>
@@ -34,26 +51,26 @@ namespace DualSouls.Mods.HollowKnight
                 "lifeblood_flash", "PRESENTATION", "LIFEBLOOD FLASH",
                 "Use the accepted softened flash, the original flash, or no flash.",
                 "soft", new[] { "soft", "vanilla", "off" }),
-            TweakDescriptor.Deferred(
+            new TweakDescriptor(
                 "damage_received", "COMBAT", "DAMAGE RECEIVED",
-                "Control how much damage the Knight receives.",
-                "HKMOD-001", "Prevent-death semantics and a scene-safe baseline are not proven."),
-            TweakDescriptor.Deferred(
+                "Choose normal damage, keep masks, or ignore damage entirely.",
+                "vanilla", new[] { "vanilla", "no_mask_loss", "invincible" }),
+            new TweakDescriptor(
                 "nail_damage", "COMBAT", "NAIL DAMAGE",
-                "Adjust nail damage without breaking smith upgrades.",
-                "HKMOD-002", "Smith-upgrade recomputation ownership and rollback are not proven."),
-            TweakDescriptor.Deferred(
+                "Multiply nail damage while preserving smith upgrades.",
+                "x1", new[] { "x1", "x2", "x3", "x5" }),
+            new TweakDescriptor(
                 "one_hit_kills", "COMBAT", "ONE-HIT KILLS",
-                "Defeat eligible enemies with one authoritative hit.",
-                "HKMOD-003", "Enemy-only typed hit interception and boss/script controls are not proven."),
-            TweakDescriptor.Deferred(
+                "Use Hollow Knight's managed instant-kill damage state.",
+                "off", new[] { "off", "on" }),
+            new TweakDescriptor(
                 "run_speed", "PLAYER", "RUN SPEED",
-                "Adjust the Knight's running pace across scenes.",
-                "HKMOD-004", "Hero replacement maintenance and transition/death baseline restoration are not proven."),
-            TweakDescriptor.Deferred(
+                "Choose the Knight's normal, +25%, or +50% walking and running pace.",
+                "vanilla", new[] { "vanilla", "plus_25", "plus_50" }),
+            new TweakDescriptor(
                 "unlimited_soul", "PLAYER", "UNLIMITED SOUL",
-                "Keep Soul available through normal resource behavior.",
-                "HKMOD-005", "Live Soul ownership and focus/spell/death/scene rollback are not proven."),
+                "Keep Soul available through the game's normal refill path.",
+                "off", new[] { "off", "on" }),
             TweakDescriptor.Deferred(
                 "charm_costs", "CHARMS", "CHARM COSTS",
                 "Adjust charm costs while preserving the complete loadout.",
@@ -136,9 +153,62 @@ namespace DualSouls.Mods.HollowKnight
             try
             {
                 if (!_api.IsReady)
-                    return TweakActionResult.Fail("Hollow Knight presentation API is not ready for " + id + ".");
+                    return TweakActionResult.Fail("Hollow Knight tweak API is not ready for " + id + ".");
 
-                if (id == "companion_backdrop")
+                if (id == "damage_received")
+                {
+                    if (value == "vanilla")
+                        _api.RestoreDamageMode();
+                    else if (value == "no_mask_loss")
+                        _api.SetDamageMode(HollowKnightDamageMode.NoMaskLoss);
+                    else if (value == "invincible")
+                        _api.SetDamageMode(HollowKnightDamageMode.Invincible);
+                    else
+                        return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + " value " + value + ".");
+                }
+                else if (id == "nail_damage")
+                {
+                    if (value == "x1")
+                        _api.RestoreNailDamage();
+                    else if (value == "x2")
+                        _api.SetNailDamageMultiplier(2);
+                    else if (value == "x3")
+                        _api.SetNailDamageMultiplier(3);
+                    else if (value == "x5")
+                        _api.SetNailDamageMultiplier(5);
+                    else
+                        return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + " value " + value + ".");
+                }
+                else if (id == "one_hit_kills")
+                {
+                    if (value == "off")
+                        _api.RestoreOneHitKills();
+                    else if (value == "on")
+                        _api.SetOneHitKills(true);
+                    else
+                        return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + " value " + value + ".");
+                }
+                else if (id == "run_speed")
+                {
+                    if (value == "vanilla")
+                        _api.RestoreRunSpeed();
+                    else if (value == "plus_25")
+                        _api.SetRunSpeedMultiplier(1.25f);
+                    else if (value == "plus_50")
+                        _api.SetRunSpeedMultiplier(1.5f);
+                    else
+                        return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + " value " + value + ".");
+                }
+                else if (id == "unlimited_soul")
+                {
+                    if (value == "off")
+                        _api.RestoreUnlimitedSoul();
+                    else if (value == "on")
+                        _api.SetUnlimitedSoul(true);
+                    else
+                        return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + " value " + value + ".");
+                }
+                else if (id == "companion_backdrop")
                 {
                     if (value == "dimmed")
                         _api.SetCompanionBackdropBlack(false);
@@ -177,6 +247,7 @@ namespace DualSouls.Mods.HollowKnight
 
         public void Tick()
         {
+            _api.TickGameplay();
         }
 
         static TweakDescriptor Find(string id)

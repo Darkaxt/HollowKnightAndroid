@@ -321,6 +321,31 @@ public sealed class HollowKnightModsSessionTests
 
         public void SetLifebloodFlash(HollowKnightFlashMode mode) =>
             Calls.Add($"flash:{mode}");
+
+        public void SetDamageMode(HollowKnightDamageMode mode) =>
+            Calls.Add($"damage:{mode}");
+
+        public void RestoreDamageMode() => Calls.Add("damage:restore");
+
+        public void SetNailDamageMultiplier(int multiplier) => Calls.Add($"nail:{multiplier}");
+
+        public void RestoreNailDamage() => Calls.Add("nail:restore");
+
+        public void SetOneHitKills(bool enabled) => Calls.Add($"one-hit:{enabled}");
+
+        public void RestoreOneHitKills() => Calls.Add("one-hit:restore");
+
+        public void SetRunSpeedMultiplier(float multiplier) => Calls.Add($"run:{multiplier}");
+
+        public void RestoreRunSpeed() => Calls.Add("run:restore");
+
+        public void SetUnlimitedSoul(bool enabled) => Calls.Add($"soul:{enabled}");
+
+        public void RestoreUnlimitedSoul() => Calls.Add("soul:restore");
+
+        public void TickGameplay()
+        {
+        }
     }
 
     private sealed class RecordingStore : Dictionary<string, string>, ITweakStore
