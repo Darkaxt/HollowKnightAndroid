@@ -13,14 +13,12 @@ namespace DualSouls.Mods.HollowKnight
         global::PlayerData _nailPlayer;
         int _nailBaseline;
         int _nailUpgradeBaseline;
-        bool _oneHitBaseline;
-        bool _oneHitBaselineCaptured;
-        bool _oneHitKills;
         float _runSpeedMultiplier = 1f;
         global::HeroController _runHero;
         float _runSpeedBaseline;
         float _walkSpeedBaseline;
         bool _unlimitedSoul;
+        float _nextSoulRefillAt;
 
         public bool IsReady => true;
 
@@ -78,26 +76,12 @@ namespace DualSouls.Mods.HollowKnight
 
         public void SetOneHitKills(bool enabled)
         {
-            if (!enabled)
-            {
-                RestoreOneHitKills();
-                return;
-            }
-            if (!_oneHitBaselineCaptured)
-            {
-                _oneHitBaseline = global::CheatManager.IsInstaKillEnabled;
-                _oneHitBaselineCaptured = true;
-            }
-            _oneHitKills = true;
-            MaintainOneHitKills();
+            HollowKnightOneHitDamagePatch.SetEnabled(enabled);
         }
 
         public void RestoreOneHitKills()
         {
-            _oneHitKills = false;
-            if (_oneHitBaselineCaptured)
-                global::CheatManager.IsInstaKillEnabled = _oneHitBaseline;
-            _oneHitBaselineCaptured = false;
+            HollowKnightOneHitDamagePatch.SetEnabled(false);
         }
 
         public void SetRunSpeedMultiplier(float multiplier)
@@ -129,19 +113,14 @@ namespace DualSouls.Mods.HollowKnight
         {
             MaintainDamageMode();
             MaintainNailDamage();
-            MaintainOneHitKills();
             MaintainRunSpeed();
             MaintainUnlimitedSoul();
         }
 
-        void MaintainOneHitKills()
-        {
-            if (_oneHitKills) global::CheatManager.IsInstaKillEnabled = true;
-        }
-
         void MaintainUnlimitedSoul()
         {
-            if (!_unlimitedSoul) return;
+            if (!_unlimitedSoul || UnityEngine.Time.unscaledTime < _nextSoulRefillAt) return;
+            _nextSoulRefillAt = UnityEngine.Time.unscaledTime + 0.4f;
             global::GameManager game = global::GameManager.UnsafeInstance;
             global::PlayerData player = game != null ? game.playerData : null;
             global::HeroController hero = game != null ? game.hero_ctrl : null;
@@ -271,6 +250,55 @@ namespace DualSouls.Mods.HollowKnight
             if (_damagePlayer != null && _damageInvincibilityCaptured)
                 _damagePlayer.isInvincible = _damageInvincibilityBaseline;
             _damageInvincibilityCaptured = false;
+        }
+    }
+
+    public static class HollowKnightOneHitDamagePatch
+    {
+        sealed class TargetEligibility
+        {
+            public TargetEligibility(bool regularEnemy)
+            {
+                RegularEnemy = regularEnemy;
+            }
+
+            public bool RegularEnemy { get; }
+        }
+
+        static bool _enabled;
+        static System.Runtime.CompilerServices.ConditionalWeakTable<
+            global::HealthManager, TargetEligibility> _targets = NewTargetCache();
+
+        public static void SetEnabled(bool enabled)
+        {
+            if (_enabled == enabled)
+            {
+                if (!enabled) _targets = NewTargetCache();
+                return;
+            }
+            _enabled = enabled;
+            _targets = NewTargetCache();
+        }
+
+        public static void BeforeHit(global::HealthManager target, ref global::HitInstance hitInstance)
+        {
+            if (!_enabled || target == null || target.isDead || hitInstance.DamageDealt <= 0)
+                return;
+
+            if (!_targets.TryGetValue(target, out TargetEligibility eligibility))
+            {
+                eligibility = new TargetEligibility(target.hp > 1 && target.hp < 200);
+                _targets.Add(target, eligibility);
+            }
+            if (eligibility.RegularEnemy && hitInstance.DamageDealt < 9999)
+                hitInstance.DamageDealt = 9999;
+        }
+
+        static System.Runtime.CompilerServices.ConditionalWeakTable<
+            global::HealthManager, TargetEligibility> NewTargetCache()
+        {
+            return new System.Runtime.CompilerServices.ConditionalWeakTable<
+                global::HealthManager, TargetEligibility>();
         }
     }
 }

@@ -136,6 +136,20 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertIn("Mods.ensure(mods, buildPaths.modStateRoot)", source)
         self.assertIn("Mods.stageForGeneration(out, workspace.root)", source)
 
+    def test_hollow_knight_builtin_damage_weave_precedes_plugins_and_il2cpp(self):
+        converter = (LAUNCHER / "Il2cppConverter.kt").read_text(encoding="utf-8")
+
+        profile_guard = 'if (profile.id == "hollow-knight" && assets != null) {'
+        builtin = "Mods.weaveBuiltin(context, root, asmDir(root), assets)"
+        plugins = "Mods.weave(context, root, modInput, asmDir(root), assets)"
+        il2cpp = "prepareTool(deploy)"
+        self.assertIn(profile_guard, converter)
+        self.assertIn(builtin, converter)
+        self.assertLess(converter.index(profile_guard), converter.index(builtin))
+        self.assertLess(converter.index(builtin), converter.index(plugins))
+        self.assertLess(converter.index(plugins), converter.index(il2cpp))
+        self.assertNotIn('if (profile.id == "silksong" && assets != null) {\n            Mods.weaveBuiltin', converter)
+
     def test_conversion_records_only_candidate_mod_metadata(self):
         converter = (LAUNCHER / "Il2cppConverter.kt").read_text(encoding="utf-8")
 

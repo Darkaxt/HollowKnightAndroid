@@ -489,6 +489,13 @@ object Il2cppConverter {
 
         if (requiresUiMessageDismissal(profile)) bridgeUiMessageDismissal(context, root)
 
+        if (profile.id == "hollow-knight" && assets != null) {
+            send(Progress("Weaving gameplay tweaks", -1f, "managed damage seam"))
+            Mods.weaveBuiltin(context, root, asmDir(root), assets) { line ->
+                trySend(Progress("Weaving gameplay tweaks", -1f, line.take(80)))
+            }
+        }
+
         // The chainloader, run here rather than at game startup: this is the
         // last moment the game exists as IL, so it is the only moment a
         // Harmony patch can be applied. Plugins are woven into the staged set

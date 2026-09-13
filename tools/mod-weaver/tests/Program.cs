@@ -30,6 +30,7 @@ internal static class Program
             ("rejected assemblies unavailable to string targets", RejectedStringTarget),
             ("generic member resolution remains best-effort", GenericMembers),
             ("builtin weave survives plugin composition", BuiltinComposition),
+            ("builtin Hollow Knight one-hit prefix", HollowKnightOneHitBuiltin),
         };
         var failed = 0;
         foreach (var (name, run) in tests)
@@ -403,6 +404,73 @@ internal static class Program
         il.Emit(OpCodes.Ret);
     }
 
+    static void HollowKnightOneHitBuiltin()
+    {
+        using var fixture = new Fixture();
+        var gameModule = fixture.Game.MainModule;
+        var hitType = new TypeDefinition("", "HitInstance",
+            TypeAttributes.Public | TypeAttributes.SequentialLayout |
+            TypeAttributes.Sealed | TypeAttributes.BeforeFieldInit,
+            gameModule.ImportReference(typeof(ValueType)));
+        gameModule.Types.Add(hitType);
+        Fixture.Field(hitType, "DamageDealt", gameModule.TypeSystem.Int32, isStatic: false);
+        var healthType = new TypeDefinition("", "HealthManager",
+            TypeAttributes.Public | TypeAttributes.Class | TypeAttributes.BeforeFieldInit,
+            gameModule.TypeSystem.Object);
+        gameModule.Types.Add(healthType);
+        Fixture.Field(healthType, "hp", gameModule.TypeSystem.Int32, isStatic: false);
+        Fixture.Field(healthType, "isDead", gameModule.TypeSystem.Boolean, isStatic: false);
+        var hit = Fixture.Method(healthType, "Hit", gameModule.TypeSystem.Void, isStatic: false);
+        Fixture.Parameter(hit, "hitInstance", hitType);
+        hit.Body.GetILProcessor().Emit(OpCodes.Ret);
+        var aspectType = new TypeDefinition("", "ForceCameraAspect", TypeAttributes.Public,
+            gameModule.TypeSystem.Object);
+        gameModule.Types.Add(aspectType);
+        var aspect = Fixture.Method(aspectType, "AutoScaleViewportShared",
+            gameModule.TypeSystem.Single);
+        var aspectIl = aspect.Body.GetILProcessor();
+        aspectIl.Emit(OpCodes.Ldc_R4, 1.6f);
+        aspectIl.Emit(OpCodes.Ldc_R4, 2.3916667f);
+        aspectIl.Emit(OpCodes.Add);
+        aspectIl.Emit(OpCodes.Ret);
+        fixture.Game.Write(Path.Combine(fixture.Staged, "Assembly-CSharp.dll"));
+
+        using var patches = Fixture.NewAssembly("HollowKnightPatches");
+        var patchType = new TypeDefinition(
+            "DualSouls.Mods.HollowKnight", "HollowKnightOneHitDamagePatch",
+            TypeAttributes.Public | TypeAttributes.Abstract | TypeAttributes.Sealed |
+            TypeAttributes.Class | TypeAttributes.BeforeFieldInit,
+            patches.MainModule.TypeSystem.Object);
+        patches.MainModule.Types.Add(patchType);
+        var beforeHit = Fixture.Method(
+            patchType, "BeforeHit", patches.MainModule.TypeSystem.Void);
+        Fixture.Parameter(beforeHit, "target", patches.MainModule.ImportReference(healthType));
+        Fixture.Parameter(beforeHit, "hitInstance",
+            new ByReferenceType(patches.MainModule.ImportReference(hitType)));
+        beforeHit.Body.GetILProcessor().Emit(OpCodes.Ret);
+        patches.Write(Path.Combine(fixture.Staged, "HollowKnightPatches.dll"));
+
+        True(Builtin.Apply(fixture.Staged).Any(n => n.Contains("one-hit", StringComparison.Ordinal)),
+            "Hollow Knight one-hit builtin reports its result");
+        using var rewritten = AssemblyDefinition.ReadAssembly(
+            Path.Combine(fixture.Staged, "Assembly-CSharp.dll"));
+        True(rewritten.MainModule.GetType(Builtin.GateType) is null,
+            "Hollow Knight builtin does not inject the Silksong aspect gate");
+        var rewrittenHit = rewritten.MainModule.GetType("HealthManager").Methods
+            .Single(m => m.Name == "Hit");
+        var instructions = rewrittenHit.Body.Instructions;
+        Equal(Code.Ldarg_0, instructions[0].OpCode.Code, "one-hit prefix loads HealthManager");
+        True(instructions[1].OpCode.Code is Code.Ldarga or Code.Ldarga_S,
+            "one-hit prefix loads HitInstance by reference");
+        var call = instructions[2].Operand as MethodReference;
+        Equal("DualSouls.Mods.HollowKnight.HollowKnightOneHitDamagePatch",
+            call?.DeclaringType.FullName, "one-hit prefix owner");
+        Equal("BeforeHit", call?.Name, "one-hit prefix method");
+
+        True(Builtin.Apply(fixture.Staged).Any(n => n.Contains("already woven", StringComparison.Ordinal)),
+            "Hollow Knight one-hit builtin is idempotent");
+    }
+
     static void BuiltinComposition()
     {
         using var fixture = new Fixture();
@@ -415,6 +483,8 @@ internal static class Program
         il.Emit(OpCodes.Add);
         il.Emit(OpCodes.Ret);
         fixture.Game.Write(Path.Combine(fixture.Staged, "Assembly-CSharp.dll"));
+        using var patches = Fixture.NewAssembly("SilksongPatches");
+        patches.Write(Path.Combine(fixture.Staged, "SilksongPatches.dll"));
         True(Builtin.Apply(fixture.Staged).Any(n => n.Contains("rewritten")), "builtin applied");
         var plugin = fixture.Plugin("Post", new Patch());
         Accepted(fixture.Run(plugin).Single());

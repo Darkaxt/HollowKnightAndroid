@@ -43,7 +43,7 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
         api.SetUnlimitedSoul(true);
         Assert.True(player.isInvincible);
         Assert.Equal(27, player.nailDamage);
-        Assert.True(CheatManager.IsInstaKillEnabled);
+        Assert.False(CheatManager.IsInstaKillEnabled);
         Assert.Equal(12f, hero.RUN_SPEED);
 
         api.RestoreBaseline();
@@ -52,6 +52,10 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
         Assert.False(CheatManager.IsInstaKillEnabled);
         Assert.Equal(8f, hero.RUN_SPEED);
         Assert.Equal(4f, hero.WALK_SPEED);
+
+        var postRestoreTarget = new HealthManager { hp = 20 };
+        postRestoreTarget.Hit(new HitInstance { DamageDealt = 5, Multiplier = 1f });
+        Assert.Equal(15, postRestoreTarget.hp);
 
         player.MPCharge = 20;
         api.TickGameplay();
@@ -143,20 +147,42 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
     }
 
     [Fact]
-    public void OneHitKillsUsesManagedCheatGateAndRestoresExactBaseline()
+    public void OneHitKillsOnlyEligibleRegularEnemiesAndResetsClassificationOnDisable()
     {
         CheatManager.IsInstaKillEnabled = false;
         var api = new HollowKnightGameTweakApi();
 
         api.SetOneHitKills(true);
-        Assert.True(CheatManager.IsInstaKillEnabled);
+        Assert.False(CheatManager.IsInstaKillEnabled);
 
-        CheatManager.IsInstaKillEnabled = false;
-        api.TickGameplay();
-        Assert.True(CheatManager.IsInstaKillEnabled);
+        var ignored = new HealthManager { hp = 20 };
+        ignored.Hit(new HitInstance { DamageDealt = 0, Multiplier = 1f });
+        Assert.Equal(20, ignored.hp);
+        Assert.False(ignored.isDead);
+
+        var regular = new HealthManager { hp = 20 };
+        var boss = new HealthManager { hp = 200 };
+        var hit = new HitInstance { DamageDealt = 5, Multiplier = 1f };
+        regular.Hit(hit);
+        boss.Hit(hit);
+        Assert.True(regular.isDead);
+        Assert.Equal(195, boss.hp);
+        Assert.False(boss.isDead);
+
+        boss.Hit(hit);
+        Assert.Equal(190, boss.hp);
+        Assert.False(boss.isDead);
 
         api.RestoreOneHitKills();
-        Assert.False(CheatManager.IsInstaKillEnabled);
+        var disabledTarget = new HealthManager { hp = 20 };
+        disabledTarget.Hit(hit);
+        Assert.Equal(15, disabledTarget.hp);
+        Assert.False(disabledTarget.isDead);
+
+        api.SetOneHitKills(true);
+        disabledTarget.Hit(hit);
+        Assert.True(disabledTarget.isDead);
+        api.RestoreOneHitKills();
 
         CheatManager.IsInstaKillEnabled = true;
         api.SetOneHitKills(true);
@@ -202,13 +228,24 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
         Assert.Equal(63, player.MPCharge);
         Assert.Equal(33, hero.SoulAdded);
 
+        player.MPCharge = 30;
+        UnityEngine.Time.unscaledTime = 0.2f;
+        api.TickGameplay();
+        Assert.Equal(30, player.MPCharge);
+
+        api.RestoreUnlimitedSoul();
+        api.SetUnlimitedSoul(true);
+        Assert.Equal(30, player.MPCharge);
+        UnityEngine.Time.unscaledTime = 0.4f;
+        api.TickGameplay();
+        Assert.Equal(63, player.MPCharge);
+        Assert.Equal(66, hero.SoulAdded);
+
         api.RestoreUnlimitedSoul();
         player.MPCharge = 20;
         api.TickGameplay();
         Assert.Equal(20, player.MPCharge);
-        Assert.Equal(33, hero.SoulAdded);
-
-        api.SetUnlimitedSoul(true);
+        Assert.Equal(66, hero.SoulAdded);
         player.health = 0;
         player.MPCharge = 10;
         api.TickGameplay();
@@ -226,6 +263,8 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
         HeroController.instance = null;
         GameManager.UnsafeInstance = null;
         CheatManager.IsInstaKillEnabled = false;
+        HollowKnightOneHitDamagePatch.SetEnabled(false);
+        UnityEngine.Time.unscaledTime = 0f;
         PlayMakerFSM.Broadcasts.Clear();
     }
 }

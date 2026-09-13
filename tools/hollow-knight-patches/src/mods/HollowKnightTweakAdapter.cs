@@ -61,7 +61,7 @@ namespace DualSouls.Mods.HollowKnight
                 "x1", new[] { "x1", "x2", "x3", "x5" }),
             new TweakDescriptor(
                 "one_hit_kills", "COMBAT", "ONE-HIT KILLS",
-                "Use Hollow Knight's managed instant-kill damage state.",
+                "Defeat regular enemies in one hit while excluding boss-scale targets.",
                 "off", new[] { "off", "on" }),
             new TweakDescriptor(
                 "run_speed", "PLAYER", "RUN SPEED",

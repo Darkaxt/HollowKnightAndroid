@@ -78,6 +78,15 @@ internal static class Builtin
     const string TargetType = "ForceCameraAspect";
     const string TargetMethod = "AutoScaleViewportShared";
 
+    const string HollowKnightPatchAssembly = "HollowKnightPatches.dll";
+    const string SilksongPatchAssembly = "SilksongPatches.dll";
+    const string HealthManagerType = "HealthManager";
+    const string HitInstanceType = "HitInstance";
+    const string HitMethod = "Hit";
+    const string OneHitPatchType =
+        "DualSouls.Mods.HollowKnight.HollowKnightOneHitDamagePatch";
+    const string OneHitPatchMethod = "BeforeHit";
+
     /// <summary>
     /// Applies every built-in weave to the staged assembly set.
     ///
@@ -90,7 +99,7 @@ internal static class Builtin
         var path = Path.Combine(assemblies, "Assembly-CSharp.dll");
         if (!File.Exists(path))
         {
-            notes.Add("aspect floor: no Assembly-CSharp.dll in the staged set; skipped");
+            notes.Add("builtins: no Assembly-CSharp.dll in the staged set; skipped");
             return notes;
         }
 
@@ -107,19 +116,39 @@ internal static class Builtin
         }
         catch (Exception e)
         {
-            notes.Add($"aspect floor: cannot read Assembly-CSharp.dll ({e.GetType().Name}); skipped");
+            notes.Add($"builtins: cannot read Assembly-CSharp.dll ({e.GetType().Name}); skipped");
             return notes;
         }
 
-        bool changed;
-        try
+        var changed = false;
+        if (File.Exists(Path.Combine(assemblies, SilksongPatchAssembly)))
         {
-            changed = WeaveAspectFloor(assembly, notes);
+            try
+            {
+                changed |= WeaveAspectFloor(assembly, notes);
+            }
+            catch (Exception e)
+            {
+                notes.Add($"aspect floor: not applied ({e.GetType().Name}: {e.Message})");
+            }
         }
-        catch (Exception e)
+
+        var patchPath = Path.Combine(assemblies, HollowKnightPatchAssembly);
+        if (File.Exists(patchPath))
         {
-            notes.Add($"aspect floor: not applied ({e.GetType().Name}: {e.Message})");
-            return notes;
+            try
+            {
+                using var patches = AssemblyDefinition.ReadAssembly(patchPath, new ReaderParameters
+                {
+                    InMemory = true,
+                    AssemblyResolver = resolver,
+                });
+                changed |= WeaveHollowKnightOneHit(assembly, patches, notes);
+            }
+            catch (Exception e)
+            {
+                notes.Add($"one-hit damage: not applied ({e.GetType().Name}: {e.Message})");
+            }
         }
 
         if (!changed) return notes;
@@ -127,11 +156,11 @@ internal static class Builtin
         try
         {
             assembly.Write(path);
-            notes.Add("aspect floor: Assembly-CSharp.dll rewritten");
+            notes.Add("builtins: Assembly-CSharp.dll rewritten");
         }
         catch (Exception e)
         {
-            notes.Add($"aspect floor: could not write Assembly-CSharp.dll ({e.GetType().Name}: {e.Message})");
+            notes.Add($"builtins: could not write Assembly-CSharp.dll ({e.GetType().Name}: {e.Message})");
         }
         return notes;
     }
@@ -206,6 +235,68 @@ internal static class Builtin
 
         notes.Add($"aspect range: {TargetType}.{TargetMethod} now asks {GateType} "
                   + $"instead of loading {StockFloor}/{StockCeiling}");
+        return true;
+    }
+
+    static bool WeaveHollowKnightOneHit(
+        AssemblyDefinition game, AssemblyDefinition patches, List<string> notes)
+    {
+        var gameModule = game.MainModule;
+        var healthManager = gameModule.GetType(HealthManagerType);
+        var hitInstance = gameModule.GetType(HitInstanceType);
+        if (healthManager is null || hitInstance is null)
+        {
+            notes.Add("one-hit damage: HealthManager/HitInstance not found; skipped");
+            return false;
+        }
+
+        var hits = healthManager.Methods.Where(m =>
+            m.Name == HitMethod && m.HasBody && !m.IsStatic
+            && m.ReturnType.MetadataType == MetadataType.Void
+            && m.Parameters.Count == 1
+            && !m.Parameters[0].ParameterType.IsByReference
+            && m.Parameters[0].ParameterType.FullName == hitInstance.FullName).ToList();
+        if (hits.Count != 1)
+        {
+            notes.Add($"one-hit damage: expected one {HealthManagerType}.{HitMethod}"
+                      + $"({HitInstanceType}), found {hits.Count}; skipped");
+            return false;
+        }
+
+        var patchType = patches.MainModule.GetType(OneHitPatchType);
+        var prefixes = patchType?.Methods.Where(m =>
+            m.Name == OneHitPatchMethod && m.IsPublic && m.IsStatic
+            && m.ReturnType.MetadataType == MetadataType.Void
+            && m.Parameters.Count == 2
+            && m.Parameters[0].ParameterType.FullName == healthManager.FullName
+            && m.Parameters[1].ParameterType is ByReferenceType byReference
+            && byReference.ElementType.FullName == hitInstance.FullName).ToList()
+            ?? new List<MethodDefinition>();
+        if (prefixes.Count != 1)
+        {
+            notes.Add($"one-hit damage: exact {OneHitPatchType}.{OneHitPatchMethod} prefix"
+                      + $" not found; skipped");
+            return false;
+        }
+
+        var hit = hits[0];
+        if (hit.Body.Instructions.Any(i =>
+                i.OpCode == OpCodes.Call
+                && i.Operand is MethodReference called
+                && called.DeclaringType.FullName == OneHitPatchType
+                && called.Name == OneHitPatchMethod))
+        {
+            notes.Add("one-hit damage: already woven; nothing to do");
+            return false;
+        }
+
+        var processor = hit.Body.GetILProcessor();
+        var first = hit.Body.Instructions[0];
+        processor.InsertBefore(first, processor.Create(OpCodes.Ldarg_0));
+        processor.InsertBefore(first, processor.Create(OpCodes.Ldarga_S, hit.Parameters[0]));
+        processor.InsertBefore(first,
+            processor.Create(OpCodes.Call, gameModule.ImportReference(prefixes[0])));
+        notes.Add($"one-hit damage: {HealthManagerType}.{HitMethod} now calls managed prefix");
         return true;
     }
 

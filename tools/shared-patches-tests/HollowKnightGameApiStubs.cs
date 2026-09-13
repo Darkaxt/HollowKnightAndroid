@@ -52,6 +52,26 @@ public sealed class GameManager : UnityEngine.Object
     public HeroController hero_ctrl;
 }
 
+public struct HitInstance
+{
+    public int DamageDealt;
+    public float Multiplier;
+}
+
+public sealed class HealthManager : UnityEngine.Object
+{
+    public int hp;
+    public bool isDead;
+
+    public void Hit(HitInstance hit)
+    {
+        HollowKnightOneHitDamagePatch.BeforeHit(this, ref hit);
+        if (isDead || hit.DamageDealt <= 0) return;
+        hp -= (int)System.MathF.Round(hit.DamageDealt * hit.Multiplier);
+        if (hp <= 0) isDead = true;
+    }
+}
+
 public static class CheatManager
 {
     public static bool IsInstaKillEnabled { get; set; }
@@ -69,6 +89,11 @@ public static class PlayMakerFSM
 
 namespace UnityEngine
 {
+    public static class Time
+    {
+        public static float unscaledTime;
+    }
+
     public class Object
     {
     }
