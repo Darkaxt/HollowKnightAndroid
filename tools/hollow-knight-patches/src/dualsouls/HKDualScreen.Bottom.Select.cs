@@ -150,6 +150,35 @@ public partial class HKDualScreen
 
     void ResetMapViewAnimated() { resetStartZoom = mapUserZoom; resetStartPan = mapUserPan; resetAnimT = 0f; pinchLastDist = -1f; dragLastValid = false; }   // the RESET button glides back instead of blipping
 
+    bool RejectAndDrainPendingModsInput()
+    {
+        if (!HollowKnightModsPresentationFlow.RejectAllLowerScreenInput(
+                modsLifecycle))
+            return false;
+
+        int tapSequence = transport != null ? transport.TapSequence : lastTapSeq;
+        int cleanTapSequence = transport != null
+            ? transport.CleanTapSequence
+            : lastCleanTapSeq;
+        bool rejected = HollowKnightModsPresentationFlow.RejectAndDrainLowerScreenInput(
+            modsLifecycle,
+            tapSequence,
+            cleanTapSequence,
+            ref lastTapSeq,
+            ref lastCleanTapSeq,
+            ref pinchLastDist,
+            ref dragLastValid,
+            ref modsDragValid);
+        if (rejected)
+            modsInteraction.ResetCleanTap(cleanTapSequence);
+        return rejected;
+    }
+
+    void DrainPendingModsInputBeforeRelease()
+    {
+        RejectAndDrainPendingModsInput();
+    }
+
     // Convert a bottom-panel normalized touch (top-left origin) to an attrCam world point.
     Vector3 TouchToWorld(float nx, float ny)
     {
@@ -163,7 +192,7 @@ public partial class HKDualScreen
     // a clean tap on the map area resets the view. Runs off HKAux's live multi-pointer bridge.
     void MapPinchTick()
     {
-        if (HollowKnightModsPresentationFlow.RejectAllLowerScreenInput(modsLifecycle))
+        if (RejectAndDrainPendingModsInput())
             return;
         if (cfg.compMapPinch != 1 || transport == null || attrCam == null) return;
         try
@@ -250,7 +279,7 @@ public partial class HKDualScreen
 
     void PollTouch()
     {
-        if (HollowKnightModsPresentationFlow.RejectAllLowerScreenInput(modsLifecycle))
+        if (RejectAndDrainPendingModsInput())
             return;
         // DEBUG sim-tap: fire a synthetic item tap at (compSimTapX, compSimTapY) when compSimTapN changes.
         if (cfg.debug == 1 && cfg.compSimTapN != lastSimTapN)

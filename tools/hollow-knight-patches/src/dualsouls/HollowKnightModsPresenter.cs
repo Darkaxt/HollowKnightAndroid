@@ -481,6 +481,7 @@ public partial class HKDualScreen
         HollowKnightModsPresentationFlow.CompleteCoveredContentRestore(
             modsLifecycle,
             ordinaryLayoutReady: true,
+            DrainPendingModsInputBeforeRelease,
             RevealModsRestoreCameras);
     }
 
@@ -492,7 +493,13 @@ public partial class HKDualScreen
 
     void RestoreModsCoveredContentImmediately()
     {
-        modsLifecycle.RequestCoveredContentRestore();
+        HollowKnightModsPresentationFlow.RestoreCoveredContentImmediately(
+            modsLifecycle,
+            RestoreAllModsCoveredContentCore);
+    }
+
+    void RestoreAllModsCoveredContentCore()
+    {
         RestoreModsCoveredContentCore();
         modsHudVisibility.Restore();
         modsCompanionVisibility.Restore();

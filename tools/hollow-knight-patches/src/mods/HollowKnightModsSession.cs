@@ -118,8 +118,19 @@ namespace DualSouls.Mods.HollowKnight
                 return HollowKnightModsRestoreDisposition.Deferred;
             }
 
-            lifecycle.RequestCoveredContentRestore();
             return HollowKnightModsRestoreDisposition.Immediate;
+        }
+
+        public static bool RestoreCoveredContentImmediately(
+            TweakPresenterLifecycle lifecycle,
+            Action restoreSurfaces)
+        {
+            if (lifecycle == null) throw new ArgumentNullException(nameof(lifecycle));
+            if (restoreSurfaces == null) throw new ArgumentNullException(nameof(restoreSurfaces));
+            if (!lifecycle.CoveredContentStowed) return false;
+
+            restoreSurfaces();
+            return lifecycle.RequestCoveredContentRestore();
         }
 
         public static bool BeginCoveredContentRestore(
@@ -133,24 +144,47 @@ namespace DualSouls.Mods.HollowKnight
             if (!lifecycle.CoveredContentRestorePending) return false;
 
             hideCameras();
-            if (!lifecycle.TryBeginCoveredContentRestore()) return false;
+            if (lifecycle.CoveredContentRestoreStarted) return false;
             restoreSurfaces();
-            return true;
+            return lifecycle.TryBeginCoveredContentRestore();
         }
 
         public static bool CompleteCoveredContentRestore(
             TweakPresenterLifecycle lifecycle,
             bool ordinaryLayoutReady,
+            Action drainPendingInput,
             Action revealCameras)
         {
             if (lifecycle == null) throw new ArgumentNullException(nameof(lifecycle));
+            if (drainPendingInput == null)
+                throw new ArgumentNullException(nameof(drainPendingInput));
             if (revealCameras == null) throw new ArgumentNullException(nameof(revealCameras));
             if (!ordinaryLayoutReady || !lifecycle.CoveredContentRestoreStarted)
                 return false;
 
+            drainPendingInput();
             revealCameras();
             return lifecycle.TryCompleteCoveredContentRestore(
                 ordinaryLayoutReady: true);
+        }
+
+        public static bool RejectAndDrainLowerScreenInput(
+            TweakPresenterLifecycle lifecycle,
+            int tapSequence,
+            int cleanTapSequence,
+            ref int lastTapSequence,
+            ref int lastCleanTapSequence,
+            ref float pinchLastDistance,
+            ref bool mapDragValid,
+            ref bool modsDragValid)
+        {
+            if (!RejectAllLowerScreenInput(lifecycle)) return false;
+            lastTapSequence = tapSequence;
+            lastCleanTapSequence = cleanTapSequence;
+            pinchLastDistance = -1f;
+            mapDragValid = false;
+            modsDragValid = false;
+            return true;
         }
 
         public static bool RejectAllLowerScreenInput(

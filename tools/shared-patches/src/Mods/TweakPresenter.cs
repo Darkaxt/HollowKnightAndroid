@@ -438,9 +438,13 @@ namespace DualSouls.Mods
 
         public void Restore()
         {
-            for (int i = _entries.Count - 1; i >= 0; i--)
-                _write(_entries[i].Target, _entries[i].State);
-            _entries.Clear();
+            while (_entries.Count != 0)
+            {
+                int index = _entries.Count - 1;
+                Entry entry = _entries[index];
+                _write(entry.Target, entry.State);
+                _entries.RemoveAt(index);
+            }
         }
     }
 

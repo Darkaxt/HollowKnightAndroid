@@ -413,6 +413,10 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         tick = method_body(presenter, r"void\s+TweaksPaneTick\s*\([^)]*\)")
         tap = method_body(presenter, r"void\s+HandleModsCleanTap\s*\([^)]*\)")
         poll = method_body(select, r"void\s+PollTouch\s*\(\s*\)")
+        drain_pending = method_body(
+            select,
+            r"bool\s+RejectAndDrainPendingModsInput\s*\(\s*\)",
+        )
 
         for required in (
             "frameRoot", "MakeGearTex(48)", "Sprite.Create", "SpriteRenderer",
@@ -466,10 +470,14 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertNotIn("PreviousGroup", tap)
         self.assertNotIn("NextGroup", tap)
         self.assertIn("if (modsLifecycle.OwnsInput) return", poll)
-        self.assertIn(
-            "HollowKnightModsPresentationFlow.RejectAllLowerScreenInput(modsLifecycle)",
-            poll,
-        )
+        self.assertIn("RejectAndDrainPendingModsInput()", poll)
+        for drained in (
+            "transport.TapSequence", "transport.CleanTapSequence",
+            "ref lastTapSeq", "ref lastCleanTapSeq", "ref pinchLastDist",
+            "ref dragLastValid", "ref modsDragValid",
+            "modsInteraction.ResetCleanTap(cleanTapSequence)",
+        ):
+            self.assertIn(drained, drain_pending)
         self.assertRegex(
             " ".join(poll.split()),
             r"if\s*\(hitTab\s*>=\s*0\)\s*\{\s*if\s*\(HollowKnightModsPresentationFlow\.CanCloseFromLowerScreenInput\(modsLifecycle\)\)\s*CloseTweaksPane\(\);\s*tab\.tap\s*=\s*hitTab",
@@ -620,6 +628,10 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             presenter,
             r"void\s+RestoreModsCoveredContentImmediately\s*\(\s*\)",
         )
+        restore_all = method_body(
+            presenter,
+            r"void\s+RestoreAllModsCoveredContentCore\s*\(\s*\)",
+        )
         close = method_body(
             presenter,
             r"void\s+CloseTweaksPane\s*\(\s*\)",
@@ -663,6 +675,10 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         poll_touch = method_body(select, r"void\s+PollTouch\s*\(\s*\)")
         map_pinch = method_body(select, r"void\s+MapPinchTick\s*\(\s*\)")
+        drain_pending = method_body(
+            select,
+            r"bool\s+RejectAndDrainPendingModsInput\s*\(\s*\)",
+        )
 
         self.assertIn("HollowKnightModsPresentationFlow.CoveredSurfaceCount", stow)
         self.assertIn("HollowKnightModsPresentationFlow.CoveredSurfaceAt", stow)
@@ -730,7 +746,12 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("modsHudVisibility.CaptureAndHide(hudCam2)", hide_restore_cameras)
         self.assertIn("modsCompanionVisibility.Restore()", reveal_restore_cameras)
         self.assertIn("modsHudVisibility.Restore()", reveal_restore_cameras)
-        immediate_restore_path = immediate_restore + restore_core
+        immediate_restore_path = immediate_restore + restore_all + restore_core
+        self.assertIn(
+            "HollowKnightModsPresentationFlow.RestoreCoveredContentImmediately(",
+            immediate_restore,
+        )
+        self.assertIn("RestoreAllModsCoveredContentCore", immediate_restore)
         for restored in (
             "modsPageVisibility.Restore()",
             "modsFrameContentVisibility.Restore()",
@@ -742,15 +763,26 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertNotIn("RestoreModsCoveredContentImmediately()", rebind)
         self.assertIn("RequestModsCoveredContentRelease()", teardown)
         self.assertNotIn("RestoreModsCoveredContentImmediately()", teardown)
-        pending_input_guard = (
-            "HollowKnightModsPresentationFlow.RejectAllLowerScreenInput(modsLifecycle)"
-        )
+        pending_input_guard = "RejectAndDrainPendingModsInput()"
         can_close_input = (
             "HollowKnightModsPresentationFlow.CanCloseFromLowerScreenInput(modsLifecycle)"
         )
         self.assertIn(pending_input_guard, poll_touch)
         self.assertIn(pending_input_guard, map_pinch)
         self.assertIn(can_close_input, poll_touch)
+        for drained in (
+            "HollowKnightModsPresentationFlow.RejectAndDrainLowerScreenInput(",
+            "transport.TapSequence", "transport.CleanTapSequence",
+            "ref lastTapSeq", "ref lastCleanTapSeq", "ref pinchLastDist",
+            "ref dragLastValid", "ref modsDragValid",
+            "modsInteraction.ResetCleanTap(cleanTapSequence)",
+        ):
+            self.assertIn(drained, drain_pending)
+        self.assertIn("DrainPendingModsInputBeforeRelease", complete_restore)
+        self.assertLess(
+            complete_restore.index("DrainPendingModsInputBeforeRelease"),
+            complete_restore.index("RevealModsRestoreCameras"),
+        )
         self.assertLess(poll_touch.index(pending_input_guard), poll_touch.index("cfg.debug"))
         self.assertLess(poll_touch.index(pending_input_guard), poll_touch.index("GearTapN"))
         self.assertLess(poll_touch.index(pending_input_guard), poll_touch.index("hitTab >= 0"))

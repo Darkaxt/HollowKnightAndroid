@@ -202,7 +202,10 @@ public sealed class TweakPresenterTests
 
         Assert.Equal(HollowKnightModsRestoreDisposition.Deferred, disposition);
         Assert.False(HollowKnightModsPresentationFlow.CompleteCoveredContentRestore(
-            lifecycle, ordinaryLayoutReady: true, () => events.Add("reveal")));
+            lifecycle,
+            ordinaryLayoutReady: true,
+            () => events.Add("drain input"),
+            () => events.Add("reveal")));
         Assert.Empty(events);
         Assert.True(HollowKnightModsPresentationFlow.BeginCoveredContentRestore(
             lifecycle,
@@ -217,15 +220,93 @@ public sealed class TweakPresenterTests
             new[] { "hide cameras", "restore surfaces", "hide cameras" },
             events);
         Assert.False(HollowKnightModsPresentationFlow.CompleteCoveredContentRestore(
-            lifecycle, ordinaryLayoutReady: false, () => events.Add("reveal")));
+            lifecycle,
+            ordinaryLayoutReady: false,
+            () => events.Add("drain input"),
+            () => events.Add("reveal")));
         Assert.DoesNotContain("reveal", events);
         Assert.True(HollowKnightModsPresentationFlow.CompleteCoveredContentRestore(
-            lifecycle, ordinaryLayoutReady: true, () => events.Add("reveal")));
+            lifecycle,
+            ordinaryLayoutReady: true,
+            () => events.Add("drain input"),
+            () => events.Add("reveal")));
         Assert.Equal(
             new[] {
-                "hide cameras", "restore surfaces", "hide cameras", "reveal",
+                "hide cameras", "restore surfaces", "hide cameras",
+                "drain input", "reveal",
             },
             events);
+        Assert.False(lifecycle.OwnsInput);
+    }
+
+    [Fact]
+    public void HollowKnightSurfaceRestoreFailureRemainsOwnedAndRetriesBeforeReveal()
+    {
+        var first = new SurfaceNode { State = true };
+        var transient = new SurfaceNode { State = true };
+        var last = new SurfaceNode { State = true };
+        bool throwOnce = true;
+        int firstRestoreWrites = 0;
+        int transientRestoreWrites = 0;
+        int lastRestoreWrites = 0;
+        var ownership = new TweakPresenterSurfaceOwnership<SurfaceNode, bool>(
+            node => node.State,
+            (node, state) =>
+            {
+                if (state)
+                {
+                    if (ReferenceEquals(node, first)) firstRestoreWrites++;
+                    if (ReferenceEquals(node, transient)) transientRestoreWrites++;
+                    if (ReferenceEquals(node, last)) lastRestoreWrites++;
+                    if (ReferenceEquals(node, transient) && throwOnce)
+                    {
+                        throwOnce = false;
+                        throw new InvalidOperationException("transient restore failure");
+                    }
+                }
+                node.State = state;
+            },
+            false);
+        ownership.CaptureAndHide(first);
+        ownership.CaptureAndHide(transient);
+        ownership.CaptureAndHide(last);
+        var lifecycle = OpenHollowKnightPresenter();
+        lifecycle.RequestCoveredContentStow();
+        HollowKnightModsPresentationFlow.RequestCoveredContentRelease(
+            lifecycle, coveredContentCanRender: true);
+        int reveals = 0;
+
+        Assert.Throws<InvalidOperationException>(() =>
+            HollowKnightModsPresentationFlow.BeginCoveredContentRestore(
+                lifecycle,
+                () => { },
+                ownership.Restore));
+
+        Assert.True(ownership.HasCapturedState);
+        Assert.False(lifecycle.CoveredContentRestoreStarted);
+        Assert.True(lifecycle.CoveredContentRestorePending);
+        Assert.True(lifecycle.OwnsInput);
+        Assert.False(HollowKnightModsPresentationFlow.CompleteCoveredContentRestore(
+            lifecycle,
+            ordinaryLayoutReady: true,
+            () => { },
+            () => reveals++));
+        Assert.Equal(0, reveals);
+
+        Assert.True(HollowKnightModsPresentationFlow.BeginCoveredContentRestore(
+            lifecycle,
+            () => { },
+            ownership.Restore));
+        Assert.False(ownership.HasCapturedState);
+        Assert.Equal(1, firstRestoreWrites);
+        Assert.Equal(2, transientRestoreWrites);
+        Assert.Equal(1, lastRestoreWrites);
+        Assert.True(HollowKnightModsPresentationFlow.CompleteCoveredContentRestore(
+            lifecycle,
+            ordinaryLayoutReady: true,
+            () => { },
+            () => reveals++));
+        Assert.Equal(1, reveals);
         Assert.False(lifecycle.OwnsInput);
     }
 
@@ -279,6 +360,37 @@ public sealed class TweakPresenterTests
         lifecycle.Detach();
 
         Assert.Equal(HollowKnightModsRestoreDisposition.Immediate, disposition);
+        Assert.True(lifecycle.CoveredContentStowed);
+        Assert.True(lifecycle.OwnsInput);
+        Assert.Throws<InvalidOperationException>(() =>
+            HollowKnightModsPresentationFlow.RestoreCoveredContentImmediately(
+                lifecycle,
+                () => throw new InvalidOperationException("transient restore failure")));
+        Assert.True(lifecycle.CoveredContentStowed);
+        Assert.True(lifecycle.OwnsInput);
+        Assert.True(HollowKnightModsPresentationFlow.RestoreCoveredContentImmediately(
+            lifecycle, () => { }));
+        Assert.False(lifecycle.CoveredContentStowed);
+        Assert.False(lifecycle.CoveredContentRestorePending);
+        Assert.False(lifecycle.OwnsInput);
+    }
+
+    [Fact]
+    public void HollowKnightPendingReleaseMayFinishImmediatelyAfterCamerasDisable()
+    {
+        var lifecycle = OpenHollowKnightPresenter();
+        lifecycle.RequestCoveredContentStow();
+        Assert.Equal(
+            HollowKnightModsRestoreDisposition.Deferred,
+            HollowKnightModsPresentationFlow.RequestCoveredContentRelease(
+                lifecycle, coveredContentCanRender: true));
+
+        Assert.Equal(
+            HollowKnightModsRestoreDisposition.Immediate,
+            HollowKnightModsPresentationFlow.RequestCoveredContentRelease(
+                lifecycle, coveredContentCanRender: false));
+        Assert.True(HollowKnightModsPresentationFlow.RestoreCoveredContentImmediately(
+            lifecycle, () => { }));
         Assert.False(lifecycle.CoveredContentStowed);
         Assert.False(lifecycle.CoveredContentRestorePending);
         Assert.False(lifecycle.OwnsInput);
@@ -301,6 +413,63 @@ public sealed class TweakPresenterTests
             lifecycle));
         Assert.False(HollowKnightModsPresentationFlow.CanCloseFromLowerScreenInput(
             lifecycle));
+    }
+
+    [Fact]
+    public void HollowKnightPendingInputIsDrainedAndCannotReplayAfterRelease()
+    {
+        var lifecycle = OpenHollowKnightPresenter();
+        lifecycle.RequestCoveredContentStow();
+        HollowKnightModsPresentationFlow.RequestCoveredContentRelease(
+            lifecycle, coveredContentCanRender: true);
+        int lastTapSequence = 40;
+        int lastCleanTapSequence = 70;
+        float pinchLastDistance = 0.5f;
+        bool mapDragValid = true;
+        bool modsDragValid = true;
+
+        Assert.True(HollowKnightModsPresentationFlow.BeginCoveredContentRestore(
+            lifecycle, () => { }, () => { }));
+        var events = new List<string>();
+        Assert.True(HollowKnightModsPresentationFlow.CompleteCoveredContentRestore(
+            lifecycle,
+            ordinaryLayoutReady: true,
+            () =>
+            {
+                events.Add("drain");
+                Assert.True(
+                    HollowKnightModsPresentationFlow.RejectAndDrainLowerScreenInput(
+                        lifecycle,
+                        tapSequence: 41,
+                        cleanTapSequence: 71,
+                        ref lastTapSequence,
+                        ref lastCleanTapSequence,
+                        ref pinchLastDistance,
+                        ref mapDragValid,
+                        ref modsDragValid));
+            },
+            () => events.Add("reveal")));
+
+        Assert.Equal(new[] { "drain", "reveal" }, events);
+        Assert.Equal(41, lastTapSequence);
+        Assert.Equal(71, lastCleanTapSequence);
+        Assert.Equal(-1f, pinchLastDistance);
+        Assert.False(mapDragValid);
+        Assert.False(modsDragValid);
+        Assert.False(lifecycle.OwnsInput);
+        Assert.False(HollowKnightModsPresentationFlow.RejectAndDrainLowerScreenInput(
+            lifecycle,
+            tapSequence: 41,
+            cleanTapSequence: 71,
+            ref lastTapSequence,
+            ref lastCleanTapSequence,
+            ref pinchLastDistance,
+            ref mapDragValid,
+            ref modsDragValid));
+        int replayedEvents = 0;
+        if (41 != lastTapSequence) replayedEvents++;
+        if (71 != lastCleanTapSequence) replayedEvents++;
+        Assert.Equal(0, replayedEvents);
     }
 
     [Fact]
