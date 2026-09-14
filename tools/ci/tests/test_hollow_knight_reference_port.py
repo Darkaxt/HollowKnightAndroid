@@ -452,7 +452,9 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertNotIn("hudGearH", gear_height.group("expression"))
         self.assertNotIn("hudFpsB", gear_height.group("expression"))
         self.assertIn("hudFpsB.max.y", position_gear)
-        for required in ("modsGearHit", "modsFpsHit", "TweakPresenterPoint", "Contains"):
+        for required in (
+            "modsGearHit", "modsFpsHit", "TweakPresenterPoint", "ResolveGearHit",
+        ):
             self.assertIn(required, gear_tap)
         self.assertIn("frameRoot", build_modal)
         self.assertIn("compRoot", build_modal)
@@ -601,6 +603,9 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
 
     def test_h3_mods_close_hotspots_remain_in_panel_space_while_frame_is_stowed(self):
         presenter = strip_csharp_comments(read(MODS_PRESENTER))
+        policy = strip_csharp_comments(
+            read(MODS_ROOT / "HollowKnightModsSession.cs")
+        )
         frame = strip_csharp_comments(
             read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
         )
@@ -608,6 +613,14 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             read(REFERENCE_ROOT / "HKDualScreen.Bottom.Select.cs")
         )
         gear_tap = method_body(presenter, r"bool\s+GearTapN\s*\([^)]*\)")
+        live_gear_tap = method_body(
+            presenter,
+            r"bool\s+LiveGearTapN\s*\([^)]*\)",
+        )
+        resolve_gear_hit = method_body(
+            policy,
+            r"HollowKnightModsGearHitDisposition\s+ResolveGearHit\s*\([^)]*\)",
+        )
         cache_gear = method_body(
             presenter,
             r"void\s+CacheModsGearHit\s*\(\s*\)",
@@ -637,9 +650,21 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             self.assertIn("TweakPresenterRect", cache)
         self.assertIn("CacheModsGearHit()", position_gear)
         self.assertIn("CacheModsTabHits()", position_frame)
-        self.assertIn("modsGearHit.Contains", gear_tap)
-        self.assertIn("modsFpsHit.Contains", gear_tap)
+        self.assertIn("ResolveGearHit", gear_tap)
+        self.assertIn("modsLifecycle.IsOpen", gear_tap)
+        self.assertIn("frameRoot.activeInHierarchy", gear_tap)
+        self.assertIn("!modsLifecycle.CoveredContentStowed", gear_tap)
+        self.assertIn("HollowKnightModsGearHitDisposition.Cached", gear_tap)
+        self.assertIn("HollowKnightModsGearHitDisposition.LiveFallback", gear_tap)
+        self.assertIn("LiveGearTapN", gear_tap)
         self.assertNotIn("ViewportToWorldPoint", gear_tap)
+        self.assertIn("cachedGear.Contains", resolve_gear_hit)
+        self.assertIn("cachedFps.Contains", resolve_gear_hit)
+        self.assertIn("!modsOpen && ordinaryFrameVisible", resolve_gear_hit)
+        self.assertIn("ViewportToWorldPoint", live_gear_tap)
+        self.assertIn(
+            "Mathf.Max(0.08f, hudGearH * 0.45f)", live_gear_tap
+        )
         self.assertIn("modsTabHits", tab_tap)
         self.assertIn("CanCloseFromLowerScreenInput", poll_touch)
         self.assertIn("ModsTabTapN", poll_touch)
@@ -647,6 +672,15 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             poll_touch.index("ModsTabTapN"),
             poll_touch.index("if (modsLifecycle.OwnsInput) return"),
         )
+        self.assertLess(
+            poll_touch.index("if (modsLifecycle.OwnsInput) return"),
+            poll_touch.index("if (ny < cfg.compTabBandY)"),
+        )
+        for simulation_gate in (
+            "TryAcceptDebugSimulation", "modsLifecycle.OwnsInput",
+            "ref lastSimTapN",
+        ):
+            self.assertIn(simulation_gate, poll_touch)
 
     def test_h3_mods_hud_camera_lease_owns_render_submission_not_only_culling(self):
         presenter = strip_csharp_comments(read(MODS_PRESENTER))
@@ -922,6 +956,16 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         self.assertIn(pending_input_guard, poll_touch)
         self.assertIn(pending_input_guard, map_pinch)
+        map_ownership_guard = "if (modsLifecycle.OwnsInput) return"
+        self.assertIn(map_ownership_guard, map_pinch)
+        self.assertLess(
+            map_pinch.index(pending_input_guard),
+            map_pinch.index(map_ownership_guard),
+        )
+        self.assertLess(
+            map_pinch.index(map_ownership_guard),
+            map_pinch.index("cfg.compMapPinch"),
+        )
         self.assertIn(can_close_input, poll_touch)
         self.assertIn("DrainOwnedModsInput()", reject_pending)
         self.assertIn("DrainOwnedModsInput()", drain_before_release)
@@ -938,7 +982,14 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             complete_restore.index("DrainPendingModsInputBeforeRelease"),
             complete_restore.index("RevealModsRestoreCameras"),
         )
-        self.assertLess(poll_touch.index(pending_input_guard), poll_touch.index("cfg.debug"))
+        self.assertLess(
+            poll_touch.index("TryAcceptDebugSimulation"),
+            poll_touch.index(pending_input_guard),
+        )
+        self.assertLess(
+            poll_touch.index(pending_input_guard),
+            poll_touch.index("PollItemTap(cfg.compSimTapX"),
+        )
         self.assertLess(poll_touch.index(pending_input_guard), poll_touch.index("GearTapN"))
         self.assertLess(poll_touch.index(pending_input_guard), poll_touch.index("hitTab >= 0"))
         self.assertLess(

@@ -198,6 +198,7 @@ public partial class HKDualScreen
     {
         if (RejectAndDrainPendingModsInput())
             return;
+        if (modsLifecycle.OwnsInput) return;
         if (cfg.compMapPinch != 1 || transport == null || attrCam == null) return;
         try
         {
@@ -283,12 +284,17 @@ public partial class HKDualScreen
 
     void PollTouch()
     {
+        // Always consume a changed debug sequence; dispatch only after Mods releases input.
+        bool dispatchDebugSimulation = cfg.debug == 1 &&
+            HollowKnightModsPresentationFlow.TryAcceptDebugSimulation(
+                cfg.compSimTapN,
+                modsLifecycle.OwnsInput,
+                ref lastSimTapN);
         if (RejectAndDrainPendingModsInput())
             return;
         // DEBUG sim-tap: fire a synthetic item tap at (compSimTapX, compSimTapY) when compSimTapN changes.
-        if (cfg.debug == 1 && cfg.compSimTapN != lastSimTapN)
+        if (dispatchDebugSimulation)
         {
-            lastSimTapN = cfg.compSimTapN;
             if (cfg.compSimTapX >= 0f && (tab.cur == COMP_INV || tab.cur == COMP_CHARM)) { Dbg($"HKDS SIMTAP {cfg.compSimTapX},{cfg.compSimTapY}"); PollItemTap(cfg.compSimTapX, cfg.compSimTapY); }
         }
         if (cfg.compTouch != 1 || transport == null) return;
@@ -314,9 +320,9 @@ public partial class HKDualScreen
                 Dbg($"HKDS Mods tab close -> tab={tab.tap}");
                 return;
             }
+            if (modsLifecycle.OwnsInput) return;   // cached Mods hits are the only lower-screen authority while open/stowed
             if (ny < cfg.compTabBandY)   // ABOVE the tab row -> an item tap on the Inventory/Charms pane (tab band is only the bottom strip)
             {
-                if (modsLifecycle.OwnsInput) return;   // Mods keeps lower-screen input until ordinary geometry is restored
                 if (cfg.compTapSelect == 1 && (tab.cur == COMP_INV || tab.cur == COMP_CHARM)) PollItemTap(nx, ny);
                 return;
             }

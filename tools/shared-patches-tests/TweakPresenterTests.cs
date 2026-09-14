@@ -196,6 +196,50 @@ public sealed class TweakPresenterTests
     }
 
     [Fact]
+    public void HollowKnightGearTapFallsBackToLiveGeometryOnlyForVisibleOrdinaryFrame()
+    {
+        var staleGear = new TweakPresenterRect(0.02f, 0.80f, 0.04f, 0.04f);
+        var staleFps = new TweakPresenterRect(0.02f, 0.94f, 0.04f, 0.02f);
+        var visibleGearTap = new TweakPresenterPoint(0.10f, 0.92f);
+
+        Assert.Equal(
+            HollowKnightModsGearHitDisposition.LiveFallback,
+            HollowKnightModsPresentationFlow.ResolveGearHit(
+                visibleGearTap, true, staleGear, staleFps,
+                modsOpen: false, ordinaryFrameVisible: true));
+        Assert.Equal(
+            HollowKnightModsGearHitDisposition.Miss,
+            HollowKnightModsPresentationFlow.ResolveGearHit(
+                visibleGearTap, true, staleGear, staleFps,
+                modsOpen: true, ordinaryFrameVisible: false));
+        Assert.Equal(
+            HollowKnightModsGearHitDisposition.Miss,
+            HollowKnightModsPresentationFlow.ResolveGearHit(
+                visibleGearTap, true, staleGear, staleFps,
+                modsOpen: false, ordinaryFrameVisible: false));
+        Assert.Equal(
+            HollowKnightModsGearHitDisposition.Cached,
+            HollowKnightModsPresentationFlow.ResolveGearHit(
+                new TweakPresenterPoint(0.04f, 0.82f), true, staleGear, staleFps,
+                modsOpen: true, ordinaryFrameVisible: false));
+    }
+
+    [Fact]
+    public void HollowKnightOwnedDebugSimulationIsConsumedWithoutDelayedDispatch()
+    {
+        int lastSimulationSequence = 8;
+
+        Assert.False(HollowKnightModsPresentationFlow.TryAcceptDebugSimulation(
+            9, ownsInput: true, ref lastSimulationSequence));
+        Assert.Equal(9, lastSimulationSequence);
+        Assert.False(HollowKnightModsPresentationFlow.TryAcceptDebugSimulation(
+            9, ownsInput: false, ref lastSimulationSequence));
+        Assert.True(HollowKnightModsPresentationFlow.TryAcceptDebugSimulation(
+            10, ownsInput: false, ref lastSimulationSequence));
+        Assert.Equal(10, lastSimulationSequence);
+    }
+
+    [Fact]
     public void HollowKnightExternalCloseGatesSurfaceRestoreAndRevealAroundLayout()
     {
         var lifecycle = OpenHollowKnightPresenter();

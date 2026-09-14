@@ -362,9 +362,46 @@ public partial class HKDualScreen
 
     bool GearTapN(float x, float y)
     {
-        if (!modsGearHitValid || !hudGearOk) return false;
         var point = new TweakPresenterPoint(x, y);
-        return modsGearHit.Contains(point) || modsFpsHit.Contains(point);
+        bool ordinaryFrameVisible = frameRoot != null &&
+            frameRoot.activeInHierarchy && !modsLifecycle.CoveredContentStowed;
+        HollowKnightModsGearHitDisposition disposition =
+            HollowKnightModsPresentationFlow.ResolveGearHit(
+                point,
+                modsGearHitValid && hudGearOk,
+                modsGearHit,
+                modsFpsHit,
+                modsLifecycle.IsOpen,
+                ordinaryFrameVisible);
+        if (disposition == HollowKnightModsGearHitDisposition.Cached) return true;
+        return disposition == HollowKnightModsGearHitDisposition.LiveFallback &&
+               LiveGearTapN(x, y);
+    }
+
+    bool LiveGearTapN(float x, float y)
+    {
+        if (x < 0f || x > 1f || y < 0f || y > 1f || attrCam == null ||
+            gearSR == null || !gearSR.enabled || !hudGearOk)
+            return false;
+
+        Rect viewport = attrCam.rect;
+        Vector2 panelPoint = new Vector2(x, 1f - y);
+        if (!viewport.Contains(panelPoint)) return false;
+        float vx = (panelPoint.x - viewport.x) / Mathf.Max(0.0001f, viewport.width);
+        float vy = (panelPoint.y - viewport.y) / Mathf.Max(0.0001f, viewport.height);
+        Vector3 world = attrCam.ViewportToWorldPoint(new Vector3(vx, vy, 10f));
+
+        float tolerance = Mathf.Max(0.08f, hudGearH * 0.45f);
+        Bounds gearBounds = gearSR.bounds;
+        gearBounds.Expand(new Vector3(tolerance, tolerance, 10f));
+        if (world.x >= gearBounds.min.x && world.x <= gearBounds.max.x &&
+            world.y >= gearBounds.min.y && world.y <= gearBounds.max.y)
+            return true;
+
+        Bounds fpsBounds = hudFpsB;
+        fpsBounds.Expand(new Vector3(tolerance, tolerance, 10f));
+        return world.x >= fpsBounds.min.x && world.x <= fpsBounds.max.x &&
+               world.y >= fpsBounds.min.y && world.y <= fpsBounds.max.y;
     }
 
     void ToggleTweaksPane()

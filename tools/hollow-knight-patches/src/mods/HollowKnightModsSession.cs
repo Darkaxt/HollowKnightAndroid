@@ -70,6 +70,13 @@ namespace DualSouls.Mods.HollowKnight
         NativeHud,
     }
 
+    internal enum HollowKnightModsGearHitDisposition
+    {
+        Miss,
+        Cached,
+        LiveFallback,
+    }
+
     internal enum HollowKnightModsRestoreDisposition
     {
         None,
@@ -125,6 +132,32 @@ namespace DualSouls.Mods.HollowKnight
                 bestValue = candidate.Value;
             }
             return bestValue;
+        }
+
+        public static HollowKnightModsGearHitDisposition ResolveGearHit(
+            TweakPresenterPoint point,
+            bool cachedHitValid,
+            TweakPresenterRect cachedGear,
+            TweakPresenterRect cachedFps,
+            bool modsOpen,
+            bool ordinaryFrameVisible)
+        {
+            if (cachedHitValid &&
+                (cachedGear.Contains(point) || cachedFps.Contains(point)))
+                return HollowKnightModsGearHitDisposition.Cached;
+            return !modsOpen && ordinaryFrameVisible
+                ? HollowKnightModsGearHitDisposition.LiveFallback
+                : HollowKnightModsGearHitDisposition.Miss;
+        }
+
+        public static bool TryAcceptDebugSimulation(
+            int simulationSequence,
+            bool ownsInput,
+            ref int lastSimulationSequence)
+        {
+            if (simulationSequence == lastSimulationSequence) return false;
+            lastSimulationSequence = simulationSequence;
+            return !ownsInput;
         }
 
         public static HollowKnightModsRestoreDisposition RequestCoveredContentRelease(
