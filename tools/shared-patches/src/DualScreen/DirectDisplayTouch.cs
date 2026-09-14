@@ -1,14 +1,46 @@
 // Shared display-attributed touch routing and primary-display input fencing.
 // This file contains only the proven Unity Input System/legacy bridge.
 
-#if UNITY_ANDROID && !UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+#if UNITY_ANDROID && !UNITY_EDITOR
 using UnityEngine;
 using UnityEngine.EventSystems;
+#endif
 
 namespace DualSouls.DualScreen
 {
+    public readonly struct DirectDisplayPixelContact
+    {
+        public DirectDisplayPixelContact(int id, float x, float y)
+        {
+            Id = id;
+            X = x;
+            Y = y;
+        }
+
+        public int Id { get; }
+        public float X { get; }
+        public float Y { get; }
+
+        public DirectDisplayContact ToTopLeftNormalized(float width, float height)
+        {
+            float normalizedX = X / Math.Max(1f, width);
+            float normalizedY = 1f - Y / Math.Max(1f, height);
+            return new DirectDisplayContact(
+                Id,
+                Clamp01(normalizedX),
+                Clamp01(normalizedY));
+        }
+
+        static float Clamp01(float value)
+        {
+            if (value < 0f) return 0f;
+            return value > 1f ? 1f : value;
+        }
+    }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
     public static class DirectDisplayTouch
     {
         static int _targetDisplay = 1;
@@ -25,6 +57,8 @@ namespace DualSouls.DualScreen
         static int _frame = -1;
         static readonly HashSet<int> _ids = new HashSet<int>();
         static readonly List<Vector2> _positions = new List<Vector2>();
+        static readonly List<DirectDisplayPixelContact> _contacts =
+            new List<DirectDisplayPixelContact>();
         static bool _inputSystemOk = true;
         static bool _targetCanceled;
 
@@ -43,6 +77,7 @@ namespace DualSouls.DualScreen
             _frame = -1;
             _ids.Clear();
             _positions.Clear();
+            _contacts.Clear();
             _targetCanceled = false;
             _inputSystemOk = true;
         }
@@ -53,6 +88,7 @@ namespace DualSouls.DualScreen
             _frame = Time.frameCount;
             _ids.Clear();
             _positions.Clear();
+            _contacts.Clear();
             _targetCanceled = false;
             if (!_inputSystemOk) return;
 
@@ -74,8 +110,14 @@ namespace DualSouls.DualScreen
                     if (phase == UnityEngine.InputSystem.TouchPhase.None ||
                         phase == UnityEngine.InputSystem.TouchPhase.Ended)
                         continue;
-                    _ids.Add(touch.touchId.ReadValue());
-                    _positions.Add(touch.position.ReadValue());
+                    int id = touch.touchId.ReadValue();
+                    Vector2 position = touch.position.ReadValue();
+                    _ids.Add(id);
+                    _positions.Add(position);
+                    _contacts.Add(new DirectDisplayPixelContact(
+                        id,
+                        position.x,
+                        position.y));
                 }
             }
             catch (Exception e)
@@ -104,6 +146,14 @@ namespace DualSouls.DualScreen
                     return true;
 
             return false;
+        }
+
+        public static void CollectTargetDisplay(List<DirectDisplayPixelContact> into)
+        {
+            into.Clear();
+            if (!Enabled) return;
+            Refresh();
+            into.AddRange(_contacts);
         }
 
         public static void CollectTargetDisplay(List<Touch> into)
@@ -239,5 +289,5 @@ namespace DualSouls.DualScreen
             Enabled = false;
         }
     }
-}
 #endif
+}

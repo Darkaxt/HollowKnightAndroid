@@ -28,7 +28,8 @@ namespace HollowKnightPatches
 
         static HkDirectDisplayAdapter _instance;
 
-        readonly List<Touch> _touches = new List<Touch>(4);
+        readonly List<DirectDisplayPixelContact> _pixelContacts =
+            new List<DirectDisplayPixelContact>(4);
         readonly List<DirectDisplayContact> _contacts =
             new List<DirectDisplayContact>(4);
         readonly DirectDisplayGestureTracker _gestures =
@@ -200,18 +201,12 @@ namespace HollowKnightPatches
                 !_presentation.Ready)
                 return;
 
-            DirectDisplayTouch.CollectTargetDisplay(_touches);
+            DirectDisplayTouch.CollectTargetDisplay(_pixelContacts);
             _contacts.Clear();
-            float width = Mathf.Max(1f, PanelWidth);
-            float height = Mathf.Max(1f, PanelHeight);
-            for (int i = 0; i < _touches.Count; i++)
-            {
-                Touch touch = _touches[i];
-                _contacts.Add(new DirectDisplayContact(
-                    touch.fingerId,
-                    Mathf.Clamp01(touch.position.x / width),
-                    Mathf.Clamp01(1f - touch.position.y / height)));
-            }
+            float width = PanelWidth;
+            float height = PanelHeight;
+            for (int i = 0; i < _pixelContacts.Count; i++)
+                _contacts.Add(_pixelContacts[i].ToTopLeftNormalized(width, height));
             _gestures.Update(
                 _contacts,
                 Time.unscaledTime,
@@ -356,7 +351,7 @@ namespace HollowKnightPatches
             else
             {
                 _gestures.Cancel();
-                _touches.Clear();
+                _pixelContacts.Clear();
                 _contacts.Clear();
                 DirectDisplayTouch.RemoveFence();
             }

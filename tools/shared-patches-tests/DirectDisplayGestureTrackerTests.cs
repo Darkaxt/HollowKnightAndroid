@@ -81,6 +81,18 @@ public sealed class DirectDisplayGestureTrackerTests
     }
 
     [Fact]
+    public void BottomOriginPixelsMapToTopLeftNormalizedCoordinates()
+    {
+        var pixels = new DirectDisplayPixelContact(23, 105f, 160f);
+
+        var normalized = pixels.ToTopLeftNormalized(1240f, 1080f);
+
+        Assert.Equal(23, normalized.Id);
+        Assert.Equal(105f / 1240f, normalized.X, 6);
+        Assert.Equal(920f / 1080f, normalized.Y, 6);
+    }
+
+    [Fact]
     public void TransportCancellationDropsTheOldGestureBeforeResume()
     {
         var tracker = new DirectDisplayGestureTracker();

@@ -200,7 +200,7 @@ public sealed class TweakPresenterTests
     {
         var staleGear = new TweakPresenterRect(0.02f, 0.80f, 0.04f, 0.04f);
         var staleFps = new TweakPresenterRect(0.02f, 0.94f, 0.04f, 0.02f);
-        var visibleGearTap = new TweakPresenterPoint(0.10f, 0.92f);
+        var visibleGearTap = new TweakPresenterPoint(105f / 1240f, 920f / 1080f);
 
         Assert.Equal(
             HollowKnightModsGearHitDisposition.LiveFallback,
