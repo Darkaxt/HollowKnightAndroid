@@ -339,6 +339,44 @@ public sealed class TweakPresenterTests
     }
 
     [Fact]
+    public void HollowKnightAcceptedLiveGearTapSurvivesOrdinaryFrameRecache()
+    {
+        var projectedGear = new TweakPresenterRect(0.02f, 0.80f, 0.04f, 0.04f);
+        var projectedFps = new TweakPresenterRect(0.02f, 0.94f, 0.04f, 0.02f);
+        var acceptedLiveTap = new TweakPresenterPoint(105f / 1240f, 920f / 1080f);
+
+        Assert.Equal(
+            HollowKnightModsGearHitDisposition.LiveFallback,
+            HollowKnightModsPresentationFlow.ResolveGearHit(
+                acceptedLiveTap, true, projectedGear, projectedFps,
+                modsOpen: false, ordinaryFrameVisible: true));
+
+        var stowedGear = HollowKnightModsPresentationFlow.RetainAcceptedLiveGearHit(
+            projectedGear, cachedHitValid: true, acceptedLiveTap);
+        Assert.Equal(
+            HollowKnightModsGearHitDisposition.Cached,
+            HollowKnightModsPresentationFlow.ResolveGearHit(
+                acceptedLiveTap, true, stowedGear, projectedFps,
+                modsOpen: true, ordinaryFrameVisible: false));
+
+        var restoredGear = HollowKnightModsPresentationFlow.MergeRetainedLiveGearHit(
+            projectedGear, retainedLivePointValid: true, acceptedLiveTap);
+        Assert.Equal(
+            HollowKnightModsGearHitDisposition.Cached,
+            HollowKnightModsPresentationFlow.ResolveGearHit(
+                acceptedLiveTap, true, restoredGear, projectedFps,
+                modsOpen: false, ordinaryFrameVisible: true));
+
+        var resetGear = HollowKnightModsPresentationFlow.MergeRetainedLiveGearHit(
+            projectedGear, retainedLivePointValid: false, acceptedLiveTap);
+        Assert.Equal(
+            HollowKnightModsGearHitDisposition.LiveFallback,
+            HollowKnightModsPresentationFlow.ResolveGearHit(
+                acceptedLiveTap, true, resetGear, projectedFps,
+                modsOpen: false, ordinaryFrameVisible: true));
+    }
+
+    [Fact]
     public void HollowKnightOwnedDebugSimulationIsConsumedWithoutDelayedDispatch()
     {
         int lastSimulationSequence = 8;

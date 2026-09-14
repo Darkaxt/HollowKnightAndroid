@@ -172,6 +172,19 @@ namespace DualSouls.Mods.HollowKnight
             return new TweakPresenterRect(left, top, right - left, bottom - top);
         }
 
+        public static TweakPresenterRect MergeRetainedLiveGearHit(
+            TweakPresenterRect projectedGear,
+            bool retainedLivePointValid,
+            TweakPresenterPoint retainedLivePoint)
+        {
+            return retainedLivePointValid
+                ? RetainAcceptedLiveGearHit(
+                    projectedGear,
+                    projectedGear.Width > 0f && projectedGear.Height > 0f,
+                    retainedLivePoint)
+                : projectedGear;
+        }
+
         public static bool TryAcceptDebugSimulation(
             int simulationSequence,
             bool ownsInput,

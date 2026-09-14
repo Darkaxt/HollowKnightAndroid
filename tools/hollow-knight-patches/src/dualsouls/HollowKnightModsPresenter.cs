@@ -79,6 +79,8 @@ public partial class HKDualScreen
     TweakPresenterRect modsGearHit;
     TweakPresenterRect modsFpsHit;
     bool modsGearHitValid;
+    TweakPresenterPoint modsRetainedLiveGearPoint;
+    bool modsRetainedLiveGearPointValid;
     readonly List<(TweakPresenterRect rect, int tab)> modsTabHits =
         new List<(TweakPresenterRect, int)>();
 
@@ -352,11 +354,15 @@ public partial class HKDualScreen
         float gearTop = 1f - (viewport.y + Mathf.Max(gearMin.y, gearMax.y) * viewport.height);
         float gearBottom = 1f - (viewport.y + Mathf.Min(gearMin.y, gearMax.y) * viewport.height);
         const float gearPadding = 0.02f;
-        modsGearHit = new TweakPresenterRect(
+        var projectedGear = new TweakPresenterRect(
             gearLeft - gearPadding,
             gearTop - gearPadding,
             gearRight - gearLeft + gearPadding * 2f,
             gearBottom - gearTop + gearPadding * 2f);
+        modsGearHit = HollowKnightModsPresentationFlow.MergeRetainedLiveGearHit(
+            projectedGear,
+            modsRetainedLiveGearPointValid,
+            modsRetainedLiveGearPoint);
 
         Vector3 fpsMin = attrCam.WorldToViewportPoint(hudFpsB.min);
         Vector3 fpsMax = attrCam.WorldToViewportPoint(hudFpsB.max);
@@ -398,6 +404,8 @@ public partial class HKDualScreen
             !LiveGearTapN(x, y))
             return false;
 
+        modsRetainedLiveGearPoint = point;
+        modsRetainedLiveGearPointValid = true;
         modsGearHit = HollowKnightModsPresentationFlow.RetainAcceptedLiveGearHit(
             modsGearHit,
             modsGearHitValid && hudGearOk,
@@ -1398,6 +1406,8 @@ public partial class HKDualScreen
         modsGearHit = default(TweakPresenterRect);
         modsFpsHit = default(TweakPresenterRect);
         modsGearHitValid = false;
+        modsRetainedLiveGearPoint = default(TweakPresenterPoint);
+        modsRetainedLiveGearPointValid = false;
         modsTabHits.Clear();
         modsPaint.Invalidate();
     }
@@ -1456,6 +1466,11 @@ public partial class HKDualScreen
         hudGearH = 0f;
         hudGearAnchor = Vector3.zero;
         hudFpsB = default(Bounds);
+        modsGearHit = default(TweakPresenterRect);
+        modsFpsHit = default(TweakPresenterRect);
+        modsGearHitValid = false;
+        modsRetainedLiveGearPoint = default(TweakPresenterPoint);
+        modsRetainedLiveGearPointValid = false;
         modsDragValid = false;
         modsListScroll = 0f;
         modsSelectedEntry = 1;

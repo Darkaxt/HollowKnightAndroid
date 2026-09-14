@@ -640,8 +640,15 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         position_frame = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
         poll_touch = method_body(select, r"void\s+PollTouch\s*\(\s*\)")
 
+        clear_frame_references = method_body(
+            presenter, r"void\s+ClearModsFrameReferences\s*\(\s*\)"
+        )
+        teardown = method_body(
+            presenter, r"void\s+TeardownModsPresenter\s*\(\s*\)"
+        )
         for cached in (
             "modsGearHit", "modsFpsHit", "modsGearHitValid", "modsTabHits",
+            "modsRetainedLiveGearPoint", "modsRetainedLiveGearPointValid",
         ):
             self.assertIn(cached, presenter)
         for cache in (cache_gear, cache_tabs):
@@ -649,6 +656,10 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             self.assertIn("attrCam.rect", cache)
             self.assertIn("TweakPresenterRect", cache)
         self.assertIn("CacheModsGearHit()", position_gear)
+        self.assertIn("MergeRetainedLiveGearHit", cache_gear)
+        for reset in (clear_frame_references, teardown):
+            self.assertIn("modsRetainedLiveGearPoint = default(TweakPresenterPoint)", reset)
+            self.assertIn("modsRetainedLiveGearPointValid = false", reset)
         self.assertIn("CacheModsTabHits()", position_frame)
         self.assertIn("ResolveGearHit", gear_tap)
         self.assertIn("modsLifecycle.IsOpen", gear_tap)
