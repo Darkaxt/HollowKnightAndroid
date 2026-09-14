@@ -394,8 +394,16 @@ public partial class HKDualScreen
                 modsLifecycle.IsOpen,
                 ordinaryFrameVisible);
         if (disposition == HollowKnightModsGearHitDisposition.Cached) return true;
-        return disposition == HollowKnightModsGearHitDisposition.LiveFallback &&
-               LiveGearTapN(x, y);
+        if (disposition != HollowKnightModsGearHitDisposition.LiveFallback ||
+            !LiveGearTapN(x, y))
+            return false;
+
+        modsGearHit = HollowKnightModsPresentationFlow.RetainAcceptedLiveGearHit(
+            modsGearHit,
+            modsGearHitValid && hudGearOk,
+            point);
+        modsGearHitValid = true;
+        return true;
     }
 
     bool LiveGearTapN(float x, float y)

@@ -152,6 +152,26 @@ namespace DualSouls.Mods.HollowKnight
                 : HollowKnightModsGearHitDisposition.Miss;
         }
 
+        public static TweakPresenterRect RetainAcceptedLiveGearHit(
+            TweakPresenterRect cachedGear,
+            bool cachedHitValid,
+            TweakPresenterPoint acceptedPoint)
+        {
+            const float padding = 0.01f;
+            float left = acceptedPoint.X - padding;
+            float top = acceptedPoint.Y - padding;
+            float right = acceptedPoint.X + padding;
+            float bottom = acceptedPoint.Y + padding;
+            if (cachedHitValid && cachedGear.Width > 0f && cachedGear.Height > 0f)
+            {
+                left = Math.Min(left, cachedGear.X);
+                top = Math.Min(top, cachedGear.Y);
+                right = Math.Max(right, cachedGear.X + cachedGear.Width);
+                bottom = Math.Max(bottom, cachedGear.Y + cachedGear.Height);
+            }
+            return new TweakPresenterRect(left, top, right - left, bottom - top);
+        }
+
         public static bool TryAcceptDebugSimulation(
             int simulationSequence,
             bool ownsInput,

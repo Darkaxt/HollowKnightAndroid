@@ -316,6 +316,29 @@ public sealed class TweakPresenterTests
     }
 
     [Fact]
+    public void HollowKnightAcceptedLiveGearTapRemainsCachedAfterFrameIsStowed()
+    {
+        var staleGear = new TweakPresenterRect(0.02f, 0.80f, 0.04f, 0.04f);
+        var staleFps = new TweakPresenterRect(0.02f, 0.94f, 0.04f, 0.02f);
+        var openingTap = new TweakPresenterPoint(105f / 1240f, 920f / 1080f);
+
+        Assert.Equal(
+            HollowKnightModsGearHitDisposition.LiveFallback,
+            HollowKnightModsPresentationFlow.ResolveGearHit(
+                openingTap, true, staleGear, staleFps,
+                modsOpen: false, ordinaryFrameVisible: true));
+
+        var retainedGear = HollowKnightModsPresentationFlow.RetainAcceptedLiveGearHit(
+            staleGear, cachedHitValid: true, openingTap);
+
+        Assert.Equal(
+            HollowKnightModsGearHitDisposition.Cached,
+            HollowKnightModsPresentationFlow.ResolveGearHit(
+                openingTap, true, retainedGear, staleFps,
+                modsOpen: true, ordinaryFrameVisible: false));
+    }
+
+    [Fact]
     public void HollowKnightOwnedDebugSimulationIsConsumedWithoutDelayedDispatch()
     {
         int lastSimulationSequence = 8;

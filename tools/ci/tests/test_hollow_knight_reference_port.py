@@ -657,6 +657,15 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("HollowKnightModsGearHitDisposition.Cached", gear_tap)
         self.assertIn("HollowKnightModsGearHitDisposition.LiveFallback", gear_tap)
         self.assertIn("LiveGearTapN", gear_tap)
+        self.assertIn("RetainAcceptedLiveGearHit", gear_tap)
+        self.assertLess(
+            gear_tap.index("LiveGearTapN"),
+            gear_tap.index("RetainAcceptedLiveGearHit"),
+        )
+        self.assertLess(
+            gear_tap.index("RetainAcceptedLiveGearHit"),
+            gear_tap.index("modsGearHitValid = true"),
+        )
         self.assertNotIn("ViewportToWorldPoint", gear_tap)
         self.assertIn("cachedGear.Contains", resolve_gear_hit)
         self.assertIn("cachedFps.Contains", resolve_gear_hit)
