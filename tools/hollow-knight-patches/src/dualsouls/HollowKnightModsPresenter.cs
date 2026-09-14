@@ -355,15 +355,9 @@ public partial class HKDualScreen
 
     bool ModsTabTapN(float x, float y, out int hitTab)
     {
-        var point = new TweakPresenterPoint(x, y);
-        for (int i = 0; i < modsTabHits.Count; i++)
-        {
-            if (!modsTabHits[i].rect.Contains(point)) continue;
-            hitTab = modsTabHits[i].tab;
-            return true;
-        }
-        hitTab = -1;
-        return false;
+        hitTab = HollowKnightModsPresentationFlow.ResolveClosestHorizontalHit(
+            new TweakPresenterPoint(x, y), modsTabHits);
+        return hitTab >= 0;
     }
 
     bool GearTapN(float x, float y)
@@ -534,7 +528,9 @@ public partial class HKDualScreen
             modsLifecycle,
             ordinaryLayoutReady: true,
             DrainPendingModsInputBeforeRelease,
-            RevealModsRestoreCameras);
+            RevealModsRestoreCameras,
+            lowerScreenContactReleased:
+                transport == null || transport.TouchCount == 0);
     }
 
     void RevealModsRestoreCameras()

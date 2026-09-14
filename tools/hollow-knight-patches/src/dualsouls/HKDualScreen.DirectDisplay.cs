@@ -131,11 +131,20 @@ public partial class HKDualScreen
     void CompleteDirectDisplayTeardown()
     {
         if (directDisplayShuttingDown) return;
+        try
+        {
+            TeardownCompanion();
+        }
+        catch (Exception)
+        {
+            directDisplayRestorePending = true;
+            directDisplayFinalTeardownPending = true;
+            throw;
+        }
         directDisplayShuttingDown = true;
         directDisplayFinalTeardownPending = false;
 
         var failures = new List<Exception>();
-        TryDirectStep(TeardownCompanion, failures);
         TryDirectStep(() =>
         {
             if (bgDimmer != null) Destroy(bgDimmer);

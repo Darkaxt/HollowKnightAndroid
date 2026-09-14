@@ -714,6 +714,24 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             r"SetRoleCamerasEnabled\(false\)\s*;\s*\}",
         )
 
+    def test_h3_mods_restore_waits_for_closing_contact_release(self):
+        presenter = strip_csharp_comments(read(MODS_PRESENTER))
+        complete = method_body(
+            presenter,
+            r"void\s+CompleteModsCoveredContentRestore\s*\(\s*\)",
+        )
+        complete_flow = " ".join(complete.split())
+
+        self.assertRegex(
+            complete_flow,
+            r"lowerScreenContactReleased\s*:\s*"
+            r"transport\s*==\s*null\s*\|\|\s*transport\.TouchCount\s*==\s*0",
+        )
+        self.assertLess(
+            complete.index("DrainPendingModsInputBeforeRelease"),
+            complete.index("RevealModsRestoreCameras"),
+        )
+
     def test_h3_mods_surface_exclusively_owns_and_exactly_restores_covered_content(self):
         presenter = strip_csharp_comments(read(MODS_PRESENTER))
         stow = method_body(
@@ -1725,6 +1743,37 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             r"internal\s+void\s+OnReferenceRestoreCompleted\s*\(\s*\)",
         )
         self.assertIn("AcknowledgeContentInactiveAndReconcile()", recovered)
+
+    def test_final_teardown_restoration_failure_retains_owner_for_retry(self):
+        direct = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.DirectDisplay.cs")
+        )
+        complete = method_body(
+            direct,
+            r"void\s+CompleteDirectDisplayTeardown\s*\(\s*\)",
+        )
+        complete_flow = " ".join(complete.split())
+
+        self.assertNotIn("TryDirectStep(TeardownCompanion", complete)
+        self.assertRegex(
+            complete_flow,
+            r"try\s*\{\s*TeardownCompanion\(\)\s*;\s*\}\s*"
+            r"catch\s*\([^)]*\)\s*\{(?:(?!\}).)*"
+            r"directDisplayRestorePending\s*=\s*true\s*;(?:(?!\}).)*"
+            r"directDisplayFinalTeardownPending\s*=\s*true\s*;(?:(?!\}).)*"
+            r"throw\s*;\s*\}",
+        )
+        restored = complete.index("TeardownCompanion()")
+        for terminal_action in (
+            "directDisplayShuttingDown = true",
+            "directDisplayFinalTeardownPending = false",
+            "OnReferenceTeardownComplete(this)",
+            "transport = null",
+            "activeInstance = null",
+            "started = false",
+            "Destroy(gameObject)",
+        ):
+            self.assertGreater(complete.index(terminal_action), restored)
 
     def test_reference_restoration_uses_failure_propagating_helpers(self):
         direct = strip_csharp_comments(

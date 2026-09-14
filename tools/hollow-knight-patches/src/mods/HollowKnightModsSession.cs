@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using DualSouls.Mods;
 
 namespace DualSouls.Mods.HollowKnight
@@ -106,6 +107,26 @@ namespace DualSouls.Mods.HollowKnight
             return CoveredSurfaces[index];
         }
 
+        public static int ResolveClosestHorizontalHit(
+            TweakPresenterPoint point,
+            IReadOnlyList<(TweakPresenterRect Rect, int Value)> candidates)
+        {
+            if (candidates == null) throw new ArgumentNullException(nameof(candidates));
+            int bestValue = -1;
+            float bestDistance = float.MaxValue;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                var candidate = candidates[i];
+                if (!candidate.Rect.Contains(point)) continue;
+                float distance = Math.Abs(
+                    point.X - (candidate.Rect.X + candidate.Rect.Width * 0.5f));
+                if (distance >= bestDistance) continue;
+                bestDistance = distance;
+                bestValue = candidate.Value;
+            }
+            return bestValue;
+        }
+
         public static HollowKnightModsRestoreDisposition RequestCoveredContentRelease(
             TweakPresenterLifecycle lifecycle,
             bool coveredContentCanRender)
@@ -159,13 +180,15 @@ namespace DualSouls.Mods.HollowKnight
             TweakPresenterLifecycle lifecycle,
             bool ordinaryLayoutReady,
             Action drainPendingInput,
-            Action revealCameras)
+            Action revealCameras,
+            bool lowerScreenContactReleased = true)
         {
             if (lifecycle == null) throw new ArgumentNullException(nameof(lifecycle));
             if (drainPendingInput == null)
                 throw new ArgumentNullException(nameof(drainPendingInput));
             if (revealCameras == null) throw new ArgumentNullException(nameof(revealCameras));
-            if (!ordinaryLayoutReady || !lifecycle.CoveredContentRestoreStarted)
+            if (!ordinaryLayoutReady || !lowerScreenContactReleased ||
+                !lifecycle.CoveredContentRestoreStarted)
                 return false;
 
             drainPendingInput();

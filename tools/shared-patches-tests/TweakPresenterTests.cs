@@ -183,6 +183,19 @@ public sealed class TweakPresenterTests
     }
 
     [Fact]
+    public void HollowKnightOverlappingTabHitsChooseClosestHorizontalMidpoint()
+    {
+        var candidates = new[]
+        {
+            (new TweakPresenterRect(0.10f, 0.80f, 0.50f, 0.20f), 1),
+            (new TweakPresenterRect(0.40f, 0.80f, 0.50f, 0.20f), 2),
+        };
+
+        Assert.Equal(2, HollowKnightModsPresentationFlow.ResolveClosestHorizontalHit(
+            new TweakPresenterPoint(0.55f, 0.90f), candidates));
+    }
+
+    [Fact]
     public void HollowKnightExternalCloseGatesSurfaceRestoreAndRevealAroundLayout()
     {
         var lifecycle = OpenHollowKnightPresenter();
@@ -228,6 +241,38 @@ public sealed class TweakPresenterTests
                 "drain input", "reveal",
             },
             events);
+        Assert.False(lifecycle.OwnsInput);
+    }
+
+    [Fact]
+    public void HollowKnightCoveredContentRemainsOwnedUntilClosingContactReleases()
+    {
+        var lifecycle = OpenHollowKnightPresenter();
+        lifecycle.RequestCoveredContentStow();
+        HollowKnightModsPresentationFlow.RequestCoveredContentRelease(
+            lifecycle, coveredContentCanRender: true);
+        Assert.True(HollowKnightModsPresentationFlow.BeginCoveredContentRestore(
+            lifecycle, () => { }, () => { }));
+        var events = new List<string>();
+
+        Assert.False(HollowKnightModsPresentationFlow.CompleteCoveredContentRestore(
+            lifecycle,
+            ordinaryLayoutReady: true,
+            () => events.Add("drain release"),
+            () => events.Add("reveal"),
+            lowerScreenContactReleased: false));
+
+        Assert.Empty(events);
+        Assert.True(lifecycle.OwnsInput);
+        Assert.True(lifecycle.CoveredContentRestorePending);
+
+        Assert.True(HollowKnightModsPresentationFlow.CompleteCoveredContentRestore(
+            lifecycle,
+            ordinaryLayoutReady: true,
+            () => events.Add("drain release"),
+            () => events.Add("reveal"),
+            lowerScreenContactReleased: true));
+        Assert.Equal(new[] { "drain release", "reveal" }, events);
         Assert.False(lifecycle.OwnsInput);
     }
 
