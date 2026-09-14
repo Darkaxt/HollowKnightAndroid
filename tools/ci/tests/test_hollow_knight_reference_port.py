@@ -766,6 +766,126 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             complete.index("RevealModsRestoreCameras"),
         )
 
+    def test_h3_mods_backdrop_compositor_is_stowed_reasserted_and_exactly_restored(self):
+        presenter = strip_csharp_comments(read(MODS_PRESENTER))
+        main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        sync = method_body(main, r"void\s+SyncBgCapture\s*\([^)]*\)")
+        main_tick = method_body(main, r"void\s+Tick\s*\(\s*\)")
+        update_companion = method_body(
+            frame,
+            r"void\s+UpdateCompanion\s*\([^)]*\)",
+        )
+        stow = method_body(
+            presenter,
+            r"void\s+StowModsCoveredContent\s*\(\s*\)",
+        )
+        capture_surface = method_body(
+            presenter,
+            r"void\s+CaptureAndHideModsSurface\s*\([^)]*\)",
+        )
+        hide_restore = method_body(
+            presenter,
+            r"void\s+HideModsRestoreCameras\s*\(\s*\)",
+        )
+        reveal_restore = method_body(
+            presenter,
+            r"void\s+RevealModsRestoreCameras\s*\(\s*\)",
+        )
+        restore_core = method_body(
+            presenter,
+            r"void\s+RestoreModsCoveredContentCore\s*\(\s*\)",
+        )
+        restore_all = method_body(
+            presenter,
+            r"void\s+RestoreAllModsCoveredContentCore\s*\(\s*\)",
+        )
+
+        self.assertRegex(
+            presenter,
+            r"TweakPresenterSurfaceOwnership<Camera,\s*bool>\s+"
+            r"modsBackdropCaptureEnabled",
+        )
+        self.assertRegex(
+            presenter,
+            r"TweakPresenterSurfaceOwnership<Camera,\s*CameraClearFlags>\s+"
+            r"modsBackdropClearFlags",
+        )
+        self.assertRegex(
+            presenter,
+            r"modsBackdropCaptureEnabled\s*=\s*new\s+"
+            r"TweakPresenterSurfaceOwnership<Camera,\s*bool>\s*\(\s*"
+            r"ReadModsCameraEnabled\s*,\s*WriteModsCameraEnabled\s*,\s*false\s*\)",
+        )
+        self.assertRegex(
+            presenter,
+            r"modsBackdropClearFlags\s*=\s*new\s+"
+            r"TweakPresenterSurfaceOwnership<Camera,\s*CameraClearFlags>\s*\(\s*"
+            r"ReadModsCameraClearFlags\s*,\s*WriteModsCameraClearFlags\s*,\s*"
+            r"CameraClearFlags\.SolidColor\s*\)",
+        )
+        read_clear_flags = method_body(
+            presenter,
+            r"CameraClearFlags\s+ReadModsCameraClearFlags\s*\([^)]*\)",
+        )
+        write_clear_flags = method_body(
+            presenter,
+            r"void\s+WriteModsCameraClearFlags\s*\([^)]*\)",
+        )
+        self.assertIn("target.clearFlags", read_clear_flags)
+        self.assertIn("target.clearFlags", write_clear_flags)
+
+        self.assertIn("bgCaptureCam.enabled = directDisplayActive", sync)
+        self.assertIn("clearCam.clearFlags = bgCaptureCam.enabled", sync)
+        self.assertLess(
+            main_tick.index("SyncBgCapture(gc)"),
+            main_tick.index("UpdateCompanion(src)"),
+        )
+        self.assertIn("TweaksPaneTick(src)", update_companion)
+        self.assertIn("HollowKnightModsPresentationFlow.CoveredSurfaceAt", stow)
+        capture_flow = " ".join(capture_surface.split())
+        self.assertRegex(
+            capture_flow,
+            r"case\s+HollowKnightModsCoveredSurface\.BackdropComposite:"
+            r"(?:(?!case\s+HollowKnightModsCoveredSurface).)*"
+            r"modsBackdropCaptureEnabled\.CaptureAndHide\(bgCaptureCam\)"
+            r"(?:(?!case\s+HollowKnightModsCoveredSurface).)*"
+            r"modsBackdropClearFlags\.CaptureAndHide\(clearCam\)"
+            r"(?:(?!case\s+HollowKnightModsCoveredSurface).)*break;",
+        )
+        for owner, target in (
+            ("modsBackdropCaptureEnabled", "bgCaptureCam"),
+            ("modsBackdropClearFlags", "clearCam"),
+        ):
+            capture = f"{owner}.CaptureAndHide({target})"
+            restore = f"{owner}.Restore()"
+            with self.subTest(backdrop_owner=owner):
+                self.assertIn(capture, hide_restore)
+                self.assertEqual(2, presenter.count(capture))
+                self.assertIn(restore, reveal_restore)
+                self.assertIn(restore, restore_all)
+                self.assertNotIn(restore, restore_core)
+                self.assertEqual(2, presenter.count(restore))
+        for method in (reveal_restore, restore_all):
+            with self.subTest(backdrop_restore_method=method):
+                backdrop_clear = method.index("modsBackdropClearFlags.Restore()")
+                self.assertLess(
+                    method.index("modsCompanionVisibility.Restore()"),
+                    backdrop_clear,
+                )
+                self.assertLess(
+                    method.index("modsHudVisibility.Restore()"),
+                    backdrop_clear,
+                )
+                self.assertLess(
+                    backdrop_clear,
+                    method.index("modsBackdropCaptureEnabled.Restore()"),
+                )
+        self.assertNotIn("attrCam.enabled =", presenter)
+        self.assertNotIn("clearCam.enabled =", presenter)
+
     def test_h3_mods_surface_exclusively_owns_and_exactly_restores_covered_content(self):
         presenter = strip_csharp_comments(read(MODS_PRESENTER))
         stow = method_body(

@@ -53,6 +53,7 @@ namespace DualSouls.Mods.HollowKnight
 
     internal enum HollowKnightModsCoveredSurface
     {
+        BackdropComposite,
         FrameRoot,
         InterruptedSlide,
         MapPage,
@@ -88,6 +89,7 @@ namespace DualSouls.Mods.HollowKnight
     {
         static readonly HollowKnightModsCoveredSurface[] CoveredSurfaces =
         {
+            HollowKnightModsCoveredSurface.BackdropComposite,
             HollowKnightModsCoveredSurface.FrameRoot,
             HollowKnightModsCoveredSurface.MapPage,
             HollowKnightModsCoveredSurface.InterruptedSlide,

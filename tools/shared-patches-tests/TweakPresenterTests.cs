@@ -154,7 +154,97 @@ public sealed class TweakPresenterTests
     }
 
     [Fact]
-    public void HollowKnightCoveredSurfacePlanIncludesInterruptedSlideAndDetachedPrompts()
+    public void BackdropSurfaceOwnershipRestoresLastAndPreservesExactCameraBaselines()
+    {
+        var enabledDepth = new BackdropCameraNode
+        {
+            Enabled = true,
+            ClearFlags = BackdropClearFlags.Depth,
+        };
+        var disabledSolid = new BackdropCameraNode
+        {
+            Enabled = false,
+            ClearFlags = BackdropClearFlags.SolidColor,
+        };
+        var companion = new SurfaceNode { State = true };
+        var hud = new SurfaceNode { State = true };
+        bool throwHudRestoreOnce = true;
+        var companionOwnership =
+            new TweakPresenterSurfaceOwnership<SurfaceNode, bool>(
+                surface => surface.State,
+                (surface, visible) => surface.State = visible,
+                false);
+        var hudOwnership =
+            new TweakPresenterSurfaceOwnership<SurfaceNode, bool>(
+                surface => surface.State,
+                (surface, visible) =>
+                {
+                    if (visible && throwHudRestoreOnce)
+                    {
+                        throwHudRestoreOnce = false;
+                        throw new InvalidOperationException("transient HUD restore");
+                    }
+                    surface.State = visible;
+                },
+                false);
+        var enabledOwnership =
+            new TweakPresenterSurfaceOwnership<BackdropCameraNode, bool>(
+                camera => camera.Enabled,
+                (camera, enabled) => camera.Enabled = enabled,
+                false);
+        var clearFlagsOwnership =
+            new TweakPresenterSurfaceOwnership<BackdropCameraNode, BackdropClearFlags>(
+                camera => camera.ClearFlags,
+                (camera, clearFlags) => camera.ClearFlags = clearFlags,
+                BackdropClearFlags.SolidColor);
+
+        Assert.True(enabledOwnership.CaptureAndHide(enabledDepth));
+        Assert.True(enabledOwnership.CaptureAndHide(disabledSolid));
+        Assert.True(clearFlagsOwnership.CaptureAndHide(enabledDepth));
+        Assert.True(clearFlagsOwnership.CaptureAndHide(disabledSolid));
+        Assert.True(companionOwnership.CaptureAndHide(companion));
+        Assert.True(hudOwnership.CaptureAndHide(hud));
+        Assert.False(enabledDepth.Enabled);
+        Assert.Equal(BackdropClearFlags.SolidColor, enabledDepth.ClearFlags);
+        Assert.False(disabledSolid.Enabled);
+        Assert.Equal(BackdropClearFlags.SolidColor, disabledSolid.ClearFlags);
+
+        enabledDepth.Enabled = true;
+        enabledDepth.ClearFlags = BackdropClearFlags.Depth;
+        disabledSolid.Enabled = true;
+        disabledSolid.ClearFlags = BackdropClearFlags.Depth;
+        Assert.False(enabledOwnership.CaptureAndHide(enabledDepth));
+        Assert.False(enabledOwnership.CaptureAndHide(disabledSolid));
+        Assert.False(clearFlagsOwnership.CaptureAndHide(enabledDepth));
+        Assert.False(clearFlagsOwnership.CaptureAndHide(disabledSolid));
+
+        Assert.Throws<InvalidOperationException>(() =>
+        {
+            companionOwnership.Restore();
+            hudOwnership.Restore();
+            clearFlagsOwnership.Restore();
+            enabledOwnership.Restore();
+        });
+        Assert.True(companion.State);
+        Assert.False(hud.State);
+        Assert.False(enabledDepth.Enabled);
+        Assert.Equal(BackdropClearFlags.SolidColor, enabledDepth.ClearFlags);
+        Assert.False(disabledSolid.Enabled);
+        Assert.Equal(BackdropClearFlags.SolidColor, disabledSolid.ClearFlags);
+
+        companionOwnership.Restore();
+        hudOwnership.Restore();
+        clearFlagsOwnership.Restore();
+        enabledOwnership.Restore();
+        Assert.True(hud.State);
+        Assert.True(enabledDepth.Enabled);
+        Assert.Equal(BackdropClearFlags.Depth, enabledDepth.ClearFlags);
+        Assert.False(disabledSolid.Enabled);
+        Assert.Equal(BackdropClearFlags.SolidColor, disabledSolid.ClearFlags);
+    }
+
+    [Fact]
+    public void HollowKnightCoveredSurfacePlanIncludesBackdropSlideAndDetachedPrompts()
     {
         var surfaces = new List<HollowKnightModsCoveredSurface>();
         for (int i = 0;
@@ -164,6 +254,7 @@ public sealed class TweakPresenterTests
 
         Assert.Equal(new[]
         {
+            HollowKnightModsCoveredSurface.BackdropComposite,
             HollowKnightModsCoveredSurface.FrameRoot,
             HollowKnightModsCoveredSurface.MapPage,
             HollowKnightModsCoveredSurface.InterruptedSlide,
@@ -652,6 +743,18 @@ public sealed class TweakPresenterTests
     {
         Assert.Equal(expected, TweakPresenterListLayout.RowFits(
             rowBottom, rowTop, regionBottom, regionTop));
+    }
+
+    enum BackdropClearFlags
+    {
+        Depth,
+        SolidColor,
+    }
+
+    sealed class BackdropCameraNode
+    {
+        public bool Enabled { get; set; }
+        public BackdropClearFlags ClearFlags { get; set; }
     }
 
     sealed class SurfaceNode

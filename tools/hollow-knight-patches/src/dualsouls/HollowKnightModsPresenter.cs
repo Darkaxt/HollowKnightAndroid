@@ -95,6 +95,13 @@ public partial class HKDualScreen
     ModsLabel modsDetailText;
     ModsLabel modsStatusText;
     TweakPresenterRect modsListHit;
+    readonly TweakPresenterSurfaceOwnership<Camera, bool> modsBackdropCaptureEnabled =
+        new TweakPresenterSurfaceOwnership<Camera, bool>(
+            ReadModsCameraEnabled, WriteModsCameraEnabled, false);
+    readonly TweakPresenterSurfaceOwnership<Camera, CameraClearFlags> modsBackdropClearFlags =
+        new TweakPresenterSurfaceOwnership<Camera, CameraClearFlags>(
+            ReadModsCameraClearFlags, WriteModsCameraClearFlags,
+            CameraClearFlags.SolidColor);
     readonly TweakPresenterSurfaceOwnership<GameObject, bool> modsFrameRootVisibility =
         new TweakPresenterSurfaceOwnership<GameObject, bool>(
             ReadModsObjectVisibility, WriteModsObjectVisibility, false);
@@ -139,6 +146,19 @@ public partial class HKDualScreen
     static void WriteModsCameraEnabled(Camera target, bool enabled)
     {
         if (target != null && target.enabled != enabled) target.enabled = enabled;
+    }
+
+    static CameraClearFlags ReadModsCameraClearFlags(Camera target)
+    {
+        return target != null ? target.clearFlags : CameraClearFlags.SolidColor;
+    }
+
+    static void WriteModsCameraClearFlags(
+        Camera target,
+        CameraClearFlags clearFlags)
+    {
+        if (target != null && target.clearFlags != clearFlags)
+            target.clearFlags = clearFlags;
     }
 
     static int ReadModsCameraMask(Camera target)
@@ -462,6 +482,10 @@ public partial class HKDualScreen
     {
         switch (surface)
         {
+            case HollowKnightModsCoveredSurface.BackdropComposite:
+                modsBackdropCaptureEnabled.CaptureAndHide(bgCaptureCam);
+                modsBackdropClearFlags.CaptureAndHide(clearCam);
+                break;
             case HollowKnightModsCoveredSurface.FrameRoot:
                 modsFrameRootVisibility.CaptureAndHide(frameRoot);
                 break;
@@ -555,6 +579,8 @@ public partial class HKDualScreen
 
     void HideModsRestoreCameras()
     {
+        modsBackdropCaptureEnabled.CaptureAndHide(bgCaptureCam);
+        modsBackdropClearFlags.CaptureAndHide(clearCam);
         modsCompanionVisibility.CaptureAndHide(attrCam);
         modsHudVisibility.CaptureAndHide(hudCam2);
     }
@@ -574,6 +600,8 @@ public partial class HKDualScreen
     {
         modsCompanionVisibility.Restore();
         modsHudVisibility.Restore();
+        modsBackdropClearFlags.Restore();
+        modsBackdropCaptureEnabled.Restore();
     }
 
     void RestoreModsCoveredContentImmediately()
@@ -589,6 +617,8 @@ public partial class HKDualScreen
         RestoreModsCoveredContentCore();
         modsHudVisibility.Restore();
         modsCompanionVisibility.Restore();
+        modsBackdropClearFlags.Restore();
+        modsBackdropCaptureEnabled.Restore();
     }
 
     void RestoreModsCoveredContentCore()
