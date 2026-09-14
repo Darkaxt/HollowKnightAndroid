@@ -683,6 +683,37 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             r"hudCam2\.enabled\s*=\s*directDisplayActive\s*&&\s*\(hudCameraWasEnabled\s*\|\|\s*hudCameraRestoredEnabled\)",
         )
 
+    def test_h3_transport_deactivation_reasserts_role_camera_shutdown_after_mods_restore(self):
+        direct = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.DirectDisplay.cs")
+        )
+        deactivate = method_body(
+            direct,
+            r"internal\s+void\s+SetDirectDisplayActive\s*\([^)]*\)",
+        )
+        retry = method_body(
+            direct,
+            r"void\s+RetryPendingDirectDisplayRestore\s*\(\s*\)",
+        )
+        disable = "SetRoleCamerasEnabled(false)"
+        teardown = "TeardownModsPresenter()"
+
+        self.assertGreaterEqual(
+            deactivate.count(
+                "TryDirectStep(() => SetRoleCamerasEnabled(false), failures)"
+            ),
+            2,
+        )
+        self.assertGreater(deactivate.rindex(disable), deactivate.index(teardown))
+        retry_flow = " ".join(retry.split())
+        self.assertRegex(
+            retry_flow,
+            r"try\s*\{(?:(?!finally).)*RestoreReferenceRouting\(\)"
+            r"(?:(?!finally).)*TeardownModsPresenter\(\)"
+            r"(?:(?!finally).)*\}\s*finally\s*\{\s*"
+            r"SetRoleCamerasEnabled\(false\)\s*;\s*\}",
+        )
+
     def test_h3_mods_surface_exclusively_owns_and_exactly_restores_covered_content(self):
         presenter = strip_csharp_comments(read(MODS_PRESENTER))
         stow = method_body(
