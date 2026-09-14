@@ -27,6 +27,12 @@ namespace DualSouls.Mods.Silksong
         void RestoreOneHitKills();
         void SetEquipAnywhere(bool enabled);
         void RestoreEquipAnywhere();
+        void SetInstantDialogue(bool enabled);
+        void RestoreInstantDialogue();
+        void SetWorldRumbleDisabled(bool enabled);
+        void RestoreWorldRumbleDisabled();
+        void SetFrostDisabled(bool enabled);
+        void RestoreFrostDisabled();
         void RefillSilk();
     }
 
@@ -50,6 +56,18 @@ namespace DualSouls.Mods.Silksong
             new TweakDescriptor(
                 "equip_anywhere", "LOADOUT", "EQUIP ANYWHERE",
                 "Allow tool and crest changes away from benches.",
+                "off", new[] { "off", "on" }),
+            new TweakDescriptor(
+                "instant_dialogue", "PRESENTATION", "INSTANT DIALOGUE",
+                "Show dialogue text immediately instead of printing it over time.",
+                "off", new[] { "off", "on" }),
+            new TweakDescriptor(
+                "disable_world_rumble", "PRESENTATION", "DISABLE WORLD RUMBLE",
+                "Prevent ambient world rumble effects.",
+                "off", new[] { "off", "on" }),
+            new TweakDescriptor(
+                "ignore_frost_slowdown", "PLAYER", "IGNORE FROST SLOWDOWN",
+                "Prevent frost buildup from slowing Hornet.",
                 "off", new[] { "off", "on" }),
         };
 
@@ -107,6 +125,21 @@ namespace DualSouls.Mods.Silksong
                 {
                     if (value == "off") _api.RestoreEquipAnywhere();
                     else _api.SetEquipAnywhere(true);
+                }
+                else if (id == "instant_dialogue")
+                {
+                    if (value == "off") _api.RestoreInstantDialogue();
+                    else _api.SetInstantDialogue(true);
+                }
+                else if (id == "disable_world_rumble")
+                {
+                    if (value == "off") _api.RestoreWorldRumbleDisabled();
+                    else _api.SetWorldRumbleDisabled(true);
+                }
+                else if (id == "ignore_frost_slowdown")
+                {
+                    if (value == "off") _api.RestoreFrostDisabled();
+                    else _api.SetFrostDisabled(true);
                 }
                 return TweakActionResult.Ok();
             }

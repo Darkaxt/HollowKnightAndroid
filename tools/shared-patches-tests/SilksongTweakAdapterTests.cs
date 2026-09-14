@@ -7,7 +7,7 @@ namespace SharedPatches.Tests;
 public sealed class SilksongTweakAdapterTests
 {
     [Fact]
-    public void DescriptorsExposeOnlyProvenInitialCapabilities()
+    public void DescriptorsExposeOnlyProvenCapabilities()
     {
         var adapter = new SilksongTweakAdapter(new RecordingApi());
 
@@ -17,7 +17,10 @@ public sealed class SilksongTweakAdapterTests
             row => AssertDescriptor(row, "damage_received", "vanilla", "vanilla", "prevent_death", "invincible"),
             row => AssertDescriptor(row, "unlimited_silk", "off", "off", "on"),
             row => AssertDescriptor(row, "one_hit_kills", "off", "off", "on"),
-            row => AssertDescriptor(row, "equip_anywhere", "off", "off", "on"));
+            row => AssertDescriptor(row, "equip_anywhere", "off", "off", "on"),
+            row => AssertDescriptor(row, "instant_dialogue", "off", "off", "on"),
+            row => AssertDescriptor(row, "disable_world_rumble", "off", "off", "on"),
+            row => AssertDescriptor(row, "ignore_frost_slowdown", "off", "off", "on"));
     }
 
     [Theory]
@@ -51,6 +54,9 @@ public sealed class SilksongTweakAdapterTests
     [InlineData("unlimited_silk", nameof(RecordingApi.UnlimitedSilk))]
     [InlineData("one_hit_kills", nameof(RecordingApi.OneHitKills))]
     [InlineData("equip_anywhere", nameof(RecordingApi.EquipAnywhere))]
+    [InlineData("instant_dialogue", nameof(RecordingApi.InstantDialogue))]
+    [InlineData("disable_world_rumble", nameof(RecordingApi.WorldRumbleDisabled))]
+    [InlineData("ignore_frost_slowdown", nameof(RecordingApi.FrostDisabled))]
     public void BooleanOptionsMapOnAndDefaultToIndividualRestore(string id, string property)
     {
         var api = new RecordingApi();
@@ -148,12 +154,18 @@ public sealed class SilksongTweakAdapterTests
         public int RestoreSilkCount { get; private set; }
         public int RestoreOneHitCount { get; private set; }
         public int RestoreEquipCount { get; private set; }
+        public int RestoreInstantDialogueCount { get; private set; }
+        public int RestoreWorldRumbleCount { get; private set; }
+        public int RestoreFrostCount { get; private set; }
         public int RefillCount { get; private set; }
         public int TotalMutationCount { get; private set; }
         public SilksongDamageMode? DamageMode { get; private set; }
         public bool UnlimitedSilk { get; private set; }
         public bool OneHitKills { get; private set; }
         public bool EquipAnywhere { get; private set; }
+        public bool InstantDialogue { get; private set; }
+        public bool WorldRumbleDisabled { get; private set; }
+        public bool FrostDisabled { get; private set; }
         public bool ThrowOnMutation { get; set; }
 
         public void CaptureBaseline() => CaptureCount++;
@@ -164,6 +176,9 @@ public sealed class SilksongTweakAdapterTests
             UnlimitedSilk = false;
             OneHitKills = false;
             EquipAnywhere = false;
+            InstantDialogue = false;
+            WorldRumbleDisabled = false;
+            FrostDisabled = false;
         }
 
         public void SetDamageMode(SilksongDamageMode mode)
@@ -218,6 +233,45 @@ public sealed class SilksongTweakAdapterTests
             EquipAnywhere = false;
         }
 
+        public void SetInstantDialogue(bool enabled)
+        {
+            Mutate();
+            InstantDialogue = enabled;
+        }
+
+        public void RestoreInstantDialogue()
+        {
+            Mutate();
+            RestoreInstantDialogueCount++;
+            InstantDialogue = false;
+        }
+
+        public void SetWorldRumbleDisabled(bool enabled)
+        {
+            Mutate();
+            WorldRumbleDisabled = enabled;
+        }
+
+        public void RestoreWorldRumbleDisabled()
+        {
+            Mutate();
+            RestoreWorldRumbleCount++;
+            WorldRumbleDisabled = false;
+        }
+
+        public void SetFrostDisabled(bool enabled)
+        {
+            Mutate();
+            FrostDisabled = enabled;
+        }
+
+        public void RestoreFrostDisabled()
+        {
+            Mutate();
+            RestoreFrostCount++;
+            FrostDisabled = false;
+        }
+
         public void RefillSilk() => RefillCount++;
 
         public int IndividualRestoreCount(string id) => id switch
@@ -225,6 +279,9 @@ public sealed class SilksongTweakAdapterTests
             "unlimited_silk" => RestoreSilkCount,
             "one_hit_kills" => RestoreOneHitCount,
             "equip_anywhere" => RestoreEquipCount,
+            "instant_dialogue" => RestoreInstantDialogueCount,
+            "disable_world_rumble" => RestoreWorldRumbleCount,
+            "ignore_frost_slowdown" => RestoreFrostCount,
             _ => 0,
         };
 

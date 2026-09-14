@@ -29,6 +29,9 @@ object BuiltInModCatalog {
             row("unlimited_silk", "COMBAT", "UNLIMITED SILK", "Keep Silk available using Silksong's own drain and refill paths.", "off", listOf("off", "on")),
             row("one_hit_kills", "COMBAT", "ONE-HIT KILLS", "Use Silksong's managed instant-kill damage state.", "off", listOf("off", "on")),
             row("equip_anywhere", "LOADOUT", "EQUIP ANYWHERE", "Allow tool and crest changes away from benches.", "off", listOf("off", "on")),
+            row("instant_dialogue", "PRESENTATION", "INSTANT DIALOGUE", "Show dialogue text immediately instead of printing it over time.", "off", listOf("off", "on")),
+            row("disable_world_rumble", "PRESENTATION", "DISABLE WORLD RUMBLE", "Prevent ambient world rumble effects.", "off", listOf("off", "on")),
+            row("ignore_frost_slowdown", "PLAYER", "IGNORE FROST SLOWDOWN", "Prevent frost buildup from slowing Hornet.", "off", listOf("off", "on")),
         )
 
     val deferred = listOf(

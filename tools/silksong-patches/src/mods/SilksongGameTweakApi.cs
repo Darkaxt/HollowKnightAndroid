@@ -17,6 +17,9 @@ namespace DualSouls.Mods.Silksong
         static CheatManager.NailDamageStates _nailDamage;
         static bool _silkDrainDisabled;
         static bool _equipAnywhere;
+        static bool _instantDialogue;
+        static bool _worldRumbleDisabled;
+        static bool _frostDisabled;
 
         public bool IsReady
         {
@@ -42,6 +45,9 @@ namespace DualSouls.Mods.Silksong
             _nailDamage = CheatManager.NailDamage;
             _silkDrainDisabled = CheatManager.IsSilkDrainDisabled;
             _equipAnywhere = CheatManager.CanChangeEquipsAnywhere;
+            _instantDialogue = CheatManager.IsTextPrintSkipEnabled;
+            _worldRumbleDisabled = CheatManager.IsWorldRumbleDisabled;
+            _frostDisabled = CheatManager.IsFrostDisabled;
             _captured = true;
         }
 
@@ -52,6 +58,9 @@ namespace DualSouls.Mods.Silksong
             CheatManager.NailDamage = _nailDamage;
             CheatManager.IsSilkDrainDisabled = _silkDrainDisabled;
             CheatManager.CanChangeEquipsAnywhere = _equipAnywhere;
+            CheatManager.IsTextPrintSkipEnabled = _instantDialogue;
+            CheatManager.IsWorldRumbleDisabled = _worldRumbleDisabled;
+            CheatManager.IsFrostDisabled = _frostDisabled;
         }
 
         public void SetDamageMode(SilksongDamageMode mode)
@@ -104,6 +113,42 @@ namespace DualSouls.Mods.Silksong
         {
             EnsureCaptured();
             CheatManager.CanChangeEquipsAnywhere = _equipAnywhere;
+        }
+
+        public void SetInstantDialogue(bool enabled)
+        {
+            EnsureCaptured();
+            CheatManager.IsTextPrintSkipEnabled = enabled;
+        }
+
+        public void RestoreInstantDialogue()
+        {
+            EnsureCaptured();
+            CheatManager.IsTextPrintSkipEnabled = _instantDialogue;
+        }
+
+        public void SetWorldRumbleDisabled(bool enabled)
+        {
+            EnsureCaptured();
+            CheatManager.IsWorldRumbleDisabled = enabled;
+        }
+
+        public void RestoreWorldRumbleDisabled()
+        {
+            EnsureCaptured();
+            CheatManager.IsWorldRumbleDisabled = _worldRumbleDisabled;
+        }
+
+        public void SetFrostDisabled(bool enabled)
+        {
+            EnsureCaptured();
+            CheatManager.IsFrostDisabled = enabled;
+        }
+
+        public void RestoreFrostDisabled()
+        {
+            EnsureCaptured();
+            CheatManager.IsFrostDisabled = _frostDisabled;
         }
 
         public void RefillSilk()

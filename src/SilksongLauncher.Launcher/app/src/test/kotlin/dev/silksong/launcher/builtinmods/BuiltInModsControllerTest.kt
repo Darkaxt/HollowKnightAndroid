@@ -21,12 +21,26 @@ class BuiltInModsControllerTest {
             listOf("damage_received", "nail_damage", "one_hit_kills", "run_speed", "unlimited_soul"),
             hollowKnight.filter { it.group != "PRESENTATION" }.map { it.id },
         )
+        assertEquals(7, silksong.size)
         assertEquals(
-            listOf("damage_received", "unlimited_silk", "one_hit_kills", "equip_anywhere"),
+            listOf(
+                "damage_received",
+                "unlimited_silk",
+                "one_hit_kills",
+                "equip_anywhere",
+                "instant_dialogue",
+                "disable_world_rumble",
+                "ignore_frost_slowdown",
+            ),
             silksong.map { it.id },
         )
         assertTrue((hollowKnight + silksong).all { it.actionable })
         assertTrue(BuiltInModCatalog.deferred("hollow-knight").isNotEmpty())
+        assertTrue(
+            hollowKnight.none {
+                it.id in setOf("instant_dialogue", "disable_world_rumble", "ignore_frost_slowdown")
+            },
+        )
     }
 
     @Test fun `missing and malformed state fail to master off and descriptor defaults`() {
@@ -62,6 +76,20 @@ class BuiltInModsControllerTest {
         assertTrue(controller.reset().success)
         assertTrue(controller.snapshot().masterEnabled)
         assertEquals("off", controller.snapshot().value("unlimited_silk"))
+    }
+
+    @Test fun `new Silksong rows default off and persist in the Silksong profile`() {
+        val file = temporary.newFile()
+        val controller = controller("silksong", file)
+
+        for (id in listOf("instant_dialogue", "disable_world_rumble", "ignore_frost_slowdown")) {
+            assertEquals("off", controller.snapshot().value(id))
+        }
+        assertTrue(controller.setMaster(true).success)
+        assertTrue(controller.cycle("instant_dialogue").success)
+
+        assertEquals("on", controller.snapshot().value("instant_dialogue"))
+        assertTrue(file.readText().contains("dualsouls.mods.silksong.value.instant_dialogue=on"))
     }
 
     @Test fun `profile state is isolated even when files share a parent`() {

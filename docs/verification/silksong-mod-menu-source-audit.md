@@ -19,6 +19,9 @@ Observed managed consumers:
 | One-hit kills | `CheatManager.NailDamage = NailDamageStates.InstaKill` | `HealthManager.Hit` |
 | Unlimited Silk | `CheatManager.IsSilkDrainDisabled`; `HeroController.RefillSilkToMaxSilent()` | PlayMaker silk-drain checks and the hero's normal refill path |
 | Equip anywhere | `CheatManager.CanChangeEquipsAnywhere` | `InventoryItemToolManager` |
+| Instant dialogue | `CheatManager.IsTextPrintSkipEnabled` | `DialogueBox.<PrintText>d__49.MoveNext()` |
+| Disable world rumble | `CheatManager.IsWorldRumbleDisabled` | `WorldRumbleManager.get_IsRumblesPrevented()` |
+| Ignore frost slowdown | `CheatManager.IsFrostDisabled` | `HeroController.GetTotalFrostSpeed()` |
 
 The current port already compiles `tools/silksong-patches/src` against the
 selected depot's `Assembly-CSharp.dll` before IL2CPP conversion. A renamed or
@@ -27,12 +30,14 @@ runtime address.
 
 ## Boundary
 
-The first implementation stage exposes only the four seams above. It captures
-their startup values and restores those exact values when master is disabled
-or an apply fails. This avoids clobbering another built-in or external patch
-that established a non-default value before the menu initialized.
+The implementation exposes only the seven seams above. It captures their
+startup values and restores those exact values when master is disabled, an
+individual row returns to `off`, or the controller rolls back a failed apply.
+This avoids clobbering another built-in or external patch that established a
+non-default value before the menu initialized.
 
-Needle multipliers, currency multipliers, movement speed, health bars, damage
+Needle multipliers, currency multipliers, game-speed and movement-speed
+multipliers, health bars, damage
 numbers, map helpers, boss retry, teleport, and save states do not have an
 equivalent proven switch in this audit. They remain required parity candidates
 but need separate typed-hook or Cecil-rewrite evidence and, where progression
@@ -69,7 +74,8 @@ restoration retry do not depend on display 1. The presenter uses the accepted
 `TweakMenuModel`; detach removes its gesture consumer and owned visuals without
 disposing the process session.
 
-The source-backed capability boundary remains exactly the same four rows above.
+At that checkpoint, the source-backed capability boundary remained the original
+four rows: damage received, one-hit kills, unlimited Silk, and equip anywhere.
 Typed actions require the current `GameManager`, gameplay scene, `PlayerData` and
 `HeroController`; unavailable state fails closed. Shared controller/session tests
 cover default-off profile isolation, reset, apply retry, restoration retry and
@@ -83,3 +89,13 @@ per-frame TMP generation when stamps are unchanged. Exact source manifests, comp
 receipts and the unproved device boundary are recorded in
 `docs/verification/evidence/task100-quality-c3f61f5/completion.json`, which
 supersedes `task100-spec-fix-0c422bc`.
+
+## Task 137 first safe built-in Mods batch
+
+Task 137 adds three public static `bool` properties from the same exact
+Silksong `1.0.29980` assembly to the typed boundary:
+`IsTextPrintSkipEnabled`, `IsWorldRumbleDisabled`, and `IsFrostDisabled`.
+Their managed consumers are listed in the table above. Each row defaults OFF,
+captures and restores its process baseline, and remains scoped to the Silksong
+profile through the shared state, catalog, controller, and runtime path.
+Game speed and the other deferred candidates above remain excluded.
