@@ -12,7 +12,10 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import dev.silksong.launcher.profiles.GameProfiles
+import dev.silksong.launcher.profiles.ProfileBuildPaths
 import dev.silksong.launcher.profiles.SelectedGameStore
+import dev.silksong.launcher.runtime.GameLifecycleAuthority
+import dev.silksong.launcher.runtime.GameProcessState
 import dev.silksong.launcher.skins.ui.SkinsActivity
 import dev.silksong.launcher.shortcuts.GameShortcutContract
 import org.junit.Assert.assertEquals
@@ -32,6 +35,7 @@ class LauncherProfileSelectionTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
+        GameLifecycleAuthority.clearProcessLaunchPending()
         SelectedGameStore(context).set(GameProfiles.require("silksong"))
     }
 
@@ -178,6 +182,45 @@ class LauncherProfileSelectionTest {
     }
 
     @Test
+    fun `recreated launcher clears process pending lease without instance return state`() {
+        val pending = lifecycleAuthority("silksong")
+        pending.markLaunchPending()
+        val game = pending.acquireForGame()
+        val controller = Robolectric.buildActivity(LauncherActivity::class.java).setup()
+        try {
+            assertEquals(GameProcessState.ACTIVE, pending.runIfInactive { Unit }.state)
+            game.close()
+            assertEquals(GameProcessState.INACTIVE, pending.runIfInactive { Unit }.state)
+        } finally {
+            game.close()
+            controller.pause().stop().destroy()
+            GameLifecycleAuthority.clearProcessLaunchPending()
+        }
+    }
+
+    @Test
+    fun `cross profile direct shortcut clears pending lease owned by previous profile`() {
+        val pending = lifecycleAuthority("silksong")
+        pending.markLaunchPending()
+        val game = pending.acquireForGame()
+        val shortcut = Intent(context, LauncherActivity::class.java).apply {
+            action = GameShortcutContract.ACTION_DIRECT_LAUNCH
+            putExtra(GameShortcutContract.PROFILE_ID_EXTRA, "hollow-knight")
+        }
+        val controller = Robolectric.buildActivity(LauncherActivity::class.java, shortcut).setup()
+        try {
+            assertEquals(GameProcessState.ACTIVE, pending.runIfInactive { Unit }.state)
+            assertEquals("hollow-knight", SelectedGameStore(context).get().id)
+            game.close()
+            assertEquals(GameProcessState.INACTIVE, pending.runIfInactive { Unit }.state)
+        } finally {
+            game.close()
+            controller.pause().stop().destroy()
+            GameLifecycleAuthority.clearProcessLaunchPending()
+        }
+    }
+
+    @Test
     fun `direct shortcut persists its exact profile then uses shared launch eligibility`() {
         val shortcut = Intent(context, LauncherActivity::class.java).apply {
             action = GameShortcutContract.ACTION_DIRECT_LAUNCH
@@ -206,6 +249,15 @@ class LauncherProfileSelectionTest {
 
         assertEquals("silksong", SelectedGameStore(context).get().id)
         assertEquals(null, shadowOf(activity).nextStartedActivity)
+    }
+
+    private fun lifecycleAuthority(profileId: String): GameLifecycleAuthority {
+        val paths = ProfileBuildPaths(
+            context.filesDir,
+            requireNotNull(context.getExternalFilesDir(null)),
+            GameProfiles.require(profileId),
+        )
+        return GameLifecycleAuthority.forModStateRoot(paths.modStateRoot)
     }
 
     private fun collectText(view: View): List<String> = when (view) {

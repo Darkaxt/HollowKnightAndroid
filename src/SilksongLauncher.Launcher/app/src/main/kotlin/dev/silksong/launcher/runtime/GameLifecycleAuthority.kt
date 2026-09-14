@@ -48,13 +48,13 @@ class GameLifecycleAuthority(private val root: File) {
             throw IllegalStateException("Could not acquire game lifecycle lease", it)
         } ?: throw IllegalStateException("The game lifecycle lease is already owned")
         activeLease.use {
-            synchronized(pendingLeases) {
-                if (pendingLeases.containsKey(pendingKey)) return
+            synchronized(pendingLock) {
+                check(pendingLaunch == null) { "A game launch is already pending" }
                 val pendingAttempt = tryAcquireLease(PENDING_OFFSET)
                 val pendingLease = pendingAttempt.getOrElse {
                     throw IllegalStateException("Could not acquire launch-transition lease", it)
                 } ?: throw IllegalStateException("The launch-transition lease is already owned")
-                pendingLeases[pendingKey] = pendingLease
+                pendingLaunch = PendingLaunch(pendingKey, pendingLease)
             }
         }
     }
@@ -62,8 +62,10 @@ class GameLifecycleAuthority(private val root: File) {
     fun markLaunchCancelled() = clearLaunchPending()
 
     fun clearLaunchPending() {
-        synchronized(pendingLeases) {
-            pendingLeases.remove(pendingKey)?.close()
+        synchronized(pendingLock) {
+            val owned = pendingLaunch?.takeIf { it.key == pendingKey } ?: return
+            pendingLaunch = null
+            owned.lease.close()
         }
     }
 
@@ -102,12 +104,23 @@ class GameLifecycleAuthority(private val root: File) {
         }
     }
 
+    private data class PendingLaunch(val key: String, val lease: Lease)
+
     companion object {
         private const val LOCK_FILE = "game-lifecycle.lock"
         private const val ACTIVE_OFFSET = 0L
         private const val PENDING_OFFSET = 1L
         private const val LOCK_LENGTH = 1L
-        private val pendingLeases = mutableMapOf<String, Lease>()
+        private val pendingLock = Any()
+        private var pendingLaunch: PendingLaunch? = null
+
+        fun clearProcessLaunchPending() {
+            synchronized(pendingLock) {
+                val owned = pendingLaunch
+                pendingLaunch = null
+                owned?.lease?.close()
+            }
+        }
 
         fun forModStateRoot(modStateRoot: File): GameLifecycleAuthority =
             GameLifecycleAuthority(File(modStateRoot, "lifecycle"))

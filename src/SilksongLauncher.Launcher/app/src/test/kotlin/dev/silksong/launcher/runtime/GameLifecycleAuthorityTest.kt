@@ -1,16 +1,21 @@
 package dev.silksong.launcher.runtime
 
 import java.io.File
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 class GameLifecycleAuthorityTest {
     @get:Rule val temporary = TemporaryFolder()
+
+    @Before fun clearPendingBeforeTest() = GameLifecycleAuthority.clearProcessLaunchPending()
+    @After fun clearPendingAfterTest() = GameLifecycleAuthority.clearProcessLaunchPending()
 
     @Test fun `exclusive transient lease is trustworthy inactive and holds through mutation`() {
         val root = temporary.newFolder()
@@ -86,6 +91,19 @@ class GameLifecycleAuthorityTest {
             owner.close()
         }
         assertEquals(GameProcessState.INACTIVE, authority.runIfInactive { Unit }.state)
+    }
+
+    @Test fun `a second pending request cannot authorize another launch`() {
+        val first = GameLifecycleAuthority(temporary.newFolder())
+        val secondProfile = GameLifecycleAuthority(temporary.newFolder())
+        first.markLaunchPending()
+        try {
+            assertThrows(IllegalStateException::class.java) { first.markLaunchPending() }
+            assertThrows(IllegalStateException::class.java) { secondProfile.markLaunchPending() }
+            assertEquals(GameProcessState.UNKNOWN, first.runIfInactive { Unit }.state)
+        } finally {
+            GameLifecycleAuthority.clearProcessLaunchPending()
+        }
     }
 
     @Test fun `launcher pending ownership is unknown until cancellation or return clears it`() {

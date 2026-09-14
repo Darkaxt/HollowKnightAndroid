@@ -354,13 +354,14 @@ class LauncherActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        // Launch ownership belongs to the launcher process, not this Activity instance or profile.
+        GameLifecycleAuthority.clearProcessLaunchPending()
         if (::radioHollowKnight.isInitialized) refreshProfileCards()
         // Auto-push fires after the user returns from playing the
         // game. We use a flag (set in launchGame) instead of just
         // "always on resume" so dismissing dialogs / opening
         // Settings + coming back doesn't trigger a push.
         if (returningFromGame) {
-            GameLifecycleAuthority.forModStateRoot(buildPaths.modStateRoot).clearLaunchPending()
             returningFromGame = false
             maybeAutoPush()
         }
@@ -861,8 +862,8 @@ class LauncherActivity : Activity() {
             if (launchPending) {
                 runCatching { lifecycleAuthority.markLaunchCancelled() }
                     .onFailure { LauncherLog.log("Could not cancel pending game launch", it) }
+                returningFromGame = false
             }
-            returningFromGame = false
             LauncherLog.log("Failed to launch game: ${t.message}")
         }
     }

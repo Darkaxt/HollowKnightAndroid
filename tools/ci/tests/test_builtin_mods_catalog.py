@@ -60,10 +60,13 @@ class BuiltInModsCatalogContractTest(unittest.TestCase):
         self.assertNotIn("writeState", authority)
         self.assertNotIn("writeText", authority)
         self.assertIn("markLaunchPending", launcher)
-        self.assertRegex(
-            launcher,
-            r"if \(returningFromGame\) \{\s*GameLifecycleAuthority[^\n]+\.clearLaunchPending\(\)",
+        on_resume = launcher.split("override fun onResume()", 1)[1].split("// ── Login", 1)[0]
+        self.assertIn("GameLifecycleAuthority.clearProcessLaunchPending()", on_resume)
+        self.assertLess(
+            on_resume.index("clearProcessLaunchPending"),
+            on_resume.index("if (returningFromGame)"),
         )
+        self.assertIn('check(pendingLaunch == null)', authority)
         self.assertIn("acquireForGame", startup)
 
     def test_production_runtimes_use_shared_profile_file_and_one_silksong_controller(self):
