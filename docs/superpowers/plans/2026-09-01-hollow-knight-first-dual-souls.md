@@ -1456,6 +1456,59 @@ mutation, device/publication/source activation, save edits or cleanup; commands
   identity/parity, sampled material appearance, Scythe/Shaman shaders,
   crest/fallback visuals, HUD effects, device resource pressure, death/respawn
   visuals and lifecycle, and persistence interaction remain device-only deferrals.
+- [ ] **Tasks139–140 — per-save skin affinity is required before final skin
+  acceptance.** Task101's profile-wide `selectedPackId`, mode, eligibility ring,
+  rotation run and death state remain valid as library authority, but a single
+  game-wide selected pack is not sufficient save continuity. The launcher owns
+  a separate game-profile-isolated affinity map keyed by the authoritative typed
+  in-game save-slot ID. Neither launcher nor managed runtime may edit, parse, or
+  infer state from game save files.
+
+  - [ ] **Task139: implement the host slice through RED/GREEN tests.** Establish
+    a typed managed notification for slot load and successful game-save
+    completion. Record a slot's last confirmed active pack only after both the
+    skin application and the corresponding game-save completion are
+    authoritative successes; scene changes, timers, queued intents, parser
+    acceptance, failed application, and process exit are not save authority.
+    Loading a slot restores its last-saved confirmed pack. `OFF` restores vanilla
+    visuals without deleting affinity, and re-enabling resumes that slot's saved
+    pack. The existing mode remains profile-wide. In `ROTATE`, the restored pack
+    is that slot's ring cursor, and a completed rotation updates affinity only at
+    the next authoritative successful game save. A slot change cancels any
+    in-flight death/respawn rotation owned by the prior slot.
+  - [ ] Persist affinity atomically under the existing launcher-owned per-game
+    skin root and survive launcher/game process restart. Reject foreign game
+    profiles, invalid slot IDs, stale configuration identities and retired pack
+    generations. A missing, deleted, corrupt, or newly ineligible referenced
+    pack must not inherit another slot's selection: expose the bounded error,
+    restore vanilla/no-active-pack for that slot, retain its unresolved affinity
+    until a valid pack is explicitly applied and successfully saved, and use the
+    canonical first eligible ring entry only as the next `ROTATE` successor.
+  - [ ] Cover slot isolation, authoritative save-completion gating, failed apply,
+    process restart, repeated slot switching, `OFF` retention, restored
+    `ROTATE` cursor, deletion/ineligibility fallback, stale configuration and
+    in-flight rotation cancellation in focused Kotlin and managed tests. Rerun
+    the complete affected launcher/shared suites, exact Hollow Knight compile,
+    profile-isolation contracts and prohibited native-memory/save-edit scans.
+    Add a Silksong implementation only through its own proven typed slot-load and
+    save-completion seams; otherwise ledger the exact missing seam rather than
+    inferring one or weakening Hollow Knight authority.
+  - [ ] **Task140: prove the complete behavior live.** After baseline two-pack
+    switching/OFF/rollback/rotation passes, use Hylian Knight plus a second
+    user-owned pack and two assistant-created disposable saves. Assign and
+    authoritatively save a distinct skin in each slot; prove slot-to-slot restore,
+    full game-process restart restore, per-slot `ROTATE` cursor, `OFF` preserving
+    affinity, and deterministic deleted/ineligible-pack recovery. A queued intent
+    or accepted parser request is not proof: retain the successful runtime
+    application outcome and successful inverse/vanilla outcome for every row.
+    Never ask the user to play, never touch unrelated saves, and delete every
+    assistant-created save through normal UI only after Tasks129–132 and Task140
+    no longer need it.
+
+  **Dependency:** Task130 baseline two-pack validation → Task139 implementation →
+  Task140 live proof → Task131 page/display lifecycle → Task132 rotation and
+  final disposable-save cleanup. These tasks are not optional polish and cannot
+  be replaced by profile-wide persistence evidence.
 - [ ] **Task102.** Verify production reachability, focused behavioral suites,
   exact two-game compiles and cross-game isolation, with independent SPEC,
   separate QUALITY and fresh main verification. Distinguish executed host
