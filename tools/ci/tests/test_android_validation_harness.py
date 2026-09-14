@@ -79,6 +79,18 @@ class OverlayFocusRunner(FakeRunner):
         return super().run(command)
 
 
+class BarePackageFocusRunner(FakeRunner):
+    def run(self, command):
+        if "dumpsys" in command:
+            self.calls.append(command)
+            return (
+                "Display: mDisplayId=4 (organized)\n"
+                "  mCurrentFocus=Window{10 u0 io.github.darkaxt.dualsouls}\n"
+                "  mFocusedApp=ActivityRecord{42 u0 rip.moth.cocoonshell/.ExternalDisplayActivity}\n"
+            )
+        return super().run(command)
+
+
 class AndroidValidationHarnessTest(unittest.TestCase):
     def load_module(self):
         self.assertTrue(MODULE_PATH.is_file(), "the live gate needs a reusable evidence harness")
@@ -240,6 +252,26 @@ class AndroidValidationHarnessTest(unittest.TestCase):
                 reloaded.execute(prepared["token"])
 
             self.assertFalse(any("tap" in call for call in runner.calls))
+
+    def test_execute_accepts_package_only_current_focus_window(self):
+        module = self.load_module()
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            source_up = root / "source-up.png"
+            source_down = root / "source-down.png"
+            source_up.write_bytes(b"up")
+            source_down.write_bytes(b"down")
+            runner = BarePackageFocusRunner({"up": source_up, "down": source_down})
+            plan_path = self.write_plan(root)
+            session = module.ValidationSession.create(
+                root / "session", plan_path, "thor", "io.github.darkaxt.dualsouls",
+                runner=runner, now=lambda: 1000.0, sleeper=lambda _: None,
+            )
+            prepared = session.prepare("open-mods")
+
+            session.execute(prepared["token"])
+
+            self.assertEqual(1, len([call for call in runner.calls if "tap" in call]))
 
     def test_execute_rejects_target_when_overlay_owns_current_focus(self):
         module = self.load_module()

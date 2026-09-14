@@ -232,7 +232,7 @@ class ValidationSession:
             if focus_kind is None:
                 continue
             component = re.search(
-                r"(?:^|\s)(?:u\d+\s+)?([A-Za-z0-9_.]+)/[A-Za-z0-9_.$]+",
+                r"\bu\d+\s+([A-Za-z0-9_.]+)(?:/[A-Za-z0-9_.$]+)?(?:\}|\s|$)",
                 line,
             )
             if component and focus_kind == "current":
