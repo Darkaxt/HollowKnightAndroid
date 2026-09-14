@@ -304,6 +304,16 @@ public partial class HKDualScreen
             // B8: the gear (stacked above the fps readout) + the readout itself toggle the pane.
             // Panel-space test — valid in both touch bands and regardless of where attrCam is parked.
             if (GearTapN(nx, ny)) { ToggleTweaksPane(); return; }
+            int modsCloseTab;
+            if (HollowKnightModsPresentationFlow.CanCloseFromLowerScreenInput(
+                    modsLifecycle) &&
+                ModsTabTapN(nx, ny, out modsCloseTab))
+            {
+                CloseTweaksPane();
+                tab.tap = modsCloseTab;
+                Dbg($"HKDS Mods tab close -> tab={tab.tap}");
+                return;
+            }
             if (ny < cfg.compTabBandY)   // ABOVE the tab row -> an item tap on the Inventory/Charms pane (tab band is only the bottom strip)
             {
                 if (modsLifecycle.OwnsInput) return;   // Mods keeps lower-screen input until ordinary geometry is restored

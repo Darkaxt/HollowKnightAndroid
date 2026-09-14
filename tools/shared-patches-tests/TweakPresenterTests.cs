@@ -164,6 +164,7 @@ public sealed class TweakPresenterTests
 
         Assert.Equal(new[]
         {
+            HollowKnightModsCoveredSurface.FrameRoot,
             HollowKnightModsCoveredSurface.MapPage,
             HollowKnightModsCoveredSurface.InterruptedSlide,
             HollowKnightModsCoveredSurface.InventoryPage,

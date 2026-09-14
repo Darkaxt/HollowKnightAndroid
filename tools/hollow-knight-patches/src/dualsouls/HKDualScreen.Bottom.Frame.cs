@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using DualSouls.Mods;
 using UnityEngine;
 
 // [B2] BOTTOM SCREEN — area management: the context-box FRAME (ornaments, tab fleurs, separators), the TAB ROW +
@@ -506,6 +507,35 @@ public partial class HKDualScreen
 
     // Each frame: keep the ornaments pinned at the panel edges + a constant apparent size as the map's
     // fit (attrCam.orthographicSize) changes per zone.
+    void CacheModsTabHits()
+    {
+        if (tweaksOpen || attrCam == null || frameTabs.Count == 0) return;
+
+        Rect viewport = attrCam.rect;
+        modsTabHits.Clear();
+        foreach (var (tmp, unused, col) in frameTabs)
+        {
+            if (tmp == null) continue;
+            Renderer renderer = (tmp as Component).GetComponent<Renderer>();
+            if (renderer == null || !renderer.enabled) continue;
+            Bounds bounds = renderer.bounds;
+            float padX = bounds.extents.x * 0.5f + 0.15f;
+            Vector3 left = attrCam.WorldToViewportPoint(
+                new Vector3(bounds.min.x - padX, bounds.center.y, bounds.center.z));
+            Vector3 right = attrCam.WorldToViewportPoint(
+                new Vector3(bounds.max.x + padX, bounds.center.y, bounds.center.z));
+            float panelLeft = viewport.x + Mathf.Min(left.x, right.x) * viewport.width;
+            float panelRight = viewport.x + Mathf.Max(left.x, right.x) * viewport.width;
+            modsTabHits.Add((
+                new TweakPresenterRect(
+                    panelLeft,
+                    cfg.compTabBandY,
+                    panelRight - panelLeft,
+                    1f - cfg.compTabBandY),
+                TAB_TO_COL[Mathf.Clamp(col, 0, 2)]));
+        }
+    }
+
     void PositionFrame()
     {
         if (frameRoot == null || attrCam == null) return;
@@ -696,6 +726,7 @@ public partial class HKDualScreen
                 }
             }
         }
+        CacheModsTabHits();
     }
 
     void TeardownFrame()
@@ -1387,6 +1418,7 @@ public partial class HKDualScreen
         if (attrCam != null) { attrCam.enabled = false; attrCam.cullingMask = 0; }
         if (hudCam2 != null) hudCam2.enabled = false;
         TeardownModsPresenter();   // role cameras are disabled before covered content is restored
+        bool hudCameraRestoredEnabled = hudCam2 != null && hudCam2.enabled;
         if (attrCam != null) attrCam.cullingMask = 0;
         ReleaseLowerHudFixtureInputLock();
         if (mapClone != null) { Destroy(mapClone); mapClone = null; mapGm = null; mapContentVisible = false; mapAreaBValid = false; mapAreaBFor = null; mapFitIsArea = false; }
@@ -1407,7 +1439,9 @@ public partial class HKDualScreen
         mapSrcRef = null; paneSrcRef = null; invStamp = int.MinValue; charmStamp = int.MinValue;
         TeardownFrame();
         if (attrCam != null) attrCam.enabled = attrCameraWasEnabled;
-        if (hudCam2 != null) hudCam2.enabled = hudCameraWasEnabled;
+        if (hudCam2 != null)
+            hudCam2.enabled = directDisplayActive &&
+                              (hudCameraWasEnabled || hudCameraRestoredEnabled);
         tab.built = -1;
         fit.valid = false;
     }

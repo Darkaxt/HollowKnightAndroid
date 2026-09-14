@@ -76,6 +76,11 @@ public partial class HKDualScreen
     float hudGearH;
     bool hudGearOk;
     Bounds hudFpsB;
+    TweakPresenterRect modsGearHit;
+    TweakPresenterRect modsFpsHit;
+    bool modsGearHitValid;
+    readonly List<(TweakPresenterRect rect, int tab)> modsTabHits =
+        new List<(TweakPresenterRect, int)>();
 
     HollowKnightModsSession modsSession;
     TweakMenuModel modsMenu;
@@ -90,15 +95,18 @@ public partial class HKDualScreen
     ModsLabel modsDetailText;
     ModsLabel modsStatusText;
     TweakPresenterRect modsListHit;
+    readonly TweakPresenterSurfaceOwnership<GameObject, bool> modsFrameRootVisibility =
+        new TweakPresenterSurfaceOwnership<GameObject, bool>(
+            ReadModsObjectVisibility, WriteModsObjectVisibility, false);
     readonly TweakPresenterSurfaceOwnership<GameObject, bool> modsPageVisibility =
         new TweakPresenterSurfaceOwnership<GameObject, bool>(
             ReadModsObjectVisibility, WriteModsObjectVisibility, false);
     readonly TweakPresenterSurfaceOwnership<Renderer, bool> modsFrameContentVisibility =
         new TweakPresenterSurfaceOwnership<Renderer, bool>(
             ReadModsRendererVisibility, WriteModsRendererVisibility, false);
-    readonly TweakPresenterSurfaceOwnership<Camera, int> modsHudVisibility =
-        new TweakPresenterSurfaceOwnership<Camera, int>(
-            ReadModsCameraMask, WriteModsCameraMask, 0);
+    readonly TweakPresenterSurfaceOwnership<Camera, bool> modsHudVisibility =
+        new TweakPresenterSurfaceOwnership<Camera, bool>(
+            ReadModsCameraEnabled, WriteModsCameraEnabled, false);
     readonly TweakPresenterSurfaceOwnership<Camera, int> modsCompanionVisibility =
         new TweakPresenterSurfaceOwnership<Camera, int>(
             ReadModsCameraMask, WriteModsCameraMask, 0);
@@ -121,6 +129,16 @@ public partial class HKDualScreen
     static void WriteModsRendererVisibility(Renderer target, bool visible)
     {
         if (target != null && target.enabled != visible) target.enabled = visible;
+    }
+
+    static bool ReadModsCameraEnabled(Camera target)
+    {
+        return target != null && target.enabled;
+    }
+
+    static void WriteModsCameraEnabled(Camera target, bool enabled)
+    {
+        if (target != null && target.enabled != enabled) target.enabled = enabled;
     }
 
     static int ReadModsCameraMask(Camera target)
@@ -296,32 +314,63 @@ public partial class HKDualScreen
         Bounds placed = gearSR.bounds;
         gearT.position += target - placed.center;
         gearSR.enabled = true;
+        CacheModsGearHit();
+    }
+
+    void CacheModsGearHit()
+    {
+        if (tweaksOpen || attrCam == null || gearSR == null ||
+            !gearSR.enabled || !hudGearOk)
+            return;
+
+        Rect viewport = attrCam.rect;
+        Bounds gearBounds = gearSR.bounds;
+        Vector3 gearMin = attrCam.WorldToViewportPoint(gearBounds.min);
+        Vector3 gearMax = attrCam.WorldToViewportPoint(gearBounds.max);
+        float gearLeft = viewport.x + Mathf.Min(gearMin.x, gearMax.x) * viewport.width;
+        float gearRight = viewport.x + Mathf.Max(gearMin.x, gearMax.x) * viewport.width;
+        float gearTop = 1f - (viewport.y + Mathf.Max(gearMin.y, gearMax.y) * viewport.height);
+        float gearBottom = 1f - (viewport.y + Mathf.Min(gearMin.y, gearMax.y) * viewport.height);
+        const float gearPadding = 0.02f;
+        modsGearHit = new TweakPresenterRect(
+            gearLeft - gearPadding,
+            gearTop - gearPadding,
+            gearRight - gearLeft + gearPadding * 2f,
+            gearBottom - gearTop + gearPadding * 2f);
+
+        Vector3 fpsMin = attrCam.WorldToViewportPoint(hudFpsB.min);
+        Vector3 fpsMax = attrCam.WorldToViewportPoint(hudFpsB.max);
+        float fpsLeft = viewport.x + Mathf.Min(fpsMin.x, fpsMax.x) * viewport.width;
+        float fpsRight = viewport.x + Mathf.Max(fpsMin.x, fpsMax.x) * viewport.width;
+        float fpsTop = 1f - (viewport.y + Mathf.Max(fpsMin.y, fpsMax.y) * viewport.height);
+        float fpsBottom = 1f - (viewport.y + Mathf.Min(fpsMin.y, fpsMax.y) * viewport.height);
+        const float fpsPadding = 0.01f;
+        modsFpsHit = new TweakPresenterRect(
+            fpsLeft - fpsPadding,
+            fpsTop - fpsPadding,
+            fpsRight - fpsLeft + fpsPadding * 2f,
+            fpsBottom - fpsTop + fpsPadding * 2f);
+        modsGearHitValid = true;
+    }
+
+    bool ModsTabTapN(float x, float y, out int hitTab)
+    {
+        var point = new TweakPresenterPoint(x, y);
+        for (int i = 0; i < modsTabHits.Count; i++)
+        {
+            if (!modsTabHits[i].rect.Contains(point)) continue;
+            hitTab = modsTabHits[i].tab;
+            return true;
+        }
+        hitTab = -1;
+        return false;
     }
 
     bool GearTapN(float x, float y)
     {
-        if (x < 0f || x > 1f || y < 0f || y > 1f || attrCam == null ||
-            gearSR == null || !gearSR.enabled || !hudGearOk)
-            return false;
-
-        Rect viewport = attrCam.rect;
-        Vector2 panelPoint = new Vector2(x, 1f - y);
-        if (!viewport.Contains(panelPoint)) return false;
-        float vx = (panelPoint.x - viewport.x) / Mathf.Max(0.0001f, viewport.width);
-        float vy = (panelPoint.y - viewport.y) / Mathf.Max(0.0001f, viewport.height);
-        Vector3 world = attrCam.ViewportToWorldPoint(new Vector3(vx, vy, 10f));
-
-        float tolerance = Mathf.Max(0.08f, hudGearH * 0.45f);
-        Bounds gearBounds = gearSR.bounds;
-        gearBounds.Expand(new Vector3(tolerance, tolerance, 10f));
-        if (world.x >= gearBounds.min.x && world.x <= gearBounds.max.x &&
-            world.y >= gearBounds.min.y && world.y <= gearBounds.max.y)
-            return true;
-
-        Bounds fpsBounds = hudFpsB;
-        fpsBounds.Expand(new Vector3(tolerance, tolerance, 10f));
-        return world.x >= fpsBounds.min.x && world.x <= fpsBounds.max.x &&
-               world.y >= fpsBounds.min.y && world.y <= fpsBounds.max.y;
+        if (!modsGearHitValid || !hudGearOk) return false;
+        var point = new TweakPresenterPoint(x, y);
+        return modsGearHit.Contains(point) || modsFpsHit.Contains(point);
     }
 
     void ToggleTweaksPane()
@@ -382,6 +431,9 @@ public partial class HKDualScreen
     {
         switch (surface)
         {
+            case HollowKnightModsCoveredSurface.FrameRoot:
+                modsFrameRootVisibility.CaptureAndHide(frameRoot);
+                break;
             case HollowKnightModsCoveredSurface.InterruptedSlide:
                 modsPageVisibility.CaptureAndHide(slideOutClone);
                 break;
@@ -510,6 +562,7 @@ public partial class HKDualScreen
     {
         modsFrameContentVisibility.Restore();
         modsPageVisibility.Restore();
+        modsFrameRootVisibility.Restore();
     }
 
     Component FindModsTextDonor()
@@ -1271,6 +1324,10 @@ public partial class HKDualScreen
         hudGearH = 0f;
         hudGearAnchor = Vector3.zero;
         hudFpsB = default(Bounds);
+        modsGearHit = default(TweakPresenterRect);
+        modsFpsHit = default(TweakPresenterRect);
+        modsGearHitValid = false;
+        modsTabHits.Clear();
         modsPaint.Invalidate();
     }
 

@@ -452,7 +452,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertNotIn("hudGearH", gear_height.group("expression"))
         self.assertNotIn("hudFpsB", gear_height.group("expression"))
         self.assertIn("hudFpsB.max.y", position_gear)
-        for required in ("attrCam.rect", "Contains", "ViewportToWorldPoint", "gearSR.bounds", "hudFpsB", "Expand"):
+        for required in ("modsGearHit", "modsFpsHit", "TweakPresenterPoint", "Contains"):
             self.assertIn(required, gear_tap)
         self.assertIn("frameRoot", build_modal)
         self.assertIn("compRoot", build_modal)
@@ -599,6 +599,90 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("modsPaint.Invalidate()", close)
         self.assertIn("RequestCoveredContentStow()", stow)
 
+    def test_h3_mods_close_hotspots_remain_in_panel_space_while_frame_is_stowed(self):
+        presenter = strip_csharp_comments(read(MODS_PRESENTER))
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        select = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Select.cs")
+        )
+        gear_tap = method_body(presenter, r"bool\s+GearTapN\s*\([^)]*\)")
+        cache_gear = method_body(
+            presenter,
+            r"void\s+CacheModsGearHit\s*\(\s*\)",
+        )
+        cache_tabs = method_body(
+            frame,
+            r"void\s+CacheModsTabHits\s*\(\s*\)",
+        )
+        tab_tap = method_body(
+            presenter,
+            r"bool\s+ModsTabTapN\s*\([^)]*\)",
+        )
+        position_gear = method_body(
+            presenter,
+            r"void\s+PositionGear\s*\([^)]*\)",
+        )
+        position_frame = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
+        poll_touch = method_body(select, r"void\s+PollTouch\s*\(\s*\)")
+
+        for cached in (
+            "modsGearHit", "modsFpsHit", "modsGearHitValid", "modsTabHits",
+        ):
+            self.assertIn(cached, presenter)
+        for cache in (cache_gear, cache_tabs):
+            self.assertIn("WorldToViewportPoint", cache)
+            self.assertIn("attrCam.rect", cache)
+            self.assertIn("TweakPresenterRect", cache)
+        self.assertIn("CacheModsGearHit()", position_gear)
+        self.assertIn("CacheModsTabHits()", position_frame)
+        self.assertIn("modsGearHit.Contains", gear_tap)
+        self.assertIn("modsFpsHit.Contains", gear_tap)
+        self.assertNotIn("ViewportToWorldPoint", gear_tap)
+        self.assertIn("modsTabHits", tab_tap)
+        self.assertIn("CanCloseFromLowerScreenInput", poll_touch)
+        self.assertIn("ModsTabTapN", poll_touch)
+        self.assertLess(
+            poll_touch.index("ModsTabTapN"),
+            poll_touch.index("if (modsLifecycle.OwnsInput) return"),
+        )
+
+    def test_h3_mods_hud_camera_lease_owns_render_submission_not_only_culling(self):
+        presenter = strip_csharp_comments(read(MODS_PRESENTER))
+        read_enabled = method_body(
+            presenter,
+            r"bool\s+ReadModsCameraEnabled\s*\([^)]*\)",
+        )
+        write_enabled = method_body(
+            presenter,
+            r"void\s+WriteModsCameraEnabled\s*\([^)]*\)",
+        )
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        teardown_companion = method_body(
+            frame,
+            r"void\s+TeardownCompanion\s*\(\s*\)",
+        )
+
+        self.assertRegex(
+            presenter,
+            r"TweakPresenterSurfaceOwnership<Camera,\s*bool>\s+modsHudVisibility",
+        )
+        self.assertRegex(
+            presenter,
+            r"modsHudVisibility\s*=\s*new\s+TweakPresenterSurfaceOwnership<Camera,\s*bool>\s*\(\s*ReadModsCameraEnabled\s*,\s*WriteModsCameraEnabled\s*,\s*false\s*\)",
+        )
+        self.assertIn("target.enabled", read_enabled)
+        self.assertIn("target.enabled", write_enabled)
+        self.assertIn("hudCameraRestoredEnabled", teardown_companion)
+        self.assertIn("directDisplayActive", teardown_companion)
+        self.assertRegex(
+            " ".join(teardown_companion.split()),
+            r"hudCam2\.enabled\s*=\s*directDisplayActive\s*&&\s*\(hudCameraWasEnabled\s*\|\|\s*hudCameraRestoredEnabled\)",
+        )
+
     def test_h3_mods_surface_exclusively_owns_and_exactly_restores_covered_content(self):
         presenter = strip_csharp_comments(read(MODS_PRESENTER))
         stow = method_body(
@@ -697,24 +781,26 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("HollowKnightModsPresentationFlow.CoveredSurfaceAt", stow)
         self.assertIn("CaptureAndHideModsSurface", stow)
         for lease in (
-            "modsPageVisibility", "modsFrameContentVisibility", "modsHudVisibility",
+            "modsFrameRootVisibility", "modsPageVisibility",
+            "modsFrameContentVisibility", "modsHudVisibility",
         ):
             with self.subTest(visibility_owner=lease):
                 self.assertIn(f"{lease}.CaptureAndHide", capture_surface)
         for covered in (
-            "slideOutClone", "mapClone", "invCloneCache", "charmCloneCache",
-            "areaNameT", "equipRowRoot", "noMapT", "mapResetT", "selBox",
-            "ctrlMyGlyph", "ctrlMyVerbT", "hudCam2",
+            "frameRoot", "slideOutClone", "mapClone", "invCloneCache",
+            "charmCloneCache", "areaNameT", "equipRowRoot", "noMapT",
+            "mapResetT", "selBox", "ctrlMyGlyph", "ctrlMyVerbT", "hudCam2",
         ):
             with self.subTest(covered_surface=covered):
                 self.assertIn(covered, capture_surface)
         for role in (
-            "InterruptedSlide", "DetachedPromptGlyph", "DetachedPromptVerb",
-            "NativeHud",
+            "FrameRoot", "InterruptedSlide", "DetachedPromptGlyph",
+            "DetachedPromptVerb", "NativeHud",
         ):
             self.assertIn(f"HollowKnightModsCoveredSurface.{role}", capture_surface)
         capture_flow = " ".join(capture_surface.split())
         for role, target in (
+            ("FrameRoot", "frameRoot"),
             ("InterruptedSlide", "slideOutClone"),
             ("DetachedPromptGlyph", "ctrlMyGlyph"),
             ("DetachedPromptVerb", "ctrlMyVerbT"),
@@ -729,12 +815,11 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertNotIn("StowSlideClone()", capture_surface)
         for release_path in (close, rebind, teardown):
             self.assertNotIn("StowSlideClone()", release_path)
-        for preserved_chrome in (
-            "statsR", "battIconSR", "battLevelR", "gearSR", "frameTabs",
-            "sepTopT", "sepBotT",
-        ):
-            with self.subTest(preserved_chrome=preserved_chrome):
-                self.assertNotIn(preserved_chrome, stow + capture_surface)
+        self.assertIn(
+            "modsFrameRootVisibility.CaptureAndHide(frameRoot)",
+            capture_surface,
+        )
+        self.assertIn("modsFrameRootVisibility.Restore()", restore_core)
         self.assertNotIn("tab.cur", restore_core)
         self.assertLess(tick.index("PositionFrame()"), tick.rindex("StowModsCoveredContent()"))
         self.assertLess(tick.rindex("StowModsCoveredContent()"), tick.index("BuildModsModal(menu)"))
@@ -771,6 +856,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             immediate_restore.index("DrainPendingModsInputBeforeRelease"),
         )
         for restored in (
+            "modsFrameRootVisibility.Restore()",
             "modsPageVisibility.Restore()",
             "modsFrameContentVisibility.Restore()",
             "modsHudVisibility.Restore()",
