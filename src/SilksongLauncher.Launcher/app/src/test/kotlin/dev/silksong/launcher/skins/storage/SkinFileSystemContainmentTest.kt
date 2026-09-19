@@ -144,26 +144,60 @@ class SkinFileSystemContainmentTest {
     }
 
     @Test
-    fun `mountinfo parser selects one exact longest mount and verifies the real device`() {
-        val rows = listOf(
-            "10 1 8:1 / / rw - ext4 /dev/root rw",
-            "11 10 8:1 /bind /profile/nested rw - ext4 /dev/root rw",
-        ).joinToString("\n", postfix = "\n").toByteArray()
-        val selected = SkinMountInfoParser.select(Paths.get("/profile/nested/file"), 2049L, rows)
+    fun `one parsed mountinfo snapshot supports repeated selection`() {
+        val bytes = mountInfoRows()
+        val parsed = SkinMountInfoParser.parse(bytes)
+        bytes.fill(0xff.toByte())
 
-        assertEquals("2049|8:1", selected?.device)
-        assertTrue(selected?.mountId.orEmpty().startsWith("11|8:1|/bind|"))
-        assertEquals(null, SkinMountInfoParser.select(Paths.get("/profile/nested/file"), 2050L, rows))
+        val first = parsed.select(Paths.get("/profile/nested/file"), 2049L)
+        val second = parsed.select(Paths.get("/profile/nested/other"), 2049L)
+
+        assertEquals(first, second)
+        assertEquals("2049|8:1", first?.device)
+        assertTrue(first?.mountId.orEmpty().startsWith("11|8:1|/bind|"))
+    }
+
+    @Test
+    fun `parsed mountinfo preserves exact longest device and ambiguity selection`() {
+        val rows = mountInfoRows()
+        val parsed = SkinMountInfoParser.parse(rows)
+
+        assertEquals(null, parsed.select(Paths.get("/profile/nested/file"), 2050L))
+        assertEquals(
+            parsed.select(Paths.get("/profile/nested/file"), 2049L),
+            SkinMountInfoParser.select(Paths.get("/profile/nested/file"), 2049L, rows),
+        )
 
         val ambiguous = rows + "12 10 8:1 /other /profile/nested rw - ext4 /dev/root rw\n".toByteArray()
-        assertEquals(null, SkinMountInfoParser.select(Paths.get("/profile/nested/file"), 2049L, ambiguous))
+        assertEquals(
+            null,
+            SkinMountInfoParser.parse(ambiguous).select(Paths.get("/profile/nested/file"), 2049L),
+        )
+    }
+
+    @Test
+    fun `mountinfo parser rejects malformed and oversized snapshots while parsing`() {
         assertThrows(Exception::class.java) {
-            SkinMountInfoParser.select(Paths.get("/profile/nested/file"), 2049L, byteArrayOf(0xff.toByte()))
+            SkinMountInfoParser.parse(byteArrayOf(0xff.toByte()))
         }
         assertThrows(Exception::class.java) {
-            SkinMountInfoParser.select(Paths.get("/profile/nested/file"), 2049L, "broken\n".toByteArray())
+            SkinMountInfoParser.parse("broken\n".toByteArray())
+        }
+        assertThrows(Exception::class.java) {
+            SkinMountInfoParser.parse(ByteArray(SkinMountInfoParser.MAX_BYTES + 1))
+        }
+        val tooManyRows = List(SkinMountInfoParser.MAX_LINES + 1) { index ->
+            "$index 1 8:1 / / rw - ext4 /dev/root rw"
+        }.joinToString("\n").toByteArray()
+        assertThrows(Exception::class.java) {
+            SkinMountInfoParser.parse(tooManyRows)
         }
     }
+
+    private fun mountInfoRows(): ByteArray = listOf(
+        "10 1 8:1 / / rw - ext4 /dev/root rw",
+        "11 10 8:1 /bind /profile/nested rw - ext4 /dev/root rw",
+    ).joinToString("\n", postfix = "\n").toByteArray()
 
     @Test
     fun `rejects an injected filesystem without the security capability`() {

@@ -34,7 +34,7 @@ internal fun interface SkinMountIdentityProvider {
 }
 
 internal object SkinMountInfoParser {
-    fun select(path: Path, deviceNumber: Long, bytes: ByteArray): SkinMountIdentity? {
+    fun parse(bytes: ByteArray): ParsedSnapshot {
         require(bytes.size <= MAX_BYTES) { "Mount table exceeds its bound" }
         val text = StandardCharsets.UTF_8.newDecoder()
             .onMalformedInput(CodingErrorAction.REPORT)
@@ -43,9 +43,7 @@ internal object SkinMountInfoParser {
             .toString()
         val lines = text.lineSequence().filter(String::isNotEmpty).toList()
         require(lines.size <= MAX_LINES) { "Mount table has too many rows" }
-        val target = path.toAbsolutePath().normalize()
-        val expectedDevice = linuxDevice(deviceNumber)
-        val candidates = lines.mapNotNull { line ->
+        return ParsedSnapshot.create(lines.map { line ->
             val fields = line.split(' ')
             val separator = fields.indexOf("-")
             require(separator >= 6 && fields.size > separator + 2) { "Mount table row is malformed" }
@@ -54,16 +52,48 @@ internal object SkinMountInfoParser {
             }
             require(Regex("[0-9]+:[0-9]+").matches(fields[2])) { "Mount table device is malformed" }
             val mountPoint = Paths.get(unescape(fields[4])).toAbsolutePath().normalize()
-            if (fields[2] != expectedDevice || !target.startsWith(mountPoint)) return@mapNotNull null
-            MountRow(
+            ParsedSnapshot.MountRow(
+                fields[2],
+                mountPoint,
                 mountPoint.nameCount,
                 "${fields[0]}|${fields[2]}|${unescape(fields[3])}|$mountPoint|${fields[separator + 1]}|${fields[separator + 2]}",
             )
+        })
+    }
+
+    fun select(path: Path, deviceNumber: Long, bytes: ByteArray): SkinMountIdentity? =
+        parse(bytes).select(path, deviceNumber)
+
+    internal class ParsedSnapshot private constructor(private val rows: List<MountRow>) {
+        fun select(path: Path, deviceNumber: Long): SkinMountIdentity? {
+            val target = path.toAbsolutePath().normalize()
+            val expectedDevice = linuxDevice(deviceNumber)
+            var selected: MountRow? = null
+            var ambiguous = false
+            for (row in rows) {
+                if (row.device != expectedDevice || !target.startsWith(row.mountPoint)) continue
+                when {
+                    selected == null || row.depth > selected.depth -> {
+                        selected = row
+                        ambiguous = false
+                    }
+                    row.depth == selected.depth -> ambiguous = true
+                }
+            }
+            if (selected == null || ambiguous) return null
+            return SkinMountIdentity("$deviceNumber|$expectedDevice", selected.identity)
         }
-        val longest = candidates.maxOfOrNull(MountRow::depth) ?: return null
-        val exact = candidates.filter { it.depth == longest }
-        if (exact.size != 1) return null
-        return SkinMountIdentity("$deviceNumber|$expectedDevice", exact.single().identity)
+
+        internal data class MountRow(
+            val device: String,
+            val mountPoint: Path,
+            val depth: Int,
+            val identity: String,
+        )
+
+        internal companion object {
+            fun create(rows: List<MountRow>): ParsedSnapshot = ParsedSnapshot(rows.toList())
+        }
     }
 
     private fun linuxDevice(device: Long): String {
@@ -75,8 +105,6 @@ internal object SkinMountInfoParser {
     private fun unescape(value: String): String = Regex("\\\\([0-7]{3})").replace(value) { match ->
         match.groupValues[1].toInt(8).toChar().toString()
     }
-
-    private data class MountRow(val depth: Int, val identity: String)
 
     const val MAX_BYTES = 1024 * 1024
     const val MAX_LINES = 4096
@@ -95,11 +123,11 @@ private object PlatformSkinMountIdentityProvider : SkinMountIdentityProvider {
 
     override fun snapshot(): SkinMountIdentityProvider {
         if (isWindowsHost()) return this
-        val mountInfo = mountInfoBytes()
+        val mountInfo = SkinMountInfoParser.parse(mountInfoBytes())
         return SkinMountIdentityProvider { path ->
             val device = (Files.getAttribute(path, "unix:dev", NOFOLLOW_LINKS) as? Number)?.toLong()
                 ?: return@SkinMountIdentityProvider null
-            SkinMountInfoParser.select(path, device, mountInfo)
+            mountInfo.select(path, device)
         }
     }
 
