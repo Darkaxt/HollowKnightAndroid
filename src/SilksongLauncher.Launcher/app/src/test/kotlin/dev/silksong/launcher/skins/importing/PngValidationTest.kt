@@ -47,6 +47,15 @@ class PngValidationTest {
     }
 
     @Test
+    fun `production import accepts prior structural validation without bitmap decode`() {
+        val info = (PngStructureValidator().inspect(TinyPngFixture.rgba(2, 3)) as SkinResult.Ok).value
+
+        val decoded = StructurallyValidatedPngDecoder.decodeAndRelease(File(root, "not-read.png"), info)
+
+        assertEquals(6L, (decoded as SkinResult.Ok).value.pixelCount)
+    }
+
+    @Test
     fun `bounds the streamed PNG even when the declared byte count is wrong`() {
         val limits = SkinLimits.V1.copy(textureBytes = 8)
         val result = PngStructureValidator(limits).inspect(

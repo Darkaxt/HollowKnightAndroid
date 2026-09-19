@@ -33,6 +33,22 @@ internal fun interface SkinMountIdentityProvider {
     fun snapshot(): SkinMountIdentityProvider = this
 }
 
+/** App-private skin storage cannot create mounts; reuse one immutable process mount view. */
+internal class CachedSkinMountIdentityProvider(
+    private val load: () -> SkinMountIdentityProvider,
+) : SkinMountIdentityProvider {
+    @Volatile private var cached: SkinMountIdentityProvider? = null
+
+    override fun identity(path: Path): SkinMountIdentity? = snapshot().identity(path)
+
+    override fun snapshot(): SkinMountIdentityProvider {
+        cached?.let { return it }
+        return synchronized(this) {
+            cached ?: load().also { cached = it }
+        }
+    }
+}
+
 internal object SkinMountInfoParser {
     fun parse(bytes: ByteArray): ParsedSnapshot {
         require(bytes.size <= MAX_BYTES) { "Mount table exceeds its bound" }
@@ -111,6 +127,15 @@ internal object SkinMountInfoParser {
 }
 
 private object PlatformSkinMountIdentityProvider : SkinMountIdentityProvider {
+    private val linuxSnapshot = CachedSkinMountIdentityProvider {
+        val mountInfo = SkinMountInfoParser.parse(mountInfoBytes())
+        SkinMountIdentityProvider { path ->
+            val device = (Files.getAttribute(path, "unix:dev", NOFOLLOW_LINKS) as? Number)?.toLong()
+                ?: return@SkinMountIdentityProvider null
+            mountInfo.select(path, device)
+        }
+    }
+
     override fun identity(path: Path): SkinMountIdentity? = if (isWindowsHost()) {
         val absolute = path.toAbsolutePath().normalize()
         val root = absolute.root?.toString() ?: return null
@@ -118,18 +143,11 @@ private object PlatformSkinMountIdentityProvider : SkinMountIdentityProvider {
         val storeId = listOf(store.name(), store.type(), store.isReadOnly.toString(), store.totalSpace.toString()).joinToString("|")
         SkinMountIdentity(device = "$root|$storeId", mountId = "windows:$root|$storeId")
     } else {
-        snapshot().identity(path)
+        linuxSnapshot.identity(path)
     }
 
-    override fun snapshot(): SkinMountIdentityProvider {
-        if (isWindowsHost()) return this
-        val mountInfo = SkinMountInfoParser.parse(mountInfoBytes())
-        return SkinMountIdentityProvider { path ->
-            val device = (Files.getAttribute(path, "unix:dev", NOFOLLOW_LINKS) as? Number)?.toLong()
-                ?: return@SkinMountIdentityProvider null
-            mountInfo.select(path, device)
-        }
-    }
+    override fun snapshot(): SkinMountIdentityProvider =
+        if (isWindowsHost()) this else linuxSnapshot.snapshot()
 
     private fun mountInfoBytes(): ByteArray {
         val source = Paths.get("/proc/self/mountinfo")

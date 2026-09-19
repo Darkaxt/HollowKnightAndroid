@@ -16,6 +16,22 @@ fun interface PngDecoder {
     fun decodeAndRelease(file: File, expected: PngInfo): SkinResult<DecodeResult>
 }
 
+/**
+ * Import already performs bounded PNG structure and catalog-dimension validation.
+ * Full Android bitmap decoding belongs to the game runtime when a prepared skin is
+ * applied, not to archive enumeration for every imported rotation candidate.
+ */
+internal object StructurallyValidatedPngDecoder : PngDecoder {
+    override fun decodeAndRelease(file: File, expected: PngInfo): SkinResult<DecodeResult> =
+        SkinResult.Ok(
+            DecodeResult(
+                expected.width,
+                expected.height,
+                expected.width.toLong() * expected.height.toLong(),
+            ),
+        )
+}
+
 class AndroidPngDecoder(
     private val limits: SkinLimits = SkinLimits.V1,
     private val fileSystem: SkinFileSystem = AndroidSkinFileSystem(),

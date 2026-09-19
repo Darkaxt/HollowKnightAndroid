@@ -144,6 +144,22 @@ class SkinFileSystemContainmentTest {
     }
 
     @Test
+    fun `cached mount provider loads one immutable process snapshot`() {
+        var loads = 0
+        val cached = CachedSkinMountIdentityProvider {
+            loads++
+            SkinMountIdentityProvider { SkinMountIdentity("device-7", "profile-11") }
+        }
+
+        val first = cached.snapshot()
+        val second = cached.snapshot()
+
+        assertTrue(first === second)
+        assertEquals(SkinMountIdentity("device-7", "profile-11"), cached.identity(owner.toPath()))
+        assertEquals(1, loads)
+    }
+
+    @Test
     fun `one parsed mountinfo snapshot supports repeated selection`() {
         val bytes = mountInfoRows()
         val parsed = SkinMountInfoParser.parse(bytes)

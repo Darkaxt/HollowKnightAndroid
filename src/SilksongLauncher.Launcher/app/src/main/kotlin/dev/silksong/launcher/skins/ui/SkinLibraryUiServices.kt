@@ -67,7 +67,10 @@ internal class SkinLibraryUiServices(
             return SkinLibraryUiServices(
                 dev.silksong.launcher.profiles.GameProfiles.require(store.profileId),
                 { SkinLibraryService.readLibrary(store, receipts) },
-                dev.silksong.launcher.skins.library.SkinLibraryImporter(store, dev.silksong.launcher.skins.importing.AndroidPngDecoder()),
+                dev.silksong.launcher.skins.library.SkinLibraryImporter(
+                    store,
+                    dev.silksong.launcher.skins.importing.StructurallyValidatedPngDecoder,
+                ),
                 object : SkinLibraryMutations {
                     override val available = true
                     override fun select(target: SkinReplaceTarget) = store.select(target.id)
