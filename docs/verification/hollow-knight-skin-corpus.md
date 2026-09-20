@@ -2,7 +2,7 @@
 
 **Status:** Read-only observation record; not runtime authority or implementation proof.
 
-This document records the bounded evidence used to adapt H4 to real, non-normalized CustomKnight archives. Observations and design consequences are deliberately separated. The source corpus stays read-only, and this repository contains no third-party skin assets, previews, or link lists.
+This document records read-only observations from real, non-normalized CustomKnight archives. The source corpus stays read-only, and this repository contains no third-party skin assets, previews, or link lists.
 
 ## 1. Observed public sources
 
@@ -44,17 +44,3 @@ Candidate coverage is measured against the fixed 205-path catalog. Ignored extra
 | `The novelist (1).rar` | `bee28d2193757b444c0673c6ce530413ac939a61abc95defa6f54b874899744f` | RAR5, 113/205; unsupported by the H4 core. |
 
 The eight ZIPs therefore expose ten independent candidates. Their mapped counts are `46, 9, 43, 24, 138, 65, 65, 74, 78, 14`.
-
-## 3. Designed behavior derived from the evidence
-
-These are requirements, not claims about current implementation:
-
-- Local ZIP normalization is the H4 core path. One selected file or every bounded immediate regular file in a selected folder is copied once and magic-classified regardless of extension/MIME; RAR returns an explicit unsupported result until its deferred ledger item closes.
-- Finite layout recognition and explicit aliases replace fuzzy recursive discovery. Unknown files and unsupported feature trees are warned about but never extracted.
-- Deterministic candidateKey IDs, canonical `assets/<digestBase32>` payloads, strict internal manifest/object bytes, and immutable import receipts replace archive naming conventions. New packs are rotation-ineligible and cannot alter mode, selection, active visual state, or stamp.
-- `hkskins.art` and the offline list remain human reference material. Direct cross-domain downloading is outside core H4.
-- Host fixtures reproduce these layouts and edge cases with tiny generated PNGs; third-party assets are never committed.
-- After synthetic host gates pass, exact host corpus replay copies and verifies these archives without modifying or extracting into the read-only source tree. `HOST-COMPLETE` additionally requires full reconciliation and exact compiles from that checkpoint.
-- Only after `HOST-COMPLETE`, future Android validation stages digest-verified copies in an isolated test document provider and completes SAF import before game startup. One approved automated gate then uses an isolated disposable profile, first level, and disabled input, with no movement, combat, progression, existing-user-save use/change, or Silksong delta.
-
-The normative security, mapping, state, and verification contracts are in [`../superpowers/specs/2026-09-02-hollow-knight-skins-design.md`](../superpowers/specs/2026-09-02-hollow-knight-skins-design.md).

@@ -78,7 +78,7 @@ Android SDK and a JDK, but not a game depot or a running Unity player.
 | `PerfOverlay`, `ProfilerTopMarkers` | on-device performance readouts |
 | `InjectionProbe` | proves the assembly is live, and logs the settings it sees |
 | `Settings` | reads the launcher's settings file |
-| `dualscreen/` | the second screen — see `DUALSCREEN-V2.md` |
+| `dualscreen/` | the second screen — product requirements are in [`docs/DUALSCREEN-V3.md`](../../docs/DUALSCREEN-V3.md) |
 
 ## Editing them
 

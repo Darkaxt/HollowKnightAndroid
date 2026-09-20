@@ -1,62 +1,162 @@
-# Dualscreen v3
+# Dual Souls product contract
 
-We are implementing a new UI for the Bottom screen, the goal is to simulate the Silksong
-UI more closely, using the same UI elements + some more features.
+This is the sole product contract for the dual-screen UI, built-in Mods, and
+Custom Knight skin experience. The audited Hollow Knight implementation is the
+behavioral reference. Silksong must receive the same experience while retaining
+its direct-display transport and accommodating its additional mechanics.
 
-## Healthbar
+A plan, stage label, host build, or deferred ledger cannot narrow this contract.
+A required feature that is absent is **missing**, not complete. Historical test
+receipts record only what they directly prove.
 
-We want to move the healthbar from top screen to the bottom screen, look at screenshots.
-It should be hidden on the top screen, but a settings toggle should be able to show it
-again.
+## Visible dual-screen experience
 
-## Tabs
+- The upper display remains the game view. HUD elements assigned to the lower
+  display must not remain duplicated on the upper display.
+- The lower display uses its full renderable surface rather than a small modal
+  floating inside unused space.
+- Hollow Knight is the implementation and validation oracle. Hollow Knight must
+  work first; shared behavior is then adapted to Silksong without regressing it.
+- Silksong-specific health, Silk, currency, Crests, Tools, Tasks, and other
+  mechanics occupy or extend the corresponding Hollow Knight layout instead of
+  restoring Silksong's original upper-screen HUD or stacking a second HUD.
+- The lower display provides the complete resident HUD and the original page
+  set: Inventory, Map, Charms for Hollow Knight, Crest/Tools for Silksong,
+  Tasks, Journal, and the original overlays and transitions.
+- Page actions remain functional, including item use, equip/unequip operations,
+  map pan/zoom and marker handling where the game permits them.
+- Pause, resume, scene changes, display loss, and app restore must not leave
+  duplicated, missing, frozen, or stale UI.
 
-Instead of the top named tabs, we want to take the icons that Silksong uses in its own
-menu and align them near the bottom. If possible, we want to do the same as Silksong where
-menu icons show up when you unlock the tabs (get your first quest unlocks Tasks tab, get
-first map unlocks map tab, etc).
+Visual acceptance requires side-by-side comparison with the Hollow Knight
+reference in ordinary gameplay. Source similarity and synthetic host tests do
+not substitute for that comparison.
 
-Also, if possible we want a sliding animation between tabs. So when you press on inventory
-from tasks screen, it should slide in the content from the left, and if pressing the map
-from tasks, it should slide the content in from the right.
+## Built-in Mods
 
-## Cursor
+The complete reference catalog is required. The names below describe required
+user-visible behavior; they are not a claim that the current build implements
+all rows.
 
-There are two different cursors, the selected tab and the highlighted item in each tab.
-These should use the same "carets" as we use on the current menu, but preferably we want
-also an animation system here, where the caret slides from the previously selected item to
-the next. Remember, there are two separate cursors, one for the selected item/task, etc
-and one for the selected tab. We should also make the mask icons, nail, etc selectable
-with the carets around them if possible.
+### General
 
-## Tab contents
+- Skins
+- Black background
 
-Every tab should be reworked to follow the contents of the screenshots. We don't have the
-dividers yet from our designer, so we can keep using the white lines we have.
+### World
 
-On the crest tab, we need to rotate the two extra tools on the bottom to fix them in.
-Ignore the icons being rotated in the screenshot, they should still be upright. Also
-disregard the "unequip skills" button text, this menu is not interactable with the
-controller, only touch.
+- Run speed
+- Fast transitions
+- Auto map
+- Innate compass
+- Bench teleport
+- Secret radar
 
-## Interactivity
+### Combat
 
-We want to make the Dual screen menu completely replace the in-game menu, this means we
-need to be able to consume items, switch tools and crest, and place and remove map markers
-from the bottom screen.
+- Nail damage
+- Damage taken
+- Damage cap
+- One-hit kills
+- Unlimited soul
 
-For consuming items, we should have just a button on the right side next to the healthbar
-which says "USE" or something like that. Preferably only visible when the item is usable.
+### Encounters
 
-Same for changing tools, we should have an UNEQUIP/EQUIP button next to the healthbar.
-Should only be visible when sitting on a bench, since you can't switch tools when not on a
-bench usually.
+- Enemy health bars
+- Damage numbers
+- Boss retry
 
-For the markers, we want a markers button, this button should put us in "marker mode",
-this mode should hide the tabs on the bottom and replace them with the unlocked markers
-icons. You can then tap one of the marker icons on the bottom to select it, and then tap
-the screen to place a marker. When in marker mode, tapping an existing marker on the map
-should remove it. The same button should take you out of marker mode. The user should
-still be able to pan and zoom the map when in marker mode, so only a single tap should
-place/delete marker. When the user enters marker mode, the map should automatically switch
-to "full map" mode.
+### Charms
+
+- Equip anywhere
+- Charm costs
+- Unlimited notches
+
+### Save states
+
+- Slot
+- Save to slot
+- Load from slot
+- Delete slot
+
+### Economy
+
+- Geo magnet
+- Keep geo on death
+- Journal in one kill
+- Geo multiplier
+
+The interface also includes the group selector, Reset Mods, and Back. A row may
+be adapted to Silksong terminology or mechanics, but it cannot disappear merely
+because an implementation seam has not yet been built.
+
+### Required Mods surfaces
+
+The reference exposes three distinct surfaces, all of which remain part of the
+product:
+
+1. The in-game Options → Mods screen, with practical controller navigation,
+   confirm, value changes, reset, and native Back/Cancel behavior.
+2. The lower-display gear pane, using the whole lower render target with the
+   reference list/details proportions. It may remain touch-driven so gameplay
+   controller input continues to belong to the game, but it cannot be the only
+   way to reach the catalog.
+3. The launcher skin-package screen for installing and managing Custom Knight
+   packs.
+
+The launcher Mods screen must also provide visible controller focus, stable
+focus after changes, deterministic directional navigation, confirm, left/right
+value changes, and controller Back. Its content must use the full available
+window, including a readable details pane; a non-fullscreen activity or
+zero-width details view does not satisfy this requirement.
+
+Mods must be profile-isolated, default off unless the user enabled them, apply
+live where the reference applies live, persist across relaunch, and restore
+normal game behavior when disabled or reset. Labels must describe the actual
+effect. Silent no-ops, hidden required rows, and presentation-only substitutes
+do not count as parity.
+
+## Skins
+
+- Import the user's local Custom Knight ZIP packs and enumerate every valid
+  candidate without requiring archives to be normalized by hand.
+- Candidate preparation must complete in practical seconds for ordinary local
+  packs, not minutes or hours.
+- Show installed packs, selection, and rotation membership clearly.
+- Apply the selected pack in Hollow Knight before relying on the shared path for
+  Silksong.
+- Preserve the selected skin per save slot.
+- In rotation mode, a normal in-game death advances to the next included pack
+  exactly once. Menus, relaunches, synthetic callbacks, and non-death state
+  changes must not advance it.
+- Missing or invalid assets fall back safely without breaking gameplay or the
+  other game profile.
+
+## Constraints
+
+- Keep Hollow Knight and Silksong profiles, saves, Mods state, skin state, and
+  generated game files isolated.
+- Preserve Silksong's direct-display transport.
+- Do not use native addresses, IL2CPP offsets, process scanning, injected
+  `PlayerData` fields, or save edits.
+- Do not remove or rewrite user saves. Disposable validation saves must be
+  recorded and removed after validation.
+- Do not trade ordinary gameplay performance for import-time or per-frame proof
+  machinery.
+- Work only in this fork. No upstream-visible interaction is part of this work.
+
+## Acceptance
+
+The deliverable remains incomplete until all of the following are demonstrated:
+
+1. Exact host compiles and focused tests pass for both supported game builds.
+2. Hollow Knight ordinary gameplay shows the reference HUD/pages on the lower
+   display, no duplicate upper HUD, full-window Mods layout, controller-operable
+   Mods, the complete catalog, persistence/reset, skin application, and one
+   normal-death rotation.
+3. Silksong demonstrates the equivalent experience with its additional
+   mechanics integrated into the same design and no Hollow Knight regression.
+4. Repeated launch, pause/resume, scene transition, display interruption, and
+   process restore preserve correct ownership and profile isolation.
+5. Production artifacts use the persistent release signer. Publishing a public
+   release requires separate authorization.

@@ -30,8 +30,10 @@ project artwork.
 - On-device conversion and ARM64 compilation from user-supplied Linux files.
 - Independent game profiles, saves, generations, mod settings, and launch
   state.
-- Dual-screen companion support on compatible Android handhelds.
-- Hollow Knight-style lower-screen HUD, pages, Mods controls, and skin support.
+- Dual-screen companion support on compatible Android handhelds. The complete
+  HUD, pages, Mods, and skins parity target is defined in
+  [`docs/DUALSCREEN-V3.md`](docs/DUALSCREEN-V3.md) and remains under active
+  development.
 - Build-time BepInEx 5 and Harmony compatibility for a supported subset of
   managed mods.
 - Atomic generation publishing so an interrupted build cannot replace the last
