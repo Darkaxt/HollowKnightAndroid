@@ -16,7 +16,9 @@ param(
     # Where the game's own assemblies live. Any depot copy will do.
     [string]$Depot,
     # Unity's Android player assemblies, as fetched by `make player`.
-    [string]$Player = "$env:USERPROFILE\.cache\silksong\unity-player\android\Variations\il2cpp\Managed"
+    [string]$Player = "$env:USERPROFILE\.cache\silksong\unity-player\android\Variations\il2cpp\Managed",
+    # Optional retained assembly for host-only weave validation.
+    [string]$Output
 )
 
 $ErrorActionPreference = 'Stop'
@@ -103,7 +105,8 @@ $engine = @(
 $game = @(
     'Assembly-CSharp','Assembly-CSharp-firstpass','UnityEngine.UI','Unity.InputSystem',
     'Unity.TextMeshPro','TeamCherry.Localization','TeamCherry.SharedUtils',
-    'TeamCherry.NestedFadeGroup','TeamCherry.TK2D','TeamCherry.Cinematics','PlayMaker'
+    'TeamCherry.NestedFadeGroup','TeamCherry.TK2D','TeamCherry.Cinematics','PlayMaker',
+    'Newtonsoft.Json'
 ) | ForEach-Object {
     $p = Join-Path $Depot "$_.dll"
     if (Test-Path $p) { "    <Reference Include=`"$_`"><HintPath>$p</HintPath><Private>false</Private></Reference>" }
@@ -122,7 +125,7 @@ $game = @(
     <LangVersion>9.0</LangVersion>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <DefineConstants>UNITY_ANDROID;ENABLE_INPUT_SYSTEM</DefineConstants>
-    <AssemblyName>PatchCheck</AssemblyName>
+    <AssemblyName>SilksongPatches</AssemblyName>
     <Nullable>disable</Nullable>
     <NoWarn>0169;0414;0649;0108;0114;0436</NoWarn>
     <DisableImplicitNamespaceImports>true</DisableImplicitNamespaceImports>
@@ -187,6 +190,13 @@ if ($exitCode -ne 0) {
     throw "[check] dotnet build exited with $exitCode"
 }
 Write-Host "[check] OK - $($sources.Count) sources compile against the depot" -ForegroundColor Green
+if ($Output) {
+    $outputPath = [System.IO.Path]::GetFullPath($Output)
+    $outputDirectory = Split-Path -Parent $outputPath
+    if ($outputDirectory) { New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null }
+    Copy-Item -LiteralPath (Join-Path $work 'bin\SilksongPatches.dll') -Destination $outputPath -Force
+    Write-Host "[check] retained: $outputPath"
+}
 
 # The entry-point list is hand-written (a player does not scan for
 # [RuntimeInitializeOnLoadMethod]), so an entry point that is added to a .cs

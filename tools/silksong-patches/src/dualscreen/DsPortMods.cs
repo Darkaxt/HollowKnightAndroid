@@ -26,6 +26,8 @@ public sealed class DsPortMods : IDisposable
     readonly List<NativeLabel> _rowValueLabels = new List<NativeLabel>();
     readonly List<NativeLabel> _groupLabels = new List<NativeLabel>();
     readonly List<Rect> _rowHits = new List<Rect>();
+    readonly List<SilksongGameplayFeatures.BenchRecord> _benchRows =
+        new List<SilksongGameplayFeatures.BenchRecord>();
     readonly Vector3[] _contentCorners = new Vector3[4];
     readonly TweakPresenterPaintInvalidation _paint =
         new TweakPresenterPaintInvalidation();
@@ -51,6 +53,8 @@ public sealed class DsPortMods : IDisposable
     int _builtEntryCount = -1;
     long _gearGeometryStamp = long.MinValue;
     bool _consumerAttached;
+    bool _benchRoute;
+    string _benchRouteError;
     bool _disposed;
 
     public DsPortMods(DsPortFrame frame, Action<Func<DsGesture, bool>> setConsumer)
@@ -94,18 +98,32 @@ public sealed class DsPortMods : IDisposable
 
         AttachConsumer();
         _session.SetPresenterAttached(true);
+        if (SilksongGameplayFeatures.ConsumeBenchRouteRequest())
+        {
+            _benchRoute = true;
+            _benchRows.Clear();
+            _benchRows.AddRange(SilksongGameplayFeatures.BenchDestinations());
+            _selectedEntry = _benchRows.Count == 0 ? 0 : 1;
+            _listScroll = 0f;
+            DestroyModal();
+        }
         _frame.SetModsOpen(_menu.IsOpen);
         if (_menu.IsOpen)
         {
-            int entryCount = TweakPresenterListLayout.EntryCount(_menu);
-            if (_modal == null || _builtEntryCount != entryCount) BuildModal();
+            int entryCount = _benchRoute
+                ? _benchRows.Count + 1
+                : TweakPresenterListLayout.EntryCount(_menu);
+            if (_modal == null || _builtEntryCount != entryCount)
+            {
+                if (_benchRoute) BuildBenchModal(); else BuildModal();
+            }
             if (_modal != null)
             {
                 long modelStamp = TweakPresenterModelPaintStamp.Compute(
                     _session, _menu, _session.Controller);
                 if (_paint.ShouldPaint(modelStamp, geometryStamp))
                 {
-                    Paint();
+                    if (_benchRoute) PaintBenches(); else Paint();
                     _paint.Acknowledge(modelStamp, geometryStamp);
                 }
             }
@@ -140,6 +158,46 @@ public sealed class DsPortMods : IDisposable
         // Let the native frame execute an exact tab tap before the modal consumes
         // every other lower-panel gesture. TabPressed closes this pane first.
         if (_frame.TryConsumeGesture(gesture)) return true;
+
+        if (_benchRoute)
+        {
+            if (gesture.Type == DsGestureType.Drag && _listHit.Contains(point))
+            {
+                float oldScroll = _listScroll;
+                float height = _modal != null ? _modal.rect.height : 0f;
+                _listScroll += gesture.Delta.y;
+                _listScroll = TweakPresenterListLayout.ClampScroll(
+                    _listScroll, _benchRows.Count + 1, height * 0.115f, height * 0.95f);
+                if (Mathf.Abs(_listScroll - oldScroll) > 0.001f) _paint.Invalidate();
+                return true;
+            }
+            if (gesture.Type == DsGestureType.Tap)
+            {
+                for (int i = 1; i < _rowHits.Count; i++)
+                {
+                    if (!_rowHits[i].Contains(point)) continue;
+                    if (_selectedEntry != i)
+                    {
+                        _selectedEntry = i;
+                        _benchRouteError = null;
+                        _paint.Invalidate();
+                        return true;
+                    }
+                    try
+                    {
+                        SilksongGameplayFeatures.WarpToBench(_benchRows[i - 1].scene);
+                        Close();
+                    }
+                    catch (Exception error)
+                    {
+                        _benchRouteError = error.GetBaseException().Message;
+                        _paint.Invalidate();
+                    }
+                    return true;
+                }
+            }
+            return true;
+        }
 
         if (gesture.Type == DsGestureType.Drag && _listHit.Contains(point))
         {
@@ -203,6 +261,9 @@ public sealed class DsPortMods : IDisposable
 
     public void Close()
     {
+        _benchRoute = false;
+        _benchRouteError = null;
+        _benchRows.Clear();
         if (_menu != null) _menu.Close();
         _frame.SetModsOpen(false);
         DestroyModal();
@@ -445,6 +506,125 @@ public sealed class DsPortMods : IDisposable
             }
         _builtEntryCount = entryCount;
         _paint.Invalidate();
+    }
+
+    void BuildBenchModal()
+    {
+        RectTransform parent = _frame.ContentMask;
+        if (parent == null) return;
+        DestroyModal();
+        _modal = DsPortUtil.CreateRoot(parent, "DsPortBenchTeleportModal",
+            DsPresentation.CONTENT_LAYER, Vector2.zero, Vector2.one);
+        _modal.SetAsLastSibling();
+        _ground = new DsRendererMaskCover(
+            _modal, "DsPortBenchTeleportGround", DsPresentation.CONTENT_LAYER,
+            DsPortLayers.PAGE_RENDER_ORDER - 10);
+        _ground.SetRect(_modal.rect);
+        _topOrnament = _frame.CloneModsOrnament(_modal, "DsPortBenchTopFleur", true);
+        _bottomOrnament = _frame.CloneModsOrnament(_modal, "DsPortBenchBottomFleur", false);
+        int entryCount = _benchRows.Count + 1;
+        for (int i = 0; i < entryCount; i++)
+        {
+            _rowLabels.Add(CreateLabel("DsPortBenchEntry-" + i));
+            _rowValueLabels.Add(null);
+            _rowHits.Add(default(Rect));
+        }
+        _detailTitle = CreateLabel("DsPortBenchDetailTitle");
+        _detail = CreateLabel("DsPortBenchDetail");
+        _status = CreateLabel("DsPortBenchStatus");
+        if (_detailTitle == null || _detail == null || _status == null ||
+            _rowLabels.Exists(label => label == null))
+        {
+            DetachPresentation();
+            return;
+        }
+        _builtEntryCount = entryCount;
+        _paint.Invalidate();
+    }
+
+    void PaintBenches()
+    {
+        if (_modal == null) return;
+        Rect modalRect = _modal.rect;
+        float width = modalRect.width;
+        float height = modalRect.height;
+        float left = modalRect.xMin;
+        float bottom = modalRect.yMin;
+        float top = modalRect.yMax;
+        float split = left + width * TweakPresenterListLayout.LeftFraction;
+        float listLeft = left + width * 0.025f;
+        float listRight = split - width * 0.025f;
+        float listTop = top - height * 0.025f;
+        float listBottom = bottom + height * 0.025f;
+        float visibleHeight = listTop - listBottom;
+        float rowStep = height * 0.115f;
+        float line = rowStep * 0.45f;
+        int entryCount = _benchRows.Count + 1;
+        _selectedEntry = _benchRows.Count == 0 ? 0 : Mathf.Clamp(_selectedEntry, 1, entryCount - 1);
+        _listScroll = TweakPresenterListLayout.ClampScroll(
+            _listScroll, entryCount, rowStep, visibleHeight);
+        TryMapModalRectToPanel(
+            new Rect(left, listBottom, split - left, visibleHeight), out _listHit);
+        if (_ground != null) _ground.SetRect(modalRect);
+
+        for (int i = 0; i < entryCount; i++)
+        {
+            float y = listTop - rowStep * 0.5f - i * rowStep + _listScroll;
+            bool shown = y + rowStep * 0.5f >= listBottom && y - rowStep * 0.5f <= listTop;
+            _rowLabels[i].Root.SetActive(shown);
+            if (!shown) { _rowHits[i] = default(Rect); continue; }
+            if (i == 0)
+            {
+                SetLabelText(_rowLabels[i], "RECORDED BENCHES",
+                    new Color(0.85f, 0.76f, 0.52f, 0.82f));
+                PlaceLabelLeft(_rowLabels[i], listLeft, y, line * 0.78f, listRight - listLeft);
+                _rowHits[i] = default(Rect);
+                continue;
+            }
+            bool selected = i == _selectedEntry;
+            string title = (selected ? "> " : "  ") + FriendlyBench(_benchRows[i - 1].scene);
+            Color color = selected ? new Color(1f, 1f, 0.82f, 1f) : new Color(0.82f, 0.84f, 0.88f, 1f);
+            SetLabelText(_rowLabels[i], title, color);
+            PlaceLabelLeft(_rowLabels[i], listLeft, y, line, listRight - listLeft);
+            Rect hit;
+            TryMapModalRectToPanel(new Rect(left, y - rowStep * 0.5f, split - left, rowStep), out hit);
+            _rowHits[i] = hit;
+        }
+
+        string detailTitle = _benchRows.Count == 0
+            ? "NO RECORDED BENCHES"
+            : FriendlyBench(_benchRows[_selectedEntry - 1].scene);
+        string detail = _benchRows.Count == 0
+            ? "Rest at a bench to add it to this profile's destination list."
+            : "Teleport to this recorded bench.\n\nTap the row again to travel.";
+        string status = string.IsNullOrEmpty(_benchRouteError)
+            ? "GEAR OR TAB: CLOSE"
+            : _benchRouteError;
+        float detailLeft = split + width * 0.035f;
+        float detailWidth = width - (detailLeft - left) - width * 0.025f;
+        float statusBottom = bottom + height * 0.025f;
+        float statusHeight = height * 0.16f;
+        float detailTop = listTop - rowStep * 1.15f;
+        float detailBottom = statusBottom + statusHeight + height * 0.035f;
+        SetLabelText(_detailTitle, detailTitle, Color.white);
+        PlaceLabelTopLeft(_detailTitle, detailLeft, listTop, line * 1.05f, detailWidth);
+        SetLabelText(_detail, Wrap(detail, 25), new Color(0.86f, 0.88f, 0.92f, 1f));
+        PlaceLabelTopLeft(_detail, detailLeft, detailTop, line * 0.72f, detailWidth,
+            Mathf.Max(line, detailTop - detailBottom));
+        SetLabelText(_status, Wrap(status, 25), string.IsNullOrEmpty(_benchRouteError)
+            ? new Color(0.66f, 0.78f, 0.9f, 1f)
+            : new Color(1f, 0.42f, 0.38f, 1f));
+        PlaceLabelBottomLeft(_status, detailLeft, statusBottom, line * 0.68f,
+            detailWidth, statusHeight);
+        PositionOrnament(_topOrnament, top - height * 0.02f, width * 0.16f);
+        PositionOrnament(_bottomOrnament, bottom + height * 0.02f, width * 0.13f);
+    }
+
+    static string FriendlyBench(string scene)
+    {
+        if (string.IsNullOrEmpty(scene)) return "UNKNOWN BENCH";
+        string value = scene.Replace('_', ' ').Trim();
+        return value.ToUpperInvariant();
     }
 
     NativeLabel CreateLabel(string name)

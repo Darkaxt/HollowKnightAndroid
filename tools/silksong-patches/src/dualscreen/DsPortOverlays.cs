@@ -53,6 +53,7 @@ public sealed class DsPortSceneryState
     readonly IDsPortScenery _native;
     object _owner, _texture;
     int _firstFrame;
+    public static bool BlackBackground { get; set; }
     public DsPortSceneryState(IDsPortScenery native) { _native = native; }
     public bool HasVisibleScenery { get; private set; }
     public static bool TrySize(bool nativeBackground, bool blurred, int panelW, int panelH, out int width, out int height)
@@ -68,7 +69,7 @@ public sealed class DsPortSceneryState
     {
         HasVisibleScenery = false;
         object owner, texture; bool background, blurred; int width, height;
-        if (!visible || !_native.TryRead(out owner, out texture, out background, out blurred) ||
+        if (!visible || BlackBackground || !_native.TryRead(out owner, out texture, out background, out blurred) ||
             owner == null || texture == null || !TrySize(background, blurred, panelW, panelH, out width, out height))
         {
             _native.Clear(); _owner = _texture = null;

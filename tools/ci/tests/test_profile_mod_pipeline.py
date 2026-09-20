@@ -456,6 +456,53 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         for forbidden in ("intptr", "marshal.", "unsafe", "processmemory", "readprocessmemory", "writeprocessmemory"):
             self.assertNotIn(forbidden, source)
 
+    def test_silksong_save_states_and_gameplay_hooks_fail_closed_without_real_saves(self):
+        features = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" / "SilksongGameplayFeatures.cs").read_text(encoding="utf-8")
+        adapter = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" / "SilksongTweakAdapter.cs").read_text(encoding="utf-8")
+        weaver = (REPO_ROOT / "tools" / "mod-weaver" / "Builtin.cs").read_text(encoding="utf-8")
+
+        self.assertIn("const int MaximumStateBytes = 4 * 1024 * 1024", features)
+        self.assertIn("if (slot < 1 || slot > 5)", features)
+        self.assertIn("envelope.profileId != profile", features)
+        self.assertIn("save.playerData.profileID != profile", features)
+        self.assertIn("stateTransferPreparation?.Invoke()", features)
+        self.assertNotIn("ClearSaveFile", features)
+        self.assertNotIn("SaveGame(", features)
+        self.assertIn('"1", "2", "3", "4", "5"', adapter)
+        self.assertIn("partial prior weave", weaver)
+        self.assertIn("throw new InvalidOperationException", weaver)
+
+    def test_silksong_owned_progression_and_silk_rebase_authoritative_grants(self):
+        features = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" / "SilksongGameplayFeatures.cs").read_text(encoding="utf-8")
+        api = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" / "SilksongGameTweakApi.cs").read_text(encoding="utf-8")
+        weaver = (REPO_ROOT / "tools" / "mod-weaver" / "Builtin.cs").read_text(encoding="utf-8")
+
+        self.assertNotIn("player.hasQuill = true", features)
+        self.assertIn("BeforeAuthoritativeBoolSet", features)
+        self.assertIn("BeginAuthoritativeMapUpdate", features)
+        self.assertIn("EndAuthoritativeMapUpdate", features)
+        self.assertIn("BeforeAuthoritativeCrestSlotSet", features)
+        self.assertIn("player.ToolEquips.GetData", features)
+        self.assertIn("ReferenceEquals(owner, PlayerData.instance)", features)
+        self.assertIn('Exact(player, "SetBool"', weaver)
+        self.assertIn('Exact(gameMap, "UpdateGameMap"', weaver)
+        self.assertIn('Exact(crestSlot, "set_SaveData"', weaver)
+        self.assertIn("ResetBossRuntime", features)
+        self.assertIn("RestoreSilkOwner", api)
+        self.assertIn("_silkBaseline", api)
+        self.assertIn("if (!_silkOwned)", api)
+        self.assertIn("_silkPartsBaseline", api)
+        self.assertIn("_silkRefillInProgress", api)
+        self.assertIn("BeginAuthoritativeSilkGrant", api)
+        self.assertIn("EndAuthoritativeSilkGrant", api)
+        self.assertIn("BeginAuthoritativeSilkPartsGrant", api)
+        self.assertIn("EndAuthoritativeSilkPartsGrant", api)
+        self.assertIn('Exact(player, "AddSilk"', weaver)
+        self.assertIn('Exact(hero, "AddSilkParts"', weaver)
+        self.assertIn("RestorePlayerOwned(false)", features)
+        self.assertIn("bossProfile", features)
+        self.assertIn("PrepareForStateTransfer", api)
+
     def test_master_defaults_off_and_persistence_is_game_qualified(self):
         source = (REPO_ROOT / "tools" / "shared-patches" / "src" / "Mods" / "TweakController.cs").read_text(encoding="utf-8")
 

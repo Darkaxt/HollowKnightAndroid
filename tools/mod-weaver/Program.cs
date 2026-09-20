@@ -110,10 +110,9 @@ internal static class Program
     /// <summary>
     /// The port's own weaves. See Builtin.cs.
     ///
-    /// Always exits 0 for anything short of a broken command line: a built-in
-    /// weave that cannot be applied leaves stock behaviour, which is a working
-    /// game, and failing the build over a frill would be the worse outcome by
-    /// a wide margin.
+    /// Optional built-ins retain stock behavior when their anchors are absent.
+    /// Mandatory gameplay contracts deliberately propagate an exact-signature or
+    /// partial-weave failure so conversion cannot ship rows with inert behavior.
     /// </summary>
     static int RunBuiltin(string[] args)
     {

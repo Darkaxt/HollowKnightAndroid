@@ -1,3 +1,4 @@
+using System.Runtime.Loader;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Reflection = System.Reflection;
@@ -32,6 +33,9 @@ internal static class Program
             ("builtin weave survives plugin composition", BuiltinComposition),
             ("builtin Hollow Knight one-hit prefix", HollowKnightOneHitBuiltin),
             ("builtin Hollow Knight gameplay event hooks", HollowKnightGameplayBuiltins),
+            ("builtin Silksong gameplay hooks are exact and idempotent", SilksongGameplayBuiltins),
+            ("builtin Silksong partial gameplay weave fails closed", SilksongPartialGameplayWeaveFailsClosed),
+            ("builtin Silksong missing gameplay signature fails closed", SilksongMissingGameplaySignatureFailsClosed),
         };
         var failed = 0;
         foreach (var (name, run) in tests)
@@ -541,6 +545,457 @@ internal static class Program
         }
     }
 
+    static void SilksongGameplayBuiltins()
+    {
+        using var fixture = new Fixture();
+        PrepareSilksongGameplayFixture(fixture);
+
+        var notes = Builtin.Apply(fixture.Staged);
+        True(notes.Any(n => n.Contains("Silksong gameplay hooks", StringComparison.Ordinal)),
+            "Silksong gameplay hooks report their result");
+        using (var rewritten = AssemblyDefinition.ReadAssembly(Path.Combine(fixture.Staged, "Assembly-CSharp.dll")))
+        {
+            foreach (var expected in new[]
+            {
+                ("HealthManager", "Hit", "BeforeEnemyHit"),
+                ("HeroController", "TakeDamage", "BeforeHeroDamage"),
+                ("HeroController", "Die", "BeforeHeroDeath"),
+                ("CurrencyManager", "ChangeCurrency", "BeforeCurrencyChange"),
+                ("CurrencyManager", "AddGeoQuietly", "BeforeAddGeoQuietly"),
+                ("EnemyJournalManager", "RecordKill", "BeforeJournalKill"),
+                ("ToolItem", "get_IsEquipped", "ShouldForceToolEquipped"),
+                ("ToolItemManager", "TryReplenishTools", "BeforeToolReplenishCost"),
+                ("PlayerData", "SetBool", "BeforeAuthoritativeBoolSet"),
+                ("PlayerData", "AddSilk", "BeginAuthoritativeSilkGrant"),
+                ("PlayerData", "AddSilk", "EndAuthoritativeSilkGrant"),
+                ("HeroController", "AddSilkParts", "BeginAuthoritativeSilkPartsGrant"),
+                ("HeroController", "AddSilkParts", "EndAuthoritativeSilkPartsGrant"),
+                ("GameMap", "UpdateGameMap", "BeginAuthoritativeMapUpdate"),
+                ("GameMap", "UpdateGameMap", "EndAuthoritativeMapUpdate"),
+                ("InventoryToolCrestSlot", "set_SaveData", "BeforeAuthoritativeCrestSlotSet"),
+            })
+            {
+                var target = rewritten.MainModule.GetType(expected.Item1).Methods.Single(m => m.Name == expected.Item2);
+                True(target.Body.Instructions.Any(i => i.OpCode == OpCodes.Call &&
+                    i.Operand is MethodReference called && called.DeclaringType.FullName ==
+                    "DualSouls.Mods.Silksong.SilksongGameplayHooks" && called.Name == expected.Item3),
+                    expected.Item1 + "." + expected.Item2 + " calls " + expected.Item3);
+            }
+            var updateMap = rewritten.MainModule.GetType("GameMap").Methods.Single(m => m.Name == "UpdateGameMap");
+            Equal(1, updateMap.Body.Instructions.Count(i => i.OpCode == OpCodes.Ret),
+                "GameMap.UpdateGameMap has one guarded return epilogue");
+            Equal(1, updateMap.Body.Instructions.Count(i => i.OpCode == OpCodes.Call &&
+                i.Operand is MethodReference called && called.Name == "EndAuthoritativeMapUpdate"),
+                "GameMap.UpdateGameMap ends authoritative ownership exactly once");
+            var addSilk = rewritten.MainModule.GetType("PlayerData").Methods.Single(m => m.Name == "AddSilk");
+            Equal(1, addSilk.Body.Instructions.Count(i => i.OpCode == OpCodes.Ret),
+                "PlayerData.AddSilk has one guarded return epilogue");
+            Equal(1, addSilk.Body.Instructions.Count(i => i.OpCode == OpCodes.Call &&
+                i.Operand is MethodReference called && called.Name == "EndAuthoritativeSilkGrant"),
+                "PlayerData.AddSilk ends authoritative rebasing exactly once");
+            Equal(1, addSilk.Body.ExceptionHandlers.Count(handler =>
+                handler.HandlerType == ExceptionHandlerType.Finally),
+                "PlayerData.AddSilk guards authoritative rebasing with finally");
+            var addSilkFinally = addSilk.Body.ExceptionHandlers.Single();
+            var addSilkBegin = addSilk.Body.Instructions.Single(i => i.OpCode == OpCodes.Call &&
+                i.Operand is MethodReference called && called.Name == "BeginAuthoritativeSilkGrant");
+            True(addSilk.Body.Instructions.IndexOf(addSilkBegin) <
+                addSilk.Body.Instructions.IndexOf(addSilkFinally.TryStart),
+                "PlayerData.AddSilk begin runs before the guarded original body");
+            var addSilkParts = rewritten.MainModule.GetType("HeroController").Methods.Single(m => m.Name == "AddSilkParts");
+            Equal(1, addSilkParts.Body.Instructions.Count(i => i.OpCode == OpCodes.Ret),
+                "HeroController.AddSilkParts has one guarded return epilogue");
+            Equal(1, addSilkParts.Body.Instructions.Count(i => i.OpCode == OpCodes.Call &&
+                i.Operand is MethodReference called && called.Name == "EndAuthoritativeSilkPartsGrant"),
+                "HeroController.AddSilkParts ends authoritative rebasing exactly once");
+            Equal(1, addSilkParts.Body.ExceptionHandlers.Count(handler =>
+                handler.HandlerType == ExceptionHandlerType.Finally),
+                "HeroController.AddSilkParts guards authoritative rebasing with finally");
+            var addSilkPartsFinally = addSilkParts.Body.ExceptionHandlers.Single();
+            var addSilkPartsBegin = addSilkParts.Body.Instructions.Single(i => i.OpCode == OpCodes.Call &&
+                i.Operand is MethodReference called && called.Name == "BeginAuthoritativeSilkPartsGrant");
+            True(addSilkParts.Body.Instructions.IndexOf(addSilkPartsBegin) <
+                addSilkParts.Body.Instructions.IndexOf(addSilkPartsFinally.TryStart),
+                "HeroController.AddSilkParts begin runs before the guarded original body");
+            foreach (string hook in new[] { "BeginAuthoritativeSilkPartsGrant", "EndAuthoritativeSilkPartsGrant" })
+            {
+                var call = addSilkParts.Body.Instructions.Single(i => i.OpCode == OpCodes.Call &&
+                    i.Operand is MethodReference called && called.Name == hook);
+                Equal("playerData", (call.Previous?.Operand as FieldReference)?.Name,
+                    hook + " receives the exact HeroController PlayerData owner");
+            }
+        }
+        AssertSilkGrantRuntime(fixture.Staged);
+        True(Builtin.Apply(fixture.Staged).Any(n => n.Contains("already woven", StringComparison.Ordinal)),
+            "Silksong gameplay weave is idempotent");
+    }
+
+    static void AssertSilkGrantRuntime(string staged)
+    {
+        var context = new AssemblyLoadContext("silk-grant-" + Guid.NewGuid().ToString("N"), isCollectible: true);
+        Reflection.Assembly Open(string path)
+        {
+            using var stream = File.OpenRead(path);
+            return context.LoadFromStream(stream);
+        }
+        context.Resolving += (_, name) =>
+        {
+            string path = Path.Combine(staged, name.Name + ".dll");
+            return File.Exists(path) ? Open(path) : null;
+        };
+        try
+        {
+            var game = Open(Path.Combine(staged, "Assembly-CSharp.dll"));
+            var patches = Open(Path.Combine(staged, "SilksongPatches.dll"));
+            var playerType = game.GetType("PlayerData")!;
+            var heroType = game.GetType("HeroController")!;
+            var hooks = patches.GetType("DualSouls.Mods.Silksong.SilksongGameplayHooks")!;
+            var addSilk = playerType.GetMethod("AddSilk")!;
+            var addSilkParts = heroType.GetMethod("AddSilkParts")!;
+
+            void ResetHooks()
+            {
+                foreach (string field in new[] { "Depth", "MaxDepth", "BeginCalls", "EndCalls" })
+                    hooks.GetField(field)!.SetValue(null, 0);
+            }
+            int Hook(string field) => (int)hooks.GetField(field)!.GetValue(null)!;
+            void Balanced(int calls, int maxDepth, string path)
+            {
+                Equal(calls, Hook("BeginCalls"), path + " begin count");
+                Equal(calls, Hook("EndCalls"), path + " end count");
+                Equal(0, Hook("Depth"), path + " balanced depth");
+                Equal(maxDepth, Hook("MaxDepth"), path + " maximum nesting");
+            }
+            static void InvokeThrows(Reflection.MethodInfo method, object target, int amount, string path)
+            {
+                try { method.Invoke(target, new object[] { amount }); }
+                catch (Reflection.TargetInvocationException error)
+                    when (error.InnerException is InvalidOperationException) { return; }
+                throw new InvalidOperationException(path + ": expected InvalidOperationException");
+            }
+
+            ResetHooks();
+            object player = Activator.CreateInstance(playerType)!;
+            Equal(true, addSilk.Invoke(player, new object[] { 2 }), "PlayerData.AddSilk Boolean result");
+            Balanced(1, 1, "PlayerData.AddSilk normal return");
+
+            ResetHooks();
+            player = Activator.CreateInstance(playerType)!;
+            InvokeThrows(addSilk, player, -1, "PlayerData.AddSilk throw");
+            Balanced(1, 1, "PlayerData.AddSilk throw");
+
+            ResetHooks();
+            player = Activator.CreateInstance(playerType)!;
+            object hero = Activator.CreateInstance(heroType, player)!;
+            InvokeThrows(addSilkParts, hero, -1, "HeroController.AddSilkParts throw");
+            Balanced(1, 1, "HeroController.AddSilkParts throw");
+
+            ResetHooks();
+            player = Activator.CreateInstance(playerType)!;
+            hero = Activator.CreateInstance(heroType, player)!;
+            addSilkParts.Invoke(hero, new object[] { 2 });
+            Balanced(2, 2, "nested AddSilkParts to AddSilk");
+            Equal(2, playerType.GetField("silk")!.GetValue(player), "nested whole-Silk mutation");
+            Equal(2, playerType.GetField("silkParts")!.GetValue(player), "nested Silk-part mutation");
+        }
+        finally { context.Unload(); }
+    }
+
+    static void SilksongPartialGameplayWeaveFailsClosed()
+    {
+        using var fixture = new Fixture();
+        PrepareSilksongGameplayFixture(fixture);
+        Builtin.Apply(fixture.Staged);
+        string path = Path.Combine(fixture.Staged, "Assembly-CSharp.dll");
+        using (var game = AssemblyDefinition.ReadAssembly(path, new ReaderParameters { InMemory = true }))
+        {
+            var hit = game.MainModule.GetType("HealthManager").Methods.Single(m => m.Name == "Hit");
+            var call = hit.Body.Instructions.Single(i => i.OpCode == OpCodes.Call &&
+                i.Operand is MethodReference called && called.Name == "BeforeEnemyHit");
+            var processor = hit.Body.GetILProcessor();
+            processor.Remove(call.Previous.Previous);
+            processor.Remove(call.Previous);
+            processor.Remove(call);
+            game.Write(path);
+        }
+        Throws<InvalidOperationException>(() => Builtin.Apply(fixture.Staged),
+            "partial Silksong gameplay weave must fail closed");
+    }
+
+    static void SilksongMissingGameplaySignatureFailsClosed()
+    {
+        using var fixture = new Fixture();
+        PrepareSilksongGameplayFixture(fixture);
+        string path = Path.Combine(fixture.Staged, "SilksongPatches.dll");
+        using (var patches = AssemblyDefinition.ReadAssembly(path, new ReaderParameters { InMemory = true }))
+        {
+            var hooks = patches.MainModule.GetType("DualSouls.Mods.Silksong.SilksongGameplayHooks");
+            hooks.Methods.Remove(hooks.Methods.Single(method => method.Name == "BeforeHeroDamage"));
+            patches.Write(path);
+        }
+        Throws<InvalidOperationException>(() => Builtin.Apply(fixture.Staged),
+            "missing Silksong gameplay hook signature must fail closed");
+    }
+
+    static void PrepareSilksongGameplayFixture(Fixture fixture)
+    {
+        var game = fixture.Game.MainModule;
+        TypeDefinition Class(string name, string ns = "")
+        {
+            var type = new TypeDefinition(ns, name, TypeAttributes.Public, game.TypeSystem.Object);
+            game.Types.Add(type);
+            return type;
+        }
+        TypeDefinition Enum(string name, string ns = "")
+        {
+            var type = new TypeDefinition(ns, name,
+                TypeAttributes.Public | TypeAttributes.Sealed, game.ImportReference(typeof(Enum)));
+            game.Types.Add(type);
+            return type;
+        }
+        MethodDefinition Method(TypeDefinition type, string name, TypeReference returns, bool isStatic,
+            params (string Name, TypeReference Type)[] parameters)
+        {
+            var method = Fixture.Method(type, name, returns, isStatic);
+            foreach (var parameter in parameters) Fixture.Parameter(method, parameter.Name, parameter.Type);
+            return method;
+        }
+        void Ret(MethodDefinition method)
+        {
+            var il = method.Body.GetILProcessor();
+            if (method.ReturnType.MetadataType == MetadataType.Boolean ||
+                method.ReturnType.MetadataType == MetadataType.ValueType) il.Emit(OpCodes.Ldc_I4_0);
+            else if (method.ReturnType.MetadataType == MetadataType.Single) il.Emit(OpCodes.Ldc_R4, 1f);
+            else if (method.ReturnType.MetadataType != MetadataType.Void) il.Emit(OpCodes.Ldnull);
+            il.Emit(OpCodes.Ret);
+        }
+
+        var gameObject = Class("GameObject", "UnityEngine");
+        var collision = Enum("CollisionSide", "GlobalEnums");
+        var hazard = Enum("HazardType", "GlobalEnums");
+        var properties = Enum("DamagePropertyFlags", "GlobalEnums");
+        var currencyType = Enum("CurrencyType");
+        var hitResponder = Class("IHitResponder");
+        var hitResponse = new TypeDefinition("", "HitResponse",
+            TypeAttributes.NestedPublic | TypeAttributes.Sealed, game.ImportReference(typeof(Enum)));
+        hitResponder.NestedTypes.Add(hitResponse);
+        var hitInstance = new TypeDefinition("", "HitInstance",
+            TypeAttributes.Public | TypeAttributes.SequentialLayout | TypeAttributes.Sealed,
+            game.ImportReference(typeof(ValueType)));
+        game.Types.Add(hitInstance);
+        var player = Class("PlayerData");
+        var playerSilk = Fixture.Field(player, "silk", game.TypeSystem.Int32, isStatic: false);
+        var playerSilkParts = Fixture.Field(player, "silkParts", game.TypeSystem.Int32, isStatic: false);
+        var playerCtor = Method(player, ".ctor", game.TypeSystem.Void, false);
+        playerCtor.IsSpecialName = playerCtor.IsRuntimeSpecialName = true;
+        var playerCtorIl = playerCtor.Body.GetILProcessor();
+        playerCtorIl.Emit(OpCodes.Ldarg_0);
+        playerCtorIl.Emit(OpCodes.Call, game.ImportReference(typeof(object).GetConstructor(System.Type.EmptyTypes)!));
+        playerCtorIl.Emit(OpCodes.Ret);
+        Ret(Method(player, "SetBool", game.TypeSystem.Void, false,
+            ("boolName", game.TypeSystem.String), ("value", game.TypeSystem.Boolean)));
+        var addSilk = Method(player, "AddSilk", game.TypeSystem.Boolean, false,
+            ("amount", game.TypeSystem.Int32));
+        var addSilkIl = addSilk.Body.GetILProcessor();
+        var silkAdded = addSilkIl.Create(OpCodes.Ldc_I4_1);
+        addSilkIl.Emit(OpCodes.Ldarg_0);
+        addSilkIl.Emit(OpCodes.Dup);
+        addSilkIl.Emit(OpCodes.Ldfld, playerSilk);
+        addSilkIl.Emit(OpCodes.Ldarg_1);
+        addSilkIl.Emit(OpCodes.Add);
+        addSilkIl.Emit(OpCodes.Stfld, playerSilk);
+        addSilkIl.Emit(OpCodes.Ldarg_1);
+        addSilkIl.Emit(OpCodes.Ldc_I4_0);
+        addSilkIl.Emit(OpCodes.Bge, silkAdded);
+        addSilkIl.Emit(OpCodes.Newobj, game.ImportReference(
+            typeof(InvalidOperationException).GetConstructor(System.Type.EmptyTypes)!));
+        addSilkIl.Emit(OpCodes.Throw);
+        addSilkIl.Append(silkAdded);
+        addSilkIl.Emit(OpCodes.Ret);
+        var gameMap = Class("GameMap");
+        var updateMap = Method(gameMap, "UpdateGameMap", game.TypeSystem.Boolean, false);
+        var mapIl = updateMap.Body.GetILProcessor();
+        var mapped = mapIl.Create(OpCodes.Ldc_I4_1);
+        mapIl.Emit(OpCodes.Ldc_I4_0);
+        mapIl.Emit(OpCodes.Brtrue, mapped);
+        mapIl.Emit(OpCodes.Ldc_I4_0);
+        mapIl.Emit(OpCodes.Ret);
+        mapIl.Append(mapped);
+        mapIl.Emit(OpCodes.Ret);
+        var toolCrestsData = Class("ToolCrestsData");
+        var slotData = new TypeDefinition("", "SlotData",
+            TypeAttributes.NestedPublic | TypeAttributes.SequentialLayout | TypeAttributes.Sealed,
+            game.ImportReference(typeof(ValueType)));
+        toolCrestsData.NestedTypes.Add(slotData);
+        var crestSlot = Class("InventoryToolCrestSlot");
+        Ret(Method(crestSlot, "set_SaveData", game.TypeSystem.Void, false,
+            ("value", slotData)));
+        var health = Class("HealthManager");
+        Ret(Method(health, "Hit", hitResponse, false, ("hit", hitInstance)));
+        var hero = Class("HeroController");
+        var heroPlayerData = Fixture.Field(hero, "playerData", player, isStatic: false);
+        var heroCtor = Method(hero, ".ctor", game.TypeSystem.Void, false,
+            ("player", player));
+        heroCtor.IsSpecialName = heroCtor.IsRuntimeSpecialName = true;
+        var heroCtorIl = heroCtor.Body.GetILProcessor();
+        heroCtorIl.Emit(OpCodes.Ldarg_0);
+        heroCtorIl.Emit(OpCodes.Call, game.ImportReference(typeof(object).GetConstructor(System.Type.EmptyTypes)!));
+        heroCtorIl.Emit(OpCodes.Ldarg_0);
+        heroCtorIl.Emit(OpCodes.Ldarg_1);
+        heroCtorIl.Emit(OpCodes.Stfld, heroPlayerData);
+        heroCtorIl.Emit(OpCodes.Ret);
+        Ret(Method(hero, "TakeDamage", game.TypeSystem.Void, false,
+            ("source", gameObject), ("side", collision), ("amount", game.TypeSystem.Int32),
+            ("hazard", hazard), ("properties", properties)));
+        Ret(Method(hero, "Die", game.ImportReference(typeof(System.Collections.IEnumerator)), false,
+            ("nonLethal", game.TypeSystem.Boolean), ("frostDeath", game.TypeSystem.Boolean)));
+        var addSilkParts = Method(hero, "AddSilkParts", game.TypeSystem.Void, false,
+            ("amount", game.TypeSystem.Int32));
+        var partsIl = addSilkParts.Body.GetILProcessor();
+        var mutateParts = partsIl.Create(OpCodes.Ldarg_0);
+        var grantParts = partsIl.Create(OpCodes.Ldarg_0);
+        partsIl.Emit(OpCodes.Ldarg_1);
+        partsIl.Emit(OpCodes.Brtrue, mutateParts);
+        partsIl.Emit(OpCodes.Ret);
+        partsIl.Append(mutateParts);
+        partsIl.Emit(OpCodes.Ldfld, heroPlayerData);
+        partsIl.Emit(OpCodes.Dup);
+        partsIl.Emit(OpCodes.Ldfld, playerSilkParts);
+        partsIl.Emit(OpCodes.Ldarg_1);
+        partsIl.Emit(OpCodes.Add);
+        partsIl.Emit(OpCodes.Stfld, playerSilkParts);
+        partsIl.Emit(OpCodes.Ldarg_1);
+        partsIl.Emit(OpCodes.Ldc_I4_0);
+        partsIl.Emit(OpCodes.Bge, grantParts);
+        partsIl.Emit(OpCodes.Newobj, game.ImportReference(
+            typeof(InvalidOperationException).GetConstructor(System.Type.EmptyTypes)!));
+        partsIl.Emit(OpCodes.Throw);
+        partsIl.Append(grantParts);
+        partsIl.Emit(OpCodes.Ldfld, heroPlayerData);
+        partsIl.Emit(OpCodes.Ldarg_1);
+        partsIl.Emit(OpCodes.Callvirt, addSilk);
+        partsIl.Emit(OpCodes.Pop);
+        partsIl.Emit(OpCodes.Ret);
+        var currency = Class("CurrencyManager");
+        Ret(Method(currency, "ChangeCurrency", game.TypeSystem.Void, true,
+            ("amount", game.TypeSystem.Int32), ("type", currencyType), ("show", game.TypeSystem.Boolean)));
+        Ret(Method(currency, "AddGeoQuietly", game.TypeSystem.Void, true,
+            ("amount", game.TypeSystem.Int32)));
+        var journalRecord = Class("EnemyJournalRecord");
+        var journal = Class("EnemyJournalManager");
+        Ret(Method(journal, "RecordKill", game.TypeSystem.Void, true,
+            ("record", journalRecord), ("show", game.TypeSystem.Boolean), ("force", game.TypeSystem.Boolean)));
+        var tool = Class("ToolItem");
+        Ret(Method(tool, "get_IsEquipped", game.TypeSystem.Boolean, false));
+        var multiplier = Method(tool, "get_ReplenishUsageMultiplier", game.TypeSystem.Single, false);
+        Ret(multiplier);
+        var tools = Class("ToolItemManager");
+        var replenishMethod = new TypeDefinition("", "ReplenishMethod",
+            TypeAttributes.NestedPublic | TypeAttributes.Sealed, game.ImportReference(typeof(Enum)));
+        tools.NestedTypes.Add(replenishMethod);
+        var replenish = Method(tools, "TryReplenishTools", game.TypeSystem.Boolean, true,
+            ("doReplenish", game.TypeSystem.Boolean), ("method", replenishMethod));
+        replenish.Body.InitLocals = true;
+        var cost = new VariableDefinition(game.TypeSystem.Single);
+        replenish.Body.Variables.Add(cost);
+        var ril = replenish.Body.GetILProcessor();
+        ril.Emit(OpCodes.Ldc_R4, 2f);
+        ril.Emit(OpCodes.Ldnull);
+        ril.Emit(OpCodes.Callvirt, multiplier);
+        ril.Emit(OpCodes.Mul);
+        ril.Emit(OpCodes.Stloc, cost);
+        ril.Emit(OpCodes.Ldc_I4_0);
+        ril.Emit(OpCodes.Ret);
+        fixture.Game.Write(Path.Combine(fixture.Staged, "Assembly-CSharp.dll"));
+
+        using var patches = Fixture.NewAssembly("SilksongPatches");
+        var hooks = new TypeDefinition("DualSouls.Mods.Silksong", "SilksongGameplayHooks",
+            TypeAttributes.Public | TypeAttributes.Abstract | TypeAttributes.Sealed,
+            patches.MainModule.TypeSystem.Object);
+        patches.MainModule.Types.Add(hooks);
+        var hookDepth = Fixture.Field(hooks, "Depth", patches.MainModule.TypeSystem.Int32);
+        var hookMaxDepth = Fixture.Field(hooks, "MaxDepth", patches.MainModule.TypeSystem.Int32);
+        var hookBeginCalls = Fixture.Field(hooks, "BeginCalls", patches.MainModule.TypeSystem.Int32);
+        var hookEndCalls = Fixture.Field(hooks, "EndCalls", patches.MainModule.TypeSystem.Int32);
+        AddHook("BeforeEnemyHit", patches.MainModule.TypeSystem.Void,
+            ("target", patches.MainModule.ImportReference(health)),
+            ("hit", new ByReferenceType(patches.MainModule.ImportReference(hitInstance))));
+        AddHook("BeforeHeroDamage", patches.MainModule.TypeSystem.Void,
+            ("amount", new ByReferenceType(patches.MainModule.TypeSystem.Int32)));
+        AddHook("BeforeCurrencyChange", patches.MainModule.TypeSystem.Void,
+            ("amount", new ByReferenceType(patches.MainModule.TypeSystem.Int32)),
+            ("type", patches.MainModule.ImportReference(currencyType)));
+        AddHook("BeforeAddGeoQuietly", patches.MainModule.TypeSystem.Void,
+            ("amount", new ByReferenceType(patches.MainModule.TypeSystem.Int32)));
+        AddHook("BeforeJournalKill", patches.MainModule.TypeSystem.Void,
+            ("record", patches.MainModule.ImportReference(journalRecord)));
+        AddHook("BeforeHeroDeath", patches.MainModule.TypeSystem.Void,
+            ("nonLethal", patches.MainModule.TypeSystem.Boolean));
+        AddHook("ShouldForceToolEquipped", patches.MainModule.TypeSystem.Boolean,
+            ("tool", patches.MainModule.ImportReference(tool)));
+        AddHook("BeforeToolReplenishCost", patches.MainModule.TypeSystem.Void,
+            ("cost", new ByReferenceType(patches.MainModule.TypeSystem.Single)));
+        AddHook("BeforeAuthoritativeBoolSet", patches.MainModule.TypeSystem.Void,
+            ("player", patches.MainModule.ImportReference(player)),
+            ("boolName", patches.MainModule.TypeSystem.String),
+            ("value", patches.MainModule.TypeSystem.Boolean));
+        AddHook("BeginAuthoritativeSilkGrant", patches.MainModule.TypeSystem.Void,
+            ("player", patches.MainModule.ImportReference(player)));
+        AddHook("EndAuthoritativeSilkGrant", patches.MainModule.TypeSystem.Void,
+            ("player", patches.MainModule.ImportReference(player)));
+        AddHook("BeginAuthoritativeSilkPartsGrant", patches.MainModule.TypeSystem.Void,
+            ("player", patches.MainModule.ImportReference(player)));
+        AddHook("EndAuthoritativeSilkPartsGrant", patches.MainModule.TypeSystem.Void,
+            ("player", patches.MainModule.ImportReference(player)));
+        AddHook("BeginAuthoritativeMapUpdate", patches.MainModule.TypeSystem.Void);
+        AddHook("EndAuthoritativeMapUpdate", patches.MainModule.TypeSystem.Void);
+        AddHook("BeforeAuthoritativeCrestSlotSet", patches.MainModule.TypeSystem.Void,
+            ("slot", patches.MainModule.ImportReference(crestSlot)),
+            ("value", patches.MainModule.ImportReference(slotData)));
+        InstrumentGrantHook("BeginAuthoritativeSilkGrant", begin: true);
+        InstrumentGrantHook("EndAuthoritativeSilkGrant", begin: false);
+        InstrumentGrantHook("BeginAuthoritativeSilkPartsGrant", begin: true);
+        InstrumentGrantHook("EndAuthoritativeSilkPartsGrant", begin: false);
+        patches.Write(Path.Combine(fixture.Staged, "SilksongPatches.dll"));
+
+        void InstrumentGrantHook(string name, bool begin)
+        {
+            var method = hooks.Methods.Single(candidate => candidate.Name == name);
+            method.Body.Instructions.Clear();
+            var il = method.Body.GetILProcessor();
+            void Increment(FieldReference field, int amount)
+            {
+                il.Emit(OpCodes.Ldsfld, field);
+                il.Emit(OpCodes.Ldc_I4, amount);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stsfld, field);
+            }
+            Increment(begin ? hookBeginCalls : hookEndCalls, 1);
+            Increment(hookDepth, begin ? 1 : -1);
+            if (begin)
+            {
+                var done = il.Create(OpCodes.Ret);
+                il.Emit(OpCodes.Ldsfld, hookDepth);
+                il.Emit(OpCodes.Ldsfld, hookMaxDepth);
+                il.Emit(OpCodes.Ble, done);
+                il.Emit(OpCodes.Ldsfld, hookDepth);
+                il.Emit(OpCodes.Stsfld, hookMaxDepth);
+                il.Append(done);
+            }
+            else il.Emit(OpCodes.Ret);
+        }
+
+        void AddHook(string name, TypeReference returns,
+            params (string Name, TypeReference Type)[] parameters)
+        {
+            var method = Fixture.Method(hooks, name, returns);
+            foreach (var parameter in parameters) Fixture.Parameter(method, parameter.Name, parameter.Type);
+            var il = method.Body.GetILProcessor();
+            if (returns.MetadataType == MetadataType.Boolean) il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Ret);
+        }
+    }
+
     static void BuiltinComposition()
     {
         using var fixture = new Fixture();
@@ -633,6 +1088,7 @@ internal static class Program
     static void Throws<T>(Action action, string message) where T : Exception
     {
         try { action(); }
+        catch (T) { return; }
         catch (Reflection.TargetInvocationException e) when (e.InnerException is T) { return; }
         throw new InvalidOperationException(message + ": expected " + typeof(T).Name);
     }

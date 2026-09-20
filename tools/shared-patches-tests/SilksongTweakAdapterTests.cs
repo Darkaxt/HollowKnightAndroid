@@ -33,10 +33,21 @@ public sealed class SilksongTweakAdapterTests
         Assert.Equal("damage_received", required.Single(row => row.ContractId == "damage_taken").Id);
         Assert.Equal("unlimited_silk", required.Single(row => row.ContractId == "unlimited_soul").Id);
         Assert.Equal(new[] { "instant_dialogue", "disable_world_rumble", "ignore_frost_slowdown" }, rows.Skip(27).Select(row => row.Id));
-        Assert.Equal(4, required.Count(row => row.IsAvailable));
-        Assert.All(required.Where(row => !row.IsAvailable), row =>
-            Assert.False(string.IsNullOrWhiteSpace(row.UnavailableReason)));
+        Assert.All(required, row => Assert.True(row.IsAvailable, row.Id + " must be available"));
         Assert.DoesNotContain(rows, row => row.Id == "state_slots");
+    }
+
+    [Fact]
+    public void EveryRequiredRowHasARealDispatch()
+    {
+        var api = new RecordingApi();
+        var adapter = new SilksongTweakAdapter(api);
+
+        foreach (TweakDescriptor row in adapter.Descriptors.Take(27))
+        {
+            var result = adapter.Apply(row.Id, row.DefaultValue);
+            Assert.True(result.Success, row.Id + ": " + result.Error);
+        }
     }
 
     [Fact]
@@ -111,11 +122,11 @@ public sealed class SilksongTweakAdapterTests
         Assert.Equal(1, api.CaptureCount);
         Assert.Equal(1, api.RestoreAllCount);
         adapter.Tick();
-        Assert.Equal(0, api.RefillCount);
+        Assert.Equal(1, api.GameplayTickCount);
     }
 
     [Fact]
-    public void TickRefillsOnlyWhileUnlimitedSilkIsEnabledByThisAdapter()
+    public void TickAlwaysDelegatesGeneralGameplayMaintenance()
     {
         var api = new RecordingApi();
         var adapter = new SilksongTweakAdapter(api);
@@ -126,7 +137,7 @@ public sealed class SilksongTweakAdapterTests
         Assert.True(adapter.Apply("unlimited_silk", "off").Success);
         adapter.Tick();
 
-        Assert.Equal(1, api.RefillCount);
+        Assert.Equal(3, api.GameplayTickCount);
     }
 
     [Fact]
@@ -152,7 +163,7 @@ public sealed class SilksongTweakAdapterTests
         Assert.False(result.Success);
         Assert.Contains("not ready", result.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, api.TotalMutationCount);
-        Assert.Equal(0, api.RefillCount);
+        Assert.Equal(1, api.GameplayTickCount);
     }
 
     [Fact]
@@ -186,7 +197,7 @@ public sealed class SilksongTweakAdapterTests
         public int RestoreInstantDialogueCount { get; private set; }
         public int RestoreWorldRumbleCount { get; private set; }
         public int RestoreFrostCount { get; private set; }
-        public int RefillCount { get; private set; }
+        public int GameplayTickCount { get; private set; }
         public int TotalMutationCount { get; private set; }
         public SilksongDamageMode? DamageMode { get; private set; }
         public bool UnlimitedSilk { get; private set; }
@@ -209,6 +220,32 @@ public sealed class SilksongTweakAdapterTests
             WorldRumbleDisabled = false;
             FrostDisabled = false;
         }
+
+        public void OpenSkins() => Mutate();
+        public void SetCompanionBackdropBlack(bool black) => Mutate();
+        public void SetRunSpeedMultiplier(float multiplier) => Mutate();
+        public void RestoreRunSpeed() => Mutate();
+        public void SetFastTransitions(bool enabled) => Mutate();
+        public void SetAutoMap(bool enabled) => Mutate();
+        public void SetInnateCompass(bool enabled) => Mutate();
+        public void OpenBenchTeleport() => Mutate();
+        public void SetSecretRadar(bool enabled) => Mutate();
+        public void SetNeedleDamageMultiplier(int multiplier) => Mutate();
+        public void RestoreNeedleDamage() => Mutate();
+        public void SetDamageCap(bool enabled) => Mutate();
+        public void SetEnemyHealthBars(bool enabled) => Mutate();
+        public void SetDamageNumbers(bool enabled) => Mutate();
+        public void SetBossRetry(bool enabled) => Mutate();
+        public void SetToolCostsFree(bool enabled) => Mutate();
+        public void SetUnlimitedToolSlots(bool enabled) => Mutate();
+        public void SetStateSlot(int slot) => Mutate();
+        public void SaveState() => Mutate();
+        public void LoadState() => Mutate();
+        public void DeleteState() => Mutate();
+        public void SetRosaryMagnet(bool enabled) => Mutate();
+        public void SetKeepRosariesOnDeath(bool enabled) => Mutate();
+        public void SetJournalOneKill(bool enabled) => Mutate();
+        public void SetRosaryMultiplier(int multiplier) => Mutate();
 
         public void SetDamageMode(SilksongDamageMode mode)
         {
@@ -301,7 +338,7 @@ public sealed class SilksongTweakAdapterTests
             FrostDisabled = false;
         }
 
-        public void RefillSilk() => RefillCount++;
+        public void TickGameplay() => GameplayTickCount++;
 
         public int IndividualRestoreCount(string id) => id switch
         {

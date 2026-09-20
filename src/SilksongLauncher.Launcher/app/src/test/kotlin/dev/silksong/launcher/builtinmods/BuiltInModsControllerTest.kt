@@ -28,7 +28,7 @@ class BuiltInModsControllerTest {
         assertEquals(required, hollowKnight.take(required.size).map { it.contractId })
         assertEquals(required, silksong.take(required.size).map { it.contractId })
         assertTrue(hollowKnight.all { it.isAvailable })
-        assertTrue(silksong.any { !it.isAvailable })
+        assertTrue(silksong.take(required.size).all { it.isAvailable })
         assertTrue(
             hollowKnight.none {
                 it.id in setOf("instant_dialogue", "disable_world_rumble", "ignore_frost_slowdown")
@@ -73,7 +73,7 @@ class BuiltInModsControllerTest {
 
         val silksong = controller("silksong", temporary.newFile())
         assertTrue(silksong.setMaster(true).success)
-        assertFalse(silksong.cycle("auto_map").success)
+        assertTrue(silksong.cycle("auto_map").success)
         assertTrue(silksong.snapshot().descriptors.any { it.id == "auto_map" })
     }
 
