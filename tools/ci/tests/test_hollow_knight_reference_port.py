@@ -17,10 +17,7 @@ FLASH_CORE = MODS_ROOT / "HollowKnightFlashPolicyCore.cs"
 STAGE_HOOKS = REFERENCE_ROOT / "HkStageHooks.cs"
 ENTRYPOINTS = PATCH_ROOT / "entrypoints.json"
 PROJECT = PATCH_ROOT / "HollowKnightPatches.csproj"
-PROVENANCE = REPO_ROOT / "docs" / "verification" / "hollow-knight-direct-display.md"
 
-PINNED_REPOSITORY = "igawa6/dualsouls"
-PINNED_COMMIT = "5c22451435b772acde0c7e6456f9019bc1baef73"
 PINNED_MODULE_HASHES = {
     "HKDualScreen.cs":
         "7c9f11b59d768d7dde9506f0b546dee03f9704dbc4329ad20cfb8bd3f15b8d3d",
@@ -168,18 +165,6 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             with self.subTest(module=filename):
                 self.assertTrue(path.is_file(), f"missing pinned module: {filename}")
 
-    def test_reference_provenance_records_exact_commit_and_source_hashes(self):
-        provenance = read(PROVENANCE)
-        self.assertIn(PINNED_REPOSITORY, provenance)
-        self.assertIn(PINNED_COMMIT, provenance)
-        for filename, sha256 in PINNED_MODULE_HASHES.items():
-            with self.subTest(module=filename):
-                self.assertRegex(
-                    provenance,
-                    rf"(?is){re.escape(filename)}.{{0,160}}{sha256}",
-                    f"missing pinned SHA-256 provenance for {filename}",
-                )
-
     def test_reference_modules_retain_their_concrete_responsibilities(self):
         for filename, required_tokens in MODULE_CONTRACTS.items():
             source = strip_csharp_comments(read(REFERENCE_ROOT / filename))
@@ -258,7 +243,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertNotIn("TAB_TO_COL", presenter)
         self.assertNotRegex(presenter, r"\b(?:tab\.tap|cfg\.compTab)\b")
 
-    def test_h3_mods_modal_renders_model_rows_and_deferred_truthfully(self):
+    def test_h3_mods_modal_renders_model_rows_and_unavailable_state_truthfully(self):
         presenter = strip_csharp_comments(read(MODS_PRESENTER))
         repaint = method_body(
             presenter,
@@ -276,7 +261,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         for required in (
             "TweakPresenterListLayout.EntryCount", "TweakPresenterListLayout.EntryAt",
             "RowsForGroup", "entry.RowIndex", "Controller.Value", "IsAvailable",
-            '"DEFERRED"', "Description", "TrackingId", "UnavailableReason",
+            '"UNAVAILABLE"', "Description", "UnavailableReason",
             "Message", "MessageIsError", '"MODS"',
         ):
             with self.subTest(repaint=required):

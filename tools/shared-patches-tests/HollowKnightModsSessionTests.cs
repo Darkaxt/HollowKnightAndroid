@@ -53,7 +53,7 @@ public sealed class HollowKnightModsSessionTests
         Assert.True(session.Controller.MasterEnabled);
         Assert.Equal("black", session.Controller.Value("companion_backdrop"));
         Assert.Equal("vanilla", session.Controller.Value("lifeblood_flash"));
-        Assert.Equal(new[] { "capture", "backdrop:True", "flash:Vanilla" }, api.Calls);
+        Assert.Equal(new[] { "capture", "backdrop:True" }, api.Calls);
     }
 
     [Fact]

@@ -17,7 +17,6 @@ namespace DualSouls.Mods.HollowKnight
         Off,
     }
 
-    /// <summary>Typed boundary for fork-owned Hollow Knight presentation and gameplay capabilities.</summary>
     public interface IHollowKnightTweakApi
     {
         bool IsReady { get; }
@@ -41,88 +40,45 @@ namespace DualSouls.Mods.HollowKnight
     /// <summary>Hollow Knight catalog adapter for the shared built-in Mods contract.</summary>
     public sealed class HollowKnightTweakAdapter : ITweakAdapter
     {
+        const string Missing = "No Hollow Knight adapter operation is connected for this required row yet.";
+
         static readonly IReadOnlyList<TweakDescriptor> Rows = Array.AsReadOnly(new[]
         {
-            new TweakDescriptor(
-                "companion_backdrop", "PRESENTATION", "COMPANION BACKDROP",
-                "Choose the accepted dimmed scenery wash or a black lower-screen backdrop.",
-                "dimmed", new[] { "dimmed", "black" }),
-            new TweakDescriptor(
-                "lifeblood_flash", "PRESENTATION", "LIFEBLOOD FLASH",
-                "Use the accepted softened flash, the original flash, or no flash.",
-                "soft", new[] { "soft", "vanilla", "off" }),
-            new TweakDescriptor(
-                "damage_received", "COMBAT", "DAMAGE RECEIVED",
-                "Choose normal damage, keep masks, or ignore damage entirely.",
-                "vanilla", new[] { "vanilla", "no_mask_loss", "invincible" }),
-            new TweakDescriptor(
-                "nail_damage", "COMBAT", "NAIL DAMAGE",
-                "Multiply nail damage while preserving smith upgrades.",
-                "x1", new[] { "x1", "x2", "x3", "x5" }),
-            new TweakDescriptor(
-                "one_hit_kills", "COMBAT", "ONE-HIT KILLS",
-                "Defeat regular enemies in one hit while excluding boss-scale targets.",
-                "off", new[] { "off", "on" }),
-            new TweakDescriptor(
-                "run_speed", "PLAYER", "RUN SPEED",
-                "Choose the Knight's normal, +25%, or +50% walking and running pace.",
-                "vanilla", new[] { "vanilla", "plus_25", "plus_50" }),
-            new TweakDescriptor(
-                "unlimited_soul", "PLAYER", "UNLIMITED SOUL",
-                "Keep Soul available through the game's normal refill path.",
-                "off", new[] { "off", "on" }),
-            TweakDescriptor.Deferred(
-                "charm_costs", "CHARMS", "CHARM COSTS",
-                "Adjust charm costs while preserving the complete loadout.",
-                "HKMOD-006", "All-cost snapshots and equipped/save lifecycle rollback are not proven."),
-            TweakDescriptor.Deferred(
-                "unlimited_notches", "CHARMS", "UNLIMITED NOTCHES",
-                "Equip charms without violating notch and overcharm rules.",
-                "HKMOD-007", "Overcharm invariants, legal unequip, and exact lifecycle restoration are not proven."),
-            TweakDescriptor.Deferred(
-                "equip_anywhere", "CHARMS", "EQUIP ANYWHERE",
-                "Change charms away from benches through legal game actions.",
-                "HKMOD-008", "Safe managed inventory actions and bench/scene/save legality are not proven."),
-            TweakDescriptor.Deferred(
-                "geo_multiplier", "ECONOMY", "GEO MULTIPLIER",
-                "Multiply Geo awards without changing unrelated balances.",
-                "HKMOD-009", "Authoritative pickup and reward-source interception is not proven."),
-            TweakDescriptor.Deferred(
-                "keep_geo_on_death", "ECONOMY", "KEEP GEO ON DEATH",
-                "Keep Geo through death without duplicate Shade awards.",
-                "HKMOD-010", "Shade, death-pool, respawn, and duplicate-award rollback are not proven."),
-            TweakDescriptor.Deferred(
-                "journal_one_kill", "JOURNAL", "JOURNAL ONE KILL",
-                "Complete eligible Hunter's Journal entries after one kill.",
-                "HKMOD-011", "Progression-write authority, event idempotence, and reload rollback are not proven."),
-            TweakDescriptor.Deferred(
-                "auto_map", "WORLD", "AUTO MAP",
-                "Reveal only visited rooms in the current mapped area.",
-                "HKMOD-012", "Bounded area-only reveal and progression-safe scene/save rollback are not proven."),
-            TweakDescriptor.Deferred(
-                "health_bars", "WORLD", "HEALTH BARS",
-                "Show health bars for eligible enemies and bosses.",
-                "HKMOD-013", "Spawned and pooled enemy renderer/event lifecycle handling is not proven."),
-            TweakDescriptor.Deferred(
-                "damage_numbers", "WORLD", "DAMAGE NUMBERS",
-                "Show authoritative damage dealt for every supported attack source.",
-                "HKMOD-014", "A complete dealt-damage event and pooled UI teardown are not proven."),
-            TweakDescriptor.Deferred(
-                "boss_retry", "WORLD", "BOSS RETRY",
-                "Retry bosses through a safe checkpoint transition.",
-                "HKMOD-015", "Scene reset and save-checkpoint semantics are not proven."),
-            TweakDescriptor.Deferred(
-                "secret_radar", "WORLD", "SECRET RADAR",
-                "Detect nearby secrets without changing progression.",
-                "HKMOD-016", "Secret identity, range, and non-progression authority are not proven."),
-            TweakDescriptor.Deferred(
-                "bench_teleport", "WORLD", "BENCH TELEPORT",
-                "Travel only to recorded benches through safe transitions.",
-                "HKMOD-017", "Recorded-bench validation and transition failure rollback are not proven."),
-            TweakDescriptor.Deferred(
-                "state_slots", "STATE", "STATE SLOTS",
-                "Capture and restore transactional, versioned state snapshots.",
-                "HKMOD-018", "A versioned checksummed snapshot format and atomic failure rollback are not proven."),
+            Unavailable("skins", "skins", TweakControlKind.Route, "GENERAL", "SKINS", "Open the installed skin library.", "open", new[] { "open" }),
+            Available("companion_backdrop", "black_background", "GENERAL", "BLACK BACKGROUND", "Use a black lower-screen background instead of the dimmed scenery wash.", "dimmed", new[] { "dimmed", "black" }),
+
+            Available("run_speed", "run_speed", "WORLD", "RUN SPEED", "Choose the Knight's normal, +25%, or +50% movement pace.", "vanilla", new[] { "vanilla", "plus_25", "plus_50" }),
+            Unavailable("fast_transitions", "fast_transitions", TweakControlKind.Choice, "WORLD", "FAST TRANSITIONS", "Shorten supported scene transitions.", "off", new[] { "off", "on" }),
+            Unavailable("auto_map", "auto_map", TweakControlKind.Choice, "WORLD", "AUTO MAP", "Reveal visited rooms on the map automatically.", "off", new[] { "off", "on" }),
+            Unavailable("innate_compass", "innate_compass", TweakControlKind.Choice, "WORLD", "INNATE COMPASS", "Show the Knight on the map without requiring Wayward Compass.", "off", new[] { "off", "on" }),
+            Unavailable("bench_teleport", "bench_teleport", TweakControlKind.Route, "WORLD", "BENCH TELEPORT", "Open the recorded-bench destination list.", "open", new[] { "open" }),
+            Unavailable("secret_radar", "secret_radar", TweakControlKind.Choice, "WORLD", "SECRET RADAR", "Signal nearby secrets without changing progression.", "off", new[] { "off", "on" }),
+
+            Available("nail_damage", "nail_damage", "COMBAT", "NAIL DAMAGE", "Multiply nail damage while preserving smith upgrades.", "x1", new[] { "x1", "x2", "x3", "x5" }),
+            Available("damage_received", "damage_taken", "COMBAT", "DAMAGE TAKEN", "Choose normal damage, keep masks, or ignore damage entirely.", "vanilla", new[] { "vanilla", "no_mask_loss", "invincible" }),
+            Unavailable("damage_cap", "damage_cap", TweakControlKind.Choice, "COMBAT", "DAMAGE CAP", "Limit damage received from a single hit.", "off", new[] { "off", "on" }),
+            Available("one_hit_kills", "one_hit_kills", "COMBAT", "ONE-HIT KILLS", "Defeat regular enemies in one hit while excluding boss-scale targets.", "off", new[] { "off", "on" }),
+            Available("unlimited_soul", "unlimited_soul", "COMBAT", "UNLIMITED SOUL", "Keep Soul available through the game's normal refill path.", "off", new[] { "off", "on" }),
+
+            Unavailable("health_bars", "enemy_health_bars", TweakControlKind.Choice, "ENCOUNTERS", "ENEMY HEALTH BARS", "Show health bars for eligible enemies and bosses.", "off", new[] { "off", "on" }),
+            Unavailable("damage_numbers", "damage_numbers", TweakControlKind.Choice, "ENCOUNTERS", "DAMAGE NUMBERS", "Show the damage dealt by supported attacks.", "off", new[] { "off", "on" }),
+            Unavailable("boss_retry", "boss_retry", TweakControlKind.Choice, "ENCOUNTERS", "BOSS RETRY", "Retry supported boss encounters from a safe checkpoint.", "off", new[] { "off", "on" }),
+
+            Unavailable("equip_anywhere", "equip_anywhere", TweakControlKind.Choice, "CHARMS", "EQUIP ANYWHERE", "Change charms away from benches through legal game actions.", "off", new[] { "off", "on" }),
+            Unavailable("charm_costs", "charm_costs", TweakControlKind.Choice, "CHARMS", "CHARM COSTS", "Remove charm notch costs while enabled.", "vanilla", new[] { "vanilla", "free" }),
+            Unavailable("unlimited_notches", "unlimited_notches", TweakControlKind.Choice, "CHARMS", "UNLIMITED NOTCHES", "Equip charms without the normal notch limit.", "off", new[] { "off", "on" }),
+
+            Unavailable("state_slot", "state_slot", TweakControlKind.Choice, "SAVE STATES", "SLOT", "Choose the save-state slot used by the commands below.", "1", new[] { "1", "2", "3", "4", "5" }),
+            Unavailable("save_to_slot", "save_to_slot", TweakControlKind.Command, "SAVE STATES", "SAVE TO SLOT", "Capture the current state in the selected slot.", "run", new[] { "run" }),
+            Unavailable("load_from_slot", "load_from_slot", TweakControlKind.Command, "SAVE STATES", "LOAD FROM SLOT", "Restore the state stored in the selected slot.", "run", new[] { "run" }),
+            Unavailable("delete_slot", "delete_slot", TweakControlKind.Command, "SAVE STATES", "DELETE SLOT", "Delete the state stored in the selected slot.", "run", new[] { "run" }),
+
+            Unavailable("geo_magnet", "geo_magnet", TweakControlKind.Choice, "ECONOMY", "GEO MAGNET", "Collect nearby Geo without requiring Gathering Swarm.", "off", new[] { "off", "on" }),
+            Unavailable("keep_geo_on_death", "keep_geo_on_death", TweakControlKind.Choice, "ECONOMY", "KEEP GEO ON DEATH", "Keep Geo through death without duplicate Shade awards.", "off", new[] { "off", "on" }),
+            Unavailable("journal_one_kill", "journal_one_kill", TweakControlKind.Choice, "ECONOMY", "JOURNAL IN ONE KILL", "Complete eligible Hunter's Journal entries after one kill.", "off", new[] { "off", "on" }),
+            Unavailable("geo_multiplier", "geo_multiplier", TweakControlKind.Choice, "ECONOMY", "GEO MULTIPLIER", "Multiply supported Geo awards.", "x1", new[] { "x1", "x2", "x3", "x5" }),
+
+            Available("lifeblood_flash", "lifeblood_flash", "PRESENTATION", "LIFEBLOOD FLASH", "Use the original flash, a softened flash, or no flash.", "vanilla", new[] { "vanilla", "soft", "off" }),
         });
 
         readonly IHollowKnightTweakApi _api;
@@ -135,103 +91,68 @@ namespace DualSouls.Mods.HollowKnight
         public string GameId => "hollow-knight";
         public IReadOnlyList<TweakDescriptor> Descriptors => Rows;
 
-        public void CaptureBaseline()
-        {
-            _api.CaptureBaseline();
-        }
+        public void CaptureBaseline() => _api.CaptureBaseline();
 
         public TweakActionResult Apply(string id, string value)
         {
             TweakDescriptor descriptor = Find(id);
-            if (descriptor == null)
-                return TweakActionResult.Fail("Unknown Hollow Knight tweak: " + id);
+            if (descriptor == null) return TweakActionResult.Fail("Unknown Hollow Knight tweak: " + id);
             if (!descriptor.IsAvailable)
-                return TweakActionResult.Fail(descriptor.TrackingId + " is deferred: " + descriptor.UnavailableReason);
-            if (!descriptor.Allows(value))
-                return TweakActionResult.Fail("Unsupported value for " + id + ": " + value);
+                return TweakActionResult.Fail(descriptor.Title + " is currently unavailable: " + descriptor.UnavailableReason);
+            if (!descriptor.Allows(value)) return TweakActionResult.Fail("Unsupported value for " + id + ": " + value);
 
             try
             {
-                if (!_api.IsReady)
-                    return TweakActionResult.Fail("Hollow Knight tweak API is not ready for " + id + ".");
+                if (!_api.IsReady) return TweakActionResult.Fail("Hollow Knight tweak API is not ready for " + id + ".");
 
                 if (id == "damage_received")
                 {
-                    if (value == "vanilla")
-                        _api.RestoreDamageMode();
-                    else if (value == "no_mask_loss")
-                        _api.SetDamageMode(HollowKnightDamageMode.NoMaskLoss);
-                    else if (value == "invincible")
-                        _api.SetDamageMode(HollowKnightDamageMode.Invincible);
-                    else
-                        return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + " value " + value + ".");
+                    if (value == "vanilla") _api.RestoreDamageMode();
+                    else if (value == "no_mask_loss") _api.SetDamageMode(HollowKnightDamageMode.NoMaskLoss);
+                    else if (value == "invincible") _api.SetDamageMode(HollowKnightDamageMode.Invincible);
+                    else return NoDispatch(id, value);
                 }
                 else if (id == "nail_damage")
                 {
-                    if (value == "x1")
-                        _api.RestoreNailDamage();
-                    else if (value == "x2")
-                        _api.SetNailDamageMultiplier(2);
-                    else if (value == "x3")
-                        _api.SetNailDamageMultiplier(3);
-                    else if (value == "x5")
-                        _api.SetNailDamageMultiplier(5);
-                    else
-                        return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + " value " + value + ".");
+                    if (value == "x1") _api.RestoreNailDamage();
+                    else if (value == "x2") _api.SetNailDamageMultiplier(2);
+                    else if (value == "x3") _api.SetNailDamageMultiplier(3);
+                    else if (value == "x5") _api.SetNailDamageMultiplier(5);
+                    else return NoDispatch(id, value);
                 }
                 else if (id == "one_hit_kills")
                 {
-                    if (value == "off")
-                        _api.RestoreOneHitKills();
-                    else if (value == "on")
-                        _api.SetOneHitKills(true);
-                    else
-                        return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + " value " + value + ".");
+                    if (value == "off") _api.RestoreOneHitKills();
+                    else if (value == "on") _api.SetOneHitKills(true);
+                    else return NoDispatch(id, value);
                 }
                 else if (id == "run_speed")
                 {
-                    if (value == "vanilla")
-                        _api.RestoreRunSpeed();
-                    else if (value == "plus_25")
-                        _api.SetRunSpeedMultiplier(1.25f);
-                    else if (value == "plus_50")
-                        _api.SetRunSpeedMultiplier(1.5f);
-                    else
-                        return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + " value " + value + ".");
+                    if (value == "vanilla") _api.RestoreRunSpeed();
+                    else if (value == "plus_25") _api.SetRunSpeedMultiplier(1.25f);
+                    else if (value == "plus_50") _api.SetRunSpeedMultiplier(1.5f);
+                    else return NoDispatch(id, value);
                 }
                 else if (id == "unlimited_soul")
                 {
-                    if (value == "off")
-                        _api.RestoreUnlimitedSoul();
-                    else if (value == "on")
-                        _api.SetUnlimitedSoul(true);
-                    else
-                        return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + " value " + value + ".");
+                    if (value == "off") _api.RestoreUnlimitedSoul();
+                    else if (value == "on") _api.SetUnlimitedSoul(true);
+                    else return NoDispatch(id, value);
                 }
                 else if (id == "companion_backdrop")
                 {
-                    if (value == "dimmed")
-                        _api.SetCompanionBackdropBlack(false);
-                    else if (value == "black")
-                        _api.SetCompanionBackdropBlack(true);
-                    else
-                        return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + " value " + value + ".");
+                    if (value == "dimmed") _api.SetCompanionBackdropBlack(false);
+                    else if (value == "black") _api.SetCompanionBackdropBlack(true);
+                    else return NoDispatch(id, value);
                 }
                 else if (id == "lifeblood_flash")
                 {
-                    if (value == "soft")
-                        _api.SetLifebloodFlash(HollowKnightFlashMode.Soft);
-                    else if (value == "vanilla")
-                        _api.SetLifebloodFlash(HollowKnightFlashMode.Vanilla);
-                    else if (value == "off")
-                        _api.SetLifebloodFlash(HollowKnightFlashMode.Off);
-                    else
-                        return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + " value " + value + ".");
+                    if (value == "soft") _api.SetLifebloodFlash(HollowKnightFlashMode.Soft);
+                    else if (value == "vanilla") _api.SetLifebloodFlash(HollowKnightFlashMode.Vanilla);
+                    else if (value == "off") _api.SetLifebloodFlash(HollowKnightFlashMode.Off);
+                    else return NoDispatch(id, value);
                 }
-                else
-                {
-                    return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + ".");
-                }
+                else return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + ".");
                 return TweakActionResult.Ok();
             }
             catch (Exception e)
@@ -240,15 +161,21 @@ namespace DualSouls.Mods.HollowKnight
             }
         }
 
-        public void RestoreBaseline()
-        {
-            _api.RestoreBaseline();
-        }
+        public void RestoreBaseline() => _api.RestoreBaseline();
+        public void Tick() => _api.TickGameplay();
 
-        public void Tick()
-        {
-            _api.TickGameplay();
-        }
+        static TweakDescriptor Available(
+            string id, string contractId, string group, string title, string description,
+            string defaultValue, IReadOnlyList<string> values) =>
+            new TweakDescriptor(id, contractId, TweakControlKind.Choice, group, title, description, defaultValue, values);
+
+        static TweakDescriptor Unavailable(
+            string id, string contractId, TweakControlKind kind, string group, string title,
+            string description, string defaultValue, IReadOnlyList<string> values) =>
+            TweakDescriptor.Unavailable(id, contractId, kind, group, title, description, defaultValue, values, Missing);
+
+        static TweakActionResult NoDispatch(string id, string value) =>
+            TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + " value " + value + ".");
 
         static TweakDescriptor Find(string id)
         {

@@ -68,13 +68,16 @@ public sealed class TweakPresenterTests
     }
 
     [Fact]
-    public void DeferredRowsNeverProduceTouchablePresenterEntries()
+    public void UnavailableRowsProduceVisiblePresenterEntriesButCannotMutate()
     {
         var fixture = PresenterFixture.Create(visibleRows: 1);
 
-        Assert.All(fixture.Menu.CurrentRows, row => Assert.True(row.IsAvailable));
-        Assert.DoesNotContain(fixture.Menu.CurrentRows, row => row.Id == "deferred");
-        Assert.Equal(6, TweakPresenterListLayout.EntryCount(fixture.Menu));
+        Assert.Contains(fixture.Menu.CurrentRows, row => !row.IsAvailable && row.Id == "unavailable");
+        Assert.Equal(7, TweakPresenterListLayout.EntryCount(fixture.Menu));
+        fixture.Menu.MoveRow(2);
+        Assert.Equal("unavailable", fixture.Menu.Selected.Id);
+        Assert.False(fixture.Menu.CycleSelected().Success);
+        Assert.False(fixture.Controller.MasterEnabled);
     }
 
     [Fact]
@@ -920,7 +923,7 @@ public sealed class TweakPresenterTests
         var fixture = PresenterFixture.Create();
 
         Assert.Equal(0.65f, TweakPresenterListLayout.LeftFraction);
-        Assert.Equal(6, TweakPresenterListLayout.EntryCount(fixture.Menu));
+        Assert.Equal(7, TweakPresenterListLayout.EntryCount(fixture.Menu));
         Assert.Equal(TweakPresenterListEntryKind.Header,
             TweakPresenterListLayout.EntryAt(fixture.Menu, 0).Kind);
         Assert.Equal(TweakPresenterListEntryKind.Master,
@@ -939,7 +942,7 @@ public sealed class TweakPresenterTests
             Assert.Equal(row, entry.RowIndex);
         }
         Assert.Throws<System.ArgumentOutOfRangeException>(() =>
-            TweakPresenterListLayout.EntryAt(fixture.Menu, 6));
+            TweakPresenterListLayout.EntryAt(fixture.Menu, 7));
     }
 
     [Fact]
@@ -1061,9 +1064,10 @@ public sealed class TweakPresenterTests
             new TweakDescriptor(
                 "second", "GROUP", "SECOND", "Second available row.",
                 "off", new[] { "off", "on" }),
-            TweakDescriptor.Deferred(
-                "deferred", "GROUP", "DEFERRED", "Deferred row.",
-                "TEST-001", "No supported behavior seam."),
+            TweakDescriptor.Unavailable(
+                "unavailable", "unavailable", TweakControlKind.Choice,
+                "GROUP", "UNAVAILABLE", "Unavailable row.",
+                "off", new[] { "off", "on" }, "No adapter operation exists yet."),
         };
 
         public void CaptureBaseline() { }

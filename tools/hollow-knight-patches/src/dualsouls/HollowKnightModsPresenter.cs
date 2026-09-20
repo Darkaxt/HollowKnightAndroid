@@ -1055,7 +1055,7 @@ public partial class HKDualScreen
                         descriptor.Title.ToUpperInvariant();
                 value = descriptor.IsAvailable
                     ? FriendlyModsValue(session.Controller.Value(descriptor.Id))
-                    : "DEFERRED";
+                    : "UNAVAILABLE";
                 color = !descriptor.IsAvailable
                     ? (selected ? new Color(1f, 0.72f, 0.38f, 1f)
                                 : new Color(0.64f, 0.50f, 0.36f, 1f))
@@ -1109,8 +1109,7 @@ public partial class HKDualScreen
             detailTitle = selectedRow.Title.ToUpperInvariant();
             detail = selectedRow.Description;
             if (!selectedRow.IsAvailable)
-                detail += "\n\n" + selectedRow.TrackingId + ": " +
-                          selectedRow.UnavailableReason;
+                detail += "\n\nCurrently unavailable: " + selectedRow.UnavailableReason;
             else
                 detail += "\n\nTap the row again to change.";
         }
@@ -1123,7 +1122,7 @@ public partial class HKDualScreen
         string status = menu.Message;
         if (string.IsNullOrEmpty(status) && selectedRow != null &&
             !selectedRow.IsAvailable)
-            status = selectedRow.TrackingId + ": " + selectedRow.UnavailableReason;
+            status = "Currently unavailable: " + selectedRow.UnavailableReason;
         else if (string.IsNullOrEmpty(status) && !masterEnabled &&
                  selectedEntry.Kind == TweakPresenterListEntryKind.Row)
             status = "MASTER IS OFF. ENABLE IT BEFORE CHANGING AVAILABLE MODS.";

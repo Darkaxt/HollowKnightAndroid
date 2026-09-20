@@ -587,7 +587,7 @@ public sealed class DsPortMods : IDisposable
             detailTitle = selectedRow.Title.ToUpperInvariant();
             detail = selectedRow.Description;
             if (!selectedRow.IsAvailable)
-                detail += "\n\n" + selectedRow.TrackingId + ": " + selectedRow.UnavailableReason;
+                detail += "\n\n" + selectedRow.UnavailableReason;
             else
                 detail += "\n\nTap the row again to change.";
         }
@@ -599,7 +599,7 @@ public sealed class DsPortMods : IDisposable
 
         string status = _menu.Message;
         if (string.IsNullOrEmpty(status) && selectedRow != null && !selectedRow.IsAvailable)
-            status = selectedRow.TrackingId + ": " + selectedRow.UnavailableReason;
+            status = selectedRow.UnavailableReason;
         else if (string.IsNullOrEmpty(status) && !master &&
                  selectedEntry.Kind == TweakPresenterListEntryKind.Row)
             status = "MASTER IS OFF. ENABLE IT BEFORE CHANGING AVAILABLE MODS.";
@@ -607,19 +607,24 @@ public sealed class DsPortMods : IDisposable
 
         float detailLeft = split + width * 0.035f;
         float detailWidth = width - (detailLeft - left) - width * 0.025f;
+        float statusBottom = bottom + height * 0.025f;
+        float statusHeight = height * 0.16f;
+        float detailTop = listTop - rowStep * 1.15f;
+        float detailBottom = statusBottom + statusHeight + height * 0.035f;
         SetLabelText(_detailTitle, detailTitle, Color.white);
         PlaceLabelTopLeft(_detailTitle, detailLeft, listTop, line * 1.05f, detailWidth);
         SetLabelText(_detail, Wrap(detail, 25),
             selectedRow != null && !selectedRow.IsAvailable
                 ? new Color(1f, 0.72f, 0.38f, 1f)
                 : new Color(0.86f, 0.88f, 0.92f, 1f));
-        PlaceLabelTopLeft(_detail, detailLeft, listTop - rowStep * 1.15f,
-                          line * 0.72f, detailWidth);
+        PlaceLabelTopLeft(_detail, detailLeft, detailTop,
+                          line * 0.72f, detailWidth,
+                          Mathf.Max(line, detailTop - detailBottom));
         SetLabelText(_status, Wrap(status, 25), _menu.MessageIsError
             ? new Color(1f, 0.42f, 0.38f, 1f)
             : new Color(0.66f, 0.78f, 0.9f, 1f));
-        PlaceLabelTopLeft(_status, detailLeft, bottom + height * 0.19f,
-                          line * 0.68f, detailWidth);
+        PlaceLabelBottomLeft(_status, detailLeft, statusBottom,
+                             line * 0.68f, detailWidth, statusHeight);
 
         PositionOrnament(_topOrnament, top - height * 0.02f, width * 0.16f);
         PositionOrnament(_bottomOrnament, bottom + height * 0.02f, width * 0.13f);
@@ -650,15 +655,31 @@ public sealed class DsPortMods : IDisposable
     }
 
     void PlaceLabelTopLeft(NativeLabel label, float x, float y,
-                           float targetLineHeight, float maximumWidth)
+                           float targetLineHeight, float maximumWidth,
+                           float maximumHeight = float.MaxValue)
     {
         Bounds bounds;
-        if (!ScaleLabel(label, targetLineHeight, maximumWidth, out bounds)) return;
+        if (!ScaleLabel(label, targetLineHeight, maximumWidth, maximumHeight, out bounds)) return;
         label.Root.transform.localPosition += new Vector3(x - bounds.min.x, y - bounds.max.y, 0f);
+    }
+
+    void PlaceLabelBottomLeft(NativeLabel label, float x, float y,
+                              float targetLineHeight, float maximumWidth,
+                              float maximumHeight)
+    {
+        Bounds bounds;
+        if (!ScaleLabel(label, targetLineHeight, maximumWidth, maximumHeight, out bounds)) return;
+        label.Root.transform.localPosition += new Vector3(x - bounds.min.x, y - bounds.min.y, 0f);
     }
 
     bool ScaleLabel(NativeLabel label, float targetLineHeight,
                     float maximumWidth, out Bounds bounds)
+    {
+        return ScaleLabel(label, targetLineHeight, maximumWidth, float.MaxValue, out bounds);
+    }
+
+    bool ScaleLabel(NativeLabel label, float targetLineHeight,
+                    float maximumWidth, float maximumHeight, out Bounds bounds)
     {
         label.Root.transform.localPosition = Vector3.zero;
         label.Root.transform.localRotation = Quaternion.identity;
@@ -671,6 +692,8 @@ public sealed class DsPortMods : IDisposable
         float factor = targetLineHeight / Mathf.Max(0.001f, lineHeight);
         if (bounds.size.x * factor > maximumWidth)
             factor = maximumWidth / Mathf.Max(0.001f, bounds.size.x);
+        if (bounds.size.y * factor > maximumHeight)
+            factor = maximumHeight / Mathf.Max(0.001f, bounds.size.y);
         label.Root.transform.localScale = Vector3.one * Mathf.Max(0.001f, factor);
         return TryBounds(label.Renderer, _modal, out bounds);
     }

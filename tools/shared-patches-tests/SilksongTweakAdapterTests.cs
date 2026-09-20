@@ -1,3 +1,4 @@
+using System.Linq;
 using DualSouls.Mods;
 using DualSouls.Mods.Silksong;
 using Xunit;
@@ -7,20 +8,48 @@ namespace SharedPatches.Tests;
 public sealed class SilksongTweakAdapterTests
 {
     [Fact]
-    public void DescriptorsExposeOnlyProvenCapabilities()
+    public void CatalogStartsWithExactRequiredContractAndSilksongNamesThenAppendsExtras()
     {
-        var adapter = new SilksongTweakAdapter(new RecordingApi());
+        var rows = new SilksongTweakAdapter(new RecordingApi()).Descriptors;
+        TweakDescriptor[] required = rows.Take(27).ToArray();
+        string[] contractIds =
+        {
+            "skins", "black_background",
+            "run_speed", "fast_transitions", "auto_map", "innate_compass", "bench_teleport", "secret_radar",
+            "nail_damage", "damage_taken", "damage_cap", "one_hit_kills", "unlimited_soul",
+            "enemy_health_bars", "damage_numbers", "boss_retry",
+            "equip_anywhere", "charm_costs", "unlimited_notches",
+            "state_slot", "save_to_slot", "load_from_slot", "delete_slot",
+            "geo_magnet", "keep_geo_on_death", "journal_one_kill", "geo_multiplier",
+        };
 
-        Assert.Equal("silksong", adapter.GameId);
-        Assert.Collection(
-            adapter.Descriptors,
-            row => AssertDescriptor(row, "damage_received", "vanilla", "vanilla", "prevent_death", "invincible"),
-            row => AssertDescriptor(row, "unlimited_silk", "off", "off", "on"),
-            row => AssertDescriptor(row, "one_hit_kills", "off", "off", "on"),
-            row => AssertDescriptor(row, "equip_anywhere", "off", "off", "on"),
-            row => AssertDescriptor(row, "instant_dialogue", "off", "off", "on"),
-            row => AssertDescriptor(row, "disable_world_rumble", "off", "off", "on"),
-            row => AssertDescriptor(row, "ignore_frost_slowdown", "off", "off", "on"));
+        Assert.Equal(contractIds, required.Select(row => row.ContractId));
+        Assert.Equal("NEEDLE DAMAGE", required.Single(row => row.ContractId == "nail_damage").Title);
+        Assert.Equal("UNLIMITED SILK", required.Single(row => row.ContractId == "unlimited_soul").Title);
+        Assert.All(required.Skip(16).Take(3), row => Assert.Equal("CRESTS & TOOLS", row.Group));
+        Assert.Equal("ROSARY MAGNET", required.Single(row => row.ContractId == "geo_magnet").Title);
+        Assert.Equal("KEEP ROSARIES ON DEATH", required.Single(row => row.ContractId == "keep_geo_on_death").Title);
+        Assert.Equal("ROSARY MULTIPLIER", required.Single(row => row.ContractId == "geo_multiplier").Title);
+        Assert.Equal("damage_received", required.Single(row => row.ContractId == "damage_taken").Id);
+        Assert.Equal("unlimited_silk", required.Single(row => row.ContractId == "unlimited_soul").Id);
+        Assert.Equal(new[] { "instant_dialogue", "disable_world_rumble", "ignore_frost_slowdown" }, rows.Skip(27).Select(row => row.Id));
+        Assert.Equal(4, required.Count(row => row.IsAvailable));
+        Assert.All(required.Where(row => !row.IsAvailable), row =>
+            Assert.False(string.IsNullOrWhiteSpace(row.UnavailableReason)));
+        Assert.DoesNotContain(rows, row => row.Id == "state_slots");
+    }
+
+    [Fact]
+    public void EveryUnavailableAndUnknownDispatchFailsWithoutCallingTheGame()
+    {
+        var api = new RecordingApi();
+        var adapter = new SilksongTweakAdapter(api);
+
+        foreach (TweakDescriptor row in adapter.Descriptors.Where(row => !row.IsAvailable))
+            Assert.False(adapter.Apply(row.Id, row.DefaultValue).Success);
+        Assert.False(adapter.Apply("unknown", "off").Success);
+
+        Assert.Equal(0, api.TotalMutationCount);
     }
 
     [Theory]

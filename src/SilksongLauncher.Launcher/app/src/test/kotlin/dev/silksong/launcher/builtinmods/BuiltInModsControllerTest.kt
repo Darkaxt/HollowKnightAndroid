@@ -12,30 +12,23 @@ import org.junit.rules.TemporaryFolder
 class BuiltInModsControllerTest {
     @get:Rule val temporary = TemporaryFolder()
 
-    @Test fun `catalog exposes only functional profile-specific rows`() {
+    @Test fun `catalog exposes every required row before optional extras`() {
         val hollowKnight = BuiltInModCatalog.forGame("hollow-knight")
         val silksong = BuiltInModCatalog.forGame("silksong")
+        val required = listOf(
+            "skins", "black_background",
+            "run_speed", "fast_transitions", "auto_map", "innate_compass", "bench_teleport", "secret_radar",
+            "nail_damage", "damage_taken", "damage_cap", "one_hit_kills", "unlimited_soul",
+            "enemy_health_bars", "damage_numbers", "boss_retry",
+            "equip_anywhere", "charm_costs", "unlimited_notches",
+            "state_slot", "save_to_slot", "load_from_slot", "delete_slot",
+            "geo_magnet", "keep_geo_on_death", "journal_one_kill", "geo_multiplier",
+        )
 
-        assertEquals(7, hollowKnight.size)
-        assertEquals(
-            listOf("damage_received", "nail_damage", "one_hit_kills", "run_speed", "unlimited_soul"),
-            hollowKnight.filter { it.group != "PRESENTATION" }.map { it.id },
-        )
-        assertEquals(7, silksong.size)
-        assertEquals(
-            listOf(
-                "damage_received",
-                "unlimited_silk",
-                "one_hit_kills",
-                "equip_anywhere",
-                "instant_dialogue",
-                "disable_world_rumble",
-                "ignore_frost_slowdown",
-            ),
-            silksong.map { it.id },
-        )
-        assertTrue((hollowKnight + silksong).all { it.actionable })
-        assertTrue(BuiltInModCatalog.deferred("hollow-knight").isNotEmpty())
+        assertEquals(required, hollowKnight.take(required.size).map { it.contractId })
+        assertEquals(required, silksong.take(required.size).map { it.contractId })
+        assertTrue(hollowKnight.any { !it.isAvailable })
+        assertTrue(silksong.any { !it.isAvailable })
         assertTrue(
             hollowKnight.none {
                 it.id in setOf("instant_dialogue", "disable_world_rumble", "ignore_frost_slowdown")
@@ -65,6 +58,61 @@ class BuiltInModsControllerTest {
                 "dualsouls.mods.hollow-knight.value.damage_received=no_mask_loss\n",
             file.readText(),
         )
+    }
+
+    @Test fun `unavailable and command rows remain visible but cannot mutate`() {
+        val file = temporary.newFile()
+        val controller = controller("hollow-knight", file)
+        assertTrue(controller.setMaster(true).success)
+        val before = file.readText()
+
+        assertFalse(controller.cycle("auto_map").success)
+        assertFalse(controller.cycle("save_to_slot").success)
+
+        assertEquals(before, file.readText())
+        assertTrue(controller.snapshot().descriptors.any { it.id == "auto_map" })
+        assertTrue(controller.snapshot().descriptors.any { it.id == "save_to_slot" })
+    }
+
+    @Test fun `reset preserves master without persisting command or route values`() {
+        val file = temporary.newFile()
+        val controller = controller("silksong", file)
+        controller.setMaster(true)
+        controller.cycle("damage_received")
+
+        assertTrue(controller.reset().success)
+
+        assertTrue(controller.snapshot().masterEnabled)
+        assertFalse(file.readText().contains("value.save_to_slot"))
+        assertFalse(file.readText().contains("value.skins"))
+    }
+
+    @Test fun `cycling supports both directions with wraparound`() {
+        val file = temporary.newFile()
+        val controller = controller("hollow-knight", file)
+        controller.setMaster(true)
+
+        assertTrue(controller.cycle("damage_received", -1).success)
+        assertEquals("invincible", controller.snapshot().value("damage_received"))
+        assertTrue(controller.cycle("damage_received", 1).success)
+        assertEquals("vanilla", controller.snapshot().value("damage_received"))
+        assertTrue(controller.cycle("damage_received").success)
+        assertEquals("no_mask_loss", controller.snapshot().value("damage_received"))
+    }
+
+    @Test fun `backward cycling obeys lifecycle authority and does not write`() {
+        val file = File(temporary.newFolder(), "state.txt")
+        val authority = GameLifecycleAuthority(temporary.newFolder())
+        val owner = authority.acquireForGame()
+        try {
+            val result = controller("silksong", file, authority).cycle("damage_received", -1)
+
+            assertFalse(result.success)
+            assertTrue(result.message.contains("closed", ignoreCase = true))
+            assertFalse(file.exists())
+        } finally {
+            owner.close()
+        }
     }
 
     @Test fun `reset restores defaults without enabling master`() {

@@ -9,20 +9,12 @@ public sealed class TweakControllerTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData(" ")]
-    public void DeferredRequiresNonblankTrackingId(string trackingId)
+    public void UnavailableRequiresNonblankReason(string unavailableReason)
     {
-        Assert.Throws<ArgumentException>(() => TweakDescriptor.Deferred(
-            "bench_teleport", "MOVEMENT", "BENCH TELEPORT", "Teleport to benches.", trackingId, "The game adapter does not support bench teleport yet."));
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData(" ")]
-    public void DeferredRequiresNonblankUnavailableReason(string unavailableReason)
-    {
-        Assert.Throws<ArgumentException>(() => TweakDescriptor.Deferred(
-            "bench_teleport", "MOVEMENT", "BENCH TELEPORT", "Teleport to benches.", "HKMOD-017", unavailableReason));
+        Assert.Throws<ArgumentException>(() => TweakDescriptor.Unavailable(
+            "bench_teleport", "bench_teleport", TweakControlKind.Route,
+            "WORLD", "BENCH TELEPORT", "Open recorded benches.",
+            "open", new[] { "open" }, unavailableReason));
     }
 
     [Fact]
@@ -59,42 +51,42 @@ public sealed class TweakControllerTests
     }
 
     [Fact]
-    public void DeferredIsUnavailableAndFixedOff()
+    public void UnavailableRetainsItsHonestControlMetadata()
     {
-        var descriptor = TweakDescriptor.Deferred(
-            "bench_teleport", "MOVEMENT", "BENCH TELEPORT", "Teleport to benches.", "HKMOD-017", "The game adapter does not support bench teleport yet.");
+        var descriptor = TweakDescriptor.Unavailable(
+            "bench_teleport", "bench_teleport", TweakControlKind.Route,
+            "WORLD", "BENCH TELEPORT", "Open recorded benches.",
+            "open", new[] { "open" }, "No adapter route exists yet.");
 
         Assert.False(descriptor.IsAvailable);
-        Assert.Equal("off", descriptor.DefaultValue);
-        Assert.Equal(new[] { "off" }, descriptor.Values);
-        Assert.Equal("HKMOD-017", descriptor.TrackingId);
-        Assert.Equal("The game adapter does not support bench teleport yet.", descriptor.UnavailableReason);
+        Assert.Equal(TweakControlKind.Route, descriptor.ControlKind);
+        Assert.Equal("open", descriptor.DefaultValue);
+        Assert.Equal(new[] { "open" }, descriptor.Values);
+        Assert.Equal("No adapter route exists yet.", descriptor.UnavailableReason);
     }
 
     [Fact]
-    public void DeferredRowsCorrectStaleValuesSkipApplyAndRejectCycling()
+    public void UnavailableChoicesPreserveCompatibleStateSkipApplyAndRejectMutation()
     {
-        var adapter = new DeferredRecordingAdapter();
+        var adapter = new UnavailableRecordingAdapter();
         var store = new MemoryStore
         {
             ["dualsouls.mods.hollow-knight.master"] = "1",
-            ["dualsouls.mods.hollow-knight.value.bench_teleport"] = "on"
+            ["dualsouls.mods.hollow-knight.value.secret_radar"] = "on"
         };
         var controller = new TweakController(adapter, store);
 
         var initialized = controller.Initialize();
-        var cycled = controller.Cycle("bench_teleport");
+        var changed = controller.Set("secret_radar", "off");
 
         Assert.True(initialized.Success);
         Assert.True(controller.MasterEnabled);
-        Assert.Equal("off", controller.Value("bench_teleport"));
-        Assert.Equal("off", store["dualsouls.mods.hollow-knight.value.bench_teleport"]);
-        Assert.Equal(2, store.FlushCount);
+        Assert.Equal("on", controller.Value("secret_radar"));
+        Assert.Equal("on", store["dualsouls.mods.hollow-knight.value.secret_radar"]);
         Assert.Empty(adapter.Applied);
-        Assert.False(cycled.Success);
-        Assert.Contains("BENCH TELEPORT", cycled.Error);
-        Assert.Contains("HKMOD-017", cycled.Error);
-        Assert.Contains("The game adapter does not support bench teleport yet.", cycled.Error);
+        Assert.False(changed.Success);
+        Assert.Contains("currently unavailable", changed.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("No adapter operation exists yet.", changed.Error);
         Assert.Empty(adapter.Applied);
     }
 
@@ -387,6 +379,75 @@ public sealed class TweakControllerTests
         Assert.Equal(1, adapter.RestoreCount);
     }
 
+    [Fact]
+    public void DescriptorExposesCanonicalIdentityAndControlKind()
+    {
+        var descriptor = new TweakDescriptor(
+            "damage_received", "damage_taken", TweakControlKind.Choice,
+            "COMBAT", "DAMAGE TAKEN", "How damage is handled.",
+            "vanilla", new[] { "vanilla", "invincible" });
+
+        Assert.Equal("damage_received", descriptor.Id);
+        Assert.Equal("damage_taken", descriptor.ContractId);
+        Assert.Equal(TweakControlKind.Choice, descriptor.ControlKind);
+    }
+
+    [Fact]
+    public void SetValidatesAndPersistsAnExactChoiceValue()
+    {
+        var adapter = new RecordingAdapter("silksong");
+        var store = new MemoryStore { ["dualsouls.mods.silksong.master"] = "1" };
+        var controller = new TweakController(adapter, store);
+        Assert.True(controller.Initialize().Success);
+
+        var result = controller.Set("damage_received", "invincible");
+
+        Assert.True(result.Success);
+        Assert.Equal("invincible", controller.Value("damage_received"));
+        Assert.Equal("invincible", store["dualsouls.mods.silksong.value.damage_received"]);
+        Assert.Equal(new[] { ("damage_received", "invincible") }, adapter.Applied);
+        Assert.False(controller.Set("damage_received", "unsupported").Success);
+        Assert.Equal("invincible", controller.Value("damage_received"));
+    }
+
+    [Fact]
+    public void CommandAndRouteOperationsAreNeverLoadedOrPersistedAsChoices()
+    {
+        var adapter = new OperationAdapter();
+        var store = new MemoryStore
+        {
+            ["dualsouls.mods.operations.master"] = "1",
+            ["dualsouls.mods.operations.value.save_to_slot"] = "run",
+            ["dualsouls.mods.operations.value.skins"] = "open",
+            ["dualsouls.mods.operations.value.state_slots"] = "legacy",
+        };
+        var controller = new TweakController(adapter, store);
+
+        Assert.True(controller.Initialize().Success);
+        Assert.Empty(adapter.Applied);
+        Assert.True(controller.Set("save_to_slot", "run").Success);
+        Assert.True(controller.Set("skins", "open").Success);
+        Assert.Equal(new[] { ("save_to_slot", "run"), ("skins", "open") }, adapter.Applied);
+        Assert.Equal("run", store["dualsouls.mods.operations.value.save_to_slot"]);
+        Assert.Equal("open", store["dualsouls.mods.operations.value.skins"]);
+        Assert.Equal("legacy", store["dualsouls.mods.operations.value.state_slots"]);
+        Assert.False(controller.Cycle("save_to_slot").Success);
+    }
+
+    [Fact]
+    public void UnavailableOperationFailsBeforeAdapterMutation()
+    {
+        var adapter = new UnavailableOperationAdapter();
+        var controller = new TweakController(adapter, new MemoryStore());
+        Assert.True(controller.Initialize().Success);
+
+        var result = controller.Set("skins", "open");
+
+        Assert.False(result.Success);
+        Assert.Contains("currently unavailable", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(adapter.Applied);
+    }
+
     private sealed class RecordingAdapter : ITweakAdapter
     {
         public RecordingAdapter(string gameId) => GameId = gameId;
@@ -430,13 +491,15 @@ public sealed class TweakControllerTests
         public void Tick() => TickCount++;
     }
 
-    private sealed class DeferredRecordingAdapter : ITweakAdapter
+    private sealed class UnavailableRecordingAdapter : ITweakAdapter
     {
         public string GameId => "hollow-knight";
         public IReadOnlyList<TweakDescriptor> Descriptors { get; } = new[]
         {
-            TweakDescriptor.Deferred(
-                "bench_teleport", "MOVEMENT", "BENCH TELEPORT", "Teleport to benches.", "HKMOD-017", "The game adapter does not support bench teleport yet.")
+            TweakDescriptor.Unavailable(
+                "secret_radar", "secret_radar", TweakControlKind.Choice,
+                "WORLD", "SECRET RADAR", "Signal nearby secrets.",
+                "off", new[] { "off", "on" }, "No adapter operation exists yet.")
         };
         public List<(string Id, string Value)> Applied { get; } = new();
 
@@ -447,6 +510,50 @@ public sealed class TweakControllerTests
             return TweakActionResult.Ok();
         }
 
+        public void RestoreBaseline() { }
+        public void Tick() { }
+    }
+
+    private sealed class OperationAdapter : ITweakAdapter
+    {
+        public string GameId => "operations";
+        public IReadOnlyList<TweakDescriptor> Descriptors { get; } = new[]
+        {
+            new TweakDescriptor(
+                "save_to_slot", "save_to_slot", TweakControlKind.Command,
+                "SAVE STATES", "SAVE TO SLOT", "Save now.", "run", new[] { "run" }),
+            new TweakDescriptor(
+                "skins", "skins", TweakControlKind.Route,
+                "GENERAL", "SKINS", "Open skins.", "open", new[] { "open" }),
+        };
+        public List<(string Id, string Value)> Applied { get; } = new();
+        public void CaptureBaseline() { }
+        public TweakActionResult Apply(string id, string value)
+        {
+            Applied.Add((id, value));
+            return TweakActionResult.Ok();
+        }
+        public void RestoreBaseline() { }
+        public void Tick() { }
+    }
+
+    private sealed class UnavailableOperationAdapter : ITweakAdapter
+    {
+        public string GameId => "unavailable";
+        public IReadOnlyList<TweakDescriptor> Descriptors { get; } = new[]
+        {
+            TweakDescriptor.Unavailable(
+                "skins", "skins", TweakControlKind.Route,
+                "GENERAL", "SKINS", "Open skins.", "open", new[] { "open" },
+                "No adapter route is connected yet."),
+        };
+        public List<(string Id, string Value)> Applied { get; } = new();
+        public void CaptureBaseline() { }
+        public TweakActionResult Apply(string id, string value)
+        {
+            Applied.Add((id, value));
+            return TweakActionResult.Ok();
+        }
         public void RestoreBaseline() { }
         public void Tick() { }
     }

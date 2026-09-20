@@ -24,9 +24,6 @@ namespace DualSouls.Mods
             for (int i = 0; i < controller.Descriptors.Count; i++)
             {
                 TweakDescriptor descriptor = controller.Descriptors[i];
-                // Deferred descriptors remain in the adapter ledger but are not
-                // actionable menu rows.
-                if (!descriptor.IsAvailable) continue;
                 int groupIndex;
                 if (!groupIndexes.TryGetValue(descriptor.Group, out groupIndex))
                 {
@@ -112,6 +109,15 @@ namespace DualSouls.Mods
             TweakActionResult result = selected == null
                 ? TweakActionResult.Fail("No tweak is selected.")
                 : _controller.Cycle(selected.Id);
+            return Record(result, "Value saved.");
+        }
+
+        public TweakActionResult SetSelected(string value)
+        {
+            TweakDescriptor selected = Selected;
+            TweakActionResult result = selected == null
+                ? TweakActionResult.Fail("No tweak is selected.")
+                : _controller.Set(selected.Id, value);
             return Record(result, "Value saved.");
         }
 

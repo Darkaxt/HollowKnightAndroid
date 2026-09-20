@@ -3,6 +3,13 @@ using System.Collections.Generic;
 
 namespace DualSouls.Mods
 {
+    public enum TweakControlKind
+    {
+        Choice,
+        Command,
+        Route,
+    }
+
     /// <summary>A stable, game-neutral row in the built-in Mods menu.</summary>
     public sealed class TweakDescriptor
     {
@@ -13,25 +20,40 @@ namespace DualSouls.Mods
             string description,
             string defaultValue,
             IReadOnlyList<string> values)
-            : this(id, group, title, description, defaultValue, values, true, "", "")
+            : this(id, id, TweakControlKind.Choice, group, title, description, defaultValue, values)
+        {
+        }
+
+        public TweakDescriptor(
+            string id,
+            string contractId,
+            TweakControlKind controlKind,
+            string group,
+            string title,
+            string description,
+            string defaultValue,
+            IReadOnlyList<string> values)
+            : this(id, contractId, controlKind, group, title, description, defaultValue, values, true, "")
         {
         }
 
         TweakDescriptor(
             string id,
+            string contractId,
+            TweakControlKind controlKind,
             string group,
             string title,
             string description,
             string defaultValue,
             IReadOnlyList<string> values,
             bool isAvailable,
-            string trackingId,
             string unavailableReason)
         {
-            if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("A tweak id is required.", nameof(id));
+            if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("A persistence id is required.", nameof(id));
+            if (string.IsNullOrWhiteSpace(contractId)) throw new ArgumentException("A contract id is required.", nameof(contractId));
+            if (!Enum.IsDefined(typeof(TweakControlKind), controlKind)) throw new ArgumentOutOfRangeException(nameof(controlKind));
             if (string.IsNullOrWhiteSpace(group)) throw new ArgumentException("A tweak group is required.", nameof(group));
             if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("A tweak title is required.", nameof(title));
-            if (!isAvailable && string.IsNullOrWhiteSpace(trackingId)) throw new ArgumentException("A tracking id is required for unavailable tweaks.", nameof(trackingId));
             if (!isAvailable && string.IsNullOrWhiteSpace(unavailableReason)) throw new ArgumentException("An unavailable reason is required for unavailable tweaks.", nameof(unavailableReason));
             if (values == null || values.Count == 0) throw new ArgumentException("At least one value is required.", nameof(values));
 
@@ -50,35 +72,44 @@ namespace DualSouls.Mods
             if (!foundDefault) throw new ArgumentException("The default must be one of the allowed values.", nameof(defaultValue));
 
             Id = id;
+            ContractId = contractId;
+            ControlKind = controlKind;
             Group = group;
             Title = title;
             Description = description ?? "";
             DefaultValue = defaultValue;
             Values = Array.AsReadOnly(copy);
             IsAvailable = isAvailable;
-            TrackingId = trackingId ?? "";
             UnavailableReason = unavailableReason ?? "";
         }
 
-        public static TweakDescriptor Deferred(
+        public static TweakDescriptor Unavailable(
             string id,
+            string contractId,
+            TweakControlKind controlKind,
             string group,
             string title,
             string description,
-            string trackingId,
+            string defaultValue,
+            IReadOnlyList<string> values,
             string unavailableReason)
         {
-            return new TweakDescriptor(id, group, title, description, "off", new[] { "off" }, false, trackingId, unavailableReason);
+            return new TweakDescriptor(
+                id, contractId, controlKind, group, title, description,
+                defaultValue, values, false, unavailableReason);
         }
 
+        /// <summary>Stable persistence key used by existing profile state.</summary>
         public string Id { get; }
+        /// <summary>Canonical identity shared by both game catalogs.</summary>
+        public string ContractId { get; }
+        public TweakControlKind ControlKind { get; }
         public string Group { get; }
         public string Title { get; }
         public string Description { get; }
         public string DefaultValue { get; }
         public IReadOnlyList<string> Values { get; }
         public bool IsAvailable { get; }
-        public string TrackingId { get; }
         public string UnavailableReason { get; }
 
         public bool Allows(string value)
@@ -119,16 +150,9 @@ namespace DualSouls.Mods
         string GameId { get; }
         IReadOnlyList<TweakDescriptor> Descriptors { get; }
 
-        /// <summary>Capture the values which master OFF must restore.</summary>
         void CaptureBaseline();
-
-        /// <summary>Apply one value. The descriptor default restores this capability's baseline.</summary>
         TweakActionResult Apply(string id, string value);
-
-        /// <summary>Restore every captured value after disable, reset, or failure.</summary>
         void RestoreBaseline();
-
-        /// <summary>Maintain effects which use the game's own periodic path.</summary>
         void Tick();
     }
 

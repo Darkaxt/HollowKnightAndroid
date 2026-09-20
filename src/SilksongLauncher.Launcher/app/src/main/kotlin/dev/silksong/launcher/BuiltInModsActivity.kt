@@ -6,7 +6,10 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
+import android.view.KeyEvent
+import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -39,21 +42,59 @@ class BuiltInModsActivity : Activity() {
     private lateinit var master: Button
     private lateinit var detail: TextView
     private lateinit var status: TextView
+    private lateinit var reset: Button
+    private lateinit var plugins: Button
+    private lateinit var back: Button
+    private val rowIds = mutableMapOf<String, Int>()
+    private val rows = linkedMapOf<String, View>()
     private var selectedId: String? = null
+    private var focusedKey = MASTER_FOCUS
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(buildUi())
+        applyImmersiveFullscreen()
         selectedId = controller.snapshot().descriptors.firstOrNull()?.id
+        setContentView(buildUi())
         render()
     }
 
     override fun onResume() {
         super.onResume()
+        applyImmersiveFullscreen()
         if (::list.isInitialized) {
             controller.reload()
             render()
         }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) applyImmersiveFullscreen()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean = when (event.keyCode) {
+        KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_BUTTON_B -> {
+            if (event.action == KeyEvent.ACTION_DOWN) finish()
+            true
+        }
+        KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_DPAD_CENTER -> {
+            if (event.action == KeyEvent.ACTION_DOWN) focusTarget(focusedKey).performClick()
+            true
+        }
+        KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+            val id = focusedKey.takeIf { it.startsWith(ROW_FOCUS_PREFIX) }
+                ?.removePrefix(ROW_FOCUS_PREFIX)
+            if (id == null) {
+                super.dispatchKeyEvent(event)
+            } else {
+                if (event.action == KeyEvent.ACTION_DOWN) {
+                    val delta = if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
+                    show(controller.cycle(id, delta).message)
+                }
+                true
+            }
+        }
+        else -> super.dispatchKeyEvent(event)
     }
 
     private fun buildUi(): LinearLayout {
@@ -63,10 +104,14 @@ class BuiltInModsActivity : Activity() {
             setPadding(dp(20), dp(16), dp(20), dp(16))
         }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        header.addView(label("MODS — ${profile.displayName.uppercase()}", 22f, bold = true), weight(1f))
+        header.addView(label("MODS — ${profile.displayName.uppercase()}", 22f, bold = true), horizontalWeight(1f))
         master = action("", primary = true) {
             show(controller.setMaster(!controller.snapshot().masterEnabled).message)
-        }.apply { id = R.id.btn_mods_master }
+        }.apply {
+            id = R.id.btn_mods_master
+            tag = MASTER_FOCUS
+            trackFocus(MASTER_FOCUS)
+        }
         header.addView(master)
         root.addView(header)
 
@@ -82,23 +127,40 @@ class BuiltInModsActivity : Activity() {
         }
         detail = label("", 15f).apply { id = R.id.txt_mod_detail }
         status = label("", 12f, Color.parseColor("#C88A94")).apply { id = R.id.txt_mod_status }
-        details.addView(detail, weight(1f))
+        details.addView(detail, verticalWeight(1f))
         details.addView(label("Tap a row to select it; tap it again to change its value.", 11f, Color.parseColor("#7A6E71")))
         details.addView(status)
-        details.addView(action("RESET ALL MODS") { show(controller.reset().message) }.apply { id = R.id.btn_reset_mods })
-        details.addView(action("PLUGINS") {
+        reset = action("RESET ALL MODS") { show(controller.reset().message) }.apply {
+            id = R.id.btn_reset_mods
+            tag = RESET_FOCUS
+            trackFocus(RESET_FOCUS)
+        }
+        details.addView(reset)
+        plugins = action("PLUGINS") {
             startActivity(Intent(this@BuiltInModsActivity, ModsActivity::class.java))
-        }.apply { id = R.id.btn_plugins })
-        details.addView(action("BACK") { finish() })
+        }.apply {
+            id = R.id.btn_plugins
+            tag = PLUGINS_FOCUS
+            trackFocus(PLUGINS_FOCUS)
+        }
+        details.addView(plugins)
+        back = action("BACK") { finish() }.apply {
+            id = View.generateViewId()
+            tag = BACK_FOCUS
+            trackFocus(BACK_FOCUS)
+        }
+        details.addView(back)
         body.addView(details, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.45f))
         root.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         return root
     }
 
     private fun render() {
+        val restoreFocus = currentFocus?.tag?.toString() ?: focusedKey
         val snapshot = controller.snapshot()
         master.text = if (snapshot.masterEnabled) "MASTER · ON" else "MASTER · OFF"
         list.removeAllViews()
+        rows.clear()
         var group: String? = null
         snapshot.descriptors.forEach { descriptor ->
             if (group != descriptor.group) {
@@ -108,39 +170,104 @@ class BuiltInModsActivity : Activity() {
                     setPadding(dp(8), dp(10), dp(8), dp(2))
                 })
             }
-            list.addView(modRow(descriptor, snapshot.value(descriptor.id)))
+            val row = modRow(descriptor, snapshot.value(descriptor.id))
+            rows[descriptor.id] = row
+            list.addView(row)
+        }
+        refreshSelection()
+        configureFocusGraph()
+        focusTarget(restoreFocus).requestFocus()
+    }
+
+    private fun refreshSelection() {
+        val snapshot = controller.snapshot()
+        rows.forEach { (id, row) ->
+            row.setBackgroundColor(Color.parseColor(if (selectedId == id) "#2A2022" else "#161112"))
         }
         val selected = snapshot.descriptors.firstOrNull { it.id == selectedId }
         detail.text = selected?.let {
-            "${it.title}\n\nVALUE  ${BuiltInModsController.friendly(snapshot.value(it.id))}\n\n${it.description}"
+            val value = if (it.isAvailable) {
+                BuiltInModsController.friendly(snapshot.value(it.id))
+            } else {
+                "UNAVAILABLE"
+            }
+            buildString {
+                append("${it.title}\n\nVALUE  $value\n\n${it.description}")
+                if (!it.isAvailable) append("\n\n${it.unavailableReason}")
+            }
         }.orEmpty()
     }
 
     private fun modRow(descriptor: BuiltInModDescriptor, value: String): LinearLayout =
         LinearLayout(this).apply {
+            id = rowIds.getOrPut(descriptor.id) { View.generateViewId() }
+            tag = ROW_FOCUS_PREFIX + descriptor.id
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             isClickable = true
             isFocusable = true
+            foreground = getDrawable(R.drawable.focus_on_dark)
             setPadding(dp(12), dp(10), dp(12), dp(10))
-            setBackgroundColor(Color.parseColor(if (selectedId == descriptor.id) "#2A2022" else "#161112"))
-            addView(label(descriptor.title, 15f, if (controller.snapshot().masterEnabled) Color.WHITE else Color.GRAY), weight(1f))
-            addView(label(BuiltInModsController.friendly(value), 14f, Color.parseColor("#C88A94")))
+            val rowEnabled = controller.snapshot().masterEnabled && descriptor.isAvailable
+            addView(label(descriptor.title, 15f, if (rowEnabled) Color.WHITE else Color.GRAY), horizontalWeight(1f))
+            val displayValue = if (descriptor.isAvailable) BuiltInModsController.friendly(value) else "UNAVAILABLE"
+            addView(label(displayValue, 14f, Color.parseColor("#C88A94")))
+            setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus) {
+                    focusedKey = tag.toString()
+                    if (selectedId != descriptor.id) {
+                        selectedId = descriptor.id
+                        status.text = ""
+                        refreshSelection()
+                    }
+                }
+            }
             setOnClickListener {
                 if (selectedId != descriptor.id) {
                     selectedId = descriptor.id
                     status.text = ""
-                    render()
+                    refreshSelection()
                 } else {
                     show(controller.cycle(descriptor.id).message)
                 }
             }
         }
 
+    private fun configureFocusGraph() {
+        val controls = listOf<View>(master) + rows.values + listOf(reset, plugins, back)
+        controls.indices.forEach { index ->
+            controls[index].nextFocusDownId = controls[(index + 1) % controls.size].id
+            controls[index].nextFocusUpId = controls[(index - 1 + controls.size) % controls.size].id
+        }
+    }
+
+    private fun focusTarget(key: String): View = when (key) {
+        MASTER_FOCUS -> master
+        RESET_FOCUS -> reset
+        PLUGINS_FOCUS -> plugins
+        BACK_FOCUS -> back
+        else -> rows[key.removePrefix(ROW_FOCUS_PREFIX)] ?: master
+    }
+
+    private fun View.trackFocus(key: String) {
+        setOnFocusChangeListener { _, hasFocus -> if (hasFocus) focusedKey = key }
+    }
+
     private fun show(message: String) {
         status.text = message
         render()
         status.text = message
+    }
+
+    @Suppress("DEPRECATION")
+    private fun applyImmersiveFullscreen() {
+        window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+            View.SYSTEM_UI_FLAG_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
     }
 
     private fun label(text: String, size: Float, color: Int = Color.WHITE, bold: Boolean = false) =
@@ -153,6 +280,8 @@ class BuiltInModsActivity : Activity() {
 
     private fun action(text: String, primary: Boolean = false, click: () -> Unit) = Button(this).apply {
         this.text = text
+        isFocusable = true
+        foreground = getDrawable(if (primary) R.drawable.focus_on_dark else R.drawable.focus_on_light)
         setOnClickListener { click() }
         backgroundTintList = android.content.res.ColorStateList.valueOf(
             Color.parseColor(if (primary) "#7D3341" else "#B4AEB2"),
@@ -160,6 +289,19 @@ class BuiltInModsActivity : Activity() {
         setTextColor(if (primary) Color.WHITE else Color.parseColor("#0D0A0B"))
     }
 
-    private fun weight(value: Float) = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, value)
+    private fun horizontalWeight(value: Float) =
+        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, value)
+
+    private fun verticalWeight(value: Float) =
+        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, value)
+
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    companion object {
+        private const val MASTER_FOCUS = "focus:master"
+        private const val ROW_FOCUS_PREFIX = "mod:"
+        private const val RESET_FOCUS = "focus:reset"
+        private const val PLUGINS_FOCUS = "focus:plugins"
+        private const val BACK_FOCUS = "focus:back"
+    }
 }

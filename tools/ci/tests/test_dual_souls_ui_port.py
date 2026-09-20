@@ -1469,6 +1469,28 @@ static class Program
         ):
             self.assertIn(decision, frame)
 
+    def test_silksong_mods_bounds_detail_above_its_status_band(self):
+        source = read(DUALSCREEN_SOURCES / "DsPortMods.cs")
+        paint = csharp_method_body(source, r"void\s+Paint\s*\(\s*\)")
+        for token in (
+            "float statusBottom = bottom + height * 0.025f;",
+            "float statusHeight = height * 0.16f;",
+            "float detailTop = listTop - rowStep * 1.15f;",
+            "float detailBottom = statusBottom + statusHeight + height * 0.035f;",
+            "Mathf.Max(line, detailTop - detailBottom)",
+            "PlaceLabelBottomLeft(_status",
+            "line * 0.68f, detailWidth, statusHeight",
+        ):
+            self.assertIn(token, paint)
+        self.assertLess(paint.index("float detailBottom"), paint.index("PlaceLabelTopLeft(_detail"))
+        self.assertLess(paint.index("PlaceLabelTopLeft(_detail"), paint.index("PlaceLabelBottomLeft(_status"))
+        self.assertIn("float maximumHeight", source)
+        self.assertIn("if (bounds.size.y * factor > maximumHeight)", source)
+        self.assertIn("factor = maximumHeight / Mathf.Max(0.001f, bounds.size.y);", source)
+        self.assertIn('_modal = DsPortUtil.CreateRoot(parent, "DsPortModsModal"', source)
+        self.assertIn("RectTransform parent = _frame.ContentMask;", source)
+        self.assertIn("TweakPresenterListLayout.LeftFraction", paint)
+
     def test_frame_owns_masks_positions_page_cache_and_horizontal_slide_state(self):
         if not PORT_FRAME.is_file():
             self.skipTest("DsPortFrame.cs is introduced by Stage 2")

@@ -49,6 +49,12 @@ namespace DualSouls.Mods
             for (int i = 0; i < Descriptors.Count; i++)
             {
                 TweakDescriptor descriptor = Descriptors[i];
+                if (descriptor.ControlKind != TweakControlKind.Choice)
+                {
+                    _values[descriptor.Id] = descriptor.DefaultValue;
+                    continue;
+                }
+
                 string key = ValueKey(descriptor.Id);
                 string value = SafeRead(key);
                 if (value == null)
@@ -120,21 +126,40 @@ namespace DualSouls.Mods
                 return TweakActionResult.Fail("The game baseline restoration is pending; Mods actions are disabled.");
             TweakDescriptor descriptor;
             if (!_byId.TryGetValue(id, out descriptor)) return TweakActionResult.Fail("Unknown tweak: " + id);
-            if (!descriptor.IsAvailable)
-                return TweakActionResult.Fail(descriptor.Title + " is unavailable (" + descriptor.TrackingId + "): " + descriptor.UnavailableReason);
-            if (!MasterEnabled) return TweakActionResult.Fail("Enable MASTER before changing gameplay tweaks.");
+            if (!descriptor.IsAvailable) return Unavailable(descriptor);
+            if (descriptor.ControlKind != TweakControlKind.Choice)
+                return TweakActionResult.Fail(descriptor.Title + " is a " + descriptor.ControlKind.ToString().ToLowerInvariant() + " and cannot be cycled.");
+            return Set(id, descriptor.Next(Value(id)));
+        }
+
+        public TweakActionResult Set(string id, string value)
+        {
+            EnsureInitialized();
+            if (RestorationPending)
+                return TweakActionResult.Fail("The game baseline restoration is pending; Mods actions are disabled.");
+            TweakDescriptor descriptor;
+            if (!_byId.TryGetValue(id, out descriptor)) return TweakActionResult.Fail("Unknown tweak: " + id);
+            if (!descriptor.IsAvailable) return Unavailable(descriptor);
+            if (!descriptor.Allows(value)) return TweakActionResult.Fail("Unsupported value for " + id + ": " + value);
+            if (descriptor.ControlKind == TweakControlKind.Choice && !MasterEnabled)
+                return TweakActionResult.Fail("Enable MASTER before changing gameplay tweaks.");
 
             string previous = Value(id);
-            string next = descriptor.Next(previous);
             TweakActionResult result;
-            try { result = _adapter.Apply(id, next); }
+            try { result = _adapter.Apply(id, value); }
             catch (Exception e) { result = TweakActionResult.Fail(e.Message); }
 
-            if (!result.Success) return FailClosed(result.Error);
+            if (!result.Success)
+                return descriptor.ControlKind == TweakControlKind.Choice
+                    ? FailClosed(result.Error)
+                    : result;
+
+            if (descriptor.ControlKind != TweakControlKind.Choice)
+                return TweakActionResult.Ok();
 
             try
             {
-                _store.Write(ValueKey(id), next);
+                _store.Write(ValueKey(id), value);
                 _store.Flush();
             }
             catch (Exception e)
@@ -143,7 +168,7 @@ namespace DualSouls.Mods
                 BestEffortWrite(ValueKey(id), previous);
                 return FailClosed("Could not persist " + descriptor.Title + ": " + e.Message);
             }
-            _values[id] = next;
+            _values[id] = value;
             return TweakActionResult.Ok();
         }
 
@@ -168,7 +193,8 @@ namespace DualSouls.Mods
                 for (int i = 0; i < Descriptors.Count; i++)
                 {
                     TweakDescriptor descriptor = Descriptors[i];
-                    _store.Write(ValueKey(descriptor.Id), descriptor.DefaultValue);
+                    if (descriptor.ControlKind == TweakControlKind.Choice)
+                        _store.Write(ValueKey(descriptor.Id), descriptor.DefaultValue);
                 }
                 _store.Write(MasterKey, MasterEnabled ? "1" : "0");
                 _store.Flush();
@@ -229,7 +255,7 @@ namespace DualSouls.Mods
             for (int i = 0; i < Descriptors.Count; i++)
             {
                 TweakDescriptor descriptor = Descriptors[i];
-                if (!descriptor.IsAvailable) continue;
+                if (!descriptor.IsAvailable || descriptor.ControlKind != TweakControlKind.Choice) continue;
                 string value = Value(descriptor.Id);
                 if (string.Equals(value, descriptor.DefaultValue, StringComparison.Ordinal)) continue;
 
@@ -242,6 +268,12 @@ namespace DualSouls.Mods
             MasterEnabled = true;
             TweakActionResult persisted = PersistMaster();
             return persisted.Success ? persisted : FailClosed(persisted.Error);
+        }
+
+        static TweakActionResult Unavailable(TweakDescriptor descriptor)
+        {
+            return TweakActionResult.Fail(
+                descriptor.Title + " is currently unavailable: " + descriptor.UnavailableReason);
         }
 
         TweakActionResult FailClosed(string error, bool restoreBaseline = true)

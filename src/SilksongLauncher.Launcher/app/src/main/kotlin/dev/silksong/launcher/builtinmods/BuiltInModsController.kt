@@ -20,7 +20,7 @@ class BuiltInModsController(
     private val store: LineModStateStore,
     private val lifecycleAuthority: GameLifecycleAuthority,
 ) {
-    private val descriptors = descriptors.filter { it.actionable }
+    private val descriptors = descriptors.toList()
     private var snapshot = load()
 
     fun snapshot(): BuiltInModsSnapshot = snapshot
@@ -35,22 +35,36 @@ class BuiltInModsController(
         BuiltInModsResult(true, if (enabled) "Mods enabled for the next launch." else "Mods disabled for the next launch.")
     }
 
-    fun cycle(id: String): BuiltInModsResult = mutate {
+    fun cycle(id: String): BuiltInModsResult = cycle(id, 1)
+
+    fun cycle(id: String, delta: Int): BuiltInModsResult = mutate {
         if (!snapshot.masterEnabled) {
             return@mutate BuiltInModsResult(false, "Enable MASTER before changing Mods values.")
         }
         val descriptor = descriptors.firstOrNull { it.id == id }
-            ?: return@mutate BuiltInModsResult(false, "That Mods row is not available.")
+            ?: return@mutate BuiltInModsResult(false, "That Mods row does not exist.")
+        if (!descriptor.isAvailable) {
+            return@mutate BuiltInModsResult(false, descriptor.unavailableReason)
+        }
+        if (descriptor.controlKind != BuiltInModControlKind.Choice) {
+            return@mutate BuiltInModsResult(false, "${descriptor.title} is not a value setting.")
+        }
         val current = snapshot.value(id)
         val currentIndex = descriptor.values.indexOf(current).takeIf { it >= 0 } ?: 0
-        val next = descriptor.values[(currentIndex + 1) % descriptor.values.size]
+        val offset = Math.floorMod(delta, descriptor.values.size)
+        val next = descriptor.values[(currentIndex + offset) % descriptor.values.size]
         store.update(mapOf(valueKey(id) to next))
         reload()
         BuiltInModsResult(true, "${descriptor.title}: ${friendly(next)}")
     }
 
     fun reset(): BuiltInModsResult = mutate {
-        store.update(descriptors.associate { valueKey(it.id) to it.defaultValue })
+        store.update(buildMap {
+            put(masterKey, if (snapshot.masterEnabled) "1" else "0")
+            descriptors
+                .filter { it.controlKind == BuiltInModControlKind.Choice }
+                .forEach { put(valueKey(it.id), it.defaultValue) }
+        })
         reload()
         BuiltInModsResult(true, "All Mods values reset.")
     }

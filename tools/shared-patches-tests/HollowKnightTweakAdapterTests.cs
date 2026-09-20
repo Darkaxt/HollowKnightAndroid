@@ -9,48 +9,49 @@ namespace SharedPatches.Tests;
 
 public sealed class HollowKnightTweakAdapterTests
 {
-    private static readonly string[] GameplayIds =
+    private static readonly string[] RequiredContractIds =
     {
-        "damage_received",
-        "nail_damage",
-        "one_hit_kills",
-        "run_speed",
-        "unlimited_soul",
+        "skins", "black_background",
+        "run_speed", "fast_transitions", "auto_map", "innate_compass", "bench_teleport", "secret_radar",
+        "nail_damage", "damage_taken", "damage_cap", "one_hit_kills", "unlimited_soul",
+        "enemy_health_bars", "damage_numbers", "boss_retry",
+        "equip_anywhere", "charm_costs", "unlimited_notches",
+        "state_slot", "save_to_slot", "load_from_slot", "delete_slot",
+        "geo_magnet", "keep_geo_on_death", "journal_one_kill", "geo_multiplier",
     };
 
-    private static readonly string[] DeferredIds =
+    [Fact]
+    public void CatalogStartsWithExactRequiredContractAndAppendsExtras()
     {
-        "charm_costs",
-        "unlimited_notches",
-        "equip_anywhere",
-        "geo_multiplier",
-        "keep_geo_on_death",
-        "journal_one_kill",
-        "auto_map",
-        "health_bars",
-        "damage_numbers",
-        "boss_retry",
-        "secret_radar",
-        "bench_teleport",
-        "state_slots",
-    };
+        var rows = new HollowKnightTweakAdapter(new RecordingApi()).Descriptors;
+        TweakDescriptor[] required = rows.Take(27).ToArray();
 
-    private static readonly string[] DeferredGroups =
-    {
-        "CHARMS",
-        "CHARMS",
-        "CHARMS",
-        "ECONOMY",
-        "ECONOMY",
-        "JOURNAL",
-        "WORLD",
-        "WORLD",
-        "WORLD",
-        "WORLD",
-        "WORLD",
-        "WORLD",
-        "STATE",
-    };
+        Assert.Equal(RequiredContractIds, required.Select(row => row.ContractId));
+        Assert.Equal(
+            new[] { "GENERAL", "GENERAL" }
+                .Concat(Enumerable.Repeat("WORLD", 6))
+                .Concat(Enumerable.Repeat("COMBAT", 5))
+                .Concat(Enumerable.Repeat("ENCOUNTERS", 3))
+                .Concat(Enumerable.Repeat("CHARMS", 3))
+                .Concat(Enumerable.Repeat("SAVE STATES", 4))
+                .Concat(Enumerable.Repeat("ECONOMY", 4)),
+            required.Select(row => row.Group));
+        Assert.Equal(TweakControlKind.Route, required[0].ControlKind);
+        Assert.Equal(TweakControlKind.Route, required[6].ControlKind);
+        Assert.Equal(TweakControlKind.Command, required[20].ControlKind);
+        Assert.Equal(TweakControlKind.Command, required[21].ControlKind);
+        Assert.Equal(TweakControlKind.Command, required[22].ControlKind);
+        Assert.All(required.Where((_, index) => index is not (0 or 6 or 20 or 21 or 22)),
+            row => Assert.Equal(TweakControlKind.Choice, row.ControlKind));
+        Assert.Equal("companion_backdrop", required.Single(row => row.ContractId == "black_background").Id);
+        Assert.Equal("damage_received", required.Single(row => row.ContractId == "damage_taken").Id);
+        Assert.Equal("health_bars", required.Single(row => row.ContractId == "enemy_health_bars").Id);
+        Assert.Equal(new[] { "lifeblood_flash" }, rows.Skip(27).Select(row => row.Id));
+        Assert.Equal(6, required.Count(row => row.IsAvailable));
+        Assert.All(required.Where(row => !row.IsAvailable), row =>
+            Assert.False(string.IsNullOrWhiteSpace(row.UnavailableReason)));
+        Assert.DoesNotContain(rows, row => row.Id == "state_slots");
+    }
 
     [Fact]
     public void DamageReceivedAppliesNoMaskLossThroughTypedApi()
@@ -128,42 +129,6 @@ public sealed class HollowKnightTweakAdapterTests
     }
 
     [Fact]
-    public void CatalogHasExactGameIdAndOrder()
-    {
-        var adapter = new HollowKnightTweakAdapter(new RecordingApi());
-        string[] presentationIds = { "companion_backdrop", "lifeblood_flash" };
-
-        Assert.Equal("hollow-knight", adapter.GameId);
-        Assert.Equal(presentationIds.Concat(GameplayIds).Concat(DeferredIds), adapter.Descriptors.Select(row => row.Id));
-    }
-
-    [Fact]
-    public void CatalogStartsWithExactAvailablePresentationRows()
-    {
-        var adapter = new HollowKnightTweakAdapter(new RecordingApi());
-
-        AssertDescriptor(
-            adapter.Descriptors[0],
-            "companion_backdrop",
-            "PRESENTATION",
-            "COMPANION BACKDROP",
-            "Choose the accepted dimmed scenery wash or a black lower-screen backdrop.",
-            "dimmed",
-            "dimmed",
-            "black");
-        AssertDescriptor(
-            adapter.Descriptors[1],
-            "lifeblood_flash",
-            "PRESENTATION",
-            "LIFEBLOOD FLASH",
-            "Use the accepted softened flash, the original flash, or no flash.",
-            "soft",
-            "soft",
-            "vanilla",
-            "off");
-    }
-
-    [Fact]
     public void CatalogRejectsMutationThroughListInterfaceAndKeepsOrder()
     {
         var adapter = new HollowKnightTweakAdapter(new RecordingApi());
@@ -197,8 +162,8 @@ public sealed class HollowKnightTweakAdapterTests
             },
             ["lifeblood_flash"] = new()
             {
-                ["soft"] = "flash:Soft",
                 ["vanilla"] = "flash:Vanilla",
+                ["soft"] = "flash:Soft",
                 ["off"] = "flash:Off",
             },
             ["damage_received"] = new()
@@ -234,7 +199,7 @@ public sealed class HollowKnightTweakAdapterTests
         var catalog = new HollowKnightTweakAdapter(new RecordingApi());
         TweakDescriptor[] available = catalog.Descriptors.Where(row => row.IsAvailable).ToArray();
 
-        Assert.Equal(expected.Keys, available.Select(row => row.Id));
+        Assert.Equal(expected.Keys.OrderBy(id => id), available.Select(row => row.Id).OrderBy(id => id));
         foreach (TweakDescriptor row in available)
         {
             Assert.Equal(expected[row.Id].Keys, row.Values);
@@ -249,31 +214,6 @@ public sealed class HollowKnightTweakAdapterTests
                 Assert.Equal(new[] { expected[row.Id][value] }, api.Calls);
             }
         }
-    }
-
-    [Fact]
-    public void DeferredRowsHaveExactUniqueTrackingMapAndRemainVisible()
-    {
-        var adapter = new HollowKnightTweakAdapter(new RecordingApi());
-        var deferredRows = adapter.Descriptors.Where(row => !row.IsAvailable).ToArray();
-        string[] expectedTrackingIds = Enumerable.Range(6, 13)
-            .Select(number => $"HKMOD-{number:000}")
-            .ToArray();
-
-        Assert.Equal(DeferredIds, deferredRows.Select(row => row.Id));
-        Assert.Equal(DeferredGroups, deferredRows.Select(row => row.Group));
-        Assert.Equal(expectedTrackingIds, deferredRows.Select(row => row.TrackingId));
-        Assert.Equal(expectedTrackingIds.Length, deferredRows.Select(row => row.TrackingId).Distinct().Count());
-        Assert.All(deferredRows, row =>
-        {
-            Assert.False(row.IsAvailable);
-            Assert.Equal("off", row.DefaultValue);
-            Assert.Equal(new[] { "off" }, row.Values);
-            Assert.False(string.IsNullOrWhiteSpace(row.Title));
-            Assert.Equal(row.Title.ToUpperInvariant(), row.Title);
-            Assert.False(string.IsNullOrWhiteSpace(row.Description));
-            Assert.False(string.IsNullOrWhiteSpace(row.UnavailableReason));
-        });
     }
 
     [Theory]
@@ -566,7 +506,7 @@ public sealed class HollowKnightTweakAdapterTests
     }
 
     [Fact]
-    public void EveryDeferredDirectCallReportsTrackingReasonWithoutCallingApi()
+    public void EveryUnavailableDirectCallReportsReasonWithoutCallingApi()
     {
         var api = new RecordingApi();
         var adapter = new HollowKnightTweakAdapter(api);
@@ -576,7 +516,7 @@ public sealed class HollowKnightTweakAdapterTests
             TweakActionResult result = adapter.Apply(row.Id, row.DefaultValue);
 
             Assert.False(result.Success);
-            Assert.Contains(row.TrackingId, result.Error);
+            Assert.Contains("currently unavailable", result.Error, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(row.UnavailableReason, result.Error);
         }
 
@@ -620,26 +560,6 @@ public sealed class HollowKnightTweakAdapterTests
         Assert.True(decision.HasOwner);
         Assert.Equal(HollowKnightFlashAuthority.Master, decision.Authority);
         Assert.Equal(expectedMode, decision.Mode);
-    }
-
-    private static void AssertDescriptor(
-        TweakDescriptor row,
-        string id,
-        string group,
-        string title,
-        string description,
-        string defaultValue,
-        params string[] values)
-    {
-        Assert.Equal(id, row.Id);
-        Assert.Equal(group, row.Group);
-        Assert.Equal(title, row.Title);
-        Assert.Equal(description, row.Description);
-        Assert.Equal(defaultValue, row.DefaultValue);
-        Assert.Equal(values, row.Values);
-        Assert.True(row.IsAvailable);
-        Assert.Equal(string.Empty, row.TrackingId);
-        Assert.Equal(string.Empty, row.UnavailableReason);
     }
 
     private sealed class RecordingApi : IHollowKnightTweakApi

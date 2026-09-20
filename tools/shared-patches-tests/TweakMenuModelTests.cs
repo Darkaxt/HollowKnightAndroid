@@ -101,7 +101,7 @@ public sealed class TweakMenuModelTests
 
         fixture.Model.MoveGroup(-3);
         Assert.Equal(1, fixture.Model.SelectedGroupIndex);
-        Assert.Equal(new[] { "run_speed" }, fixture.Model.CurrentRows.Select(row => row.Id));
+        Assert.Equal(new[] { "run_speed", "bench_teleport" }, fixture.Model.CurrentRows.Select(row => row.Id));
         Assert.Equal("run_speed", fixture.Model.Selected.Id);
 
         fixture.Model.MoveGroup(5);
@@ -128,15 +128,31 @@ public sealed class TweakMenuModelTests
     }
 
     [Fact]
-    public void DeferredDescriptorsRemainInLedgerButNeverBecomeMenuRows()
+    public void UnavailableDescriptorsRemainVisibleAndCannotMutate()
     {
         var fixture = MenuFixture.Create(visibleRows: 2);
+        fixture.Model.MoveGroup(1);
+        fixture.Model.MoveRow(1);
 
-        Assert.Contains(fixture.Controller.Descriptors, row => !row.IsAvailable && row.Id == "bench_teleport");
-        Assert.DoesNotContain(
-            fixture.Model.Groups.SelectMany(index => fixture.Model.RowsForGroup(
-                fixture.Model.Groups.ToList().IndexOf(index))),
-            row => !row.IsAvailable);
+        Assert.Equal("bench_teleport", fixture.Model.Selected.Id);
+        Assert.False(fixture.Model.Selected.IsAvailable);
+        var result = fixture.Model.SetSelected("open");
+        Assert.False(result.Success);
+        Assert.Contains("currently unavailable", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(fixture.Adapter.Applied);
+    }
+
+    [Fact]
+    public void SetSelectedForwardsTheExactValue()
+    {
+        var fixture = MenuFixture.Create(visibleRows: 2);
+        Assert.True(fixture.Model.ToggleMaster().Success);
+
+        var result = fixture.Model.SetSelected("invincible");
+
+        Assert.True(result.Success);
+        Assert.Equal("invincible", fixture.Controller.Value("damage_received"));
+        Assert.Equal(new[] { ("damage_received", "invincible") }, fixture.Adapter.Applied);
     }
 
     [Fact]
@@ -311,9 +327,10 @@ public sealed class TweakMenuModelTests
             new TweakDescriptor(
                 "one_hit_kills", "COMBAT", "ONE-HIT KILLS", "Defeat regular enemies in one hit.",
                 "off", new[] { "off", "on" }),
-            TweakDescriptor.Deferred(
-                "bench_teleport", "COMBAT", "BENCH TELEPORT", "Travel to a recorded bench.",
-                "HKMOD-017", "No safe scene-transition seam is enabled.")
+            TweakDescriptor.Unavailable(
+                "bench_teleport", "bench_teleport", TweakControlKind.Route,
+                "MOVEMENT", "BENCH TELEPORT", "Travel to a recorded bench.",
+                "open", new[] { "open" }, "No safe scene-transition operation exists yet.")
         };
 
         public string FailId { get; set; }
