@@ -59,6 +59,7 @@ namespace DualSouls.Mods.HollowKnight
             Skins = HollowKnightSkinRuntime.Current ?? new HollowKnightSkinRuntime();
             skinLibrary = new HollowKnightSkinLibrary(Skins);
             Current = this;
+            gameObject.AddComponent<HollowKnightNativeModsMenu>();
             DontDestroyOnLoad(gameObject);
         }
 
