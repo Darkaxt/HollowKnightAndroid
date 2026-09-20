@@ -38,6 +38,7 @@
     <Compile Include="../hollow-knight-patches/src/skins/runtime/*.cs" Link="HollowKnightSkins/Runtime/%(Filename)%(Extension)" />
     <Compile Include="../silksong-patches/src/skins/runtime/*.cs" Link="SilksongSkins/Runtime/%(Filename)%(Extension)" />
     <Compile Include="..\silksong-patches\src\mods\SilksongTweakAdapter.cs" Link="Silksong\SilksongTweakAdapter.cs" Condition="Exists('..\silksong-patches\src\mods\SilksongTweakAdapter.cs')" />
+    <Compile Include="..\silksong-patches\src\mods\SilksongNativeMenuLifecycle.cs" Link="Silksong\SilksongNativeMenuLifecycle.cs" Condition="Exists('..\silksong-patches\src\mods\SilksongNativeMenuLifecycle.cs')" />
     <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightTweakAdapter.cs" Link="HollowKnight\HollowKnightTweakAdapter.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightTweakAdapter.cs')" />
     <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightGameTweakApi.cs" Link="HollowKnight\HollowKnightGameTweakApi.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightGameTweakApi.cs')" />
     <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightFlashPolicyCore.cs" Link="HollowKnight\HollowKnightFlashPolicyCore.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightFlashPolicyCore.cs')" />

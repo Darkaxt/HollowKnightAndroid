@@ -64,6 +64,7 @@ namespace DualSouls.Mods.Silksong
             Skins = SilksongSkinRuntime.Current ?? new SilksongSkinRuntime();
             skinLibrary = new SilksongSkinLibrary(Skins);
             Current = this;
+            gameObject.AddComponent<SilksongNativeModsMenu>();
             DontDestroyOnLoad(gameObject);
         }
 

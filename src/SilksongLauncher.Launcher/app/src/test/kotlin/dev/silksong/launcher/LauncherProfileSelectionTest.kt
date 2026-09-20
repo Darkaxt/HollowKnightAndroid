@@ -134,13 +134,18 @@ class LauncherProfileSelectionTest {
     }
 
     @Test
-    fun `settings has logs and genuine settings but no mods or skins routes`() {
+    fun `settings exposes real skins mods and logs routes`() {
         val settings = Robolectric.buildActivity(SettingsActivity::class.java).setup().get()
+        val shadow = shadowOf(settings)
 
-        assertEquals(0, settings.resources.getIdentifier("btn_settings_mods", "id", settings.packageName))
-        assertEquals(0, settings.resources.getIdentifier("btn_settings_skins", "id", settings.packageName))
+        settings.findViewById<Button>(R.id.btn_settings_skins).performClick()
+        assertEquals(SkinsActivity::class.java.name, shadow.nextStartedActivity.component?.className)
+
+        settings.findViewById<Button>(R.id.btn_settings_mods).performClick()
+        assertEquals(BuiltInModsActivity::class.java.name, shadow.nextStartedActivity.component?.className)
+
         settings.findViewById<Button>(R.id.btn_settings_logs).performClick()
-        assertEquals(LogActivity::class.java.name, shadowOf(settings).nextStartedActivity.component?.className)
+        assertEquals(LogActivity::class.java.name, shadow.nextStartedActivity.component?.className)
     }
 
     @Test

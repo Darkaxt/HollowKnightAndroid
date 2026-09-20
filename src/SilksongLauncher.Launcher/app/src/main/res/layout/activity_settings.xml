@@ -144,6 +144,37 @@
         android:layout_marginBottom="24dp"
         android:layout_marginStart="4dp" />
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="16dp">
+
+        <Button
+            android:id="@+id/btn_settings_skins"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/action_skins"
+            android:textSize="15sp"
+            android:textColor="@color/text_on_control"
+            android:backgroundTint="@color/surface_control"
+            android:minHeight="48dp" />
+
+        <Button
+            android:id="@+id/btn_settings_mods"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+            android:text="@string/action_mods"
+            android:textSize="15sp"
+            android:textColor="@color/text_on_control"
+            android:backgroundTint="@color/surface_control"
+            android:minHeight="48dp" />
+    </LinearLayout>
+
     <!-- ───── Clear the build ─────
          Last, and visually separated, because it is the only control here
          that destroys anything. -->
