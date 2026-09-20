@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using DualSouls.Mods.HollowKnight;
 using UnityEngine;
 
@@ -12,6 +14,28 @@ static class HkStageHooks
     static HollowKnightFlashMode? _flashOverride;
     static HollowKnightFlashMode? _legacyFlashMode;
     static float? _legacyFlashAlpha;
+    static bool benchLoaded;
+    static bool lastAtBench;
+    static readonly Dictionary<string, BenchRecord> benches =
+        new Dictionary<string, BenchRecord>(StringComparer.Ordinal);
+
+    [Serializable]
+    sealed class BenchRecord
+    {
+        public string scene;
+        public string marker;
+        public int type;
+        public bool facingRight;
+    }
+
+    [Serializable]
+    sealed class BenchEnvelope
+    {
+        public List<BenchRecord> records = new List<BenchRecord>();
+    }
+
+    static string BenchPath => Path.Combine(
+        Application.persistentDataPath, "dualsouls-recorded-benches.json");
 
     internal static bool TweaksAvailable =>
         HollowKnightModsRuntime.Current != null &&
@@ -71,6 +95,7 @@ static class HkStageHooks
 
     internal static void Tick(HKLayout layout, bool debug)
     {
+        RecordBench();
         if (Time.unscaledTime < nextJoyPoll) return;
         nextJoyPoll = Time.unscaledTime + 2f;
         try
@@ -93,8 +118,115 @@ static class HkStageHooks
         catch { }
     }
     internal static void PushInputSettings(HKLayout layout) { }
-    internal static bool IsBenchRecorded(string scene) => false;
-    internal static void BenchWarp(string scene) { }
+
+    internal static void OpenSkins()
+    {
+        using (var unity = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+        using (var activity = unity.GetStatic<AndroidJavaObject>("currentActivity"))
+        using (var intent = new AndroidJavaObject("android.content.Intent"))
+        using (var component = new AndroidJavaObject(
+            "android.content.ComponentName",
+            activity.Call<string>("getPackageName"),
+            "dev.silksong.launcher.skins.ui.SkinsActivity"))
+        {
+            intent.Call<AndroidJavaObject>("setComponent", component);
+            activity.Call("startActivity", intent);
+        }
+    }
+
+    internal static void OpenBenchTeleport()
+    {
+        HKDualScreen.OpenBenchTeleportRoute();
+    }
+
+    internal static bool IsBenchRecorded(string scene)
+    {
+        EnsureBenchesLoaded();
+        return !string.IsNullOrEmpty(scene) && benches.ContainsKey(scene);
+    }
+
+    internal static void BenchWarp(string scene)
+    {
+        EnsureBenchesLoaded();
+        if (string.IsNullOrEmpty(scene) || !benches.TryGetValue(scene, out BenchRecord record))
+            throw new InvalidOperationException("That bench has not been recorded.");
+        GameManager game = GameManager.UnsafeInstance;
+        PlayerData player = game != null ? game.playerData : null;
+        if (game == null || player == null)
+            throw new InvalidOperationException("Hollow Knight is not ready to travel.");
+        player.SetBenchRespawn(record.marker, record.scene, record.type, record.facingRight);
+        game.ReadyForRespawn(false);
+    }
+
+    static void RecordBench()
+    {
+        EnsureBenchesLoaded();
+        GameManager game = GameManager.UnsafeInstance;
+        PlayerData player = game != null ? game.playerData : null;
+        bool atBench = player != null && player.atBench;
+        if (!atBench || lastAtBench)
+        {
+            lastAtBench = atBench;
+            return;
+        }
+        lastAtBench = true;
+        if (string.IsNullOrEmpty(player.respawnScene) ||
+            string.IsNullOrEmpty(player.respawnMarkerName)) return;
+        benches[player.respawnScene] = new BenchRecord
+        {
+            scene = player.respawnScene,
+            marker = player.respawnMarkerName,
+            type = player.respawnType,
+            facingRight = player.respawnFacingRight,
+        };
+        SaveBenches();
+    }
+
+    static void EnsureBenchesLoaded()
+    {
+        if (benchLoaded) return;
+        benchLoaded = true;
+        try
+        {
+            if (!File.Exists(BenchPath)) return;
+            var info = new FileInfo(BenchPath);
+            if (info.Length > 512 * 1024)
+                throw new InvalidDataException("The recorded-bench sidecar is too large.");
+            BenchEnvelope envelope = JsonUtility.FromJson<BenchEnvelope>(File.ReadAllText(BenchPath));
+            if (envelope == null || envelope.records == null) return;
+            int count = Math.Min(envelope.records.Count, 256);
+            for (int i = 0; i < count; i++)
+            {
+                BenchRecord record = envelope.records[i];
+                if (record == null || string.IsNullOrEmpty(record.scene) ||
+                    string.IsNullOrEmpty(record.marker)) continue;
+                benches[record.scene] = record;
+            }
+        }
+        catch (Exception error)
+        {
+            Debug.LogError("Dual Souls could not load recorded benches: " + error.Message);
+            benches.Clear();
+        }
+    }
+
+    static void SaveBenches()
+    {
+        var envelope = new BenchEnvelope();
+        foreach (BenchRecord record in benches.Values)
+        {
+            if (envelope.records.Count == 256) break;
+            envelope.records.Add(record);
+        }
+        try
+        {
+            File.WriteAllText(BenchPath, JsonUtility.ToJson(envelope));
+        }
+        catch (Exception error)
+        {
+            Debug.LogError("Dual Souls could not save recorded benches: " + error.Message);
+        }
+    }
 
     internal static KeyCode JoyBtn(int index)
     {

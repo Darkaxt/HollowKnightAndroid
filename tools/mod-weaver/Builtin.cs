@@ -143,7 +143,22 @@ internal static class Builtin
                     InMemory = true,
                     AssemblyResolver = resolver,
                 });
-                changed |= WeaveHollowKnightOneHit(assembly, patches, notes);
+                try
+                {
+                    changed |= WeaveHollowKnightOneHit(assembly, patches, notes);
+                }
+                catch (Exception e)
+                {
+                    notes.Add($"one-hit damage: not applied ({e.GetType().Name}: {e.Message})");
+                }
+                try
+                {
+                    changed |= WeaveHollowKnightGameplayHooks(assembly, patches, notes);
+                }
+                catch (Exception e)
+                {
+                    notes.Add($"gameplay hooks: not applied ({e.GetType().Name}: {e.Message})");
+                }
             }
             catch (Exception e)
             {
@@ -297,6 +312,93 @@ internal static class Builtin
         processor.InsertBefore(first,
             processor.Create(OpCodes.Call, gameModule.ImportReference(prefixes[0])));
         notes.Add($"one-hit damage: {HealthManagerType}.{HitMethod} now calls managed prefix");
+        return true;
+    }
+
+    static bool WeaveHollowKnightGameplayHooks(
+        AssemblyDefinition game, AssemblyDefinition patches, List<string> notes)
+    {
+        const string hookTypeName =
+            "DualSouls.Mods.HollowKnight.HollowKnightGameplayHooks";
+        var module = game.MainModule;
+        var hero = module.GetType("HeroController");
+        var player = module.GetType("PlayerData");
+        var hooks = patches.MainModule.GetType(hookTypeName);
+        if (hero is null || player is null || hooks is null)
+        {
+            notes.Add("gameplay hooks: exact types are unavailable; skipped");
+            return false;
+        }
+
+        MethodDefinition? Exact(TypeDefinition type, string name, int parameterCount) =>
+            type.Methods.SingleOrDefault(m => m.Name == name && m.HasBody && !m.IsStatic &&
+                m.Parameters.Count == parameterCount);
+        MethodDefinition? Hook(string name, params string[] parameters) =>
+            hooks.Methods.SingleOrDefault(m => m.Name == name && m.IsPublic && m.IsStatic &&
+                m.ReturnType.MetadataType == MetadataType.Void &&
+                m.Parameters.Select(p => p.ParameterType.FullName).SequenceEqual(parameters));
+
+        var takeDamage = Exact(hero, "TakeDamage", 4);
+        var addGeo = Exact(hero, "AddGeo", 1);
+        var addGeoQuietly = Exact(hero, "AddGeoQuietly", 1);
+        var die = Exact(hero, "Die", 0);
+        var setInt = Exact(player, "SetInt", 2);
+        var beforeDamage = Hook("BeforeTakeDamage", "System.Int32&");
+        var beforeGeo = Hook("BeforeAddGeo", "System.Int32&");
+        var beforeJournal = Hook("BeforeJournalSetInt", "PlayerData", "System.String", "System.Int32&");
+        var beforeDeath = Hook("BeforeDeath");
+        if (takeDamage is null || takeDamage.Parameters[2].ParameterType.MetadataType != MetadataType.Int32 ||
+            addGeo is null || addGeo.Parameters[0].ParameterType.MetadataType != MetadataType.Int32 ||
+            addGeoQuietly is null || addGeoQuietly.Parameters[0].ParameterType.MetadataType != MetadataType.Int32 ||
+            die is null || setInt is null ||
+            setInt.Parameters[0].ParameterType.MetadataType != MetadataType.String ||
+            setInt.Parameters[1].ParameterType.MetadataType != MetadataType.Int32 ||
+            beforeDamage is null || beforeGeo is null || beforeJournal is null ||
+            beforeDeath is null)
+        {
+            notes.Add("gameplay hooks: an exact target or patch signature is unavailable; skipped");
+            return false;
+        }
+
+        bool Calls(MethodDefinition method, string hookName) => method.Body.Instructions.Any(i =>
+            i.OpCode == OpCodes.Call && i.Operand is MethodReference called &&
+            called.DeclaringType.FullName == hookTypeName && called.Name == hookName);
+        bool already = Calls(takeDamage, "BeforeTakeDamage") && Calls(addGeo, "BeforeAddGeo") &&
+            Calls(addGeoQuietly, "BeforeAddGeo") && Calls(setInt, "BeforeJournalSetInt") &&
+            Calls(die, "BeforeDeath");
+        if (already)
+        {
+            notes.Add("gameplay hooks: already woven; nothing to do");
+            return false;
+        }
+        if (Calls(takeDamage, "BeforeTakeDamage") || Calls(addGeo, "BeforeAddGeo") ||
+            Calls(addGeoQuietly, "BeforeAddGeo") || Calls(setInt, "BeforeJournalSetInt") ||
+            Calls(die, "BeforeDeath"))
+        {
+            notes.Add("gameplay hooks: partial prior weave found; skipped");
+            return false;
+        }
+
+        void Prefix(MethodDefinition target, MethodDefinition hook, params Instruction[] loads)
+        {
+            var processor = target.Body.GetILProcessor();
+            var first = target.Body.Instructions[0];
+            foreach (Instruction load in loads) processor.InsertBefore(first, load);
+            processor.InsertBefore(first, processor.Create(OpCodes.Call, module.ImportReference(hook)));
+        }
+
+        Prefix(takeDamage, beforeDamage,
+            Instruction.Create(OpCodes.Ldarga, takeDamage.Parameters[2]));
+        Prefix(addGeo, beforeGeo,
+            Instruction.Create(OpCodes.Ldarga, addGeo.Parameters[0]));
+        Prefix(addGeoQuietly, beforeGeo,
+            Instruction.Create(OpCodes.Ldarga, addGeoQuietly.Parameters[0]));
+        Prefix(setInt, beforeJournal,
+            Instruction.Create(OpCodes.Ldarg_0),
+            Instruction.Create(OpCodes.Ldarg, setInt.Parameters[0]),
+            Instruction.Create(OpCodes.Ldarga, setInt.Parameters[1]));
+        Prefix(die, beforeDeath);
+        notes.Add("gameplay hooks: damage cap, Geo multiplier, journal, and death handling woven");
         return true;
     }
 

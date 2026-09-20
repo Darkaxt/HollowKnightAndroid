@@ -27,7 +27,7 @@ class BuiltInModsControllerTest {
 
         assertEquals(required, hollowKnight.take(required.size).map { it.contractId })
         assertEquals(required, silksong.take(required.size).map { it.contractId })
-        assertTrue(hollowKnight.any { !it.isAvailable })
+        assertTrue(hollowKnight.all { it.isAvailable })
         assertTrue(silksong.any { !it.isAvailable })
         assertTrue(
             hollowKnight.none {
@@ -60,18 +60,21 @@ class BuiltInModsControllerTest {
         )
     }
 
-    @Test fun `unavailable and command rows remain visible but cannot mutate`() {
-        val file = temporary.newFile()
-        val controller = controller("hollow-knight", file)
-        assertTrue(controller.setMaster(true).success)
-        val before = file.readText()
+    @Test fun `available choices cycle while operational rows remain non-persistent`() {
+        val hollowKnightFile = temporary.newFile()
+        val hollowKnight = controller("hollow-knight", hollowKnightFile)
+        assertTrue(hollowKnight.setMaster(true).success)
 
-        assertFalse(controller.cycle("auto_map").success)
-        assertFalse(controller.cycle("save_to_slot").success)
+        assertTrue(hollowKnight.cycle("auto_map").success)
+        val afterChoice = hollowKnightFile.readText()
+        assertFalse(hollowKnight.cycle("save_to_slot").success)
+        assertEquals(afterChoice, hollowKnightFile.readText())
+        assertTrue(hollowKnight.snapshot().descriptors.any { it.id == "save_to_slot" })
 
-        assertEquals(before, file.readText())
-        assertTrue(controller.snapshot().descriptors.any { it.id == "auto_map" })
-        assertTrue(controller.snapshot().descriptors.any { it.id == "save_to_slot" })
+        val silksong = controller("silksong", temporary.newFile())
+        assertTrue(silksong.setMaster(true).success)
+        assertFalse(silksong.cycle("auto_map").success)
+        assertTrue(silksong.snapshot().descriptors.any { it.id == "auto_map" })
     }
 
     @Test fun `reset preserves master without persisting command or route values`() {

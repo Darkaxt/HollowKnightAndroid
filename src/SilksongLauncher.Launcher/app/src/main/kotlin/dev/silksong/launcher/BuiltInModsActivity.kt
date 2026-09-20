@@ -15,12 +15,14 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import dev.silksong.launcher.builtinmods.BuiltInModCatalog
+import dev.silksong.launcher.builtinmods.BuiltInModControlKind
 import dev.silksong.launcher.builtinmods.BuiltInModDescriptor
 import dev.silksong.launcher.builtinmods.BuiltInModsController
 import dev.silksong.launcher.builtinmods.LineModStateStore
 import dev.silksong.launcher.profiles.ProfileBuildPaths
 import dev.silksong.launcher.profiles.SelectedGameStore
 import dev.silksong.launcher.runtime.GameLifecycleAuthority
+import dev.silksong.launcher.skins.ui.SkinsActivity
 import java.io.File
 
 /** Launcher presentation of the selected game's built-in typed Mods/Cheats catalog. */
@@ -187,7 +189,7 @@ class BuiltInModsActivity : Activity() {
         val selected = snapshot.descriptors.firstOrNull { it.id == selectedId }
         detail.text = selected?.let {
             val value = if (it.isAvailable) {
-                BuiltInModsController.friendly(snapshot.value(it.id))
+                displayValue(it, snapshot.value(it.id))
             } else {
                 "UNAVAILABLE"
             }
@@ -210,7 +212,7 @@ class BuiltInModsActivity : Activity() {
             setPadding(dp(12), dp(10), dp(12), dp(10))
             val rowEnabled = controller.snapshot().masterEnabled && descriptor.isAvailable
             addView(label(descriptor.title, 15f, if (rowEnabled) Color.WHITE else Color.GRAY), horizontalWeight(1f))
-            val displayValue = if (descriptor.isAvailable) BuiltInModsController.friendly(value) else "UNAVAILABLE"
+            val displayValue = if (descriptor.isAvailable) displayValue(descriptor, value) else "UNAVAILABLE"
             addView(label(displayValue, 14f, Color.parseColor("#C88A94")))
             setOnFocusChangeListener { _, hasFocus ->
                 if (hasFocus) {
@@ -228,9 +230,35 @@ class BuiltInModsActivity : Activity() {
                     status.text = ""
                     refreshSelection()
                 } else {
-                    show(controller.cycle(descriptor.id).message)
+                    activate(descriptor)
                 }
             }
+        }
+
+    private fun activate(descriptor: BuiltInModDescriptor) {
+        if (!descriptor.isAvailable) {
+            show(descriptor.unavailableReason)
+            return
+        }
+        when (descriptor.controlKind) {
+            BuiltInModControlKind.Choice -> show(controller.cycle(descriptor.id).message)
+            BuiltInModControlKind.Route -> {
+                if (descriptor.contractId == "skins") {
+                    startActivity(Intent(this, SkinsActivity::class.java))
+                } else {
+                    show("${descriptor.title} is available from the in-game Mods pane.")
+                }
+            }
+            BuiltInModControlKind.Command ->
+                show("${descriptor.title} is available from the in-game Mods pane.")
+        }
+    }
+
+    private fun displayValue(descriptor: BuiltInModDescriptor, value: String): String =
+        when (descriptor.controlKind) {
+            BuiltInModControlKind.Choice -> BuiltInModsController.friendly(value)
+            BuiltInModControlKind.Route -> if (descriptor.contractId == "skins") "OPEN" else "IN GAME"
+            BuiltInModControlKind.Command -> "IN GAME"
         }
 
     private fun configureFocusGraph() {

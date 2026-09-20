@@ -112,6 +112,18 @@ namespace DualSouls.Mods
             return Record(result, "Value saved.");
         }
 
+        public TweakActionResult ActivateSelected()
+        {
+            TweakDescriptor selected = Selected;
+            if (selected == null)
+                return Record(TweakActionResult.Fail("No tweak is selected."), "Action completed.");
+            if (selected.ControlKind == TweakControlKind.Choice)
+                return CycleSelected();
+            return Record(
+                _controller.Set(selected.Id, selected.DefaultValue),
+                "Action completed.");
+        }
+
         public TweakActionResult SetSelected(string value)
         {
             TweakDescriptor selected = Selected;

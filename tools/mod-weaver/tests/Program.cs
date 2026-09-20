@@ -31,6 +31,7 @@ internal static class Program
             ("generic member resolution remains best-effort", GenericMembers),
             ("builtin weave survives plugin composition", BuiltinComposition),
             ("builtin Hollow Knight one-hit prefix", HollowKnightOneHitBuiltin),
+            ("builtin Hollow Knight gameplay event hooks", HollowKnightGameplayBuiltins),
         };
         var failed = 0;
         foreach (var (name, run) in tests)
@@ -469,6 +470,75 @@ internal static class Program
 
         True(Builtin.Apply(fixture.Staged).Any(n => n.Contains("already woven", StringComparison.Ordinal)),
             "Hollow Knight one-hit builtin is idempotent");
+    }
+
+    static void HollowKnightGameplayBuiltins()
+    {
+        using var fixture = new Fixture();
+        var game = fixture.Game.MainModule;
+        var player = new TypeDefinition("", "PlayerData", TypeAttributes.Public, game.TypeSystem.Object);
+        game.Types.Add(player);
+        var setInt = Fixture.Method(player, "SetInt", game.TypeSystem.Void, isStatic: false);
+        Fixture.Parameter(setInt, "name", game.TypeSystem.String);
+        Fixture.Parameter(setInt, "value", game.TypeSystem.Int32);
+        setInt.Body.GetILProcessor().Emit(OpCodes.Ret);
+
+        var hero = new TypeDefinition("", "HeroController", TypeAttributes.Public, game.TypeSystem.Object);
+        game.Types.Add(hero);
+        var takeDamage = Fixture.Method(hero, "TakeDamage", game.TypeSystem.Void, isStatic: false);
+        Fixture.Parameter(takeDamage, "source", game.TypeSystem.Object);
+        Fixture.Parameter(takeDamage, "side", game.TypeSystem.Int32);
+        Fixture.Parameter(takeDamage, "damageAmount", game.TypeSystem.Int32);
+        Fixture.Parameter(takeDamage, "hazardType", game.TypeSystem.Int32);
+        takeDamage.Body.GetILProcessor().Emit(OpCodes.Ret);
+        foreach (string name in new[] { "AddGeo", "AddGeoQuietly" })
+        {
+            var method = Fixture.Method(hero, name, game.TypeSystem.Void, isStatic: false);
+            Fixture.Parameter(method, "amount", game.TypeSystem.Int32);
+            method.Body.GetILProcessor().Emit(OpCodes.Ret);
+        }
+        var die = Fixture.Method(hero, "Die", game.TypeSystem.Object, isStatic: false);
+        die.Body.GetILProcessor().Emit(OpCodes.Ldnull);
+        die.Body.GetILProcessor().Emit(OpCodes.Ret);
+        fixture.Game.Write(Path.Combine(fixture.Staged, "Assembly-CSharp.dll"));
+
+        using var patches = Fixture.NewAssembly("HollowKnightPatches");
+        var hooks = new TypeDefinition("DualSouls.Mods.HollowKnight", "HollowKnightGameplayHooks",
+            TypeAttributes.Public | TypeAttributes.Abstract | TypeAttributes.Sealed,
+            patches.MainModule.TypeSystem.Object);
+        patches.MainModule.Types.Add(hooks);
+        AddHook("BeforeTakeDamage", ("damageAmount", new ByReferenceType(patches.MainModule.TypeSystem.Int32)));
+        AddHook("BeforeAddGeo", ("amount", new ByReferenceType(patches.MainModule.TypeSystem.Int32)));
+        AddHook("BeforeJournalSetInt",
+            ("playerData", patches.MainModule.ImportReference(player)),
+            ("fieldName", patches.MainModule.TypeSystem.String),
+            ("value", new ByReferenceType(patches.MainModule.TypeSystem.Int32)));
+        AddHook("BeforeDeath");
+        patches.Write(Path.Combine(fixture.Staged, "HollowKnightPatches.dll"));
+
+        var notes = Builtin.Apply(fixture.Staged);
+        True(notes.Any(n => n.Contains("gameplay hooks", StringComparison.Ordinal)), "gameplay hooks report their result");
+        using var rewritten = AssemblyDefinition.ReadAssembly(Path.Combine(fixture.Staged, "Assembly-CSharp.dll"));
+        AssertCall("HeroController", "TakeDamage", "BeforeTakeDamage");
+        AssertCall("HeroController", "AddGeo", "BeforeAddGeo");
+        AssertCall("HeroController", "AddGeoQuietly", "BeforeAddGeo");
+        AssertCall("PlayerData", "SetInt", "BeforeJournalSetInt");
+        AssertCall("HeroController", "Die", "BeforeDeath");
+
+        void AddHook(string name, params (string Name, TypeReference Type)[] parameters)
+        {
+            var method = Fixture.Method(hooks, name, patches.MainModule.TypeSystem.Void);
+            foreach (var parameter in parameters) Fixture.Parameter(method, parameter.Name, parameter.Type);
+            method.Body.GetILProcessor().Emit(OpCodes.Ret);
+        }
+        void AssertCall(string typeName, string methodName, string hookName)
+        {
+            MethodDefinition method = rewritten.MainModule.GetType(typeName).Methods.Single(m => m.Name == methodName);
+            True(method.Body.Instructions.Any(i => i.OpCode == OpCodes.Call &&
+                i.Operand is MethodReference called && called.DeclaringType.FullName ==
+                "DualSouls.Mods.HollowKnight.HollowKnightGameplayHooks" && called.Name == hookName),
+                typeName + "." + methodName + " calls " + hookName);
+        }
     }
 
     static void BuiltinComposition()

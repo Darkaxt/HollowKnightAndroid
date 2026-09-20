@@ -16,13 +16,21 @@ ROW_RE = re.compile(
     r'"(?P<group>[^"]+)",\s*"(?P<title>[^"]+)",\s*"(?P<description>[^"]*)",\s*'
     r'"(?P<default>[^"]+)",\s*(?:new\[\]\s*\{|listOf\()(?P<values>[^}\)]*)[}\)](?:,\s*[A-Z_]+)?\)',
 )
+DIRECT_ROW_RE = re.compile(
+    r'Row\("(?P<id>[^"]+)",\s*"(?P<contract>[^"]+)",\s*'
+    r'TweakControlKind\.(?P<kind>\w+),\s*"(?P<group>[^"]+)",\s*'
+    r'"(?P<title>[^"]+)",\s*"(?P<description>[^"]*)",\s*'
+    r'"(?P<default>[^"]+)"(?P<values>(?:,\s*"[^"]+")+?)\)',
+)
 
 
 def parse_rows(text: str):
     rows = []
-    for match in ROW_RE.finditer(text):
+    matches = [(match.start(), match, False) for match in ROW_RE.finditer(text)]
+    matches.extend((match.start(), match, True) for match in DIRECT_ROW_RE.finditer(text))
+    for _, match, direct in sorted(matches, key=lambda item: item[0]):
         fields = match.groupdict()
-        unavailable = fields["factory"].lower() == "unavailable"
+        unavailable = not direct and fields["factory"].lower() == "unavailable"
         rows.append({
             "id": fields["id"],
             "contract": fields["contract"],
@@ -46,33 +54,33 @@ def kotlin_rows(name: str):
 def expected_required(game: str):
     silksong = game == "silksong"
     return [
-        ("skins", "skins", "GENERAL", "SKINS", "Route", False, "open", ("open",)),
+        ("skins", "skins", "GENERAL", "SKINS", "Route", not silksong, "open", ("open",)),
         ("black_background", "black_background" if silksong else "companion_backdrop", "GENERAL", "BLACK BACKGROUND", "Choice", not silksong, "off" if silksong else "dimmed", ("off", "on") if silksong else ("dimmed", "black")),
         ("run_speed", "run_speed", "WORLD", "RUN SPEED", "Choice", not silksong, "vanilla", ("vanilla", "plus_25", "plus_50")),
-        ("fast_transitions", "fast_transitions", "WORLD", "FAST TRANSITIONS", "Choice", False, "off", ("off", "on")),
-        ("auto_map", "auto_map", "WORLD", "AUTO MAP", "Choice", False, "off", ("off", "on")),
-        ("innate_compass", "innate_compass", "WORLD", "INNATE COMPASS", "Choice", False, "off", ("off", "on")),
-        ("bench_teleport", "bench_teleport", "WORLD", "BENCH TELEPORT", "Route", False, "open", ("open",)),
-        ("secret_radar", "secret_radar", "WORLD", "SECRET RADAR", "Choice", False, "off", ("off", "on")),
+        ("fast_transitions", "fast_transitions", "WORLD", "FAST TRANSITIONS", "Choice", not silksong, "off", ("off", "on")),
+        ("auto_map", "auto_map", "WORLD", "AUTO MAP", "Choice", not silksong, "off", ("off", "on")),
+        ("innate_compass", "innate_compass", "WORLD", "INNATE COMPASS", "Choice", not silksong, "off", ("off", "on")),
+        ("bench_teleport", "bench_teleport", "WORLD", "BENCH TELEPORT", "Route", not silksong, "open", ("open",)),
+        ("secret_radar", "secret_radar", "WORLD", "SECRET RADAR", "Choice", not silksong, "off", ("off", "on")),
         ("nail_damage", "nail_damage", "COMBAT", "NEEDLE DAMAGE" if silksong else "NAIL DAMAGE", "Choice", not silksong, "x1", ("x1", "x2", "x3", "x5")),
         ("damage_taken", "damage_received", "COMBAT", "DAMAGE TAKEN", "Choice", True, "vanilla", ("vanilla", "prevent_death", "invincible") if silksong else ("vanilla", "no_mask_loss", "invincible")),
-        ("damage_cap", "damage_cap", "COMBAT", "DAMAGE CAP", "Choice", False, "off", ("off", "on")),
+        ("damage_cap", "damage_cap", "COMBAT", "DAMAGE CAP", "Choice", not silksong, "off", ("off", "on")),
         ("one_hit_kills", "one_hit_kills", "COMBAT", "ONE-HIT KILLS", "Choice", True, "off", ("off", "on")),
         ("unlimited_soul", "unlimited_silk" if silksong else "unlimited_soul", "COMBAT", "UNLIMITED SILK" if silksong else "UNLIMITED SOUL", "Choice", True, "off", ("off", "on")),
-        ("enemy_health_bars", "health_bars", "ENCOUNTERS", "ENEMY HEALTH BARS", "Choice", False, "off", ("off", "on")),
-        ("damage_numbers", "damage_numbers", "ENCOUNTERS", "DAMAGE NUMBERS", "Choice", False, "off", ("off", "on")),
-        ("boss_retry", "boss_retry", "ENCOUNTERS", "BOSS RETRY", "Choice", False, "off", ("off", "on")),
-        ("equip_anywhere", "equip_anywhere", "CRESTS & TOOLS" if silksong else "CHARMS", "EQUIP ANYWHERE", "Choice", silksong, "off", ("off", "on")),
-        ("charm_costs", "charm_costs", "CRESTS & TOOLS" if silksong else "CHARMS", "TOOL COSTS" if silksong else "CHARM COSTS", "Choice", False, "vanilla", ("vanilla", "free")),
-        ("unlimited_notches", "unlimited_notches", "CRESTS & TOOLS" if silksong else "CHARMS", "UNLIMITED TOOL SLOTS" if silksong else "UNLIMITED NOTCHES", "Choice", False, "off", ("off", "on")),
-        ("state_slot", "state_slot", "SAVE STATES", "SLOT", "Choice", False, "1", ("1", "2", "3", "4", "5")),
-        ("save_to_slot", "save_to_slot", "SAVE STATES", "SAVE TO SLOT", "Command", False, "run", ("run",)),
-        ("load_from_slot", "load_from_slot", "SAVE STATES", "LOAD FROM SLOT", "Command", False, "run", ("run",)),
-        ("delete_slot", "delete_slot", "SAVE STATES", "DELETE SLOT", "Command", False, "run", ("run",)),
-        ("geo_magnet", "geo_magnet", "ECONOMY", "ROSARY MAGNET" if silksong else "GEO MAGNET", "Choice", False, "off", ("off", "on")),
-        ("keep_geo_on_death", "keep_geo_on_death", "ECONOMY", "KEEP ROSARIES ON DEATH" if silksong else "KEEP GEO ON DEATH", "Choice", False, "off", ("off", "on")),
-        ("journal_one_kill", "journal_one_kill", "ECONOMY", "JOURNAL IN ONE KILL", "Choice", False, "off", ("off", "on")),
-        ("geo_multiplier", "geo_multiplier", "ECONOMY", "ROSARY MULTIPLIER" if silksong else "GEO MULTIPLIER", "Choice", False, "x1", ("x1", "x2", "x3", "x5")),
+        ("enemy_health_bars", "health_bars", "ENCOUNTERS", "ENEMY HEALTH BARS", "Choice", not silksong, "off", ("off", "on")),
+        ("damage_numbers", "damage_numbers", "ENCOUNTERS", "DAMAGE NUMBERS", "Choice", not silksong, "off", ("off", "on")),
+        ("boss_retry", "boss_retry", "ENCOUNTERS", "BOSS RETRY", "Choice", not silksong, "off", ("off", "on")),
+        ("equip_anywhere", "equip_anywhere", "CRESTS & TOOLS" if silksong else "CHARMS", "EQUIP ANYWHERE", "Choice", True, "off", ("off", "on")),
+        ("charm_costs", "charm_costs", "CRESTS & TOOLS" if silksong else "CHARMS", "TOOL COSTS" if silksong else "CHARM COSTS", "Choice", not silksong, "vanilla", ("vanilla", "free")),
+        ("unlimited_notches", "unlimited_notches", "CRESTS & TOOLS" if silksong else "CHARMS", "UNLIMITED TOOL SLOTS" if silksong else "UNLIMITED NOTCHES", "Choice", not silksong, "off", ("off", "on")),
+        ("state_slot", "state_slot", "SAVE STATES", "SLOT", "Choice", not silksong, "1", ("1", "2", "3", "4", "5")),
+        ("save_to_slot", "save_to_slot", "SAVE STATES", "SAVE TO SLOT", "Command", not silksong, "run", ("run",)),
+        ("load_from_slot", "load_from_slot", "SAVE STATES", "LOAD FROM SLOT", "Command", not silksong, "run", ("run",)),
+        ("delete_slot", "delete_slot", "SAVE STATES", "DELETE SLOT", "Command", not silksong, "run", ("run",)),
+        ("geo_magnet", "geo_magnet", "ECONOMY", "ROSARY MAGNET" if silksong else "GEO MAGNET", "Choice", not silksong, "off", ("off", "on")),
+        ("keep_geo_on_death", "keep_geo_on_death", "ECONOMY", "KEEP ROSARIES ON DEATH" if silksong else "KEEP GEO ON DEATH", "Choice", not silksong, "off", ("off", "on")),
+        ("journal_one_kill", "journal_one_kill", "ECONOMY", "JOURNAL IN ONE KILL", "Choice", not silksong, "off", ("off", "on")),
+        ("geo_multiplier", "geo_multiplier", "ECONOMY", "ROSARY MULTIPLIER" if silksong else "GEO MULTIPLIER", "Choice", not silksong, "x1", ("x1", "x2", "x3", "x5")),
     ]
 
 
@@ -111,7 +119,8 @@ class BuiltInModsCatalogContractTest(unittest.TestCase):
             source = path.read_text(encoding="utf-8")
             rows = parse_rows(source)
             self.assertTrue(all(row["description"] for row in rows))
-            self.assertIn("currently unavailable", source)
+            if any(not row["available"] for row in rows):
+                self.assertIn("currently unavailable", source)
             self.assertNotIn("HKMOD-", source)
             self.assertNotIn(" is deferred", source)
 

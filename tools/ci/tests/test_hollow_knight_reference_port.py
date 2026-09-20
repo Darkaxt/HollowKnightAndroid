@@ -241,7 +241,13 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             self.assertIn(f'LocalizedLabel("{label}"', tab_row)
         self.assertNotIn('LocalizedLabel("Mods"', tab_row)
         self.assertNotIn("TAB_TO_COL", presenter)
-        self.assertNotRegex(presenter, r"\b(?:tab\.tap|cfg\.compTab)\b")
+        bench_route = method_body(
+            presenter,
+            r"public\s+static\s+void\s+OpenBenchTeleportRoute\s*\([^)]*\)",
+        )
+        self.assertIn("tab.tap = COMP_MAP", bench_route)
+        self.assertEqual(1, len(re.findall(r"\btab\.tap\b", presenter)))
+        self.assertNotRegex(presenter, r"\bcfg\.compTab\b")
 
     def test_h3_mods_modal_renders_model_rows_and_unavailable_state_truthfully(self):
         presenter = strip_csharp_comments(read(MODS_PRESENTER))
@@ -303,7 +309,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("TweakPresenterListLayout.ClampScroll", touch)
         self.assertIn("modsPaint.Invalidate()", touch)
         self.assertIn("modsSelectedEntry", tap)
-        self.assertIn("menu.CycleSelected()", tap)
+        self.assertIn("menu.ActivateSelected()", tap)
         self.assertIn("menu.ToggleMaster()", tap)
         self.assertIn("menu.Reset()", tap)
         self.assertIn("modsListHit", presenter)
@@ -456,7 +462,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             capture_surface.count("modsPageVisibility.CaptureAndHide("), 4
         )
         self.assertNotRegex(tick, r"\bInput\.")
-        for action in ("MoveGroup(", "MoveRow(", "ToggleMaster(", "CycleSelected(", "Reset("):
+        for action in ("MoveGroup(", "MoveRow(", "ToggleMaster(", "ActivateSelected(", "Reset("):
             self.assertIn(action, tap)
         self.assertNotIn("PreviousGroup", tap)
         self.assertNotIn("NextGroup", tap)

@@ -211,6 +211,28 @@ public sealed class TweakMenuModelTests
     }
 
     [Fact]
+    public void ActivateSelectedCyclesChoiceAndExecutesRouteOrCommand()
+    {
+        var adapter = new ActionAdapter();
+        var controller = new TweakController(adapter, new MemoryStore());
+        Assert.True(controller.Initialize().Success);
+        var menu = new TweakMenuModel(controller, visibleRows: 2);
+        Assert.True(menu.ToggleMaster().Success);
+
+        Assert.True(menu.ActivateSelected().Success);
+        Assert.Equal(("choice", "on"), adapter.Applied[^1]);
+
+        menu.MoveRow(1);
+        Assert.True(menu.ActivateSelected().Success);
+        Assert.Equal(("route", "open"), adapter.Applied[^1]);
+
+        menu.MoveRow(1);
+        Assert.True(menu.ActivateSelected().Success);
+        Assert.Equal(("command", "run"), adapter.Applied[^1]);
+        Assert.Equal("Action completed.", menu.Message);
+    }
+
+    [Fact]
     public void ToggleMasterForwardsBothStatesAndReportsSuccess()
     {
         var fixture = MenuFixture.Create(visibleRows: 2);
@@ -308,6 +330,22 @@ public sealed class TweakMenuModelTests
             Assert.True(controller.Initialize().Success);
             return new MenuFixture(adapter, controller, new TweakMenuModel(controller, visibleRows));
         }
+    }
+
+    sealed class ActionAdapter : ITweakAdapter
+    {
+        public string GameId => "actions";
+        public IReadOnlyList<TweakDescriptor> Descriptors { get; } = new[]
+        {
+            new TweakDescriptor("choice", "choice", TweakControlKind.Choice, "ACTIONS", "CHOICE", "", "off", new[] { "off", "on" }),
+            new TweakDescriptor("route", "route", TweakControlKind.Route, "ACTIONS", "ROUTE", "", "open", new[] { "open" }),
+            new TweakDescriptor("command", "command", TweakControlKind.Command, "ACTIONS", "COMMAND", "", "run", new[] { "run" }),
+        };
+        public List<(string Id, string Value)> Applied { get; } = new();
+        public void CaptureBaseline() { }
+        public TweakActionResult Apply(string id, string value) { Applied.Add((id, value)); return TweakActionResult.Ok(); }
+        public void RestoreBaseline() { }
+        public void Tick() { }
     }
 
     sealed class RecordingAdapter : ITweakAdapter

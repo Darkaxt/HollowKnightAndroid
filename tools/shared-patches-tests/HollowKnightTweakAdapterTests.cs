@@ -47,9 +47,8 @@ public sealed class HollowKnightTweakAdapterTests
         Assert.Equal("damage_received", required.Single(row => row.ContractId == "damage_taken").Id);
         Assert.Equal("health_bars", required.Single(row => row.ContractId == "enemy_health_bars").Id);
         Assert.Equal(new[] { "lifeblood_flash" }, rows.Skip(27).Select(row => row.Id));
-        Assert.Equal(6, required.Count(row => row.IsAvailable));
-        Assert.All(required.Where(row => !row.IsAvailable), row =>
-            Assert.False(string.IsNullOrWhiteSpace(row.UnavailableReason)));
+        Assert.Equal(27, required.Count(row => row.IsAvailable));
+        Assert.All(required, row => Assert.True(row.IsAvailable));
         Assert.DoesNotContain(rows, row => row.Id == "state_slots");
     }
 
@@ -155,46 +154,34 @@ public sealed class HollowKnightTweakAdapterTests
     {
         var expected = new Dictionary<string, Dictionary<string, string>>
         {
-            ["companion_backdrop"] = new()
-            {
-                ["dimmed"] = "backdrop:False",
-                ["black"] = "backdrop:True",
-            },
-            ["lifeblood_flash"] = new()
-            {
-                ["vanilla"] = "flash:Vanilla",
-                ["soft"] = "flash:Soft",
-                ["off"] = "flash:Off",
-            },
-            ["damage_received"] = new()
-            {
-                ["vanilla"] = "damage:restore",
-                ["no_mask_loss"] = "damage:NoMaskLoss",
-                ["invincible"] = "damage:Invincible",
-            },
-            ["nail_damage"] = new()
-            {
-                ["x1"] = "nail:restore",
-                ["x2"] = "nail:2",
-                ["x3"] = "nail:3",
-                ["x5"] = "nail:5",
-            },
-            ["one_hit_kills"] = new()
-            {
-                ["off"] = "one-hit:restore",
-                ["on"] = "one-hit:True",
-            },
-            ["run_speed"] = new()
-            {
-                ["vanilla"] = "run:restore",
-                ["plus_25"] = "run:1.25",
-                ["plus_50"] = "run:1.5",
-            },
-            ["unlimited_soul"] = new()
-            {
-                ["off"] = "soul:restore",
-                ["on"] = "soul:True",
-            },
+            ["skins"] = One("open", "skins:open"),
+            ["companion_backdrop"] = Map(("dimmed", "backdrop:False"), ("black", "backdrop:True")),
+            ["run_speed"] = Map(("vanilla", "run:restore"), ("plus_25", "run:1.25"), ("plus_50", "run:1.5")),
+            ["fast_transitions"] = OffOn("fast-transitions"),
+            ["auto_map"] = OffOn("auto-map"),
+            ["innate_compass"] = OffOn("compass"),
+            ["bench_teleport"] = One("open", "bench-teleport:open"),
+            ["secret_radar"] = OffOn("secret-radar"),
+            ["nail_damage"] = Map(("x1", "nail:restore"), ("x2", "nail:2"), ("x3", "nail:3"), ("x5", "nail:5")),
+            ["damage_received"] = Map(("vanilla", "damage:restore"), ("no_mask_loss", "damage:NoMaskLoss"), ("invincible", "damage:Invincible")),
+            ["damage_cap"] = OffOn("damage-cap"),
+            ["one_hit_kills"] = Map(("off", "one-hit:restore"), ("on", "one-hit:True")),
+            ["unlimited_soul"] = Map(("off", "soul:restore"), ("on", "soul:True")),
+            ["health_bars"] = OffOn("health-bars"),
+            ["damage_numbers"] = OffOn("damage-numbers"),
+            ["boss_retry"] = OffOn("boss-retry"),
+            ["equip_anywhere"] = OffOn("equip-anywhere"),
+            ["charm_costs"] = Map(("vanilla", "charm-costs-free:False"), ("free", "charm-costs-free:True")),
+            ["unlimited_notches"] = OffOn("unlimited-notches"),
+            ["state_slot"] = Map(("1", "state-slot:1"), ("2", "state-slot:2"), ("3", "state-slot:3"), ("4", "state-slot:4"), ("5", "state-slot:5")),
+            ["save_to_slot"] = One("run", "state:save"),
+            ["load_from_slot"] = One("run", "state:load"),
+            ["delete_slot"] = One("run", "state:delete"),
+            ["geo_magnet"] = OffOn("geo-magnet"),
+            ["keep_geo_on_death"] = OffOn("keep-geo"),
+            ["journal_one_kill"] = OffOn("journal-one-kill"),
+            ["geo_multiplier"] = Map(("x1", "geo-multiplier:1"), ("x2", "geo-multiplier:2"), ("x3", "geo-multiplier:3"), ("x5", "geo-multiplier:5")),
+            ["lifeblood_flash"] = Map(("vanilla", "flash:Vanilla"), ("soft", "flash:Soft"), ("off", "flash:Off")),
         };
         var catalog = new HollowKnightTweakAdapter(new RecordingApi());
         TweakDescriptor[] available = catalog.Descriptors.Where(row => row.IsAvailable).ToArray();
@@ -463,6 +450,24 @@ public sealed class HollowKnightTweakAdapterTests
     }
 
     [Fact]
+    public void EveryPersistedChoiceIsReleasedByMasterOff()
+    {
+        var catalog = new HollowKnightTweakAdapter(new RecordingApi());
+        foreach (TweakDescriptor row in catalog.Descriptors.Where(row => row.ControlKind == TweakControlKind.Choice))
+        {
+            var api = new RecordingApi();
+            var controller = new TweakController(new HollowKnightTweakAdapter(api), new MemoryStore());
+            Assert.True(controller.Initialize().Success);
+            Assert.True(controller.SetMaster(true).Success);
+            Assert.True(controller.Set(row.Id, row.Values.First(value => value != row.DefaultValue)).Success);
+            Assert.Contains(row.Id, api.ActiveGameplay);
+
+            Assert.True(controller.SetMaster(false).Success);
+            Assert.Empty(api.ActiveGameplay);
+        }
+    }
+
+    [Fact]
     public void CaptureApplyAndRestorePreserveApiCallOrder()
     {
         var api = new RecordingApi();
@@ -553,6 +558,15 @@ public sealed class HollowKnightTweakAdapterTests
         Assert.Throws<ArgumentNullException>(() => new HollowKnightTweakAdapter(null!));
     }
 
+    private static Dictionary<string, string> One(string value, string call) =>
+        new() { [value] = call };
+
+    private static Dictionary<string, string> OffOn(string prefix) =>
+        Map(("off", prefix + ":False"), ("on", prefix + ":True"));
+
+    private static Dictionary<string, string> Map(params (string Value, string Call)[] entries) =>
+        entries.ToDictionary(entry => entry.Value, entry => entry.Call, StringComparer.Ordinal);
+
     private static void AssertMasterDecision(
         HollowKnightFlashDecision decision,
         HollowKnightFlashMode expectedMode)
@@ -579,12 +593,12 @@ public sealed class HollowKnightTweakAdapterTests
 
         public void SetCompanionBackdropBlack(bool black)
         {
-            Record($"backdrop:{black}");
+            SetActive("companion_backdrop", black, $"backdrop:{black}");
         }
 
         public void SetLifebloodFlash(HollowKnightFlashMode mode)
         {
-            Record($"flash:{mode}");
+            SetActive("lifeblood_flash", mode != HollowKnightFlashMode.Vanilla, $"flash:{mode}");
         }
 
         public void SetDamageMode(HollowKnightDamageMode mode)
@@ -647,8 +661,37 @@ public sealed class HollowKnightTweakAdapterTests
             ActiveGameplay.Remove("unlimited_soul");
         }
 
+        public void OpenSkins() => Record("skins:open");
+        public void SetFastTransitions(bool enabled) => SetActive("fast_transitions", enabled, $"fast-transitions:{enabled}");
+        public void SetAutoMap(bool enabled) => SetActive("auto_map", enabled, $"auto-map:{enabled}");
+        public void SetInnateCompass(bool enabled) => SetActive("innate_compass", enabled, $"compass:{enabled}");
+        public void OpenBenchTeleport() => Record("bench-teleport:open");
+        public void SetSecretRadar(bool enabled) => SetActive("secret_radar", enabled, $"secret-radar:{enabled}");
+        public void SetDamageCap(bool enabled) => SetActive("damage_cap", enabled, $"damage-cap:{enabled}");
+        public void SetEnemyHealthBars(bool enabled) => SetActive("health_bars", enabled, $"health-bars:{enabled}");
+        public void SetDamageNumbers(bool enabled) => SetActive("damage_numbers", enabled, $"damage-numbers:{enabled}");
+        public void SetBossRetry(bool enabled) => SetActive("boss_retry", enabled, $"boss-retry:{enabled}");
+        public void SetEquipAnywhere(bool enabled) => SetActive("equip_anywhere", enabled, $"equip-anywhere:{enabled}");
+        public void SetCharmCostsFree(bool enabled) => SetActive("charm_costs", enabled, $"charm-costs-free:{enabled}");
+        public void SetUnlimitedNotches(bool enabled) => SetActive("unlimited_notches", enabled, $"unlimited-notches:{enabled}");
+        public void SetStateSlot(int slot) => SetActive("state_slot", slot != 1, $"state-slot:{slot}");
+        public void SaveState() => Record("state:save");
+        public void LoadState() => Record("state:load");
+        public void DeleteState() => Record("state:delete");
+        public void SetGeoMagnet(bool enabled) => SetActive("geo_magnet", enabled, $"geo-magnet:{enabled}");
+        public void SetKeepGeoOnDeath(bool enabled) => SetActive("keep_geo_on_death", enabled, $"keep-geo:{enabled}");
+        public void SetJournalOneKill(bool enabled) => SetActive("journal_one_kill", enabled, $"journal-one-kill:{enabled}");
+        public void SetGeoMultiplier(int multiplier) => SetActive("geo_multiplier", multiplier != 1, $"geo-multiplier:{multiplier}");
+
         public void TickGameplay()
         {
+        }
+
+        private void SetActive(string id, bool enabled, string call)
+        {
+            Record(call);
+            if (enabled) ActiveGameplay.Add(id);
+            else ActiveGameplay.Remove(id);
         }
 
         private void Record(string call)

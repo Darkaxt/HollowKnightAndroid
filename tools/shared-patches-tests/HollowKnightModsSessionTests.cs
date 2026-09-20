@@ -343,6 +343,28 @@ public sealed class HollowKnightModsSessionTests
 
         public void RestoreUnlimitedSoul() => Calls.Add("soul:restore");
 
+        public void OpenSkins() => Calls.Add("skins:open");
+        public void SetFastTransitions(bool enabled) => Calls.Add($"fast-transitions:{enabled}");
+        public void SetAutoMap(bool enabled) => Calls.Add($"auto-map:{enabled}");
+        public void SetInnateCompass(bool enabled) => Calls.Add($"compass:{enabled}");
+        public void OpenBenchTeleport() => Calls.Add("bench-teleport:open");
+        public void SetSecretRadar(bool enabled) => Calls.Add($"secret-radar:{enabled}");
+        public void SetDamageCap(bool enabled) => Calls.Add($"damage-cap:{enabled}");
+        public void SetEnemyHealthBars(bool enabled) => Calls.Add($"health-bars:{enabled}");
+        public void SetDamageNumbers(bool enabled) => Calls.Add($"damage-numbers:{enabled}");
+        public void SetBossRetry(bool enabled) => Calls.Add($"boss-retry:{enabled}");
+        public void SetEquipAnywhere(bool enabled) => Calls.Add($"equip-anywhere:{enabled}");
+        public void SetCharmCostsFree(bool enabled) => Calls.Add($"charm-costs-free:{enabled}");
+        public void SetUnlimitedNotches(bool enabled) => Calls.Add($"unlimited-notches:{enabled}");
+        public void SetStateSlot(int slot) => Calls.Add($"state-slot:{slot}");
+        public void SaveState() => Calls.Add("state:save");
+        public void LoadState() => Calls.Add("state:load");
+        public void DeleteState() => Calls.Add("state:delete");
+        public void SetGeoMagnet(bool enabled) => Calls.Add($"geo-magnet:{enabled}");
+        public void SetKeepGeoOnDeath(bool enabled) => Calls.Add($"keep-geo:{enabled}");
+        public void SetJournalOneKill(bool enabled) => Calls.Add($"journal-one-kill:{enabled}");
+        public void SetGeoMultiplier(int multiplier) => Calls.Add($"geo-multiplier:{multiplier}");
+
         public void TickGameplay()
         {
         }

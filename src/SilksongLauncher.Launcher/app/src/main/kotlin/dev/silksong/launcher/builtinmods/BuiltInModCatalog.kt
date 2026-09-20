@@ -24,45 +24,43 @@ data class BuiltInModDescriptor(
 
 /** Android mirror of the production typed adapters; Python contracts prevent drift. */
 object BuiltInModCatalog {
-    private const val HOLLOW_KNIGHT_MISSING =
-        "No Hollow Knight adapter operation is connected for this required row yet."
     private const val SILKSONG_MISSING =
         "No Silksong adapter operation is connected for this required row yet."
 
     val hollowKnight = listOf(
-        unavailable("skins", "skins", BuiltInModControlKind.Route, "GENERAL", "SKINS", "Open the installed skin library.", "open", listOf("open"), HOLLOW_KNIGHT_MISSING),
+        available("skins", "skins", BuiltInModControlKind.Route, "GENERAL", "SKINS", "Open the installed skin library.", "open", listOf("open")),
         available("companion_backdrop", "black_background", "GENERAL", "BLACK BACKGROUND", "Use a black lower-screen background instead of the dimmed scenery wash.", "dimmed", listOf("dimmed", "black")),
 
         available("run_speed", "run_speed", "WORLD", "RUN SPEED", "Choose the Knight's normal, +25%, or +50% movement pace.", "vanilla", listOf("vanilla", "plus_25", "plus_50")),
-        unavailable("fast_transitions", "fast_transitions", BuiltInModControlKind.Choice, "WORLD", "FAST TRANSITIONS", "Shorten supported scene transitions.", "off", listOf("off", "on"), HOLLOW_KNIGHT_MISSING),
-        unavailable("auto_map", "auto_map", BuiltInModControlKind.Choice, "WORLD", "AUTO MAP", "Reveal visited rooms on the map automatically.", "off", listOf("off", "on"), HOLLOW_KNIGHT_MISSING),
-        unavailable("innate_compass", "innate_compass", BuiltInModControlKind.Choice, "WORLD", "INNATE COMPASS", "Show the Knight on the map without requiring Wayward Compass.", "off", listOf("off", "on"), HOLLOW_KNIGHT_MISSING),
-        unavailable("bench_teleport", "bench_teleport", BuiltInModControlKind.Route, "WORLD", "BENCH TELEPORT", "Open the recorded-bench destination list.", "open", listOf("open"), HOLLOW_KNIGHT_MISSING),
-        unavailable("secret_radar", "secret_radar", BuiltInModControlKind.Choice, "WORLD", "SECRET RADAR", "Signal nearby secrets without changing progression.", "off", listOf("off", "on"), HOLLOW_KNIGHT_MISSING),
+        available("fast_transitions", "fast_transitions", BuiltInModControlKind.Choice, "WORLD", "FAST TRANSITIONS", "Shorten supported scene transitions.", "off", listOf("off", "on")),
+        available("auto_map", "auto_map", BuiltInModControlKind.Choice, "WORLD", "AUTO MAP", "Reveal visited rooms on the map automatically.", "off", listOf("off", "on")),
+        available("innate_compass", "innate_compass", BuiltInModControlKind.Choice, "WORLD", "INNATE COMPASS", "Show the Knight on the map without requiring Wayward Compass.", "off", listOf("off", "on")),
+        available("bench_teleport", "bench_teleport", BuiltInModControlKind.Route, "WORLD", "BENCH TELEPORT", "Open the recorded-bench destination list.", "open", listOf("open")),
+        available("secret_radar", "secret_radar", BuiltInModControlKind.Choice, "WORLD", "SECRET RADAR", "Signal nearby secrets without changing progression.", "off", listOf("off", "on")),
 
         available("nail_damage", "nail_damage", "COMBAT", "NAIL DAMAGE", "Multiply nail damage while preserving smith upgrades.", "x1", listOf("x1", "x2", "x3", "x5")),
         available("damage_received", "damage_taken", "COMBAT", "DAMAGE TAKEN", "Choose normal damage, keep masks, or ignore damage entirely.", "vanilla", listOf("vanilla", "no_mask_loss", "invincible")),
-        unavailable("damage_cap", "damage_cap", BuiltInModControlKind.Choice, "COMBAT", "DAMAGE CAP", "Limit damage received from a single hit.", "off", listOf("off", "on"), HOLLOW_KNIGHT_MISSING),
+        available("damage_cap", "damage_cap", BuiltInModControlKind.Choice, "COMBAT", "DAMAGE CAP", "Limit damage received from a single hit.", "off", listOf("off", "on")),
         available("one_hit_kills", "one_hit_kills", "COMBAT", "ONE-HIT KILLS", "Defeat regular enemies in one hit while excluding boss-scale targets.", "off", listOf("off", "on")),
         available("unlimited_soul", "unlimited_soul", "COMBAT", "UNLIMITED SOUL", "Keep Soul available through the game's normal refill path.", "off", listOf("off", "on")),
 
-        unavailable("health_bars", "enemy_health_bars", BuiltInModControlKind.Choice, "ENCOUNTERS", "ENEMY HEALTH BARS", "Show health bars for eligible enemies and bosses.", "off", listOf("off", "on"), HOLLOW_KNIGHT_MISSING),
-        unavailable("damage_numbers", "damage_numbers", BuiltInModControlKind.Choice, "ENCOUNTERS", "DAMAGE NUMBERS", "Show the damage dealt by supported attacks.", "off", listOf("off", "on"), HOLLOW_KNIGHT_MISSING),
-        unavailable("boss_retry", "boss_retry", BuiltInModControlKind.Choice, "ENCOUNTERS", "BOSS RETRY", "Retry supported boss encounters from a safe checkpoint.", "off", listOf("off", "on"), HOLLOW_KNIGHT_MISSING),
+        available("health_bars", "enemy_health_bars", BuiltInModControlKind.Choice, "ENCOUNTERS", "ENEMY HEALTH BARS", "Show health bars for eligible enemies and bosses.", "off", listOf("off", "on")),
+        available("damage_numbers", "damage_numbers", BuiltInModControlKind.Choice, "ENCOUNTERS", "DAMAGE NUMBERS", "Show the damage dealt by supported attacks.", "off", listOf("off", "on")),
+        available("boss_retry", "boss_retry", BuiltInModControlKind.Choice, "ENCOUNTERS", "BOSS RETRY", "Retry supported boss encounters from a safe checkpoint.", "off", listOf("off", "on")),
 
-        unavailable("equip_anywhere", "equip_anywhere", BuiltInModControlKind.Choice, "CHARMS", "EQUIP ANYWHERE", "Change charms away from benches through legal game actions.", "off", listOf("off", "on"), HOLLOW_KNIGHT_MISSING),
-        unavailable("charm_costs", "charm_costs", BuiltInModControlKind.Choice, "CHARMS", "CHARM COSTS", "Remove charm notch costs while enabled.", "vanilla", listOf("vanilla", "free"), HOLLOW_KNIGHT_MISSING),
-        unavailable("unlimited_notches", "unlimited_notches", BuiltInModControlKind.Choice, "CHARMS", "UNLIMITED NOTCHES", "Equip charms without the normal notch limit.", "off", listOf("off", "on"), HOLLOW_KNIGHT_MISSING),
+        available("equip_anywhere", "equip_anywhere", BuiltInModControlKind.Choice, "CHARMS", "EQUIP ANYWHERE", "Change charms away from benches through legal game actions.", "off", listOf("off", "on")),
+        available("charm_costs", "charm_costs", BuiltInModControlKind.Choice, "CHARMS", "CHARM COSTS", "Remove charm notch costs while enabled.", "vanilla", listOf("vanilla", "free")),
+        available("unlimited_notches", "unlimited_notches", BuiltInModControlKind.Choice, "CHARMS", "UNLIMITED NOTCHES", "Equip charms without the normal notch limit.", "off", listOf("off", "on")),
 
-        unavailable("state_slot", "state_slot", BuiltInModControlKind.Choice, "SAVE STATES", "SLOT", "Choose the save-state slot used by the commands below.", "1", listOf("1", "2", "3", "4", "5"), HOLLOW_KNIGHT_MISSING),
-        unavailable("save_to_slot", "save_to_slot", BuiltInModControlKind.Command, "SAVE STATES", "SAVE TO SLOT", "Capture the current state in the selected slot.", "run", listOf("run"), HOLLOW_KNIGHT_MISSING),
-        unavailable("load_from_slot", "load_from_slot", BuiltInModControlKind.Command, "SAVE STATES", "LOAD FROM SLOT", "Restore the state stored in the selected slot.", "run", listOf("run"), HOLLOW_KNIGHT_MISSING),
-        unavailable("delete_slot", "delete_slot", BuiltInModControlKind.Command, "SAVE STATES", "DELETE SLOT", "Delete the state stored in the selected slot.", "run", listOf("run"), HOLLOW_KNIGHT_MISSING),
+        available("state_slot", "state_slot", BuiltInModControlKind.Choice, "SAVE STATES", "SLOT", "Choose the save-state slot used by the commands below.", "1", listOf("1", "2", "3", "4", "5")),
+        available("save_to_slot", "save_to_slot", BuiltInModControlKind.Command, "SAVE STATES", "SAVE TO SLOT", "Capture the current state in the selected slot.", "run", listOf("run")),
+        available("load_from_slot", "load_from_slot", BuiltInModControlKind.Command, "SAVE STATES", "LOAD FROM SLOT", "Restore the state stored in the selected slot.", "run", listOf("run")),
+        available("delete_slot", "delete_slot", BuiltInModControlKind.Command, "SAVE STATES", "DELETE SLOT", "Delete the state stored in the selected slot.", "run", listOf("run")),
 
-        unavailable("geo_magnet", "geo_magnet", BuiltInModControlKind.Choice, "ECONOMY", "GEO MAGNET", "Collect nearby Geo without requiring Gathering Swarm.", "off", listOf("off", "on"), HOLLOW_KNIGHT_MISSING),
-        unavailable("keep_geo_on_death", "keep_geo_on_death", BuiltInModControlKind.Choice, "ECONOMY", "KEEP GEO ON DEATH", "Keep Geo through death without duplicate Shade awards.", "off", listOf("off", "on"), HOLLOW_KNIGHT_MISSING),
-        unavailable("journal_one_kill", "journal_one_kill", BuiltInModControlKind.Choice, "ECONOMY", "JOURNAL IN ONE KILL", "Complete eligible Hunter's Journal entries after one kill.", "off", listOf("off", "on"), HOLLOW_KNIGHT_MISSING),
-        unavailable("geo_multiplier", "geo_multiplier", BuiltInModControlKind.Choice, "ECONOMY", "GEO MULTIPLIER", "Multiply supported Geo awards.", "x1", listOf("x1", "x2", "x3", "x5"), HOLLOW_KNIGHT_MISSING),
+        available("geo_magnet", "geo_magnet", BuiltInModControlKind.Choice, "ECONOMY", "GEO MAGNET", "Collect nearby Geo without requiring Gathering Swarm.", "off", listOf("off", "on")),
+        available("keep_geo_on_death", "keep_geo_on_death", BuiltInModControlKind.Choice, "ECONOMY", "KEEP GEO ON DEATH", "Keep Geo through death without duplicate Shade awards.", "off", listOf("off", "on")),
+        available("journal_one_kill", "journal_one_kill", BuiltInModControlKind.Choice, "ECONOMY", "JOURNAL IN ONE KILL", "Complete eligible Hunter's Journal entries after one kill.", "off", listOf("off", "on")),
+        available("geo_multiplier", "geo_multiplier", BuiltInModControlKind.Choice, "ECONOMY", "GEO MULTIPLIER", "Multiply supported Geo awards.", "x1", listOf("x1", "x2", "x3", "x5")),
 
         available("lifeblood_flash", "lifeblood_flash", "PRESENTATION", "LIFEBLOOD FLASH", "Use the original flash, a softened flash, or no flash.", "vanilla", listOf("vanilla", "soft", "off")),
     )
@@ -123,6 +121,20 @@ object BuiltInModCatalog {
         values: List<String>,
     ) = BuiltInModDescriptor(
         id, contractId, BuiltInModControlKind.Choice, group, title, description,
+        defaultValue, values, isAvailable = true,
+    )
+
+    private fun available(
+        id: String,
+        contractId: String,
+        controlKind: BuiltInModControlKind,
+        group: String,
+        title: String,
+        description: String,
+        defaultValue: String,
+        values: List<String>,
+    ) = BuiltInModDescriptor(
+        id, contractId, controlKind, group, title, description,
         defaultValue, values, isAvailable = true,
     )
 

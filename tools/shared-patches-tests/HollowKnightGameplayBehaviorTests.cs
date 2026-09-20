@@ -252,6 +252,38 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
         Assert.Equal(10, player.MPCharge);
     }
 
+    [Fact]
+    public void EventHooksApplyDamageCapGeoMultiplierAndJournalOneKillExactly()
+    {
+        int damage = 4;
+        HollowKnightGameplayHooks.DamageCapEnabled = true;
+        HollowKnightGameplayHooks.BeforeTakeDamage(ref damage);
+        Assert.Equal(1, damage);
+
+        int geo = 7;
+        HollowKnightGameplayHooks.GeoMultiplier = 3;
+        HollowKnightGameplayHooks.BeforeAddGeo(ref geo);
+        Assert.Equal(21, geo);
+
+        var player = new PlayerData();
+        player.SetBool("killedCrawler", true);
+        int remaining = 4;
+        HollowKnightGameplayHooks.JournalOneKillEnabled = true;
+        HollowKnightGameplayHooks.BeforeJournalSetInt(player, "killsCrawler", ref remaining);
+        Assert.Equal(0, remaining);
+    }
+
+    [Fact]
+    public void DeathHookArmsOnlyExplicitKeepGeoHandling()
+    {
+        HollowKnightGameplayHooks.KeepGeoEnabled = true;
+        HollowKnightGameplayHooks.BeforeDeath();
+        Assert.True(HollowKnightGameplayHooks.DeathObserved);
+
+        HollowKnightGameplayHooks.CompleteDeathHandling();
+        Assert.False(HollowKnightGameplayHooks.DeathObserved);
+    }
+
     public void Dispose()
     {
         ResetGame();
@@ -264,6 +296,7 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
         GameManager.UnsafeInstance = null;
         CheatManager.IsInstaKillEnabled = false;
         HollowKnightOneHitDamagePatch.SetEnabled(false);
+        HollowKnightGameplayHooks.Reset();
         UnityEngine.Time.unscaledTime = 0f;
         PlayMakerFSM.Broadcasts.Clear();
     }

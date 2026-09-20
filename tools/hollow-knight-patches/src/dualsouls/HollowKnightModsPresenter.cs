@@ -440,6 +440,14 @@ public partial class HKDualScreen
                world.y >= fpsBounds.min.y && world.y <= fpsBounds.max.y;
     }
 
+    public static void OpenBenchTeleportRoute()
+    {
+        if (activeInstance == null)
+            throw new InvalidOperationException("The Hollow Knight companion is not ready.");
+        activeInstance.tab.tap = COMP_MAP;
+        activeInstance.CloseTweaksPane();
+    }
+
     void ToggleTweaksPane()
     {
         HollowKnightModsSession session;
@@ -1059,7 +1067,7 @@ public partial class HKDualScreen
                 color = !descriptor.IsAvailable
                     ? (selected ? new Color(1f, 0.72f, 0.38f, 1f)
                                 : new Color(0.64f, 0.50f, 0.36f, 1f))
-                    : !masterEnabled
+                    : !masterEnabled && descriptor.ControlKind == TweakControlKind.Choice
                         ? (selected ? new Color(0.78f, 0.78f, 0.78f, 1f)
                                     : new Color(0.54f, 0.54f, 0.54f, 1f))
                         : (selected ? new Color(1f, 1f, 0.82f, 1f)
@@ -1111,7 +1119,10 @@ public partial class HKDualScreen
             if (!selectedRow.IsAvailable)
                 detail += "\n\nCurrently unavailable: " + selectedRow.UnavailableReason;
             else
-                detail += "\n\nTap the row again to change.";
+                detail += selectedRow.ControlKind == TweakControlKind.Choice
+                    ? "\n\nTap the row again to change."
+                    : "\n\nTap the row again to " +
+                      (selectedRow.ControlKind == TweakControlKind.Route ? "open." : "run.");
         }
         else
         {
@@ -1124,7 +1135,7 @@ public partial class HKDualScreen
             !selectedRow.IsAvailable)
             status = "Currently unavailable: " + selectedRow.UnavailableReason;
         else if (string.IsNullOrEmpty(status) && !masterEnabled &&
-                 selectedEntry.Kind == TweakPresenterListEntryKind.Row)
+                 selectedRow != null && selectedRow.ControlKind == TweakControlKind.Choice)
             status = "MASTER IS OFF. ENABLE IT BEFORE CHANGING AVAILABLE MODS.";
         if (string.IsNullOrEmpty(status))
             status = "GEAR OR TAB: CLOSE";
@@ -1292,7 +1303,7 @@ public partial class HKDualScreen
             menu.MoveGroup(entry.GroupIndex - menu.SelectedGroupIndex);
             menu.MoveRow(entry.RowIndex - menu.SelectedRowIndex);
             if (menu.Selected != null && menu.Selected.IsAvailable)
-                menu.CycleSelected();
+                menu.ActivateSelected();
         }
     }
 

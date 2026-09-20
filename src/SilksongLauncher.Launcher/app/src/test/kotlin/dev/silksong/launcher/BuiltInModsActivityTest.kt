@@ -11,6 +11,7 @@ import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import dev.silksong.launcher.profiles.GameProfiles
 import dev.silksong.launcher.profiles.SelectedGameStore
+import dev.silksong.launcher.skins.ui.SkinsActivity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -39,6 +40,31 @@ class BuiltInModsActivityTest {
         assertEquals(ModsActivity::class.java.name, shadowOf(activity).nextStartedActivity.component?.className)
     }
 
+    @Test fun `skins row opens the launcher package manager`() {
+        val activity = Robolectric.buildActivity(BuiltInModsActivity::class.java).setup().get()
+
+        modRow(activity, "skins").performClick()
+
+        assertEquals(SkinsActivity::class.java.name, shadowOf(activity).nextStartedActivity.component?.className)
+    }
+
+    @Test fun `in-game operations are labeled and never cycled as values`() {
+        val activity = Robolectric.buildActivity(BuiltInModsActivity::class.java).setup().get()
+        enableAndReset(activity)
+        val row = modRow(activity, "save_to_slot")
+
+        assertTrue(collectText(row).contains("IN GAME"))
+        row.performClick()
+        row.performClick()
+
+        assertTrue(
+            activity.findViewById<TextView>(R.id.txt_mod_status).text.contains(
+                "in-game Mods pane",
+                ignoreCase = true,
+            ),
+        )
+    }
+
     @Test fun `secondary manager labels its contents as plugins`() {
         val activity = Robolectric.buildActivity(ModsActivity::class.java).setup().get()
         val text = collectText(activity.findViewById(android.R.id.content))
@@ -61,7 +87,7 @@ class BuiltInModsActivityTest {
             listOf("GENERAL", "WORLD", "COMBAT", "ENCOUNTERS", "CHARMS", "SAVE STATES", "ECONOMY", "PRESENTATION"),
             groupLabels,
         )
-        assertTrue(collectText(list).contains("UNAVAILABLE"))
+        assertFalse(collectText(list).contains("UNAVAILABLE"))
         assertEquals("MASTER · OFF", activity.findViewById<Button>(R.id.btn_mods_master).text.toString())
         assertTrue(activity.findViewById<TextView>(R.id.txt_mod_detail).text.isNotBlank())
         assertTrue(activity.findViewById<Button>(R.id.btn_reset_mods).text.toString().contains("RESET ALL MODS"))

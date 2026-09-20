@@ -7,6 +7,8 @@ internal static class HkStageHooks
     internal static void ClearPresentationOverrides() { }
     internal static void SetBackdropOverride(bool black) { }
     internal static void SetFlashOverride(HollowKnightFlashMode mode) { }
+    internal static void OpenSkins() { }
+    internal static void OpenBenchTeleport() { }
 }
 
 public sealed class PlayerData
@@ -18,6 +20,14 @@ public sealed class PlayerData
     public int nailDamage;
     public int nailSmithUpgrades;
     public int MPCharge;
+    public int geo;
+    public int geoPool;
+    readonly Dictionary<string, bool> bools = new Dictionary<string, bool>();
+    readonly Dictionary<string, int> ints = new Dictionary<string, int>();
+    public bool GetBool(string name) => bools.TryGetValue(name, out bool value) && value;
+    public void SetBool(string name, bool value) => bools[name] = value;
+    public int GetInt(string name) => ints.TryGetValue(name, out int value) ? value : 0;
+    public void SetInt(string name, int value) => ints[name] = value;
 }
 
 public sealed class HeroController : UnityEngine.Object
