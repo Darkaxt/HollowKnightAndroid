@@ -101,7 +101,13 @@ The product has exactly two Mods-related surfaces:
    controller navigation, stable focus after confirm or value changes,
    left/right value changes, command and route execution, reset, and native
    Back/Cancel behavior. Grouping and scrolling may organize the catalog, but
-   must not omit rows that exist in the shared Mods model.
+   must not omit rows that exist in the shared Mods model. The category selector
+   is shown at the upper left as `< CATEGORY >`, with its `n/N` category position
+   separately at the upper right. Settings use aligned name and value columns,
+   plus a description for the focused setting; they must not appear as centered
+   sentence-like rows. `STATUS READY` and similar implementation diagnostics are
+   not product UI. The separate Options → Skins screen is the only in-game route
+   to skin configuration, so Mods must not contain a duplicate `SKINS OPEN` row.
 2. The launcher skin-package screen for installing and managing Custom Knight
    packs. This remains separate because package import and management happen
    outside gameplay.

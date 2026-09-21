@@ -26,6 +26,7 @@ namespace DualSouls.Mods.Silksong
         const float EntryY = -575f;
         const float FirstRowY = -25f;
         const float RowStep = 78f;
+        const float ButtonTextHorizontalInset = 80f;
 
         internal enum NativeMenuRoute { Mods, Skins }
         enum ButtonRole { Group, Master, Row, Reset, Back }
@@ -61,6 +62,7 @@ namespace DualSouls.Mods.Silksong
             new List<SilksongNativeModsButton>();
         readonly List<GameObject> _buttonRoots = new List<GameObject>();
         readonly List<TmpText> _labels = new List<TmpText>();
+        readonly List<TmpText> _valueLabels = new List<TmpText>();
         readonly List<SilksongNativeSkinButton> _skinButtons =
             new List<SilksongNativeSkinButton>();
         readonly List<GameObject> _skinButtonRoots = new List<GameObject>();
@@ -80,12 +82,12 @@ namespace DualSouls.Mods.Silksong
         SilksongNativeModsEntryButton _entryButton;
         SilksongNativeModsEntryButton _skinsEntryButton;
         TmpText _title;
-        TmpText _status;
+        TmpText _description;
         TmpText _skinsTitle;
-        TmpText _skinsStatus;
-        GameObject _statusRoot;
-        GameObject _skinsStatusRoot;
-        string _skinStatus = "";
+        TmpText _skinsDescription;
+        GameObject _descriptionRoot;
+        GameObject _skinsDescriptionRoot;
+        string _skinError = "";
         MenuButton _gameButton;
         MenuButton _audioButton;
         MenuButton _videoButton;
@@ -93,6 +95,7 @@ namespace DualSouls.Mods.Silksong
         MenuButton _keyboardButton;
         Coroutine _transitionCoroutine;
         NativeMenuRoute _openRoute;
+        ButtonRole _focusedRole = ButtonRole.Group;
         bool _nativeOpen;
         bool _topologyWarningLogged;
         float _nextBindAttempt;
@@ -303,11 +306,11 @@ namespace DualSouls.Mods.Silksong
                 UnityObject.Destroy(child);
             }
 
-            CreateButton(content, rowTemplate, ButtonRole.Group, 0, "GROUP");
+            CreateButton(content, rowTemplate, ButtonRole.Group, 0, "CATEGORY");
             CreateButton(content, rowTemplate, ButtonRole.Master, 1, "MASTER MODS");
             for (int i = 0; i < VisibleRows; i++)
                 CreateButton(content, rowTemplate, ButtonRole.Row, i + 2, "MOD");
-            CreateStatus(content, rowTemplate, 7);
+            CreateDescription(content, rowTemplate, 7);
             CreateButton(content, rowTemplate, ButtonRole.Reset, 8, "RESET ALL MODS");
             CreateButton(content, rowTemplate, ButtonRole.Back, 9, "BACK");
 
@@ -346,7 +349,7 @@ namespace DualSouls.Mods.Silksong
             }
             for (int index = 0; index < VisibleRows + 3; index++)
                 CreateSkinButton(content, rowTemplate, index);
-            CreateSkinStatus(content, rowTemplate, VisibleRows + 3);
+            CreateSkinDescription(content, rowTemplate, VisibleRows + 3);
             DisableForeignDrivers(root);
             _skinsScreen.defaultHighlight = _skinButtons[0];
             _skinsTitle.text = "SKINS";
@@ -379,20 +382,20 @@ namespace DualSouls.Mods.Silksong
             _skinLabels.Add(SetButtonText(wrapper, "SKIN"));
         }
 
-        void CreateStatus(Transform parent, GameObject template, int visualIndex)
+        void CreateDescription(Transform parent, GameObject template, int visualIndex)
         {
-            _statusRoot = CreateStatusRow(parent, template, "ModsStatus", visualIndex,
-                                          out _status);
+            _descriptionRoot = CreateDescriptionRow(
+                parent, template, "ModsDescription", visualIndex, out _description);
         }
 
-        void CreateSkinStatus(Transform parent, GameObject template, int visualIndex)
+        void CreateSkinDescription(Transform parent, GameObject template, int visualIndex)
         {
-            _skinsStatusRoot = CreateStatusRow(parent, template, "SkinsStatus", visualIndex,
-                                               out _skinsStatus);
+            _skinsDescriptionRoot = CreateDescriptionRow(
+                parent, template, "SkinsDescription", visualIndex, out _skinsDescription);
         }
 
-        static GameObject CreateStatusRow(Transform parent, GameObject template, string name,
-                                          int visualIndex, out TmpText label)
+        static GameObject CreateDescriptionRow(Transform parent, GameObject template, string name,
+                                               int visualIndex, out TmpText label)
         {
             GameObject wrapper = Instantiate(template, parent, false);
             wrapper.name = name;
@@ -402,12 +405,12 @@ namespace DualSouls.Mods.Silksong
                     FirstRowY - RowStep * visualIndex);
             MenuButton source = wrapper.GetComponentInChildren<MenuButton>(true);
             if (source == null)
-                throw new InvalidOperationException("Native status row has no MenuButton.");
+                throw new InvalidOperationException("Native description row has no MenuButton.");
             source.interactable = false;
             source.enabled = false;
             source.navigation = new Navigation { mode = Navigation.Mode.None };
             DisableForeignDrivers(wrapper);
-            label = SetButtonText(wrapper, "STATUS     READY");
+            label = SetButtonText(wrapper, "Choose a category.");
             return wrapper;
         }
 
@@ -437,9 +440,19 @@ namespace DualSouls.Mods.Silksong
                 buttonRect.sizeDelta = new Vector2(buttonRect.sizeDelta.x, 70f);
             DisableForeignDrivers(wrapper);
             TmpText label = SetButtonText(wrapper, initialText);
+            TmpText valueLabel = null;
+            if (role == ButtonRole.Group || role == ButtonRole.Master ||
+                role == ButtonRole.Row)
+            {
+                valueLabel = CloneColumnText(label, "ModsValue");
+                ConfigureColumn(label, rightAligned: false);
+                ConfigureColumn(valueLabel, rightAligned: true);
+                valueLabel.text = "";
+            }
             _buttonRoots.Add(wrapper);
             _buttons.Add(button);
             _labels.Add(label);
+            _valueLabels.Add(valueLabel);
         }
 
         static void CopySelectable(MenuButton source, MenuSelectable target)
@@ -465,6 +478,27 @@ namespace DualSouls.Mods.Silksong
                 throw new InvalidOperationException("Native button text is unavailable.");
             text.text = value;
             return text;
+        }
+
+        static TmpText CloneColumnText(TmpText source, string name)
+        {
+            GameObject clone = Instantiate(source.gameObject, source.transform.parent, false);
+            clone.name = name;
+            TmpText text = clone.GetComponent<TmpText>();
+            if (text == null)
+                throw new InvalidOperationException("Cloned native text is unavailable.");
+            return text;
+        }
+
+        static void ConfigureColumn(TmpText text, bool rightAligned)
+        {
+            RectTransform rect = text.transform as RectTransform;
+            if (rect != null)
+                rect.sizeDelta = new Vector2(-ButtonTextHorizontalInset, rect.sizeDelta.y);
+            text.alignment = rightAligned
+                ? TMProOld.TextAlignmentOptions.Right
+                : TMProOld.TextAlignmentOptions.Left;
+            text.enableWordWrapping = false;
         }
 
         static Transform FindDescendant(Transform parent, string exactName)
@@ -650,9 +684,11 @@ namespace DualSouls.Mods.Silksong
 
         internal void Select(SilksongNativeModsButton button)
         {
-            if (button == null || (ButtonRole)button.Role != ButtonRole.Row ||
-                button.DataIndex < 0 || button.DataIndex >= _menu.CurrentRows.Count) return;
-            _menu.MoveRow(button.DataIndex - _menu.SelectedRowIndex);
+            if (button == null) return;
+            _focusedRole = (ButtonRole)button.Role;
+            if (_focusedRole == ButtonRole.Row && button.DataIndex >= 0 &&
+                button.DataIndex < _menu.CurrentRows.Count)
+                _menu.MoveRow(button.DataIndex - _menu.SelectedRowIndex);
             Paint();
         }
 
@@ -743,16 +779,19 @@ namespace DualSouls.Mods.Silksong
             int index = role == ButtonRole.Group ? 0 :
                         role == ButtonRole.Master ? 1 :
                         role == ButtonRole.Reset ? 7 : 8;
+            _focusedRole = role;
             _buttons[index].Select();
+            Paint();
         }
 
         void Paint()
         {
-            if (_menu == null || _labels.Count != 9 || _title == null || _status == null) return;
-            _labels[0].text = "GROUP  <  " + Friendly(_menu.Groups[_menu.SelectedGroupIndex]) +
-                              "  >  " + (_menu.SelectedGroupIndex + 1) + "/" + _menu.Groups.Count;
-            _labels[1].text = "MASTER MODS     " +
-                              (_session.Controller.MasterEnabled ? "ON" : "OFF");
+            if (_menu == null || _labels.Count != 9 || _valueLabels.Count != 9 ||
+                _title == null || _description == null) return;
+            _labels[0].text = "< " + Friendly(_menu.Groups[_menu.SelectedGroupIndex]) + " >";
+            _valueLabels[0].text = (_menu.SelectedGroupIndex + 1) + "/" + _menu.Groups.Count;
+            _labels[1].text = "MASTER MODS";
+            _valueLabels[1].text = _session.Controller.MasterEnabled ? "ON" : "OFF";
 
             IReadOnlyList<TweakDescriptor> rows = _menu.CurrentRows;
             for (int slot = 0; slot < VisibleRows; slot++)
@@ -771,15 +810,35 @@ namespace DualSouls.Mods.Silksong
                 else if (descriptor.ControlKind == TweakControlKind.Command) value = "RUN";
                 else if (descriptor.ControlKind == TweakControlKind.Route) value = "OPEN";
                 else value = Friendly(_session.Controller.Value(descriptor.Id));
-                _labels[slot + 2].text = descriptor.Title.ToUpperInvariant() + "     " + value;
+                _labels[slot + 2].text = descriptor.Title.ToUpperInvariant();
+                _valueLabels[slot + 2].text = value;
             }
 
             _labels[7].text = "RESET ALL MODS";
             _labels[8].text = "BACK";
-            string status = _menu.Message;
             _title.text = "MODS";
-            _status.text = "STATUS     " +
-                (string.IsNullOrEmpty(status) ? "READY" : status.ToUpperInvariant());
+            _description.text = _menu.MessageIsError
+                ? _menu.Message.ToUpperInvariant()
+                : FocusDescription();
+        }
+
+        string FocusDescription()
+        {
+            if (_focusedRole == ButtonRole.Group)
+                return "Choose a mod category.";
+            if (_focusedRole == ButtonRole.Master)
+                return "Enable or disable all built-in mods.";
+            if (_focusedRole == ButtonRole.Reset)
+                return "Restore every mod setting to its default.";
+            if (_focusedRole == ButtonRole.Back)
+                return "Return to Options.";
+
+            TweakDescriptor descriptor = _menu.Selected;
+            if (descriptor == null) return "Choose a mod setting.";
+            string description = descriptor.Description;
+            if (!descriptor.IsAvailable && !string.IsNullOrEmpty(descriptor.UnavailableReason))
+                description += " Unavailable: " + descriptor.UnavailableReason;
+            return description;
         }
 
         static string Friendly(string value)
@@ -863,16 +922,16 @@ namespace DualSouls.Mods.Silksong
             }
             catch (Exception error)
             {
-                _skinStatus = "CHANGE FAILED · " + error.GetBaseException().Message;
+                _skinError = "CHANGE FAILED · " + error.GetBaseException().Message;
             }
             if (accepted)
             {
                 SilksongModsRuntime runtime = SilksongModsRuntime.Current;
                 if (runtime != null) runtime.InvalidateSkinLibrary();
-                _skinStatus = "";
+                _skinError = "";
             }
-            else if (string.IsNullOrEmpty(_skinStatus))
-                _skinStatus = "CHANGE NOT APPLIED · REFRESHED";
+            else if (string.IsNullOrEmpty(_skinError))
+                _skinError = "CHANGE NOT APPLIED · REFRESHED";
             // A false result is stale/busy authority: repaint only from a new checked snapshot.
             RefreshSkinMenu();
             PaintSkins();
@@ -907,23 +966,24 @@ namespace DualSouls.Mods.Silksong
                     wire.eligiblePackIds ?? Array.Empty<string>(), packs);
                 if (_skinMenu == null) _skinMenu = new NativeSkinMenuModel(snapshot, VisibleRows);
                 else _skinMenu.Replace(snapshot);
-                if (_skinStatus.StartsWith("SKINS UNAVAILABLE", StringComparison.Ordinal))
-                    _skinStatus = "";
+                if (_skinError.StartsWith("SKINS UNAVAILABLE", StringComparison.Ordinal))
+                    _skinError = "";
             }
             catch (Exception error)
             {
-                _skinStatus = "SKINS UNAVAILABLE · " + error.GetBaseException().Message;
-                Debug.LogWarning("[Silksong Skins] " + _skinStatus);
+                _skinError = "SKINS UNAVAILABLE · " + error.GetBaseException().Message;
+                Debug.LogWarning("[Silksong Skins] " + _skinError);
             }
         }
 
         void PaintSkins()
         {
             if (_skinLabels.Count != VisibleRows + 3 || _skinsTitle == null ||
-                _skinsStatus == null) return;
+                _skinsDescription == null) return;
             _skinsTitle.text = "SKINS";
-            _skinsStatus.text = "STATUS     " +
-                (string.IsNullOrEmpty(_skinStatus) ? "READY" : _skinStatus.ToUpperInvariant());
+            _skinsDescription.text = string.IsNullOrEmpty(_skinError)
+                ? SkinFocusDescription()
+                : _skinError.ToUpperInvariant();
             if (_skinMenu == null)
             {
                 for (int index = 0; index < _skinButtonRoots.Count; index++)
@@ -945,6 +1005,24 @@ namespace DualSouls.Mods.Silksong
                 _skinButtons[slot].interactable = row.IsActionable;
                 _skinLabels[slot].text = row.Label.ToUpperInvariant() +
                     (string.IsNullOrEmpty(row.Value) ? "" : "     " + row.Value);
+            }
+        }
+
+        string SkinFocusDescription()
+        {
+            if (_skinMenu == null) return "The installed skin library is unavailable.";
+            switch (_skinMenu.Selected.Kind)
+            {
+                case NativeSkinMenuRowKind.Mode:
+                    return "Choose whether skins are off, fixed, or rotating.";
+                case NativeSkinMenuRowKind.Sprites:
+                    return "Choose which sprites use installed skins.";
+                case NativeSkinMenuRowKind.Skin:
+                    return "Select this installed skin for the current mode.";
+                case NativeSkinMenuRowKind.Back:
+                    return "Return to Options.";
+                default:
+                    return "No compatible installed skins were found.";
             }
         }
 
@@ -985,6 +1063,7 @@ namespace DualSouls.Mods.Silksong
             _buttons.Clear();
             _buttonRoots.Clear();
             _labels.Clear();
+            _valueLabels.Clear();
             _skinButtons.Clear();
             _skinButtonRoots.Clear();
             _skinLabels.Clear();
@@ -995,11 +1074,11 @@ namespace DualSouls.Mods.Silksong
             _modsScreen = null;
             _skinsScreen = null;
             _title = null;
-            _status = null;
+            _description = null;
             _skinsTitle = null;
-            _skinsStatus = null;
-            _statusRoot = null;
-            _skinsStatusRoot = null;
+            _skinsDescription = null;
+            _descriptionRoot = null;
+            _skinsDescriptionRoot = null;
             _gameButton = _audioButton = _videoButton = null;
             _controllerButton = _keyboardButton = null;
             _ui = null;

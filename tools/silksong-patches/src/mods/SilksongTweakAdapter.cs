@@ -58,7 +58,6 @@ namespace DualSouls.Mods.Silksong
     {
         static readonly IReadOnlyList<TweakDescriptor> Rows = Array.AsReadOnly(new[]
         {
-            Row("skins", "skins", TweakControlKind.Route, "GENERAL", "SKINS", "Open the installed skin library.", "open", "open"),
             Row("black_background", "black_background", TweakControlKind.Choice, "GENERAL", "BLACK BACKGROUND", "Use a black lower-screen background instead of the dimmed scenery wash.", "off", "off", "on"),
 
             Row("run_speed", "run_speed", TweakControlKind.Choice, "WORLD", "RUN SPEED", "Choose Hornet's normal, +25%, or +50% movement pace.", "vanilla", "vanilla", "plus_25", "plus_50"),
@@ -115,7 +114,6 @@ namespace DualSouls.Mods.Silksong
             {
                 switch (id)
                 {
-                    case "skins": _api.OpenSkins(); break;
                     case "black_background": _api.SetCompanionBackdropBlack(On(value)); break;
                     case "run_speed": if (value == "vanilla") _api.RestoreRunSpeed(); else _api.SetRunSpeedMultiplier(value == "plus_25" ? 1.25f : 1.5f); break;
                     case "fast_transitions": _api.SetFastTransitions(On(value)); break;

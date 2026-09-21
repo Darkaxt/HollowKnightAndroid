@@ -11,10 +11,10 @@ public sealed class SilksongTweakAdapterTests
     public void CatalogStartsWithExactRequiredContractAndSilksongNamesThenAppendsExtras()
     {
         var rows = new SilksongTweakAdapter(new RecordingApi()).Descriptors;
-        TweakDescriptor[] required = rows.Take(27).ToArray();
+        TweakDescriptor[] required = rows.Take(26).ToArray();
         string[] contractIds =
         {
-            "skins", "black_background",
+            "black_background",
             "run_speed", "fast_transitions", "auto_map", "innate_compass", "bench_teleport", "secret_radar",
             "nail_damage", "damage_taken", "damage_cap", "one_hit_kills", "unlimited_soul",
             "enemy_health_bars", "damage_numbers", "boss_retry",
@@ -26,14 +26,15 @@ public sealed class SilksongTweakAdapterTests
         Assert.Equal(contractIds, required.Select(row => row.ContractId));
         Assert.Equal("NEEDLE DAMAGE", required.Single(row => row.ContractId == "nail_damage").Title);
         Assert.Equal("UNLIMITED SILK", required.Single(row => row.ContractId == "unlimited_soul").Title);
-        Assert.All(required.Skip(16).Take(3), row => Assert.Equal("CRESTS & TOOLS", row.Group));
+        Assert.All(required.Skip(15).Take(3), row => Assert.Equal("CRESTS & TOOLS", row.Group));
         Assert.Equal("ROSARY MAGNET", required.Single(row => row.ContractId == "geo_magnet").Title);
         Assert.Equal("KEEP ROSARIES ON DEATH", required.Single(row => row.ContractId == "keep_geo_on_death").Title);
         Assert.Equal("ROSARY MULTIPLIER", required.Single(row => row.ContractId == "geo_multiplier").Title);
         Assert.Equal("damage_received", required.Single(row => row.ContractId == "damage_taken").Id);
         Assert.Equal("unlimited_silk", required.Single(row => row.ContractId == "unlimited_soul").Id);
-        Assert.Equal(new[] { "instant_dialogue", "disable_world_rumble", "ignore_frost_slowdown" }, rows.Skip(27).Select(row => row.Id));
+        Assert.Equal(new[] { "instant_dialogue", "disable_world_rumble", "ignore_frost_slowdown" }, rows.Skip(26).Select(row => row.Id));
         Assert.All(required, row => Assert.True(row.IsAvailable, row.Id + " must be available"));
+        Assert.DoesNotContain(rows, row => row.Id == "skins");
         Assert.DoesNotContain(rows, row => row.Id == "state_slots");
     }
 
@@ -43,7 +44,7 @@ public sealed class SilksongTweakAdapterTests
         var api = new RecordingApi();
         var adapter = new SilksongTweakAdapter(api);
 
-        foreach (TweakDescriptor row in adapter.Descriptors.Take(27))
+        foreach (TweakDescriptor row in adapter.Descriptors.Take(26))
         {
             var result = adapter.Apply(row.Id, row.DefaultValue);
             Assert.True(result.Success, row.Id + ": " + result.Error);

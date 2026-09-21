@@ -16,7 +16,7 @@ class BuiltInModsControllerTest {
         val hollowKnight = BuiltInModCatalog.forGame("hollow-knight")
         val silksong = BuiltInModCatalog.forGame("silksong")
         val required = listOf(
-            "skins", "black_background",
+            "black_background",
             "run_speed", "fast_transitions", "auto_map", "innate_compass", "bench_teleport", "secret_radar",
             "nail_damage", "damage_taken", "damage_cap", "one_hit_kills", "unlimited_soul",
             "enemy_health_bars", "damage_numbers", "boss_retry",
@@ -29,6 +29,8 @@ class BuiltInModsControllerTest {
         assertEquals(required, silksong.take(required.size).map { it.contractId })
         assertTrue(hollowKnight.all { it.isAvailable })
         assertTrue(silksong.take(required.size).all { it.isAvailable })
+        assertTrue(hollowKnight.none { it.id == "skins" })
+        assertTrue(silksong.none { it.id == "skins" })
         assertTrue(
             hollowKnight.none {
                 it.id in setOf("instant_dialogue", "disable_world_rumble", "ignore_frost_slowdown")

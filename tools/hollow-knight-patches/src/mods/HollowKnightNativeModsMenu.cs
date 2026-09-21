@@ -90,6 +90,42 @@ namespace DualSouls.Mods.HollowKnight
                 set { _textProperty.SetValue(_component, value, null); }
             }
 
+            public NativeText CloneSibling(string name)
+            {
+                GameObject clone = UnityObject.Instantiate(
+                    _component.gameObject, _component.transform.parent, false);
+                clone.name = name;
+                NativeText text = Find(clone);
+                if (text == null)
+                    throw new InvalidOperationException("Cloned native text is unavailable.");
+                return text;
+            }
+
+            public void ConfigureColumn(bool rightAligned)
+            {
+                RectTransform rect = _component.transform as RectTransform;
+                if (rect != null)
+                    rect.sizeDelta = new Vector2(-ButtonTextHorizontalInset, rect.sizeDelta.y);
+
+                Text uiText = _component as Text;
+                if (uiText != null)
+                {
+                    uiText.horizontalOverflow = HorizontalWrapMode.Overflow;
+                    uiText.verticalOverflow = VerticalWrapMode.Overflow;
+                    uiText.alignment = rightAligned
+                        ? TextAnchor.MiddleRight
+                        : TextAnchor.MiddleLeft;
+                    return;
+                }
+
+                PropertyInfo alignmentProperty = _component.GetType().GetProperty("alignment");
+                if (alignmentProperty == null || !alignmentProperty.CanWrite ||
+                    !alignmentProperty.PropertyType.IsEnum) return;
+                object alignment = Enum.Parse(alignmentProperty.PropertyType,
+                                              rightAligned ? "Right" : "Left");
+                alignmentProperty.SetValue(_component, alignment, null);
+            }
+
             public void ConfigureSingleLine(float horizontalInset)
             {
                 RectTransform rect = _component.transform as RectTransform;
@@ -128,6 +164,7 @@ namespace DualSouls.Mods.HollowKnight
             new List<HollowKnightNativeModsButton>();
         readonly List<GameObject> _buttonRoots = new List<GameObject>();
         readonly List<NativeText> _labels = new List<NativeText>();
+        readonly List<NativeText> _valueLabels = new List<NativeText>();
         readonly List<HollowKnightNativeSkinButton> _skinButtons =
             new List<HollowKnightNativeSkinButton>();
         readonly List<GameObject> _skinButtonRoots = new List<GameObject>();
@@ -148,14 +185,15 @@ namespace DualSouls.Mods.HollowKnight
         HollowKnightNativeModsEntryButton _entryButton;
         HollowKnightNativeModsEntryButton _skinsEntryButton;
         NativeText _title;
-        NativeText _status;
+        NativeText _description;
         NativeText _skinsTitle;
-        NativeText _skinsStatus;
-        GameObject _statusRoot;
-        GameObject _skinsStatusRoot;
-        string _skinStatus = "";
+        NativeText _skinsDescription;
+        GameObject _descriptionRoot;
+        GameObject _skinsDescriptionRoot;
+        string _skinError = "";
         Coroutine _transitionCoroutine;
         NativeMenuRoute _openRoute;
+        ButtonRole _focusedRole = ButtonRole.Group;
         int _generation;
         bool _transitioning;
         bool _nativeOpen;
@@ -415,12 +453,12 @@ namespace DualSouls.Mods.HollowKnight
                 UnityObject.Destroy(child);
             }
 
-            CreateButton(content, rowTemplate, ButtonRole.Group, 0, firstY, rowStep, "GROUP");
+            CreateButton(content, rowTemplate, ButtonRole.Group, 0, firstY, rowStep, "CATEGORY");
             CreateButton(content, rowTemplate, ButtonRole.Master, 1, firstY, rowStep,
                          "MASTER MODS");
             for (int i = 0; i < VisibleRows; i++)
                 CreateButton(content, rowTemplate, ButtonRole.Row, i + 2, firstY, rowStep, "MOD");
-            CreateStatus(content, rowTemplate, 7, firstY, rowStep);
+            CreateDescription(content, rowTemplate, 7, firstY, rowStep);
             CreateButton(content, rowTemplate, ButtonRole.Reset, 8, firstY, rowStep,
                          "RESET ALL MODS");
             CreateButton(content, rowTemplate, ButtonRole.Back, 9, firstY, rowStep, "BACK");
@@ -460,7 +498,7 @@ namespace DualSouls.Mods.HollowKnight
             }
             for (int index = 0; index < VisibleRows + 3; index++)
                 CreateSkinButton(content, rowTemplate, index, firstY, rowStep);
-            CreateSkinStatus(content, rowTemplate, VisibleRows + 3, firstY, rowStep);
+            CreateSkinDescription(content, rowTemplate, VisibleRows + 3, firstY, rowStep);
             DisableForeignDrivers(root);
             _skinsScreen.defaultHighlight = _skinButtons[0].Selectable;
             _skinsTitle.Text = "SKINS";
@@ -478,23 +516,25 @@ namespace DualSouls.Mods.HollowKnight
             }
         }
 
-        void CreateStatus(Transform parent, GameObject template, int visualIndex,
-                          float firstY, float rowStep)
+        void CreateDescription(Transform parent, GameObject template, int visualIndex,
+                               float firstY, float rowStep)
         {
-            _statusRoot = CreateStatusRow(parent, template, "ModsStatus", visualIndex,
-                                          firstY, rowStep, out _status);
+            _descriptionRoot = CreateDescriptionRow(
+                parent, template, "ModsDescription", visualIndex,
+                firstY, rowStep, out _description);
         }
 
-        void CreateSkinStatus(Transform parent, GameObject template, int visualIndex,
-                              float firstY, float rowStep)
+        void CreateSkinDescription(Transform parent, GameObject template, int visualIndex,
+                                   float firstY, float rowStep)
         {
-            _skinsStatusRoot = CreateStatusRow(parent, template, "SkinsStatus", visualIndex,
-                                               firstY, rowStep, out _skinsStatus);
+            _skinsDescriptionRoot = CreateDescriptionRow(
+                parent, template, "SkinsDescription", visualIndex,
+                firstY, rowStep, out _skinsDescription);
         }
 
-        static GameObject CreateStatusRow(Transform parent, GameObject template, string name,
-                                          int visualIndex, float firstY, float rowStep,
-                                          out NativeText label)
+        static GameObject CreateDescriptionRow(Transform parent, GameObject template, string name,
+                                               int visualIndex, float firstY, float rowStep,
+                                               out NativeText label)
         {
             GameObject wrapper = Instantiate(template, parent, false);
             wrapper.name = name;
@@ -504,12 +544,12 @@ namespace DualSouls.Mods.HollowKnight
                                                     firstY - rowStep * visualIndex);
             MenuButton source = wrapper.GetComponentInChildren<MenuButton>(true);
             if (source == null)
-                throw new InvalidOperationException("Native status row has no MenuButton.");
+                throw new InvalidOperationException("Native description row has no MenuButton.");
             source.interactable = false;
             source.enabled = false;
             source.navigation = new Navigation { mode = Navigation.Mode.None };
             DisableForeignDrivers(wrapper);
-            label = SetButtonText(wrapper, "STATUS     READY", fullRow: true);
+            label = SetButtonText(wrapper, "Choose a category.");
             return wrapper;
         }
 
@@ -569,9 +609,19 @@ namespace DualSouls.Mods.HollowKnight
                                                    Math.Min(buttonRect.sizeDelta.y, rowStep - 4f));
             DisableForeignDrivers(wrapper);
             NativeText label = SetButtonText(wrapper, initialText, fullRow: true);
+            NativeText valueLabel = null;
+            if (role == ButtonRole.Group || role == ButtonRole.Master ||
+                role == ButtonRole.Row)
+            {
+                valueLabel = label.CloneSibling("ModsValue");
+                label.ConfigureColumn(rightAligned: false);
+                valueLabel.ConfigureColumn(rightAligned: true);
+                valueLabel.Text = "";
+            }
             _buttonRoots.Add(wrapper);
             _buttons.Add(button);
             _labels.Add(label);
+            _valueLabels.Add(valueLabel);
         }
 
         static NativeText SetButtonText(GameObject root, string value, bool fullRow = false)
@@ -758,9 +808,11 @@ namespace DualSouls.Mods.HollowKnight
 
         internal void Select(HollowKnightNativeModsButton button)
         {
-            if (button == null || (ButtonRole)button.Role != ButtonRole.Row ||
-                button.DataIndex < 0 || button.DataIndex >= _menu.CurrentRows.Count) return;
-            _menu.MoveRow(button.DataIndex - _menu.SelectedRowIndex);
+            if (button == null) return;
+            _focusedRole = (ButtonRole)button.Role;
+            if (_focusedRole == ButtonRole.Row && button.DataIndex >= 0 &&
+                button.DataIndex < _menu.CurrentRows.Count)
+                _menu.MoveRow(button.DataIndex - _menu.SelectedRowIndex);
             Paint();
         }
 
@@ -855,16 +907,18 @@ namespace DualSouls.Mods.HollowKnight
             int index = role == ButtonRole.Group ? 0 :
                         role == ButtonRole.Master ? 1 :
                         role == ButtonRole.Reset ? 7 : 8;
+            _focusedRole = role;
             _buttons[index].Selectable.Select();
+            Paint();
         }
 
         void Paint()
         {
-            if (_menu == null || _labels.Count != 9) return;
-            _labels[0].Text = "GROUP  <  " + Friendly(_menu.Groups[_menu.SelectedGroupIndex]) +
-                              "  >  " + (_menu.SelectedGroupIndex + 1) + "/" + _menu.Groups.Count;
-            _labels[1].Text = "MASTER MODS     " +
-                              (_session.Controller.MasterEnabled ? "ON" : "OFF");
+            if (_menu == null || _labels.Count != 9 || _valueLabels.Count != 9) return;
+            _labels[0].Text = "< " + Friendly(_menu.Groups[_menu.SelectedGroupIndex]) + " >";
+            _valueLabels[0].Text = (_menu.SelectedGroupIndex + 1) + "/" + _menu.Groups.Count;
+            _labels[1].Text = "MASTER MODS";
+            _valueLabels[1].Text = _session.Controller.MasterEnabled ? "ON" : "OFF";
 
             IReadOnlyList<TweakDescriptor> rows = _menu.CurrentRows;
             for (int slot = 0; slot < VisibleRows; slot++)
@@ -883,15 +937,35 @@ namespace DualSouls.Mods.HollowKnight
                 else if (descriptor.ControlKind == TweakControlKind.Command) value = "RUN";
                 else if (descriptor.ControlKind == TweakControlKind.Route) value = "OPEN";
                 else value = Friendly(_session.Controller.Value(descriptor.Id));
-                _labels[slot + 2].Text = descriptor.Title.ToUpperInvariant() + "     " + value;
+                _labels[slot + 2].Text = descriptor.Title.ToUpperInvariant();
+                _valueLabels[slot + 2].Text = value;
             }
 
             _labels[7].Text = "RESET ALL MODS";
             _labels[8].Text = "BACK";
-            string status = _menu.Message;
             _title.Text = "MODS";
-            _status.Text = "STATUS     " +
-                (string.IsNullOrEmpty(status) ? "READY" : status.ToUpperInvariant());
+            _description.Text = _menu.MessageIsError
+                ? _menu.Message.ToUpperInvariant()
+                : FocusDescription();
+        }
+
+        string FocusDescription()
+        {
+            if (_focusedRole == ButtonRole.Group)
+                return "Choose a mod category.";
+            if (_focusedRole == ButtonRole.Master)
+                return "Enable or disable all built-in mods.";
+            if (_focusedRole == ButtonRole.Reset)
+                return "Restore every mod setting to its default.";
+            if (_focusedRole == ButtonRole.Back)
+                return "Return to Options.";
+
+            TweakDescriptor descriptor = _menu.Selected;
+            if (descriptor == null) return "Choose a mod setting.";
+            string description = descriptor.Description;
+            if (!descriptor.IsAvailable && !string.IsNullOrEmpty(descriptor.UnavailableReason))
+                description += " Unavailable: " + descriptor.UnavailableReason;
+            return description;
         }
 
         static string Friendly(string value)
@@ -975,16 +1049,16 @@ namespace DualSouls.Mods.HollowKnight
             }
             catch (Exception error)
             {
-                _skinStatus = "CHANGE FAILED · " + error.GetBaseException().Message;
+                _skinError = "CHANGE FAILED · " + error.GetBaseException().Message;
             }
             if (accepted)
             {
                 HollowKnightModsRuntime runtime = HollowKnightModsRuntime.Current;
                 if (runtime != null) runtime.InvalidateSkinLibrary();
-                _skinStatus = "";
+                _skinError = "";
             }
-            else if (string.IsNullOrEmpty(_skinStatus))
-                _skinStatus = "CHANGE NOT APPLIED · REFRESHED";
+            else if (string.IsNullOrEmpty(_skinError))
+                _skinError = "CHANGE NOT APPLIED · REFRESHED";
             // A false result is stale/busy authority: repaint only from a new checked snapshot.
             RefreshSkinMenu();
             PaintSkins();
@@ -1019,23 +1093,24 @@ namespace DualSouls.Mods.HollowKnight
                     wire.eligiblePackIds ?? Array.Empty<string>(), packs);
                 if (_skinMenu == null) _skinMenu = new NativeSkinMenuModel(snapshot, VisibleRows);
                 else _skinMenu.Replace(snapshot);
-                if (_skinStatus.StartsWith("SKINS UNAVAILABLE", StringComparison.Ordinal))
-                    _skinStatus = "";
+                if (_skinError.StartsWith("SKINS UNAVAILABLE", StringComparison.Ordinal))
+                    _skinError = "";
             }
             catch (Exception error)
             {
-                _skinStatus = "SKINS UNAVAILABLE · " + error.GetBaseException().Message;
-                Debug.LogWarning("[HK Skins] " + _skinStatus);
+                _skinError = "SKINS UNAVAILABLE · " + error.GetBaseException().Message;
+                Debug.LogWarning("[HK Skins] " + _skinError);
             }
         }
 
         void PaintSkins()
         {
             if (_skinLabels.Count != VisibleRows + 3 || _skinsTitle == null ||
-                _skinsStatus == null) return;
+                _skinsDescription == null) return;
             _skinsTitle.Text = "SKINS";
-            _skinsStatus.Text = "STATUS     " +
-                (string.IsNullOrEmpty(_skinStatus) ? "READY" : _skinStatus.ToUpperInvariant());
+            _skinsDescription.Text = string.IsNullOrEmpty(_skinError)
+                ? SkinFocusDescription()
+                : _skinError.ToUpperInvariant();
             if (_skinMenu == null)
             {
                 for (int index = 0; index < _skinButtonRoots.Count; index++)
@@ -1057,6 +1132,24 @@ namespace DualSouls.Mods.HollowKnight
                 _skinButtons[slot].Selectable.interactable = row.IsActionable;
                 _skinLabels[slot].Text = row.Label.ToUpperInvariant() +
                     (string.IsNullOrEmpty(row.Value) ? "" : "     " + row.Value);
+            }
+        }
+
+        string SkinFocusDescription()
+        {
+            if (_skinMenu == null) return "The installed skin library is unavailable.";
+            switch (_skinMenu.Selected.Kind)
+            {
+                case NativeSkinMenuRowKind.Mode:
+                    return "Choose whether skins are off, fixed, or rotating.";
+                case NativeSkinMenuRowKind.Sprites:
+                    return "Choose which sprites use installed skins.";
+                case NativeSkinMenuRowKind.Skin:
+                    return "Select this installed skin for the current mode.";
+                case NativeSkinMenuRowKind.Back:
+                    return "Return to Options.";
+                default:
+                    return "No compatible installed skins were found.";
             }
         }
 
@@ -1100,6 +1193,7 @@ namespace DualSouls.Mods.HollowKnight
             _buttons.Clear();
             _buttonRoots.Clear();
             _labels.Clear();
+            _valueLabels.Clear();
             _skinButtons.Clear();
             _skinButtonRoots.Clear();
             _skinLabels.Clear();
@@ -1112,11 +1206,11 @@ namespace DualSouls.Mods.HollowKnight
             _modsScreen = null;
             _skinsScreen = null;
             _title = null;
-            _status = null;
+            _description = null;
             _skinsTitle = null;
-            _skinsStatus = null;
-            _statusRoot = null;
-            _skinsStatusRoot = null;
+            _skinsDescription = null;
+            _descriptionRoot = null;
+            _skinsDescriptionRoot = null;
             _ui = null;
             _session = null;
             _menu = null;

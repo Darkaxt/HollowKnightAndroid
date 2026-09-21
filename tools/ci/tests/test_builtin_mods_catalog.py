@@ -54,7 +54,6 @@ def kotlin_rows(name: str):
 def expected_required(game: str):
     silksong = game == "silksong"
     return [
-        ("skins", "skins", "GENERAL", "SKINS", "Route", True, "open", ("open",)),
         ("black_background", "black_background" if silksong else "companion_backdrop", "GENERAL", "BLACK BACKGROUND", "Choice", True, "off" if silksong else "dimmed", ("off", "on") if silksong else ("dimmed", "black")),
         ("run_speed", "run_speed", "WORLD", "RUN SPEED", "Choice", True, "vanilla", ("vanilla", "plus_25", "plus_50")),
         ("fast_transitions", "fast_transitions", "WORLD", "FAST TRANSITIONS", "Choice", True, "off", ("off", "on")),
@@ -104,8 +103,9 @@ class BuiltInModsCatalogContractTest(unittest.TestCase):
         }
         for name, path in CSHARP.items():
             rows = parse_rows(path.read_text(encoding="utf-8"))
-            self.assertEqual(expected_required("silksong" if name == "silksong" else "hollowKnight"), compact(rows[:27]), name)
-            self.assertEqual(expected_extras[name], [(row["contract"], row["id"]) for row in rows[27:]], name)
+            self.assertEqual(expected_required("silksong" if name == "silksong" else "hollowKnight"), compact(rows[:26]), name)
+            self.assertEqual(expected_extras[name], [(row["contract"], row["id"]) for row in rows[26:]], name)
+            self.assertNotIn("skins", {row["id"] for row in rows})
             self.assertNotIn("state_slots", {row["id"] for row in rows})
 
     def test_android_catalog_matches_every_csharp_metadata_field(self):

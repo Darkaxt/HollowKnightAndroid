@@ -11,7 +11,6 @@ import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import dev.silksong.launcher.profiles.GameProfiles
 import dev.silksong.launcher.profiles.SelectedGameStore
-import dev.silksong.launcher.skins.ui.SkinsActivity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -40,12 +39,10 @@ class BuiltInModsActivityTest {
         assertEquals(ModsActivity::class.java.name, shadowOf(activity).nextStartedActivity.component?.className)
     }
 
-    @Test fun `skins row opens the launcher package manager`() {
+    @Test fun `mods catalog omits the duplicate skins route`() {
         val activity = Robolectric.buildActivity(BuiltInModsActivity::class.java).setup().get()
 
-        modRow(activity, "skins").performClick()
-
-        assertEquals(SkinsActivity::class.java.name, shadowOf(activity).nextStartedActivity.component?.className)
+        assertTrue(modRows(activity).none { it.tag == "mod:skins" })
     }
 
     @Test fun `in-game operations are labeled and never cycled as values`() {

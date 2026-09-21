@@ -25,7 +25,6 @@ data class BuiltInModDescriptor(
 /** Android mirror of the production typed adapters; Python contracts prevent drift. */
 object BuiltInModCatalog {
     val hollowKnight = listOf(
-        available("skins", "skins", BuiltInModControlKind.Route, "GENERAL", "SKINS", "Open the installed skin library.", "open", listOf("open")),
         available("companion_backdrop", "black_background", "GENERAL", "BLACK BACKGROUND", "Use a black lower-screen background instead of the dimmed scenery wash.", "dimmed", listOf("dimmed", "black")),
 
         available("run_speed", "run_speed", "WORLD", "RUN SPEED", "Choose the Knight's normal, +25%, or +50% movement pace.", "vanilla", listOf("vanilla", "plus_25", "plus_50")),
@@ -63,7 +62,6 @@ object BuiltInModCatalog {
     )
 
     val silksong = listOf(
-        available("skins", "skins", BuiltInModControlKind.Route, "GENERAL", "SKINS", "Open the installed skin library.", "open", listOf("open")),
         available("black_background", "black_background", BuiltInModControlKind.Choice, "GENERAL", "BLACK BACKGROUND", "Use a black lower-screen background instead of the dimmed scenery wash.", "off", listOf("off", "on")),
 
         available("run_speed", "run_speed", BuiltInModControlKind.Choice, "WORLD", "RUN SPEED", "Choose Hornet's normal, +25%, or +50% movement pace.", "vanilla", listOf("vanilla", "plus_25", "plus_50")),

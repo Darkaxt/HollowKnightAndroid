@@ -52,7 +52,6 @@ namespace DualSouls.Mods.HollowKnight
     {
         static readonly IReadOnlyList<TweakDescriptor> Rows = Array.AsReadOnly(new[]
         {
-            Row("skins", "skins", TweakControlKind.Route, "GENERAL", "SKINS", "Open the installed skin library.", "open", "open"),
             Row("companion_backdrop", "black_background", TweakControlKind.Choice, "GENERAL", "BLACK BACKGROUND", "Use a black lower-screen background instead of the dimmed scenery wash.", "dimmed", "dimmed", "black"),
             Row("run_speed", "run_speed", TweakControlKind.Choice, "WORLD", "RUN SPEED", "Choose the Knight's normal, +25%, or +50% movement pace.", "vanilla", "vanilla", "plus_25", "plus_50"),
             Row("fast_transitions", "fast_transitions", TweakControlKind.Choice, "WORLD", "FAST TRANSITIONS", "Shorten supported scene transitions.", "off", "off", "on"),
@@ -100,7 +99,6 @@ namespace DualSouls.Mods.HollowKnight
             {
                 switch (id)
                 {
-                    case "skins": _api.OpenSkins(); break;
                     case "companion_backdrop": _api.SetCompanionBackdropBlack(value == "black"); break;
                     case "run_speed":
                         if (value == "vanilla") _api.RestoreRunSpeed();

@@ -143,17 +143,42 @@ class SilksongNativeModsMenuContractTest(unittest.TestCase):
         self.assertIn("!button.transform.IsChildOf(content)", helper)
         self.assertIn("button.gameObject.SetActive(false);", helper)
 
-    def test_mods_and_skins_titles_stay_fixed_with_bounded_status_rows(self):
+    def test_mod_rows_use_native_name_and_value_columns(self):
+        source = self.source()
+        create = method_body(source, "void CreateButton(")
+        paint = method_body(source, "void Paint()")
+        self.assertIn("_valueLabels.Add", create)
+        self.assertIn("CloneColumnText", create)
+        self.assertIn("ConfigureColumn", create)
+        self.assertIn("_valueLabels[0].text", paint)
+        self.assertIn("_valueLabels[1].text", paint)
+        self.assertIn("_valueLabels[slot + 2].text", paint)
+        self.assertNotIn('"GROUP', paint)
+
+    def test_mods_description_tracks_focus_and_only_errors_override_it(self):
         source = self.source()
         paint = method_body(source, "void Paint()")
+        self.assertIn("string FocusDescription()", source)
+        describe = method_body(source, "string FocusDescription()")
+        self.assertIn("_description.text =", paint)
+        self.assertIn("_menu.MessageIsError", paint)
+        self.assertIn("descriptor.Description", describe)
+        self.assertIn("descriptor.UnavailableReason", describe)
+        self.assertNotIn('"STATUS', source)
+
+    def test_skins_description_explains_focus_or_actionable_error(self):
+        source = self.source()
         skins = method_body(source, "void PaintSkins()")
-        self.assertIn('_title.text = "MODS";', paint)
-        self.assertNotIn('"MODS  ·  "', paint)
-        self.assertIn("_status.text =", paint)
+        self.assertIn("string SkinFocusDescription()", source)
+        describe = method_body(source, "string SkinFocusDescription()")
         self.assertIn('_skinsTitle.text = "SKINS";', skins)
-        self.assertIn("_skinsStatus.text =", skins)
-        self.assertIn("CreateStatus(", method_body(source, "void BuildModsScreen("))
-        self.assertIn("CreateSkinStatus(", method_body(source, "void BuildSkinsScreen("))
+        self.assertIn("_skinsDescription.text =", skins)
+        self.assertIn("NativeSkinMenuRowKind.Mode", describe)
+        self.assertIn("NativeSkinMenuRowKind.Sprites", describe)
+        self.assertIn("NativeSkinMenuRowKind.Skin", describe)
+        self.assertIn("NativeSkinMenuRowKind.Back", describe)
+        self.assertIn("CreateDescription(", method_body(source, "void BuildModsScreen("))
+        self.assertIn("CreateSkinDescription(", method_body(source, "void BuildSkinsScreen("))
 
 
 if __name__ == "__main__":

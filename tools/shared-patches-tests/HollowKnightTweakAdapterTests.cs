@@ -11,7 +11,7 @@ public sealed class HollowKnightTweakAdapterTests
 {
     private static readonly string[] RequiredContractIds =
     {
-        "skins", "black_background",
+        "black_background",
         "run_speed", "fast_transitions", "auto_map", "innate_compass", "bench_teleport", "secret_radar",
         "nail_damage", "damage_taken", "damage_cap", "one_hit_kills", "unlimited_soul",
         "enemy_health_bars", "damage_numbers", "boss_retry",
@@ -24,11 +24,11 @@ public sealed class HollowKnightTweakAdapterTests
     public void CatalogStartsWithExactRequiredContractAndAppendsExtras()
     {
         var rows = new HollowKnightTweakAdapter(new RecordingApi()).Descriptors;
-        TweakDescriptor[] required = rows.Take(27).ToArray();
+        TweakDescriptor[] required = rows.Take(26).ToArray();
 
         Assert.Equal(RequiredContractIds, required.Select(row => row.ContractId));
         Assert.Equal(
-            new[] { "GENERAL", "GENERAL" }
+            new[] { "GENERAL" }
                 .Concat(Enumerable.Repeat("WORLD", 6))
                 .Concat(Enumerable.Repeat("COMBAT", 5))
                 .Concat(Enumerable.Repeat("ENCOUNTERS", 3))
@@ -36,19 +36,19 @@ public sealed class HollowKnightTweakAdapterTests
                 .Concat(Enumerable.Repeat("SAVE STATES", 4))
                 .Concat(Enumerable.Repeat("ECONOMY", 4)),
             required.Select(row => row.Group));
-        Assert.Equal(TweakControlKind.Route, required[0].ControlKind);
-        Assert.Equal(TweakControlKind.Route, required[6].ControlKind);
+        Assert.Equal(TweakControlKind.Route, required[5].ControlKind);
+        Assert.Equal(TweakControlKind.Command, required[19].ControlKind);
         Assert.Equal(TweakControlKind.Command, required[20].ControlKind);
         Assert.Equal(TweakControlKind.Command, required[21].ControlKind);
-        Assert.Equal(TweakControlKind.Command, required[22].ControlKind);
-        Assert.All(required.Where((_, index) => index is not (0 or 6 or 20 or 21 or 22)),
+        Assert.All(required.Where((_, index) => index is not (5 or 19 or 20 or 21)),
             row => Assert.Equal(TweakControlKind.Choice, row.ControlKind));
         Assert.Equal("companion_backdrop", required.Single(row => row.ContractId == "black_background").Id);
         Assert.Equal("damage_received", required.Single(row => row.ContractId == "damage_taken").Id);
         Assert.Equal("health_bars", required.Single(row => row.ContractId == "enemy_health_bars").Id);
-        Assert.Equal(new[] { "lifeblood_flash" }, rows.Skip(27).Select(row => row.Id));
-        Assert.Equal(27, required.Count(row => row.IsAvailable));
+        Assert.Equal(new[] { "lifeblood_flash" }, rows.Skip(26).Select(row => row.Id));
+        Assert.Equal(26, required.Count(row => row.IsAvailable));
         Assert.All(required, row => Assert.True(row.IsAvailable));
+        Assert.DoesNotContain(rows, row => row.Id == "skins");
         Assert.DoesNotContain(rows, row => row.Id == "state_slots");
     }
 
@@ -154,7 +154,6 @@ public sealed class HollowKnightTweakAdapterTests
     {
         var expected = new Dictionary<string, Dictionary<string, string>>
         {
-            ["skins"] = One("open", "skins:open"),
             ["companion_backdrop"] = Map(("dimmed", "backdrop:False"), ("black", "backdrop:True")),
             ["run_speed"] = Map(("vanilla", "run:restore"), ("plus_25", "run:1.25"), ("plus_50", "run:1.5")),
             ["fast_transitions"] = OffOn("fast-transitions"),
