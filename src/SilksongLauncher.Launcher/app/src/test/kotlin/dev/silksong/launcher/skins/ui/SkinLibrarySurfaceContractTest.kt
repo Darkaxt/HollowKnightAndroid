@@ -88,6 +88,29 @@ class SkinLibrarySurfaceContractTest {
         assertEquals("56dp", importButton.getAttributeNS(android, "minHeight"))
     }
 
+    @Test fun `launcher Skins layouts expose package management controls only`() {
+        val activity = xml("res/layout/activity_skins.xml")
+        val activityButtons = activity.getElementsByTagName("Button")
+        val activityIds = (0 until activityButtons.length).map {
+            (activityButtons.item(it) as Element).getAttributeNS(android, "id")
+        }
+        assertTrue("Import must remain reachable", "@+id/skins_import" in activityIds)
+        assertTrue("Prepared imports must remain committable", "@+id/skins_import_all" in activityIds)
+        assertTrue("Package/status details must remain reachable", "@+id/skins_library_details" in activityIds)
+        assertFalse("Launcher must not mutate runtime mode", "@+id/skins_advance_mode" in activityIds)
+
+        val pack = xml("res/layout/item_skin_pack.xml")
+        val packButtons = pack.getElementsByTagName("Button")
+        val packIds = (0 until packButtons.length).map {
+            (packButtons.item(it) as Element).getAttributeNS(android, "id")
+        }
+        assertEquals(
+            "Installed cards must offer only deletion and package details/replacement",
+            listOf("@+id/skin_pack_delete", "@+id/skin_pack_details"),
+            packIds,
+        )
+    }
+
     @Test fun `skins cards use labeled touch actions and prepared state is conditional`() {
         val activity = xml("res/layout/activity_skins.xml")
         val prepared = (0 until activity.getElementsByTagName("LinearLayout").length)

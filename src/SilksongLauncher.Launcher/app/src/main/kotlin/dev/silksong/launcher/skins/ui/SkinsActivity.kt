@@ -54,7 +54,6 @@ class SkinsActivity : Activity() {
         findViewById<Button>(R.id.skins_import).setOnClickListener { if (acceptsCallback()) showImportSource() }
         findViewById<Button>(R.id.skins_import_all).setOnClickListener { if (acceptsCallback()) session.importAll() }
         findViewById<Button>(R.id.skins_cancel).setOnClickListener { if (acceptsCallback()) session.cancel() }
-        findViewById<Button>(R.id.skins_advance_mode).setOnClickListener { if (acceptsCallback()) session.advanceMode() }
         findViewById<Button>(R.id.skins_library_details).setOnClickListener { if (acceptsCallback()) showLibraryDetails(session.state) }
     }
 
@@ -113,7 +112,6 @@ class SkinsActivity : Activity() {
         findViewById<Button>(R.id.skins_import).isEnabled = screen.canImport && !screen.busy && screen.handles.isEmpty()
         findViewById<Button>(R.id.skins_import_all).isEnabled = screen.canImport && !screen.busy && screen.handles.isNotEmpty()
         findViewById<Button>(R.id.skins_cancel).isEnabled = screen.handles.isNotEmpty() || screen.busy || screen.cleanupPending
-        findViewById<Button>(R.id.skins_advance_mode).isEnabled = screen.canAdvance && !screen.busy
         findViewById<Button>(R.id.skins_library_details).isEnabled =
             screen.library != null || screen.refreshError != null || session.canRecover
         renderPrepared(screen)
@@ -227,14 +225,6 @@ class SkinsActivity : Activity() {
         row.findViewById<View>(R.id.skin_pack_delete_reason).visibility =
             if (item.deleteBlock == null) View.GONE else View.VISIBLE
         val target = SkinReplaceTarget(pack.id, state.generationSha256, pack.treeSha256, pack.importReceiptSha256)
-        row.findViewById<Button>(R.id.skin_pack_toggle).apply {
-            setText(if (item.primaryAction == SkinPackPrimaryAction.DISABLE) R.string.skins_disable else R.string.skins_enable)
-            isEnabled = screen.canEdit && !screen.busy && state.simplifiedAuthority
-            setOnClickListener {
-                if (!acceptsCallback()) return@setOnClickListener
-                if (item.primaryAction == SkinPackPrimaryAction.DISABLE) session.disable(target) else session.enable(target)
-            }
-        }
         row.findViewById<Button>(R.id.skin_pack_delete).apply {
             isEnabled = screen.canEdit && !screen.busy && state.simplifiedAuthority && item.deleteBlock == null
             setOnClickListener { confirmDelete(pack.name, target) }
@@ -281,18 +271,13 @@ class SkinsActivity : Activity() {
             yesNo(pack.rotationEligible),
             receiptText,
         )
-        val canEdit = screen.canEdit && !screen.busy
         val canReplace = screen.canImport && !screen.busy && (pack.selected || state.simplifiedAuthority) && readySources(screen).isNotEmpty()
         val shown = AlertDialog.Builder(this)
             .setTitle(pack.name)
             .setMessage(detail)
-            .setNeutralButton(if (pack.rotationEligible) R.string.skins_rotation_exclude else R.string.skins_rotation_include) { _, _ ->
-                if (acceptsCallback()) session.eligibility(target, !pack.rotationEligible)
-            }
             .setPositiveButton(R.string.skins_replace) { _, _ -> if (acceptsCallback()) chooseSource(screen, pack.name, target) }
             .setNegativeButton(R.string.skins_close, null)
             .show()
-        shown.getButton(AlertDialog.BUTTON_NEUTRAL).isEnabled = canEdit
         shown.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = canReplace
         dialog = shown
     }
@@ -301,7 +286,8 @@ class SkinsActivity : Activity() {
         if (!acceptsCallback()) return
         val state = screen.library
         val none = getString(R.string.skins_none)
-        val message = if (state == null) {
+        val recovery = getString(if (session.canRecover) R.string.skins_recovery_required else R.string.skins_recovery_clear)
+        val message = (if (state == null) {
             getString(
                 R.string.skins_read_error,
                 screen.refreshError?.code?.name ?: none,
@@ -320,16 +306,13 @@ class SkinsActivity : Activity() {
                 state.rollbackFailure ?: none,
                 state.leaseObservation,
             )
-        }
-        val builder = AlertDialog.Builder(this)
+        }) + "\n" + recovery
+        dialog = AlertDialog.Builder(this)
             .setTitle(R.string.skins_library_details_title)
             .setMessage(message)
             .setNeutralButton(R.string.skins_refresh) { _, _ -> if (acceptsCallback()) session.refresh() }
             .setNegativeButton(R.string.skins_close, null)
-        if (session.canRecover) builder.setPositiveButton(R.string.skins_recover_off) { _, _ ->
-            if (acceptsCallback()) session.recoverOff()
-        }
-        dialog = builder.show()
+            .show()
     }
 
     private fun readySources(screen: SkinScreenState) = screen.handles.flatMap { handle ->

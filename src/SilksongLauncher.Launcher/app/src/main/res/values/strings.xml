@@ -26,8 +26,8 @@
     <string name="action_skins">Skins</string>
     <string name="skins_title_hollow_knight">Hollow Knight · Skins</string>
     <string name="skins_title_silksong">Silksong · Skins</string>
-    <string name="skins_guidance_hollow_knight">Import CustomKnight skin packs, then enable one or rotate between your favourites. Your original game files are never changed.</string>
-    <string name="skins_guidance_silksong">Import skin packs made for Silksong, then enable one or rotate between your favourites. Missing artwork stays original.</string>
+    <string name="skins_guidance_hollow_knight">Import, replace, inspect, and delete CustomKnight packages here. Configure active skins in the game’s upper Pause → Options → Skins menu. Your original game files are never changed.</string>
+    <string name="skins_guidance_silksong">Import, replace, inspect, and delete Silksong skin packages here. Configure active skins in the game’s upper Pause → Options → Skins menu.</string>
     <string name="skins_back">&lt; Back</string>
     <string name="skins_import">Import skin</string>
     <string name="skins_import_source_title">Import skin</string>
@@ -40,7 +40,7 @@
     <string name="skins_candidate_details">Name: %1$s\nResult: %2$s\nCandidate key: %3$s\nSource prefix: %4$s\n%5$s</string>
     <string name="skins_import_all">Import all</string>
     <string name="skins_cancel">Cancel</string>
-    <string name="skins_configuration_title">Requested configuration</string>
+    <string name="skins_configuration_title">Configuration status · Read only</string>
     <string name="skins_requested">Requested: %1$s\nSelected pack: %2$s</string>
     <string name="skins_runtime_none">Latest runtime report: Not reported yet</string>
     <string name="skins_runtime_report">Latest runtime report: %1$s</string>
@@ -58,7 +58,7 @@
     <string name="skins_badge_enabled">Enabled · ON requested</string>
     <string name="skins_badge_rotating">Selected · ROTATE requested</string>
     <string name="skins_badge_pending">Pending rotation</string>
-    <string name="skins_delete_blocked">In use — turn skins OFF before deleting.</string>
+    <string name="skins_delete_blocked">In use — choose MODE: OFF in the game’s upper Pause → Options → Skins menu before deleting.</string>
     <string name="skins_enable">Enable</string>
     <string name="skins_disable">Disable</string>
     <string name="skins_delete">Delete</string>
@@ -74,6 +74,8 @@
     <string name="skins_delete_detail">This removes the pack from the library. Retained imported files are not erased.</string>
     <string name="skins_library_details">Requested mode: %1$s\nSelected pack ID: %2$s\nPending pack ID: %3$s\nRotation order: %4$s\nLatest runtime report: %5$s\nInterlock: %6$s\nOriginal error: %7$s\nRollback error: %8$s\nLease: %9$s</string>
     <string name="skins_library_details_title">Skin library details</string>
+    <string name="skins_recovery_required">Recovery status: Recovery required. Choose MODE: OFF in the game’s upper Pause → Options → Skins menu.</string>
+    <string name="skins_recovery_clear">Recovery status: Clear</string>
     <string name="skins_refresh">Refresh</string>
     <string name="skins_recover_off">Turn OFF / recover</string>
     <string name="skins_loading">Reading skin library…</string>

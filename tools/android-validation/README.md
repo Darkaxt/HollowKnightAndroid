@@ -27,6 +27,40 @@ The harness never treats successful ADB execution as a visual pass. It does not 
 }
 ```
 
+For native Skins validation, use the same harness with a focused controller plan
+for the upper Pause → Options → Skins route. The required upper rows are
+`"MODE", "SPRITES", "installed skins", "Back"`; verify MODE values
+OFF/ON/ROTATE, the ALL/CHARACTER + HUD/CHARACTER sprite scopes, stable focus,
+and persisted selection. Every before/after review must also verify that the
+lower display contains no Skins UI.
+
+```json
+{
+  "version": 1,
+  "name": "Hollow Knight upper native Skins ownership",
+  "steps": [
+    {
+      "id": "open-skins",
+      "title": "Confirm the selected Skins entry in the upper Options menu",
+      "expected_before": "Paused Options screen on the upper display with SKINS selected; the lower display contains no Skins UI",
+      "expected_after": "The native Skins menu owns the upper menu window with MODE, SPRITES, installed skins, and Back; controller focus is visible and the lower display contains no Skins UI",
+      "action": { "type": "keyevent", "display": 0, "keycode": "KEYCODE_BUTTON_A" }
+    },
+    {
+      "id": "change-skin-mode",
+      "title": "Change MODE with the controller",
+      "expected_before": "The upper native Skins menu has MODE focused; the lower display contains no Skins UI",
+      "expected_after": "MODE changes exactly once, focus remains on MODE, and the lower display contains no Skins UI",
+      "action": { "type": "keyevent", "display": 0, "keycode": "KEYCODE_DPAD_RIGHT" }
+    }
+  ]
+}
+```
+
+Run the same plan for Hollow Knight and Silksong. Add focused steps for SPRITES,
+installed-skin selection, Back/Cancel, persistence after reopening, and each
+scope combination; continue to capture both displays for every step.
+
 Supported actions are bounded `tap`, `swipe`, `keyevent`, and input-free `observe`. Every input action names a logical display. Key events are restricted to navigation/controller keys.
 
 ## Usage

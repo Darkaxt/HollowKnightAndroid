@@ -79,7 +79,7 @@ class SkinsActivityTest {
         }
     }
 
-    @Test fun `pack card keeps technical data in Details and direct actions use session callbacks`() {
+    @Test fun `pack card keeps technical data in Details and exposes only package actions`() {
         val fixture = Fixture(mutationsAvailable = true)
         SkinsActivity.withHostBinding(fixture.binding) {
             SelectedGameStore(ApplicationProvider.getApplicationContext()).set(HollowKnightProfile)
@@ -95,19 +95,22 @@ class SkinsActivityTest {
                 assertFalse(visible.contains("d".repeat(64)))
                 assertFalse(visible.contains("e".repeat(64)))
 
-                descendantButtons(packList).single { it.text == activity.getString(R.string.skins_enable) }.performClick()
-                fixture.idle()
-                assertEquals(listOf("enable:target"), fixture.directActions)
+                val packButtons = descendantButtons(packList)
+                assertFalse(packButtons.any { it.text == activity.getString(R.string.skins_enable) })
+                assertFalse(packButtons.any { it.text == activity.getString(R.string.skins_disable) })
+                assertTrue(fixture.directActions.isEmpty())
 
-                descendantButtons(packList).single { it.text == activity.getString(R.string.skins_details) }.performClick()
+                packButtons.single { it.text == activity.getString(R.string.skins_details) }.performClick()
                 val details = ShadowAlertDialog.getLatestAlertDialog()
                 val detailText = details.findViewById<TextView>(android.R.id.message).text.toString()
                 assertTrue(detailText.contains("target"))
                 assertTrue(detailText.contains("d".repeat(64)))
                 assertTrue(detailText.contains("e".repeat(64)))
+                assertNoDialogAction(details, AlertDialog.BUTTON_NEUTRAL,
+                    "Pack Details must not change rotation membership")
                 details.dismiss()
 
-                descendantButtons(packList).single { it.text == activity.getString(R.string.skins_delete) }.performClick()
+                packButtons.single { it.text == activity.getString(R.string.skins_delete) }.performClick()
                 ShadowAlertDialog.getLatestAlertDialog().getButton(AlertDialog.BUTTON_POSITIVE).performClick()
                 fixture.idle()
                 assertEquals(listOf("target"), fixture.removed)
@@ -115,7 +118,7 @@ class SkinsActivityTest {
         }
     }
 
-    @Test fun `selected live card exposes Disable and blocks Delete with visible reason`() {
+    @Test fun `selected live card reports status and blocks Delete without runtime controls`() {
         val fixture = Fixture(mutationsAvailable = true, mode = "ON")
         SkinsActivity.withHostBinding(fixture.binding) {
             SelectedGameStore(ApplicationProvider.getApplicationContext()).set(HollowKnightProfile)
@@ -128,14 +131,14 @@ class SkinsActivityTest {
                 val delete = buttons.single { it.text == activity.getString(R.string.skins_delete) }
                 assertFalse(delete.isEnabled)
                 assertTrue(allText(packList).contains(activity.getString(R.string.skins_delete_blocked)))
-                buttons.single { it.text == activity.getString(R.string.skins_disable) }.performClick()
-                fixture.idle()
-                assertEquals(listOf("disable:target"), fixture.directActions)
+                assertFalse(buttons.any { it.text == activity.getString(R.string.skins_disable) })
+                assertFalse(buttons.any { it.text == activity.getString(R.string.skins_enable) })
+                assertTrue(fixture.directActions.isEmpty())
             } finally { controller.pause().stop().destroy(); fixture.idle() }
         }
     }
 
-    @Test fun `library Details retains full authority report with Refresh and recovery`() {
+    @Test fun `library Details retains full authority report with Refresh and read-only recovery status`() {
         val fixture = Fixture(
             runtimeObservation = "Last game report: Applied · target · complete · 10 ms UTC; refresh to retry status",
             recoverAvailable = true,
@@ -152,16 +155,18 @@ class SkinsActivityTest {
                 assertTrue(text.contains("target"))
                 assertTrue(text.contains("Last game report"))
                 assertTrue(text.contains("Lease"))
+                assertTrue(text.contains("Recovery status"))
+                assertTrue(text.contains("required"))
                 assertEquals(activity.getString(R.string.skins_refresh),
                     details.getButton(AlertDialog.BUTTON_NEUTRAL).text.toString())
-                details.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-                fixture.idle()
-                assertEquals(1, fixture.recoveries)
+                assertNoDialogAction(details, AlertDialog.BUTTON_POSITIVE,
+                    "Recovery status must not mutate runtime mode")
+                assertEquals(0, fixture.recoveries)
             } finally { controller.pause().stop().destroy(); fixture.idle() }
         }
     }
 
-    @Test fun `read failure keeps Retry and OFF recovery reachable in Details`() {
+    @Test fun `read failure keeps Retry and read-only recovery status reachable in Details`() {
         val fixture = Fixture(readFailure = true, recoverAvailable = true)
         SkinsActivity.withHostBinding(fixture.binding) {
             SelectedGameStore(ApplicationProvider.getApplicationContext()).set(HollowKnightProfile)
@@ -176,11 +181,10 @@ class SkinsActivityTest {
                 assertTrue(details.findViewById<TextView>(android.R.id.message).text.toString().contains("refresh failed"))
                 assertEquals(activity.getString(R.string.skins_refresh),
                     details.getButton(AlertDialog.BUTTON_NEUTRAL).text.toString())
-                assertEquals(activity.getString(R.string.skins_recover_off),
-                    details.getButton(AlertDialog.BUTTON_POSITIVE).text.toString())
-                details.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-                fixture.idle()
-                assertEquals(1, fixture.recoveries)
+                assertTrue(details.findViewById<TextView>(android.R.id.message).text.toString().contains("Recovery required"))
+                assertNoDialogAction(details, AlertDialog.BUTTON_POSITIVE,
+                    "Recovery status must not expose a launcher mode mutation")
+                assertEquals(0, fixture.recoveries)
             } finally { controller.pause().stop().destroy(); fixture.idle() }
         }
     }
@@ -205,7 +209,7 @@ class SkinsActivityTest {
         }
     }
 
-    @Test fun `default production surface enables ordinary ZIP picker and mode control`() {
+    @Test fun `default production surface enables ordinary ZIP picker without runtime controls`() {
         SelectedGameStore(ApplicationProvider.getApplicationContext()).set(HollowKnightProfile)
         val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
         try {
@@ -215,7 +219,10 @@ class SkinsActivityTest {
                 Thread.sleep(20); shadowOf(Looper.getMainLooper()).idle()
             }
             assertTrue(activity.findViewById<Button>(R.id.skins_import).isEnabled)
-            assertTrue(activity.findViewById<Button>(R.id.skins_advance_mode).isEnabled)
+            val screenText = allText(activity.findViewById(android.R.id.content))
+            assertFalse(screenText.contains(activity.getString(R.string.skins_change_mode)))
+            assertFalse(screenText.contains(activity.getString(R.string.skins_enable)))
+            assertFalse(screenText.contains(activity.getString(R.string.skins_disable)))
             openArchivePicker(activity)
             assertEquals(Intent.ACTION_OPEN_DOCUMENT, shadowOf(activity).nextStartedActivityForResult.intent.action)
         } finally { controller.pause().stop().destroy() }
@@ -435,6 +442,12 @@ class SkinsActivityTest {
         assertTrue(replace.performClick())
         shadowOf(Looper.getMainLooper()).idle()
         return ShadowAlertDialog.getLatestAlertDialog().also { assertNotSame(details, it) }
+    }
+
+    private fun assertNoDialogAction(dialog: AlertDialog, which: Int, message: String) {
+        val button = dialog.getButton(which)
+        assertNotEquals(message, View.VISIBLE, button.visibility)
+        assertTrue(message, button.text.isBlank())
     }
 
     private fun descendantButtons(root: ViewGroup): List<Button> = buildList {

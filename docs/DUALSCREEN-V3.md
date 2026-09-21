@@ -128,11 +128,24 @@ do not count as parity.
 
 ## Skins
 
-- Import the user's local Custom Knight ZIP packs and enumerate every valid
-  candidate without requiring archives to be normalized by hand.
-- Candidate preparation must complete in practical seconds for ordinary local
-  packs, not minutes or hours.
-- Show installed packs, selection, and rotation membership clearly.
+The upper Pause → Options → Skins screen is the sole in-game Skins
+configuration menu in both games. Its rows, in order, are MODE, SPRITES,
+installed skins, and Back. MODE selects OFF, ON, or ROTATE. The exact SPRITES
+scope choices are ALL / CHARACTER + HUD / CHARACTER. The menu must be fully
+controller-operable, keep stable focus after changes, and persist its
+configuration through the shared profile-isolated skin authority.
+
+The launcher Skins screen is package management only. It imports and replaces
+local packages, enumerates every valid candidate, reports compatibility,
+receipt, error, runtime, and recovery status, and deletes packages subject to
+in-use safeguards. It may report mode, selected/active pack, rotation
+membership, and sprite scope as read-only status, but it must not mutate those
+settings. Candidate preparation must complete in practical seconds for ordinary
+local packs, not minutes or hours.
+
+The lower display is reserved for the resident HUD and game pages and must not
+contain a Skins UI, shortcut, pane, modal, selector, or duplicate presenter.
+
 - Apply the selected pack in Hollow Knight before relying on the shared path for
   Silksong.
 - Preserve the selected skin per save slot.
@@ -164,11 +177,13 @@ The deliverable remains incomplete until all of the following are demonstrated:
    display with no duplicate upper HUD and no lower-display Mods wheel, gear,
    pane, or presenter. Its upper Pause → Options → Mods screen uses the full
    available upper menu window, is fully controller-operable, exposes the
-   complete catalog, and proves persistence/reset. Skin application and one
-   normal-death rotation are also demonstrated.
-3. Silksong demonstrates the equivalent upper-display Mods ownership and
-   lower-display HUD/page experience, with its additional mechanics integrated
-   into the same design and no Hollow Knight regression.
+   complete catalog, and proves persistence/reset. Its upper Pause → Options →
+   Skins screen is likewise controller-operable and authoritative, with no
+   lower-display Skins UI. Skin application and one normal-death rotation are
+   also demonstrated.
+3. Silksong demonstrates the equivalent upper-display Mods and Skins ownership
+   and lower-display HUD/page experience, with its additional mechanics
+   integrated into the same design and no Hollow Knight regression.
 4. Repeated launch, pause/resume, scene transition, display interruption, and
    process restore preserve correct ownership and profile isolation.
 5. Production artifacts use the persistent release signer. Publishing a public

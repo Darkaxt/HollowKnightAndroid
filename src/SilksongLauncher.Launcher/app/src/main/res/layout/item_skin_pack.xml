@@ -49,19 +49,9 @@
         android:orientation="horizontal">
 
         <Button
-            android:id="@+id/skin_pack_toggle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:minHeight="48dp"
-            android:text="@string/skins_enable"
-            android:textAllCaps="false" />
-
-        <Button
             android:id="@+id/skin_pack_delete"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
             android:layout_weight="1"
             android:minHeight="48dp"
             android:text="@string/skins_delete"

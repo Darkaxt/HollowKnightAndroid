@@ -149,31 +149,14 @@
                 android:textColor="@color/text_muted"
                 android:textSize="15sp" />
 
-            <LinearLayout
+            <Button
+                android:id="@+id/skins_library_details"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:orientation="horizontal">
-
-                <Button
-                    android:id="@+id/skins_advance_mode"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:minHeight="48dp"
-                    android:text="@string/skins_change_mode"
-                    android:textAllCaps="false" />
-
-                <Button
-                    android:id="@+id/skins_library_details"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:layout_weight="1"
-                    android:minHeight="48dp"
-                    android:text="@string/skins_details"
-                    android:textAllCaps="false" />
-            </LinearLayout>
+                android:minHeight="48dp"
+                android:text="@string/skins_details"
+                android:textAllCaps="false" />
         </LinearLayout>
 
         <TextView

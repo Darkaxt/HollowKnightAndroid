@@ -8,6 +8,9 @@ from unittest import mock
 
 
 MODULE_PATH = pathlib.Path(__file__).parents[2] / "android-validation" / "dualsouls_validate.py"
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
+VALIDATION_README = REPO_ROOT / "tools" / "android-validation" / "README.md"
+PRODUCT_CONTRACT = REPO_ROOT / "docs" / "DUALSCREEN-V3.md"
 
 
 class FakeRunner:
@@ -117,6 +120,24 @@ class AndroidValidationHarnessTest(unittest.TestCase):
         path = root / "plan.json"
         path.write_text(json.dumps(plan), encoding="utf-8")
         return path
+
+    def test_native_skins_validation_example_and_product_contract_cover_both_displays(self):
+        readme = " ".join(VALIDATION_README.read_text(encoding="utf-8").split())
+        contract = " ".join(PRODUCT_CONTRACT.read_text(encoding="utf-8").split())
+        for token in (
+            "upper Pause → Options → Skins",
+            '"MODE", "SPRITES", "installed skins", "Back"',
+            "ALL/CHARACTER + HUD/CHARACTER",
+            "lower display contains no Skins UI",
+        ):
+            self.assertIn(token, readme)
+        for token in (
+            "sole in-game Skins configuration menu in both games",
+            "MODE, SPRITES, installed skins, and Back",
+            "ALL / CHARACTER + HUD / CHARACTER",
+            "must not contain a Skins UI",
+        ):
+            self.assertIn(token, contract)
 
     def test_rejects_unbounded_or_shell_actions(self):
         module = self.load_module()
