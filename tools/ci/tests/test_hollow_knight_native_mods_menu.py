@@ -32,7 +32,7 @@ class HollowKnightNativeModsMenuContractTest(unittest.TestCase):
             "UIManager",
             "optionsMenuScreen",
             "MenuScreen",
-            "MenuSelectable",
+            "MenuButton",
             "ShowMenu(binding.ModsScreen)",
             "HideMenu(binding.OptionsScreen)",
         ):
@@ -111,6 +111,22 @@ class HollowKnightNativeModsMenuContractTest(unittest.TestCase):
         self.assertNotIn("oldList.enabled = false", build)
         self.assertLess(build.index("Destroy(oldList)"), build.index("Destroy(child)"))
 
+    def test_cloned_menu_buttons_remain_the_only_selectables(self):
+        source = self.source()
+        entry = method_body(source, "void BuildEntry(")
+        create = method_body(source, "void CreateButton(")
+        self.assertIn("_entrySelectable = source;", entry)
+        self.assertIn("button.Selectable = source;", create)
+        self.assertNotIn("Destroy(source)", entry)
+        self.assertNotIn("Destroy(source)", create)
+        self.assertIn(
+            "class HollowKnightNativeModsEntryButton : MonoBehaviour,", source
+        )
+        self.assertIn(
+            "class HollowKnightNativeModsButton : MonoBehaviour,", source
+        )
+        self.assertIn("behaviour is MenuButton", source)
+
     def test_binding_waits_for_ready_authority_and_rebinds_after_loss(self):
         source = self.source()
         bind = method_body(source, "void TryBind()")
@@ -123,7 +139,7 @@ class HollowKnightNativeModsMenuContractTest(unittest.TestCase):
         wire = method_body(self.source(), "void WireOptionsNavigation(bool includeMods)")
         self.assertNotIn("_optionsNavigationIncludesEntry == includeMods", wire)
         self.assertIn("if (!_optionsNavigationIncludesEntry)", wire)
-        self.assertIn("SetVertical(_entryButton", wire)
+        self.assertIn("SetVertical(_entrySelectable", wire)
 
     def test_options_entry_keeps_native_spacing_while_mod_rows_fit_full_screen(self):
         bind = method_body(self.source(), "void TryBind()")

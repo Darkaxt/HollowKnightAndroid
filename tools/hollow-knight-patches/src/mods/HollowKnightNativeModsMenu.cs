@@ -75,6 +75,7 @@ namespace DualSouls.Mods.HollowKnight
         UIManager _ui;
         MenuScreen _modsScreen;
         GameObject _entryRoot;
+        MenuButton _entrySelectable;
         HollowKnightNativeModsEntryButton _entryButton;
         TextMeshProUGUI _title;
         Coroutine _transitionCoroutine;
@@ -269,12 +270,10 @@ namespace DualSouls.Mods.HollowKnight
             MenuButton source = _entryRoot.GetComponentInChildren<MenuButton>(true);
             if (source == null)
                 throw new InvalidOperationException("Mods entry template has no MenuButton.");
-            source.enabled = false;
+            _entrySelectable = source;
             _entryButton = source.gameObject.AddComponent<HollowKnightNativeModsEntryButton>();
-            CopySelectable(source, _entryButton);
             _entryButton.Owner = this;
-            _entryButton.FlashEffect = source.flashEffect;
-            UnityObject.Destroy(source);
+            _entryButton.Selectable = source;
             DisableForeignDrivers(_entryRoot);
             SetButtonText(_entryRoot, "MODS");
             _entryRoot.SetActive(false);
@@ -321,7 +320,7 @@ namespace DualSouls.Mods.HollowKnight
             CreateButton(content, rowTemplate, ButtonRole.Back, 8, firstY, rowStep, "BACK");
 
             DisableForeignDrivers(root);
-            _modsScreen.defaultHighlight = _buttons[0];
+            _modsScreen.defaultHighlight = _buttons[0].Selectable;
             _title.text = "MODS";
             root.SetActive(false);
         }
@@ -339,17 +338,15 @@ namespace DualSouls.Mods.HollowKnight
             MenuButton source = wrapper.GetComponentInChildren<MenuButton>(true);
             if (source == null)
                 throw new InvalidOperationException("Native Mods row has no MenuButton.");
-            source.enabled = false;
             HollowKnightNativeModsButton button =
                 source.gameObject.AddComponent<HollowKnightNativeModsButton>();
-            CopySelectable(source, button);
             button.Owner = this;
+            button.Selectable = source;
             button.Role = (int)role;
-            button.FlashEffect = source.flashEffect;
-            button.navigation = new Navigation { mode = Navigation.Mode.None };
-            UnityObject.Destroy(source);
+            source.cancelAction = CancelAction.DoNothing;
+            source.navigation = new Navigation { mode = Navigation.Mode.None };
 
-            RectTransform buttonRect = button.transform as RectTransform;
+            RectTransform buttonRect = source.transform as RectTransform;
             if (buttonRect != null)
                 buttonRect.sizeDelta = new Vector2(buttonRect.sizeDelta.x,
                                                    Math.Min(buttonRect.sizeDelta.y, rowStep - 4f));
@@ -358,18 +355,6 @@ namespace DualSouls.Mods.HollowKnight
             _buttonRoots.Add(wrapper);
             _buttons.Add(button);
             _labels.Add(label);
-        }
-
-        static void CopySelectable(MenuButton source, MenuSelectable target)
-        {
-            target.interactable = source.interactable;
-            target.navigation = source.navigation;
-            target.cancelAction = source.cancelAction;
-            target.leftCursor = source.leftCursor;
-            target.rightCursor = source.rightCursor;
-            target.selectHighlight = source.selectHighlight;
-            target.descriptionText = source.descriptionText;
-            target.playSubmitSound = source.playSubmitSound;
         }
 
         static TextMeshProUGUI SetButtonText(GameObject root, string value)
@@ -389,6 +374,7 @@ namespace DualSouls.Mods.HollowKnight
                 Behaviour behaviour = behaviours[i];
                 if (behaviour == null || behaviour is Animator || behaviour is Graphic ||
                     behaviour is CanvasGroup || behaviour is MenuScreen ||
+                    behaviour is MenuButton ||
                     behaviour is HollowKnightNativeModsButton ||
                     behaviour is HollowKnightNativeModsEntryButton) continue;
                 behaviour.enabled = false;
@@ -410,13 +396,13 @@ namespace DualSouls.Mods.HollowKnight
             // local state after a native submenu transition.
             for (int i = 0; i < _optionButtons.Count; i++)
             {
-                Selectable up = i == 0 ? (Selectable)_entryButton : _optionButtons[i - 1].Button;
+                Selectable up = i == 0 ? (Selectable)_entrySelectable : _optionButtons[i - 1].Button;
                 Selectable down = i + 1 == _optionButtons.Count
-                    ? (Selectable)_entryButton
+                    ? (Selectable)_entrySelectable
                     : _optionButtons[i + 1].Button;
                 SetVertical(_optionButtons[i].Button, up, down);
             }
-            SetVertical(_entryButton,
+            SetVertical(_entrySelectable,
                         _optionButtons[_optionButtons.Count - 1].Button,
                         _optionButtons[0].Button);
             _optionsNavigationIncludesEntry = true;
@@ -620,7 +606,7 @@ namespace DualSouls.Mods.HollowKnight
             int slot = _menu.SelectedRowIndex - _menu.WindowStart;
             if (slot >= 0 && slot < VisibleRows &&
                 _buttons[slot + 2].gameObject.activeInHierarchy)
-                _buttons[slot + 2].Select();
+                _buttons[slot + 2].Selectable.Select();
         }
 
         void Focus(ButtonRole role)
@@ -628,7 +614,7 @@ namespace DualSouls.Mods.HollowKnight
             int index = role == ButtonRole.Group ? 0 :
                         role == ButtonRole.Master ? 1 :
                         role == ButtonRole.Reset ? 7 : 8;
-            _buttons[index].Select();
+            _buttons[index].Selectable.Select();
         }
 
         void Paint()
@@ -703,6 +689,7 @@ namespace DualSouls.Mods.HollowKnight
             _buttonRoots.Clear();
             _labels.Clear();
             _entryRoot = null;
+            _entrySelectable = null;
             _entryButton = null;
             _modsScreen = null;
             _title = null;
@@ -717,18 +704,15 @@ namespace DualSouls.Mods.HollowKnight
         }
     }
 
-    public sealed class HollowKnightNativeModsEntryButton : MenuSelectable,
+    public sealed class HollowKnightNativeModsEntryButton : MonoBehaviour,
         ISubmitHandler, IPointerClickHandler
     {
         internal HollowKnightNativeModsMenu Owner;
-        internal Animator FlashEffect;
+        internal MenuButton Selectable;
 
         void ISubmitHandler.OnSubmit(BaseEventData eventData)
         {
-            if (!interactable || Owner == null) return;
-            ForceDeselect();
-            Flash();
-            PlaySubmitSound();
+            if (Selectable == null || !Selectable.interactable || Owner == null) return;
             Owner.Open();
         }
 
@@ -736,28 +720,19 @@ namespace DualSouls.Mods.HollowKnight
         {
             ((ISubmitHandler)this).OnSubmit(eventData);
         }
-
-        void Flash()
-        {
-            if (FlashEffect == null) return;
-            FlashEffect.ResetTrigger("Flash");
-            FlashEffect.SetTrigger("Flash");
-        }
     }
 
-    public sealed class HollowKnightNativeModsButton : MenuSelectable,
+    public sealed class HollowKnightNativeModsButton : MonoBehaviour,
         ISubmitHandler, IPointerClickHandler, IMoveHandler, ICancelHandler, ISelectHandler
     {
         internal HollowKnightNativeModsMenu Owner;
-        internal Animator FlashEffect;
+        internal MenuButton Selectable;
         internal int Role;
         internal int DataIndex = -1;
 
         void ISubmitHandler.OnSubmit(BaseEventData eventData)
         {
-            if (!interactable || Owner == null) return;
-            Flash();
-            PlaySubmitSound();
+            if (Selectable == null || !Selectable.interactable || Owner == null) return;
             Owner.Submit(this);
         }
 
@@ -769,31 +744,22 @@ namespace DualSouls.Mods.HollowKnight
 
         void IMoveHandler.OnMove(AxisEventData eventData)
         {
-            if (!interactable || Owner == null) return;
+            if (Selectable == null || !Selectable.interactable || Owner == null) return;
             Owner.Move(this, eventData.moveDir);
             eventData.Use();
         }
 
         void ICancelHandler.OnCancel(BaseEventData eventData)
         {
-            if (!interactable || Owner == null) return;
-            ForceDeselect();
-            PlayCancelSound();
+            if (Selectable == null || !Selectable.interactable || Owner == null) return;
+            Selectable.ForceDeselect();
             Owner.Close();
             eventData.Use();
         }
 
         void ISelectHandler.OnSelect(BaseEventData eventData)
         {
-            base.OnSelect(eventData);
             Owner?.Select(this);
-        }
-
-        void Flash()
-        {
-            if (FlashEffect == null) return;
-            FlashEffect.ResetTrigger("Flash");
-            FlashEffect.SetTrigger("Flash");
         }
     }
 }
