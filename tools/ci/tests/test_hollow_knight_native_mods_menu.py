@@ -161,6 +161,7 @@ class HollowKnightNativeModsMenuContractTest(unittest.TestCase):
         self.assertNotIn("GetComponentInChildren<TextMeshProUGUI>", source)
         self.assertIn('type.Namespace == "TMProOld"', source)
         self.assertIn('type.Namespace == "TMPro"', source)
+        self.assertIn("component is Text", source)
         self.assertIn('type.GetProperty("text")', source)
         self.assertNotIn('<Reference Include="Unity.TextMeshPro">', project)
         self.assertNotIn('$(HollowKnightManaged)/Unity.TextMeshPro.dll', project)

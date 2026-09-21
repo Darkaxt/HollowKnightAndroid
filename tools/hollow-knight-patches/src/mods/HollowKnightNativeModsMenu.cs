@@ -88,11 +88,10 @@ namespace DualSouls.Mods.HollowKnight
                     Component component = components[i];
                     if (component == null) continue;
                     Type type = component.GetType();
-                    bool knownNamespace = type.Namespace == "TMProOld" ||
-                                          type.Namespace == "TMPro";
-                    if (!knownNamespace ||
-                        (type.Name != "TextMeshPro" && type.Name != "TextMeshProUGUI"))
-                        continue;
+                    bool knownTextMeshPro =
+                        (type.Namespace == "TMProOld" || type.Namespace == "TMPro") &&
+                        (type.Name == "TextMeshPro" || type.Name == "TextMeshProUGUI");
+                    if (!(component is Text) && !knownTextMeshPro) continue;
                     PropertyInfo textProperty = type.GetProperty("text");
                     if (textProperty != null && textProperty.CanWrite)
                         return new NativeText(component, textProperty);
