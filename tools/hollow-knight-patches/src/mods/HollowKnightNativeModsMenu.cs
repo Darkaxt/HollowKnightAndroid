@@ -19,6 +19,7 @@ namespace DualSouls.Mods.HollowKnight
     public sealed class HollowKnightNativeModsMenu : MonoBehaviour
     {
         const int VisibleRows = 5;
+        const float ButtonTextHorizontalInset = 80f;
         const float MaximumRowStep = 78f;
         const float MinimumRowStep = 58f;
 
@@ -77,6 +78,18 @@ namespace DualSouls.Mods.HollowKnight
             public string Text
             {
                 set { _textProperty.SetValue(_component, value, null); }
+            }
+
+            public void ConfigureSingleLine(float horizontalInset)
+            {
+                RectTransform rect = _component.transform as RectTransform;
+                if (rect != null)
+                    rect.sizeDelta = new Vector2(-horizontalInset, rect.sizeDelta.y);
+
+                Text uiText = _component as Text;
+                if (uiText == null) return;
+                uiText.horizontalOverflow = HorizontalWrapMode.Overflow;
+                uiText.verticalOverflow = VerticalWrapMode.Overflow;
             }
 
             public static NativeText Find(GameObject root)
@@ -388,17 +401,19 @@ namespace DualSouls.Mods.HollowKnight
                 buttonRect.sizeDelta = new Vector2(buttonRect.sizeDelta.x,
                                                    Math.Min(buttonRect.sizeDelta.y, rowStep - 4f));
             DisableForeignDrivers(wrapper);
-            NativeText label = SetButtonText(wrapper, initialText);
+            NativeText label = SetButtonText(wrapper, initialText, fullRow: true);
             _buttonRoots.Add(wrapper);
             _buttons.Add(button);
             _labels.Add(label);
         }
 
-        static NativeText SetButtonText(GameObject root, string value)
+        static NativeText SetButtonText(GameObject root, string value, bool fullRow = false)
         {
             NativeText text = NativeText.Find(root);
             if (text == null)
                 throw new InvalidOperationException("Native button text is unavailable.");
+            if (fullRow)
+                text.ConfigureSingleLine(ButtonTextHorizontalInset);
             text.Text = value;
             return text;
         }

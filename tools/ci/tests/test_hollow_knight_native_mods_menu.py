@@ -166,6 +166,18 @@ class HollowKnightNativeModsMenuContractTest(unittest.TestCase):
         self.assertNotIn('<Reference Include="Unity.TextMeshPro">', project)
         self.assertNotIn('$(HollowKnightManaged)/Unity.TextMeshPro.dll', project)
 
+    def test_native_button_labels_use_the_full_row_without_wrapping(self):
+        source = self.source()
+        configure = method_body(source, "void ConfigureSingleLine(float horizontalInset)")
+        self.assertIn("uiText.horizontalOverflow = HorizontalWrapMode.Overflow", configure)
+        self.assertIn("uiText.verticalOverflow = VerticalWrapMode.Overflow", configure)
+        self.assertIn("rect.sizeDelta = new Vector2(-horizontalInset, rect.sizeDelta.y)", configure)
+        set_text = method_body(source, "static NativeText SetButtonText(")
+        self.assertIn("if (fullRow)", set_text)
+        self.assertIn("text.ConfigureSingleLine(ButtonTextHorizontalInset)", set_text)
+        create = method_body(source, "void CreateButton(")
+        self.assertIn("SetButtonText(wrapper, initialText, fullRow: true)", create)
+
 
 if __name__ == "__main__":
     unittest.main()
