@@ -5,7 +5,7 @@ namespace DualSouls.Skins.Runtime
 {
     public sealed class SkinLibraryRequest
     {
-        public string ProfileId, ConfigSha256, Mode, PackId, TreeSha256, Root, RotationRun, RotationDetail;
+        public string ProfileId, ConfigSha256, Mode, SpriteScope = SkinSpriteScopes.All, PackId, TreeSha256, Root, RotationRun, RotationDetail;
         public long LastDeath, PendingOccurrence;
         public IDictionary<string, string> Textures;
     }
@@ -26,7 +26,7 @@ namespace DualSouls.Skins.Runtime
         readonly Func<SkinApplyResult> observe;
         readonly Func<SkinLibraryRequest, bool> ready;
         SkinPack cached, cachedRotation;
-        string cachedTree, activeId, activeTree, activeMode, preparedRun;
+        string cachedTree, cachedScope, activeId, activeTree, activeMode, activeScope, preparedRun;
         long preparedOccurrence;
         bool restored, restoreRequired, pendingRestored, awaitingApply;
         public SkinLibraryRuntimeController(SkinRuntimeRules rules, Func<SkinLibraryRequest> read,
@@ -47,7 +47,8 @@ namespace DualSouls.Skins.Runtime
                 request = read();
                 if (request == null) return; // nonblocking Kotlin lock was busy; next poll retries
                 if (request.ProfileId != rules.ProfileId || !Digest(request.ConfigSha256) ||
-                    (request.Mode != "OFF" && request.Mode != "ON" && request.Mode != "ROTATE"))
+                    (request.Mode != "OFF" && request.Mode != "ON" && request.Mode != "ROTATE") ||
+                    !SkinSpriteScopes.IsValid(request.SpriteScope))
                     throw new InvalidOperationException("Invalid launched-profile skin configuration.");
                 if (request.PendingOccurrence == 0 || request.PendingOccurrence != preparedOccurrence ||
                     !string.Equals(request.RotationRun, preparedRun, StringComparison.Ordinal))
@@ -61,13 +62,13 @@ namespace DualSouls.Skins.Runtime
                 {
                     result = restored ? new SkinApplyResult(SkinApplyStatus.Restored) : restore();
                     if (result.Status == SkinApplyStatus.Restored || result.Status == SkinApplyStatus.Unchanged)
-                    { restored = true; activeId = activeTree = null; }
+                    { restored = true; activeId = activeTree = activeMode = activeScope = null; }
                 }
                 else if (request.PendingOccurrence > 0 && !(ready?.Invoke(request) ?? false))
                     result = new SkinApplyResult(SkinApplyStatus.AwaitingTargets, "Frozen successor awaits live stable respawn.");
                 else if (request.PendingOccurrence > 0 && rules.RestoreBeforeRotation && !pendingRestored)
                 {
-                    restored = false; activeMode = null;
+                    restored = false; activeMode = activeScope = null;
                     result = restore();
                     if (result.Status == SkinApplyStatus.Restored || result.Status == SkinApplyStatus.Unchanged)
                     {
@@ -79,7 +80,7 @@ namespace DualSouls.Skins.Runtime
                 }
                 else if (request.PendingOccurrence > 0 && restoreRequired)
                 {
-                    restored = false; activeMode = null;
+                    restored = false; activeMode = activeScope = null;
                     result = restore();
                     if (result.Status == SkinApplyStatus.Restored || result.Status == SkinApplyStatus.Unchanged)
                     {
@@ -105,13 +106,17 @@ namespace DualSouls.Skins.Runtime
             if (string.IsNullOrEmpty(request.PackId) || !Digest(request.TreeSha256) || request.Textures == null ||
                 request.Textures.Count < 1 || request.Textures.Count > rules.MappingLimit)
                 throw new InvalidOperationException("Selected skin is unavailable or exceeds the launched profile bound.");
-            if (cached == null || cached.Id != request.PackId || cachedTree != request.TreeSha256 || cached.Root != request.Root)
-            { cached = new SkinPack(request.PackId, request.Root, request.Textures); cachedRotation = null; cachedTree = request.TreeSha256; }
+            if (cached == null || cached.Id != request.PackId || cachedTree != request.TreeSha256 ||
+                cached.Root != request.Root || cachedScope != request.SpriteScope)
+            {
+                cached = new SkinPack(request.PackId, request.Root, request.Textures, "ON", request.SpriteScope);
+                cachedRotation = null; cachedTree = request.TreeSha256; cachedScope = request.SpriteScope;
+            }
             if (request.Mode == "ROTATE" && cachedRotation == null)
-                cachedRotation = new SkinPack(request.PackId, request.Root, request.Textures, "ROTATE");
+                cachedRotation = new SkinPack(request.PackId, request.Root, request.Textures, "ROTATE", request.SpriteScope);
             SkinApplyResult result;
             bool directApply = !(activeId == request.PackId && activeTree == request.TreeSha256 &&
-                activeMode == request.Mode && !restored && !awaitingApply);
+                activeMode == request.Mode && activeScope == request.SpriteScope && !restored && !awaitingApply);
             if (!directApply)
                 result = observe?.Invoke() ?? new SkinApplyResult(SkinApplyStatus.Unchanged);
             else
@@ -122,12 +127,13 @@ namespace DualSouls.Skins.Runtime
             }
             if (result.PreviousVisualsRestored)
             {
-                activeId = activeTree = activeMode = null;
+                activeId = activeTree = activeMode = activeScope = null;
             }
             if (directApply) awaitingApply = result.Status == SkinApplyStatus.AwaitingTargets;
             if (result.Status == SkinApplyStatus.Applied || result.Status == SkinApplyStatus.Unchanged)
             {
-                awaitingApply = false; restored = false; activeId = request.PackId; activeTree = request.TreeSha256; activeMode = request.Mode; }
+                awaitingApply = false; restored = false; activeId = request.PackId; activeTree = request.TreeSha256;
+                activeMode = request.Mode; activeScope = request.SpriteScope; }
             return result;
         }
 

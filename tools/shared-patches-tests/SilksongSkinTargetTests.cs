@@ -31,17 +31,20 @@ public sealed class SilksongSkinTargetTests
     }
 
     [Fact]
-    public void Runtime_rules_are_closed_and_rotate_character_only()
+    public void Runtime_rules_reuse_exact_IsHud_metadata_for_each_explicit_scope()
     {
         var rules = SilksongSkinTargets.RuntimeRules;
         var character = SilksongSkinTargets.All.First(x => !x.IsHud).CanonicalPath;
         var hud = SilksongSkinTargets.All.First(x => x.IsHud).CanonicalPath;
         Assert.Equal("silksong", rules.ProfileId);
         Assert.Equal(11, rules.MappingLimit);
-        Assert.True(rules.Allows("ON", character));
-        Assert.True(rules.Allows("ON", hud));
-        Assert.True(rules.Allows("ROTATE", character));
-        Assert.False(rules.Allows("ROTATE", hud));
+        Assert.True(rules.Allows("ALL", character));
+        Assert.True(rules.Allows("ALL", hud));
+        Assert.True(rules.Allows("CHARACTER_HUD", character));
+        Assert.True(rules.Allows("CHARACTER_HUD", hud));
+        Assert.True(rules.Allows("CHARACTER", character));
+        Assert.False(rules.Allows("CHARACTER", hud));
+        Assert.False(rules.Allows("BOGUS", character));
         Assert.False(rules.IsSupported("Knight.png"));
         Assert.False(rules.IsSupported("Assets/Collections/Tools Cln Data/atlas0.png"));
     }

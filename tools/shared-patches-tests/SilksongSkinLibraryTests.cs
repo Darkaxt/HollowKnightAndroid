@@ -241,8 +241,25 @@ public sealed class SilksongSkinLibraryTests
         Assert.Equal(new long[] { 1, 2 }, confirmed);
     }
 
+    [Fact]
+    public void Native_menu_invalidation_exposes_an_immediate_runtime_poll()
+    {
+        var frame = Frame(); var death = new SilksongSkinDeathAdapter(() => frame); var request = Request("a");
+        int reads = 0;
+        using var library = new SilksongSkinLibrary(() => { reads++; return request; },
+            _ => new SkinApplyResult(SkinApplyStatus.Applied),
+            () => new SkinApplyResult(SkinApplyStatus.Restored), _ => true,
+            () => new SkinApplyResult(SkinApplyStatus.Unchanged), death,
+            (_, __) => true, (_, __) => true, _ => true);
+
+        library.Tick(0); request.SpriteScope = "ALL"; library.Tick(.1f);
+        Assert.Equal(1, reads);
+        library.Invalidate(); library.Tick(.1f);
+        Assert.Equal(2, reads);
+    }
+
     static SkinLibraryRequest Request(string id) => new SkinLibraryRequest {
-        ProfileId = "silksong", ConfigSha256 = new string('a', 64), Mode = "ROTATE",
+        ProfileId = "silksong", ConfigSha256 = new string('a', 64), Mode = "ROTATE", SpriteScope = "CHARACTER",
         PackId = id, TreeSha256 = new string('b', 64), Root = Environment.CurrentDirectory,
         Textures = new Dictionary<string, string> {
             [SilksongSkinTargets.All[0].CanonicalPath] = "atlas0.png"

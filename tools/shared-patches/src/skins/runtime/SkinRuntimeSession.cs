@@ -27,7 +27,15 @@ namespace DualSouls.Skins.Runtime
             this.allows = allows ?? throw new ArgumentNullException(nameof(allows));
         }
         public bool IsSupported(string target) => isSupported(target);
-        public bool Allows(string mode, string target) => isSupported(target) && allows(mode, target);
+        public bool Allows(string spriteScope, string target) => isSupported(target) && allows(spriteScope, target);
+    }
+
+    public static class SkinSpriteScopes
+    {
+        public const string All = "ALL";
+        public const string CharacterHud = "CHARACTER_HUD";
+        public const string Character = "CHARACTER";
+        public static bool IsValid(string value) => value == All || value == CharacterHud || value == Character;
     }
 
     // A caller-verified, immutable normalized object. No registry or automatic folder discovery.
@@ -37,10 +45,14 @@ namespace DualSouls.Skins.Runtime
         public string Root { get; }
         public IReadOnlyDictionary<string, string> Textures { get; }
         public string Mode { get; }
-        public SkinPack(string id, string root, IDictionary<string, string> textures, string mode = "ON")
+        public string SpriteScope { get; }
+        public SkinPack(string id, string root, IDictionary<string, string> textures, string mode = "ON",
+            string spriteScope = SkinSpriteScopes.All)
         {
-            if (mode != "ON" && mode != "ROTATE") throw new ArgumentException("Invalid skin visual policy.");
+            if (mode != "ON" && mode != "ROTATE") throw new ArgumentException("Invalid skin activation mode.");
+            if (!SkinSpriteScopes.IsValid(spriteScope)) throw new ArgumentException("Invalid skin sprite scope.");
             Mode = mode;
+            SpriteScope = spriteScope;
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Pack ID is required.");
             Id = id; Root = Path.GetFullPath(root);
             var copy = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -189,7 +201,7 @@ namespace DualSouls.Skins.Runtime
         readonly List<SkinTexture> preparing = new List<SkinTexture>();
         long encodedAdmission, scratchBytes;
         bool blocked, disposed;
-        string retirementError = "", mode = "ON";
+        string retirementError = "", mode = "ON", spriteScope = SkinSpriteScopes.All;
         public SkinPack CurrentPack { get; private set; }
         public int SkinStamp { get; private set; }
         public bool TeardownComplete => disposed;
@@ -236,17 +248,27 @@ namespace DualSouls.Skins.Runtime
                 return WithRetirement(new SkinApplyResult(SkinApplyStatus.AwaitingTargets,
                     "Prior skin resources are still retiring; successor allocation is deferred.",
                     previousVisualsRestored: CurrentPack == null));
-            if (ReferenceEquals(pack, CurrentPack) && pack.Mode == mode) return Refresh();
+            if (ReferenceEquals(pack, CurrentPack) && pack.Mode == mode && pack.SpriteScope == spriteScope) return Refresh();
             var unsupported = pack.Textures.Keys.Where(x => !rules.IsSupported(x)).ToList();
             var candidate = new Dictionary<string, SkinTexture>(StringComparer.OrdinalIgnoreCase);
+            if (SameContent(pack, CurrentPack))
+            {
+                var reusable = new Dictionary<string, SkinTexture>(StringComparer.Ordinal);
+                foreach (var pair in current)
+                    if (CurrentPack.Textures.TryGetValue(pair.Key, out var payload) && !reusable.ContainsKey(payload))
+                        reusable.Add(payload, pair.Value);
+                foreach (var pair in pack.Textures.Where(x => rules.Allows(pack.SpriteScope, x.Key)))
+                    if (reusable.TryGetValue(pair.Value, out var texture)) candidate.Add(pair.Key, texture);
+            }
             try
             {
                 cancellation.ThrowIfCancellationRequested();
                 var files = new Dictionary<string, PngFile>(StringComparer.Ordinal);
                 long candidatePeak = 0;
-                foreach (var pair in pack.Textures.Where(x => rules.Allows(pack.Mode, x.Key)))
+                foreach (var pair in pack.Textures.Where(x => rules.Allows(pack.SpriteScope, x.Key)))
                 {
                     cancellation.ThrowIfCancellationRequested();
+                    if (candidate.ContainsKey(pair.Key)) continue;
                     string path = Path.Combine(pack.Root, pair.Value);
                     if (files.ContainsKey(path)) continue;
                     var file = Inspect(path);
@@ -263,12 +285,12 @@ namespace DualSouls.Skins.Runtime
                         "Previous visuals restored; successor waits for confirmed resource retirement.",
                         previousVisualsRestored: true));
                 }
-                mode = pack.Mode;
                 encodedAdmission = files.Values.Sum(x => x.Length);
                 var decoded = new Dictionary<string, SkinTexture>(StringComparer.Ordinal);
-                foreach (var pair in pack.Textures.Where(x => rules.Allows(pack.Mode, x.Key)))
+                foreach (var pair in pack.Textures.Where(x => rules.Allows(pack.SpriteScope, x.Key)))
                 {
                     cancellation.ThrowIfCancellationRequested();
+                    if (candidate.ContainsKey(pair.Key)) continue;
                     string path = Path.Combine(pack.Root, pair.Value);
                     if (!decoded.TryGetValue(path, out var texture))
                     {
@@ -285,18 +307,21 @@ namespace DualSouls.Skins.Runtime
                     else candidate.Add(pair.Key, texture);
                     cancellation.ThrowIfCancellationRequested();
                 }
-                var result = Change(candidate, false, cancellation, unsupported, pack.Mode);
-                if (result.Status == SkinApplyStatus.Applied || result.Status == SkinApplyStatus.Unchanged)
+                var result = Change(candidate, false, cancellation, unsupported, pack.SpriteScope);
+                if (result.Status == SkinApplyStatus.Applied || result.Status == SkinApplyStatus.Unchanged ||
+                    result.Status == SkinApplyStatus.AwaitingTargets && CurrentPack != null)
                 {
-                    var previous = current.Values.Distinct().ToList(); current = candidate; CurrentPack = pack;
+                    var previous = current.Values.Except(candidate.Values).Distinct().ToList(); current = candidate; CurrentPack = pack;
+                    mode = pack.Mode; spriteScope = pack.SpriteScope;
                     Retire(previous); return WithRetirement(result);
                 }
-                if (blocked) held.AddRange(candidate.Values.Distinct()); else Retire(candidate.Values);
+                var created = candidate.Values.Except(current.Values).Distinct();
+                if (blocked) held.AddRange(created); else Retire(created);
                 return WithRetirement(result);
             }
             catch (Exception error)
             {
-                Retire(candidate.Values);
+                Retire(candidate.Values.Except(current.Values));
                 return WithRetirement(new SkinApplyResult(error is OperationCanceledException ? SkinApplyStatus.Cancelled :
                     error is InvalidDataException || error is OverflowException ? SkinApplyStatus.Rejected : SkinApplyStatus.Failed,
                     error.Message, unsupported));
@@ -309,14 +334,14 @@ namespace DualSouls.Skins.Runtime
             Reap();
             if (disposed || blocked) return new SkinApplyResult(SkinApplyStatus.Blocked);
             if (CurrentPack == null) return WithRetirement(new SkinApplyResult(SkinApplyStatus.Unchanged));
-            return WithRetirement(Change(current.Where(x => rules.Allows(mode, x.Key)).ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase),
-                false, default, CurrentPack.Textures.Keys.Where(x => !rules.IsSupported(x)), mode));
+            return WithRetirement(Change(current.Where(x => rules.Allows(spriteScope, x.Key)).ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase),
+                false, default, CurrentPack.Textures.Keys.Where(x => !rules.IsSupported(x)), spriteScope));
         }
 
         public SkinApplyResult TryRestore()
         {
             Reap();
-            var result = Change(new Dictionary<string, SkinTexture>(), true, default, null, mode);
+            var result = Change(new Dictionary<string, SkinTexture>(), true, default, null, spriteScope);
             if (result.Status == SkinApplyStatus.Restored || result.Status == SkinApplyStatus.Unchanged)
             {
                 var release = current.Values.Concat(held).Distinct().ToList();
@@ -327,7 +352,7 @@ namespace DualSouls.Skins.Runtime
         }
 
         SkinApplyResult Change(IReadOnlyDictionary<string, SkinTexture> desired, bool restoring,
-            CancellationToken cancellation, IEnumerable<string> unsupported, string requestedMode)
+            CancellationToken cancellation, IEnumerable<string> unsupported, string requestedScope)
         {
             var undo = new List<(SkinSlot Slot, object Value)>();
             var nextOriginals = originals.Where(x => x.Key.IsAlive()).ToDictionary(x => x.Key, x => x.Value);
@@ -354,14 +379,12 @@ namespace DualSouls.Skins.Runtime
                     writes[slot] = replacement;
                 }
                 bool waiting = !restoring && writes.Count == 0;
-                if (waiting && requestedMode != "ROTATE")
-                    return new SkinApplyResult(SkinApplyStatus.AwaitingTargets, "No requested targets are currently available.", unsupported);
-                // No character target yet: retain working character visuals, but restore excluded
-                // environment now. A later refresh must not reapply the previous full-pack policy.
+                // Preserve a previously owned live slot only when this exact filtered candidate still
+                // requests its target. Scope narrowing restores every excluded slot in this transaction.
                 var activeOriginals = nextOriginals.Where(x => writes.ContainsKey(x.Key) ||
-                    (waiting && rules.Allows(requestedMode, x.Key.Target))).ToDictionary(x => x.Key, x => x.Value);
+                    desired.ContainsKey(x.Key.Target)).ToDictionary(x => x.Key, x => x.Value);
                 foreach (var original in nextOriginals)
-                    if (!writes.ContainsKey(original.Key) && !(waiting && rules.Allows(requestedMode, original.Key.Target)))
+                    if (!writes.ContainsKey(original.Key) && !desired.ContainsKey(original.Key.Target))
                         writes.Add(original.Key, original.Value);
                 AddInventoryConsumerWrites(slots, writes, nextOriginals, activeOriginals);
                 cancellation.ThrowIfCancellationRequested(); // commit is synchronous; no mid-frame yielding
@@ -375,7 +398,9 @@ namespace DualSouls.Skins.Runtime
                 }
                 originals = restoring ? new Dictionary<SkinSlot, object>() : activeOriginals;
                 if (undo.Count > 0) unchecked { SkinStamp++; }
-                if (waiting) return new SkinApplyResult(SkinApplyStatus.AwaitingTargets, "No character targets available; excluded environment restored.", unsupported);
+                if (waiting) return new SkinApplyResult(SkinApplyStatus.AwaitingTargets,
+                    "No live targets available for " + requestedScope + "; excluded targets restored.", unsupported,
+                    previousVisualsRestored: undo.Count > 0 && activeOriginals.Count == 0);
                 return new SkinApplyResult(undo.Count == 0 ? SkinApplyStatus.Unchanged :
                     restoring ? SkinApplyStatus.Restored : SkinApplyStatus.Applied, unsupported: unsupported);
             }
@@ -428,6 +453,16 @@ namespace DualSouls.Skins.Runtime
                 if (matches.Any(activeOriginals.ContainsKey)) activeOriginals[consumer] = vanilla;
             }
             if (writes.Count > 4096) throw new InvalidDataException("Live target and inventory consumer bound exceeded.");
+        }
+
+        static bool SameContent(SkinPack left, SkinPack right)
+        {
+            if (left == null || right == null || left.Id != right.Id || left.Root != right.Root ||
+                left.Textures.Count != right.Textures.Count) return false;
+            foreach (var pair in left.Textures)
+                if (!right.Textures.TryGetValue(pair.Key, out var payload) ||
+                    !string.Equals(pair.Value, payload, StringComparison.Ordinal)) return false;
+            return true;
         }
 
         IEnumerable<SkinTexture> AllTextures() => current.Values.Concat(held).Concat(retired).Concat(auxiliary).Concat(preparing).Distinct();

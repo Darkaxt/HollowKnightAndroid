@@ -24,6 +24,25 @@ class SkinLibraryRuntimeBridgeTest {
         assertEquals("OFF",wire["mode"].asString); assertEquals("ALL", wire["spriteScope"].asString)
         assertEquals(64,wire["configSha256"].asString.length)
     }
+    @Test fun `runtime payload transports sprite scope independently of mode including OFF`() {
+        val store = importedStore()
+        var document = store.read().required()
+        store.setSpriteScope(store.configurationIdentity(document), SpriteScope.CHARACTER_HUD).required()
+        val access = SkinLibraryRuntimeAccess(store)
+
+        var wire = JsonParser.parseString(access.readConfiguration()).asJsonObject
+        assertEquals("ROTATE", wire["mode"].asString)
+        assertEquals("CHARACTER_HUD", wire["spriteScope"].asString)
+        assertTrue(wire.has("textures"))
+
+        document = store.read().required()
+        store.setMode(store.configurationIdentity(document), LibraryMode.OFF).required()
+        wire = JsonParser.parseString(access.readConfiguration()).asJsonObject
+        assertEquals("OFF", wire["mode"].asString)
+        assertEquals("CHARACTER_HUD", wire["spriteScope"].asString)
+        assertFalse(wire.has("textures"))
+    }
+
     @Test fun `bounded last observation never writes configuration and stale observations are rejected`() {
         PinnedCatalogFixture.load()
         val store = SkinLibraryStore(SkinPaths(File(temporary.root,"profiles/hollow-knight").apply { mkdirs() }))

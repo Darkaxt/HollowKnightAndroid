@@ -86,7 +86,7 @@ namespace DualSouls.Skins.Silksong.Runtime
                 foreach (var texture in wire.textures) textures.Add(texture.target, texture.path);
             }
             return new SkinLibraryRequest { ProfileId = wire.profileId, ConfigSha256 = wire.configSha256,
-                Mode = wire.mode, PackId = wire.packId, TreeSha256 = wire.treeSha256, Root = wire.root,
+                Mode = wire.mode, SpriteScope = wire.spriteScope, PackId = wire.packId, TreeSha256 = wire.treeSha256, Root = wire.root,
                 Textures = textures, RotationRun = wire.rotationRun, LastDeath = wire.lastDeath,
                 PendingOccurrence = wire.pendingOccurrence, RotationDetail = wire.rotationDetail };
         }
@@ -115,7 +115,7 @@ namespace DualSouls.Skins.Silksong.Runtime
         [Serializable] sealed class WireRequest
         {
             public bool ok;
-            public string code, detail, profileId, configSha256, mode, packId, treeSha256, root,
+            public string code, detail, profileId, configSha256, mode, spriteScope, packId, treeSha256, root,
                 rotationRun, rotationDetail;
             public long lastDeath, pendingOccurrence;
             public WireTexture[] textures;
@@ -203,6 +203,11 @@ namespace DualSouls.Skins.Silksong.Runtime
                 death.Configure("ROTATE", run, occurrence, 0);
                 pending = false;
             }
+        }
+
+        public void Invalidate()
+        {
+            if (!disposed) nextPoll = 0f;
         }
 
         public void Dispose()

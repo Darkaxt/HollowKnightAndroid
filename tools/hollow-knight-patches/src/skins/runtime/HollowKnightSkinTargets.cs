@@ -4,6 +4,8 @@ using System.Collections.ObjectModel;
 
 namespace DualSouls.Skins.HollowKnight.Runtime
 {
+    public enum HollowKnightSkinFamily { Character, Hud, Other }
+
     // Adapted from igawa6/dualsouls Assets/HKMods.cs at
     // 5c22451435b772acde0c7e6456f9019bc1baef73 (source-only MIT label). See NOTICE.md.
     // These are rendering targets, not an alternate pack-name/registry authority.
@@ -131,7 +133,55 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             return true;
         }
         static readonly HashSet<string> Supported = new HashSet<string>(SupportedTargets(), StringComparer.OrdinalIgnoreCase);
+        static readonly IReadOnlyDictionary<string, HollowKnightSkinFamily> Families = BuildFamilies();
         public static bool IsSupported(string canonicalTarget) => Supported.Contains(canonicalTarget);
+        public static bool TryGetFamily(string canonicalTarget, out HollowKnightSkinFamily family) =>
+            Families.TryGetValue(canonicalTarget ?? "", out family);
+
+        static IReadOnlyDictionary<string, HollowKnightSkinFamily> BuildFamilies()
+        {
+            var result = new Dictionary<string, HollowKnightSkinFamily>(StringComparer.OrdinalIgnoreCase);
+            void AddTarget(HollowKnightSkinFamily family, string target)
+            {
+                if (result.TryGetValue(target, out var existing))
+                {
+                    if (existing != family) throw new InvalidOperationException("Conflicting skin target family: " + target);
+                    return;
+                }
+                result.Add(target, family);
+            }
+            void Add(HollowKnightSkinFamily family, params string[] targets)
+            {
+                foreach (var target in targets) AddTarget(family, target);
+            }
+
+            // Source authority: Knight's two collection pages plus every sheet bound by HERO_OBJ
+            // beneath HeroController in the referenced HKMods.cs. The remaining entries are
+            // CustomKnight player states, spells, equipped charm companions, and death visuals.
+            Add(HollowKnightSkinFamily.Character,
+                "Knight.png", "Sprint.png", "Unn.png", "Shade.png", "ShadeOrb.png", "Wraiths.png", "VoidSpells.png", "VS.png",
+                "QOrbs.png", "QOrbs2.png", "ScrOrbs.png", "ScrOrbs2.png", "DungRecharge.png", "SDCrystalBurst.png",
+                "DoubleJFeather.png", "Leak.png", "HitPt.png", "ShadowDashBlobs.png", "Deathpt.png", "DDeathpt.png",
+                "Baldur.png", "Fluke.png", "Grimm.png", "Shield.png", "Weaver.png", "Hatchling.png", "Compass.png",
+                "Beam.png", "Cloak.png", "Shriek.png", "Wings.png", "Webbed.png", "DreamArrival.png", "Dreamnail.png",
+                "DeathNail.png", "DeathAsh.png", "BrummShield.png", "FlowerBreak.png");
+
+            // HKMods.cs identifies these exact three through HUD Cln and its hudCanvas object pass.
+            Add(HollowKnightSkinFamily.Hud, "Hud.png", "OrbFull.png", "Liquid.png");
+
+            // Explicit non-status surfaces: world currency, NPC/environment/cutscene art, inventory,
+            // and charms pages. These remain available only to ALL.
+            Add(HollowKnightSkinFamily.Other, "Geo.png", "Quirrel.png", "Hornet.png", "Birthplace.png", "BrummWave.png", "Salubra.png");
+            foreach (var map in new[] { InventoryObjects, InventoryFsms, CharmFields, CharmFsms })
+                foreach (var target in map.Keys) AddTarget(HollowKnightSkinFamily.Other, target);
+            for (int i = 0; i < 40; i++)
+            {
+                var target = CharmListTarget(i);
+                if (target != null) AddTarget(HollowKnightSkinFamily.Other, target);
+            }
+            return new ReadOnlyDictionary<string, HollowKnightSkinFamily>(result);
+        }
+
         public static string CollectionTarget(string name, int page)
         {
             if (string.IsNullOrEmpty(name) || page < 0) return null;

@@ -17,7 +17,7 @@ public sealed class HollowKnightSkinRuntimeTests
         var hornet = new Slot("Hornet.png", new object(), null);
         var knight = new Slot("Knight.png", new object(), null);
         var rules = new SkinRuntimeRules("silksong", 11,
-            target => target == "Hornet.png", (mode, target) => mode == "ON" && target == "Hornet.png");
+            target => target == "Hornet.png", (scope, target) => scope == "ALL" && target == "Hornet.png");
         using var session = new SkinRuntimeSession(loader,
             () => new[] { hornet.Binding(), knight.Binding() }, 512L * 1024 * 1024, rules);
         var root = Path.Combine(AppContext.BaseDirectory, "runtime-fixtures", Guid.NewGuid().ToString("N"));
@@ -141,7 +141,7 @@ public sealed class HollowKnightSkinRuntimeTests
     {
         var targets = Enumerable.Range(0, 11).Select(index => "T" + index + ".png").ToArray();
         var rules = new SkinRuntimeRules("silksong", 11, targets.Contains,
-            (mode, target) => mode == "ON" || mode == "ROTATE" && Array.IndexOf(targets, target) < 9,
+            (scope, target) => scope == "ALL" || scope == "CHARACTER" && Array.IndexOf(targets, target) < 9,
             restoreBeforeRotation: true);
         var rig = new Rig(2300, rules);
         foreach (var target in targets) rig.Add(target);
@@ -174,7 +174,7 @@ public sealed class HollowKnightSkinRuntimeTests
     {
         var targets = Enumerable.Range(0, 11).Select(index => "T" + index + ".png").ToArray();
         var rules = new SkinRuntimeRules("silksong", 11, targets.Contains,
-            (mode, target) => mode == "ON" || mode == "ROTATE" && Array.IndexOf(targets, target) < 9,
+            (scope, target) => scope == "ALL" || scope == "CHARACTER" && Array.IndexOf(targets, target) < 9,
             restoreBeforeRotation: true);
         var rig = new Rig(2300, rules);
         foreach (var target in targets) rig.Add(target);
@@ -195,6 +195,7 @@ public sealed class HollowKnightSkinRuntimeTests
         Assert.Equal("full-a", observed.ActivePackId);
         rig.Loader.DelayedRelease = true;
         request.Mode = successorMode;
+        request.SpriteScope = successorMode == "ROTATE" ? "CHARACTER" : "ALL";
         request.PackId = second.Id;
         request.TreeSha256 = new string('c', 64);
         request.Root = second.Root;
@@ -227,7 +228,7 @@ public sealed class HollowKnightSkinRuntimeTests
     {
         var targets = Enumerable.Range(0, 11).Select(index => "T" + index + ".png").ToArray();
         var rules = new SkinRuntimeRules("silksong", 11, targets.Contains,
-            (mode, target) => mode == "ON" || mode == "ROTATE" && Array.IndexOf(targets, target) < 9,
+            (scope, target) => scope == "ALL" || scope == "CHARACTER" && Array.IndexOf(targets, target) < 9,
             restoreBeforeRotation: true);
         var rig = new Rig(2300, rules);
         foreach (var target in targets) rig.Add(target);
@@ -283,13 +284,13 @@ public sealed class HollowKnightSkinRuntimeTests
     {
         var targets = Enumerable.Range(0, 11).Select(index => "T" + index + ".png").ToArray();
         var rules = new SkinRuntimeRules("silksong", 11, targets.Contains,
-            (mode, target) => mode == "ON" || mode == "ROTATE" && Array.IndexOf(targets, target) < 9,
+            (scope, target) => scope == "ALL" || scope == "CHARACTER" && Array.IndexOf(targets, target) < 9,
             restoreBeforeRotation: true);
         var rig = new Rig(2300, rules);
         foreach (var target in targets) rig.Add(target);
         var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGNQSlv1HxkzkC4AAJHIIxEb9L/kAAAAAElFTkSuQmCC");
         var on = rig.Pack("full", "ON", png, targets);
-        var rotate = rig.Pack("full", "ROTATE", png, targets);
+        var rotate = rig.PackWithScope("full", "ROTATE", "CHARACTER", png, targets);
 
         Assert.Equal(SkinApplyStatus.Applied, rig.Session.TryApply(on).Status);
         rig.Loader.DelayedRelease = true;
@@ -984,42 +985,108 @@ public sealed class HollowKnightSkinRuntimeTests
     }
 
     [Fact]
-    public void Mode_policy_filters_material_and_atlas_and_rebinds_without_environment()
+    public void Every_supported_target_has_an_explicit_source_family_and_unknown_targets_fail_closed()
     {
-        var rig = new Rig(); var knight = rig.Add("Knight.png"); var geo = rig.Add("Geo.png");
-        var ui = rig.Add("Inventory/Geo.png"); var quirrel = rig.Add("Quirrel.png"); var birthplace = new Atlas();
-        rig.ExtraSlots.Add(new SkinAtlasSlot(birthplace, "Birthplace.png", rig.Session.AllocateAuxiliary).Binding());
-        var pack = rig.Pack("a", "Knight.png", "Geo.png", "Inventory/Geo.png", "Quirrel.png", "Birthplace.png");
+        var supported = HollowKnightSkinTargets.SupportedTargets().Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        Assert.All(supported, target => Assert.True(HollowKnightSkinTargets.TryGetFamily(target, out _), target));
+        Assert.All(supported, target => Assert.True(HollowKnightSkinPolicy.RuntimeRules.Allows("ALL", target), target));
+        Assert.Equal(new[] { "Hud.png", "Liquid.png", "OrbFull.png" }, supported
+            .Where(target => HollowKnightSkinTargets.TryGetFamily(target, out var family) && family == HollowKnightSkinFamily.Hud)
+            .OrderBy(target => target, StringComparer.Ordinal).ToArray());
+        Assert.Equal(HollowKnightSkinFamily.Character, Family("Knight.png"));
+        Assert.Equal(HollowKnightSkinFamily.Character, Family("Wraiths.png"));
+        Assert.Equal(HollowKnightSkinFamily.Hud, Family("Hud.png"));
+        Assert.Equal(HollowKnightSkinFamily.Hud, Family("OrbFull.png"));
+        Assert.Equal(HollowKnightSkinFamily.Hud, Family("Liquid.png"));
+        Assert.Equal(HollowKnightSkinFamily.Other, Family("Inventory/Geo.png"));
+        Assert.Equal(HollowKnightSkinFamily.Other, Family("Charms/Charm_1.png"));
+        Assert.Equal(HollowKnightSkinFamily.Other, Family("Geo.png"));
+        Assert.Equal(HollowKnightSkinFamily.Other, Family("Birthplace.png"));
+        Assert.Equal(HollowKnightSkinFamily.Other, Family("Quirrel.png"));
+        Assert.False(HollowKnightSkinTargets.TryGetFamily("future-unclassified.png", out _));
+
+        HollowKnightSkinFamily Family(string target)
+        {
+            Assert.True(HollowKnightSkinTargets.TryGetFamily(target, out var family));
+            return family;
+        }
+    }
+
+    [Theory]
+    [InlineData("ALL", "Knight.png", true)]
+    [InlineData("ALL", "Hud.png", true)]
+    [InlineData("ALL", "Geo.png", true)]
+    [InlineData("CHARACTER_HUD", "Knight.png", true)]
+    [InlineData("CHARACTER_HUD", "Hud.png", true)]
+    [InlineData("CHARACTER_HUD", "Geo.png", false)]
+    [InlineData("CHARACTER", "Knight.png", true)]
+    [InlineData("CHARACTER", "Hud.png", false)]
+    [InlineData("CHARACTER", "Inventory/Geo.png", false)]
+    [InlineData("BOGUS", "Knight.png", false)]
+    public void Hollow_Knight_scope_policy_is_explicit_and_closed(string scope, string target, bool expected) =>
+        Assert.Equal(expected, HollowKnightSkinPolicy.RuntimeRules.Allows(scope, target));
+
+    [Fact]
+    public void Scope_policy_filters_targets_independently_of_On_and_Rotate_modes()
+    {
+        var rig = new Rig(); var knight = rig.Add("Knight.png"); var hud = rig.Add("Hud.png"); var geo = rig.Add("Geo.png");
+        var pack = rig.Pack("a", "Knight.png", "Hud.png", "Geo.png");
         var request = PolicyRequest(pack); var controller = PolicyController(rig, request);
-        controller.Tick(); Assert.NotSame(geo.Original, geo.Value); Assert.NotSame(birthplace.Vanilla, birthplace.Visual);
+        controller.Tick();
+        Assert.NotSame(knight.Original, knight.Value); Assert.NotSame(hud.Original, hud.Value); Assert.NotSame(geo.Original, geo.Value);
+
+        request.SpriteScope = "CHARACTER_HUD"; controller.Tick();
+        Assert.NotSame(knight.Original, knight.Value); Assert.NotSame(hud.Original, hud.Value); Assert.Same(geo.Original, geo.Value);
+
         request.Mode = "ROTATE"; controller.Tick();
-        Assert.Same(geo.Original, geo.Value); Assert.Same(birthplace.Vanilla, birthplace.Visual);
-        Assert.NotSame(knight.Original, knight.Value); Assert.NotSame(ui.Original, ui.Value); Assert.NotSame(quirrel.Original, quirrel.Value);
-        var fresh = rig.Add("Geo.png"); var freshKnight = rig.Add("Knight.png"); rig.Session.Refresh();
-        Assert.Same(fresh.Original, fresh.Value); Assert.NotSame(freshKnight.Original, freshKnight.Value);
-        request.Mode = "ON"; controller.Tick(); Assert.NotSame(geo.Original, geo.Value);
-        request.Mode = "OFF"; controller.Tick(); Assert.Same(geo.Original, geo.Value); Assert.Same(knight.Original, knight.Value);
+        Assert.NotSame(knight.Original, knight.Value); Assert.NotSame(hud.Original, hud.Value); Assert.Same(geo.Original, geo.Value);
+
+        request.SpriteScope = "CHARACTER"; controller.Tick();
+        Assert.NotSame(knight.Original, knight.Value); Assert.Same(hud.Original, hud.Value); Assert.Same(geo.Original, geo.Value);
+
+        request.Mode = "ON"; request.SpriteScope = "ALL"; controller.Tick();
+        Assert.NotSame(knight.Original, knight.Value); Assert.NotSame(hud.Original, hud.Value); Assert.NotSame(geo.Original, geo.Value);
+        request.Mode = "OFF"; request.SpriteScope = "CHARACTER"; controller.Tick();
+        Assert.Same(knight.Original, knight.Value); Assert.Same(hud.Original, hud.Value); Assert.Same(geo.Original, geo.Value);
     }
 
     [Fact]
-    public void Filter_empty_transition_restores_before_waiting_and_never_reapplies_environment()
+    public void Scope_narrowing_retains_included_texture_and_widening_decodes_only_new_targets()
+    {
+        var rig = new Rig(); var knight = rig.Add("Knight.png"); var hud = rig.Add("Hud.png"); var geo = rig.Add("Geo.png");
+        var request = PolicyRequest(rig.Pack("a", "Knight.png", "Hud.png", "Geo.png"));
+        var controller = PolicyController(rig, request);
+        controller.Tick(); var knightSkin = knight.Value;
+        Assert.Equal(3, rig.Loader.Created.Count);
+
+        request.SpriteScope = "CHARACTER"; controller.Tick();
+        Assert.Same(knightSkin, knight.Value); Assert.Same(hud.Original, hud.Value); Assert.Same(geo.Original, geo.Value);
+        Assert.Equal(3, rig.Loader.Created.Count);
+
+        request.SpriteScope = "ALL"; controller.Tick();
+        Assert.Same(knightSkin, knight.Value); Assert.NotSame(hud.Original, hud.Value); Assert.NotSame(geo.Original, geo.Value);
+        Assert.Equal(5, rig.Loader.Created.Count);
+    }
+
+    [Fact]
+    public void Empty_scope_transition_restores_excluded_targets_and_remains_awaiting()
     {
         var rig = new Rig(); var geo = rig.Add("Geo.png"); var request = PolicyRequest(rig.Pack("a", "Geo.png"));
         SkinLibraryObservation seen = null; var controller = PolicyController(rig, request, x => seen = x);
         controller.Tick(); Assert.NotSame(geo.Original, geo.Value);
-        request.Mode = "ROTATE"; controller.Tick(); Assert.Same(geo.Original, geo.Value);
-        Assert.Equal("AwaitingTargets", seen.Status); Assert.Equal(2, rig.Session.SkinStamp);
+        request.SpriteScope = "CHARACTER"; controller.Tick(); Assert.Same(geo.Original, geo.Value);
+        Assert.Equal("AwaitingTargets", seen.Status); Assert.Null(seen.ActivePackId); Assert.Equal(2, rig.Session.SkinStamp);
         rig.Session.Refresh(); controller.Tick(); Assert.Same(geo.Original, geo.Value); Assert.Equal(2, rig.Session.SkinStamp);
-        request.Mode = "ON"; controller.Tick(); Assert.NotSame(geo.Original, geo.Value);
+        request.SpriteScope = "ALL"; controller.Tick(); Assert.NotSame(geo.Original, geo.Value);
     }
 
     [Fact]
-    public void Filter_empty_restore_failure_is_visible_and_retryable_without_false_stamp()
+    public void Empty_scope_restore_failure_is_visible_and_retryable_without_false_stamp()
     {
         var rig = new Rig(); var geo = rig.Add("Geo.png"); var request = PolicyRequest(rig.Pack("a", "Geo.png"));
         SkinLibraryObservation seen = null; var controller = PolicyController(rig, request, x => seen = x);
         controller.Tick(); var previous = geo.Value; geo.FailNextWrite = true;
-        request.Mode = "ROTATE"; controller.Tick(); Assert.Equal("Failed", seen.Status);
+        request.SpriteScope = "CHARACTER"; controller.Tick(); Assert.Equal("Failed", seen.Status);
         Assert.Same(previous, geo.Value); Assert.Equal(1, rig.Session.SkinStamp);
         controller.Tick(); Assert.Same(geo.Original, geo.Value); Assert.Equal("AwaitingTargets", seen.Status); Assert.Equal(2, rig.Session.SkinStamp);
     }
@@ -1029,7 +1096,7 @@ public sealed class HollowKnightSkinRuntimeTests
     {
         var rig=new Rig();var knight=rig.Add("Knight.png");var geo=rig.Add("Geo.png");
         var a=rig.Pack("a","Knight.png","Geo.png");var b=rig.Pack("b","Knight.png","Geo.png");
-        var request=PolicyRequest(a);request.Mode="ROTATE";request.RotationRun="run";
+        var request=PolicyRequest(a);request.Mode="ROTATE";request.SpriteScope="CHARACTER_HUD";request.RotationRun="run";
         var frame=new SkinDeathFrame {Hero=new object(),Manager=new object(),Hud=new object(),SaveId=1,MapZone="CROSSROADS",
             Gameplay=true,Playing=true,InPosition=true,WaitingToTransition=true,AcceptingInput=true,TargetsAvailable=true};
         var death=new HollowKnightSkinDeathAdapter(()=>frame);string selected="a";int confirmations=0;
@@ -1270,7 +1337,7 @@ public sealed class HollowKnightSkinRuntimeTests
         {
             Knight=Rendering.Add("Knight.png");Geo=Rendering.Add("Geo.png");
             var a=Rendering.Pack("a","Knight.png","Geo.png");var b=Rendering.Pack("b","Knight.png","Geo.png");
-            Request=PolicyRequest(a);Request.Mode="ROTATE";Request.RotationRun="run";
+            Request=PolicyRequest(a);Request.Mode="ROTATE";Request.SpriteScope="CHARACTER_HUD";Request.RotationRun="run";
             Death=new HollowKnightSkinDeathAdapter(()=>Frame);
             Schedule=new SkinRuntimeRefreshSchedule(()=>TargetCaches++,()=>Library.CanRefresh,
                 ()=>{Refreshes++;Schedule.Publish(Rendering.Session.Refresh());});
@@ -1295,7 +1362,7 @@ public sealed class HollowKnightSkinRuntimeTests
         public void Dispose(){Library.Dispose();Rendering.Session.Dispose();}
     }
     static SkinLibraryRequest PolicyRequest(SkinPack pack) => new SkinLibraryRequest {
-        ProfileId = "hollow-knight", ConfigSha256 = new string('a', 64), Mode = "ON", PackId = pack.Id,
+        ProfileId = "hollow-knight", ConfigSha256 = new string('a', 64), Mode = "ON", SpriteScope = "ALL", PackId = pack.Id,
         TreeSha256 = new string('b', 64), Root = pack.Root, Textures = pack.Textures.ToDictionary(x => x.Key, x => x.Value)
     };
     static SkinLibraryRuntimeController PolicyController(Rig rig, SkinLibraryRequest request, Action<SkinLibraryObservation> report = null) =>
@@ -1320,7 +1387,9 @@ public sealed class HollowKnightSkinRuntimeTests
         }
         public SkinPack Pack(string id, params string[] targets) => Pack(id, "ON",
             Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg=="), targets);
-        public SkinPack Pack(string id, string mode, byte[] png, params string[] targets)
+        public SkinPack Pack(string id, string mode, byte[] png, params string[] targets) =>
+            PackWithScope(id, mode, "ALL", png, targets);
+        public SkinPack PackWithScope(string id, string mode, string spriteScope, byte[] png, params string[] targets)
         {
             var root = Path.Combine(AppContext.BaseDirectory, "runtime-fixtures", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(root); var files = new Dictionary<string, string>();
@@ -1330,7 +1399,7 @@ public sealed class HollowKnightSkinRuntimeTests
                 File.WriteAllBytes(Path.Combine(root, name), png);
                 files.Add(targets[i], name);
             }
-            return new SkinPack(id, root, files, mode);
+            return new SkinPack(id, root, files, mode, spriteScope);
         }
     }
     sealed class Slot

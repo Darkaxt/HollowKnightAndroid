@@ -148,7 +148,7 @@ namespace DualSouls.Skins.HollowKnight.Runtime
                 foreach (var texture in wire.textures) textures.Add(texture.target, texture.path);
             }
             return new SkinLibraryRequest { ProfileId = wire.profileId, ConfigSha256 = wire.configSha256, Mode = wire.mode,
-                PackId = wire.packId, TreeSha256 = wire.treeSha256, Root = wire.root, Textures = textures,
+                SpriteScope = wire.spriteScope, PackId = wire.packId, TreeSha256 = wire.treeSha256, Root = wire.root, Textures = textures,
                 RotationRun = wire.rotationRun, LastDeath = wire.lastDeath, PendingOccurrence = wire.pendingOccurrence, RotationDetail = wire.rotationDetail };
         }
         bool ReportManaged(SkinLibraryObservation observation)
@@ -170,7 +170,7 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         [Serializable] sealed class WireRequest
         {
             public bool ok;
-            public string code, detail, profileId, configSha256, mode, packId, treeSha256, root, rotationRun, rotationDetail;
+            public string code, detail, profileId, configSha256, mode, spriteScope, packId, treeSha256, root, rotationRun, rotationDetail;
             public long lastDeath, pendingOccurrence;
             public WireTexture[] textures;
         }

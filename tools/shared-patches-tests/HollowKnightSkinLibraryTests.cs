@@ -57,6 +57,46 @@ public class HollowKnightSkinLibraryTests
         Assert.Equal(new[] { "apply:a", "restore", "restore", "apply:b" }, actions);
     }
 
+    [Fact] public void Same_pack_and_mode_scope_change_has_distinct_cache_identity_and_reapplies()
+    {
+        var request = Request(); var applied = new List<SkinPack>();
+        var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules, () => request,
+            pack => { applied.Add(pack); return new SkinApplyResult(SkinApplyStatus.Applied); },
+            () => new SkinApplyResult(SkinApplyStatus.Restored), _ => { });
+
+        controller.Tick(); controller.Tick();
+        request.SpriteScope = "CHARACTER"; request.ConfigSha256 = new string('c', 64); controller.Tick();
+        request.Mode = "ROTATE"; request.ConfigSha256 = new string('d', 64); controller.Tick();
+
+        Assert.Equal(3, applied.Count);
+        Assert.Equal(new[] { "ALL", "CHARACTER", "CHARACTER" }, applied.ConvertAll(x => x.SpriteScope));
+        Assert.Equal(new[] { "ON", "ON", "ROTATE" }, applied.ConvertAll(x => x.Mode));
+        Assert.NotSame(applied[0], applied[1]);
+        Assert.NotSame(applied[1], applied[2]);
+    }
+
+    [Fact] public void Off_validates_and_transports_scope_but_only_restores_baseline()
+    {
+        var request = Request(); request.Mode = "OFF"; request.SpriteScope = "CHARACTER";
+        int applies = 0, restores = 0; SkinLibraryObservation observed = null;
+        var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules, () => request,
+            _ => { applies++; return new SkinApplyResult(SkinApplyStatus.Applied); },
+            () => { restores++; return new SkinApplyResult(SkinApplyStatus.Restored); }, value => observed = value);
+
+        controller.Tick(); request.SpriteScope = "ALL"; request.ConfigSha256 = new string('c', 64); controller.Tick();
+
+        Assert.Equal(0, applies); Assert.Equal(1, restores); Assert.Equal("Restored", observed.Status);
+    }
+
+    [Fact] public void Invalid_scope_is_rejected_without_touching_visuals()
+    {
+        var request = Request(); request.SpriteScope = "EVERYTHING"; int writes = 0; SkinLibraryObservation observed = null;
+        var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules, () => request,
+            _ => { writes++; return null; }, () => { writes++; return null; }, value => observed = value);
+        controller.Tick();
+        Assert.Equal(0, writes); Assert.Equal("Failed", observed.Status);
+    }
+
     [Fact] public void OnAndRotateReuseImmutablePackAndOffRestoresOnce()
     {
         var request = Request(); var applied = new List<SkinPack>(); int restores = 0;
@@ -441,7 +481,8 @@ public class HollowKnightSkinLibraryTests
         public SkinTexture Decode(byte[] bytes, int width, int height) => new SkinTexture(new object(), width, height, () => { }, () => true);
     }
     static SkinLibraryRequest Request() => new SkinLibraryRequest {
-        ProfileId = "hollow-knight", ConfigSha256 = new string('a', 64), Mode = "ON", PackId = "a", TreeSha256 = new string('b', 64),
+        ProfileId = "hollow-knight", ConfigSha256 = new string('a', 64), Mode = "ON", SpriteScope = "ALL",
+        PackId = "a", TreeSha256 = new string('b', 64),
         Root = System.IO.Path.GetTempPath(), Textures = new Dictionary<string, string> { ["Knight.png"] = "assets/a" }
     };
 }
