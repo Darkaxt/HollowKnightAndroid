@@ -13,8 +13,8 @@ receipts record only what they directly prove.
 
 - The upper display remains the game view. HUD elements assigned to the lower
   display must not remain duplicated on the upper display.
-- The lower display uses its full renderable surface rather than a small modal
-  floating inside unused space.
+- The lower display uses its full renderable surface for the resident HUD and
+  game pages rather than placing them in a small panel inside unused space.
 - Hollow Knight is the implementation and validation oracle. Hollow Knight must
   work first; shared behavior is then adapted to Silksong without regressing it.
 - Silksong-specific health, Silk, currency, Crests, Tools, Tasks, and other
@@ -90,25 +90,35 @@ The interface also includes the group selector, Reset Mods, and Back. A row may
 be adapted to Silksong terminology or mechanics, but it cannot disappear merely
 because an implementation seam has not yet been built.
 
-### Required Mods surfaces
+### Required Mods surfaces and ownership
 
-The reference exposes three distinct surfaces, all of which remain part of the
-product:
+The product has exactly two Mods-related surfaces:
 
-1. The in-game Options → Mods screen, with practical controller navigation,
-   confirm, value changes, reset, and native Back/Cancel behavior.
-2. The lower-display gear pane, using the whole lower render target with the
-   reference list/details proportions. It may remain touch-driven so gameplay
-   controller input continues to belong to the game, but it cannot be the only
-   way to reach the catalog.
-3. The launcher skin-package screen for installing and managing Custom Knight
-   packs.
+1. The **upper-display** in-game Options → Mods screen. It is the sole in-game
+   Mods interface and must expose the complete required catalog for the active
+   game, including every group, row, unavailable-state explanation, master
+   switch, Reset Mods command, and Back action. It must provide practical
+   controller navigation, stable focus after confirm or value changes,
+   left/right value changes, command and route execution, reset, and native
+   Back/Cancel behavior. Grouping and scrolling may organize the catalog, but
+   must not omit rows that exist in the shared Mods model.
+2. The launcher skin-package screen for installing and managing Custom Knight
+   packs. This remains separate because package import and management happen
+   outside gameplay.
 
-The launcher Mods screen must also provide visible controller focus, stable
-focus after changes, deterministic directional navigation, confirm, left/right
-value changes, and controller Back. Its content must use the full available
-window, including a readable details pane; a non-fullscreen activity or
-zero-width details view does not satisfy this requirement.
+The lower display is reserved for its resident HUD, game pages, and their
+existing controls. It must not contain a Mods wheel, gear, shortcut, pane,
+modal, catalog, or duplicate Mods presenter. The existing lower-display Mods
+UI may be removed only after automated catalog parity and live controller
+validation prove that the upper Options → Mods screen exposes and operates the
+complete catalog in both games. Once that gate passes, the lower Mods UI and
+its touch/input ownership must be removed rather than retained as a hidden or
+fallback path.
+
+The launcher skin-package screen must provide visible controller focus, stable
+focus after changes, deterministic directional navigation, confirm, controller
+Back, and a readable full-window layout. These launcher requirements do not
+create a second in-game Mods menu.
 
 Mods must be profile-isolated, default off unless the user enabled them, apply
 live where the reference applies live, persist across relaunch, and restore
@@ -151,11 +161,14 @@ The deliverable remains incomplete until all of the following are demonstrated:
 
 1. Exact host compiles and focused tests pass for both supported game builds.
 2. Hollow Knight ordinary gameplay shows the reference HUD/pages on the lower
-   display, no duplicate upper HUD, full-window Mods layout, controller-operable
-   Mods, the complete catalog, persistence/reset, skin application, and one
-   normal-death rotation.
-3. Silksong demonstrates the equivalent experience with its additional
-   mechanics integrated into the same design and no Hollow Knight regression.
+   display with no duplicate upper HUD and no lower-display Mods wheel, gear,
+   pane, or presenter. Its upper Pause → Options → Mods screen uses the full
+   available upper menu window, is fully controller-operable, exposes the
+   complete catalog, and proves persistence/reset. Skin application and one
+   normal-death rotation are also demonstrated.
+3. Silksong demonstrates the equivalent upper-display Mods ownership and
+   lower-display HUD/page experience, with its additional mechanics integrated
+   into the same design and no Hollow Knight regression.
 4. Repeated launch, pause/resume, scene transition, display interruption, and
    process restore preserve correct ownership and profile isolation.
 5. Production artifacts use the persistent release signer. Publishing a public

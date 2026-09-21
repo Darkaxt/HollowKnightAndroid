@@ -14,14 +14,14 @@ The harness never treats successful ADB execution as a visual pass. It does not 
 ```json
 {
   "version": 1,
-  "name": "Hollow Knight Mods presentation",
+  "name": "Hollow Knight upper-display Mods presentation",
   "steps": [
     {
       "id": "open-mods",
-      "title": "Open Mods from the lower-screen gear",
-      "expected_before": "Stable gameplay with the ordinary lower HUD visible",
-      "expected_after": "Mods exclusively owns the lower content while frame chrome remains",
-      "action": { "type": "tap", "display": 4, "x": 106, "y": 922 }
+      "title": "Confirm the selected Mods entry in the upper Options menu",
+      "expected_before": "Paused Options screen on the upper display with MODS selected; the lower display contains no Mods gear or pane",
+      "expected_after": "The complete controller-operated Mods catalog owns the upper menu window; the lower display remains free of Mods UI",
+      "action": { "type": "keyevent", "display": 0, "keycode": "KEYCODE_BUTTON_A" }
     }
   ]
 }
@@ -68,7 +68,7 @@ python tools/android-validation/dualsouls_validate.py review \
   --session "$CLAUDE_JOB_DIR/tmp/hk-mods-live" \
   --step open-mods \
   --verdict pass \
-  --note "Ordinary HUD content was absent and the Mods hierarchy was clean."
+  --note "The complete catalog was readable on the upper display, controller focus remained stable, and the lower display contained no Mods UI."
 
 python tools/android-validation/dualsouls_validate.py report \
   --session "$CLAUDE_JOB_DIR/tmp/hk-mods-live"
