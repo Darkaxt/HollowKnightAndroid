@@ -393,6 +393,7 @@ namespace DualSouls.Mods.HollowKnight
             button.Owner = this;
             button.Selectable = source;
             button.Role = (int)role;
+            source.buttonType = MenuButton.MenuButtonType.Activate;
             source.cancelAction = CancelAction.DoNothing;
             source.navigation = new Navigation { mode = Navigation.Mode.None };
 

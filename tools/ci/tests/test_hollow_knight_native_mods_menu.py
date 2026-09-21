@@ -126,6 +126,15 @@ class HollowKnightNativeModsMenuContractTest(unittest.TestCase):
         )
         self.assertIn("behaviour is MenuButton", source)
 
+    def test_mod_rows_keep_focus_after_submit_while_options_entry_can_transition(self):
+        source = self.source()
+        create = method_body(source, "void CreateButton(")
+        entry = method_body(source, "void BuildEntry(")
+        self.assertIn(
+            "source.buttonType = MenuButton.MenuButtonType.Activate;", create
+        )
+        self.assertNotIn("MenuButtonType.Activate", entry)
+
     def test_binding_waits_for_ready_authority_and_rebinds_after_loss(self):
         source = self.source()
         bind = method_body(source, "void TryBind()")
