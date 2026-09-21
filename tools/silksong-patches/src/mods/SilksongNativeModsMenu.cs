@@ -3,6 +3,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using DualSouls.Mods;
+using DualSouls.Skins;
 using GlobalEnums;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -20,54 +21,74 @@ namespace DualSouls.Mods.Silksong
     public sealed class SilksongNativeModsMenu : MonoBehaviour
     {
         const int VisibleRows = 5;
+        const int MaximumSkinSnapshotBytes = 262144;
+        const string SkinProfileId = "silksong";
         const float EntryY = -575f;
         const float FirstRowY = -25f;
         const float RowStep = 78f;
 
+        internal enum NativeMenuRoute { Mods, Skins }
         enum ButtonRole { Group, Master, Row, Reset, Back }
 
         sealed class NativeMenuBinding
         {
             public NativeMenuBinding(UIManager ui, MenuScreen optionsScreen,
-                                     MenuScreen modsScreen, TweakSession session,
-                                     TweakMenuModel menu, GameObject entryRoot)
+                                     MenuScreen modsScreen, MenuScreen skinsScreen,
+                                     TweakSession session, TweakMenuModel menu,
+                                     GameObject modsEntryRoot, GameObject skinsEntryRoot)
             {
                 Ui = ui;
                 OptionsScreen = optionsScreen;
                 ModsScreen = modsScreen;
+                SkinsScreen = skinsScreen;
                 Session = session;
                 Menu = menu;
-                EntryRoot = entryRoot;
+                ModsEntryRoot = modsEntryRoot;
+                SkinsEntryRoot = skinsEntryRoot;
             }
 
             public UIManager Ui { get; }
             public MenuScreen OptionsScreen { get; }
             public MenuScreen ModsScreen { get; }
+            public MenuScreen SkinsScreen { get; }
             public TweakSession Session { get; }
             public TweakMenuModel Menu { get; }
-            public GameObject EntryRoot { get; }
+            public GameObject ModsEntryRoot { get; }
+            public GameObject SkinsEntryRoot { get; }
         }
 
         readonly List<SilksongNativeModsButton> _buttons =
             new List<SilksongNativeModsButton>();
         readonly List<GameObject> _buttonRoots = new List<GameObject>();
         readonly List<TmpText> _labels = new List<TmpText>();
+        readonly List<SilksongNativeSkinButton> _skinButtons =
+            new List<SilksongNativeSkinButton>();
+        readonly List<GameObject> _skinButtonRoots = new List<GameObject>();
+        readonly List<TmpText> _skinLabels = new List<TmpText>();
         readonly SilksongNativeMenuLifecycle<NativeMenuBinding> _lifecycle =
             new SilksongNativeMenuLifecycle<NativeMenuBinding>();
 
         TweakSession _session;
         TweakMenuModel _menu;
+        NativeSkinMenuModel _skinMenu;
+        AndroidJavaClass _skinBridge;
         UIManager _ui;
         MenuScreen _modsScreen;
+        MenuScreen _skinsScreen;
         GameObject _entryRoot;
+        GameObject _skinsEntryRoot;
         SilksongNativeModsEntryButton _entryButton;
+        SilksongNativeModsEntryButton _skinsEntryButton;
         TmpText _title;
+        TmpText _skinsTitle;
+        string _skinStatus = "";
         MenuButton _gameButton;
         MenuButton _audioButton;
         MenuButton _videoButton;
         MenuButton _controllerButton;
         MenuButton _keyboardButton;
         Coroutine _transitionCoroutine;
+        NativeMenuRoute _openRoute;
         bool _nativeOpen;
         bool _topologyWarningLogged;
         float _nextBindAttempt;
@@ -87,16 +108,20 @@ namespace DualSouls.Mods.Silksong
 
             NativeMenuBinding binding = _lifecycle.Current;
             bool available = binding.Session.IsReady && binding.Ui.uiState == UIState.PAUSED;
-            if (binding.EntryRoot.activeSelf != available)
-                binding.EntryRoot.SetActive(available);
+            if (binding.ModsEntryRoot.activeSelf != available)
+                binding.ModsEntryRoot.SetActive(available);
+            if (binding.SkinsEntryRoot.activeSelf != available)
+                binding.SkinsEntryRoot.SetActive(available);
             WireOptionsNavigation(available);
 
             if (_nativeOpen)
             {
                 if (!available && !_lifecycle.Transitioning)
                     BeginClose(binding, showOptions: false);
-                else
+                else if (_openRoute == NativeMenuRoute.Mods)
                     Paint();
+                else
+                    PaintSkins();
             }
         }
 
@@ -109,12 +134,15 @@ namespace DualSouls.Mods.Silksong
         {
             return binding != null && ReferenceEquals(_lifecycle.Current, binding) &&
                    binding.Ui != null && binding.OptionsScreen != null &&
-                   binding.ModsScreen != null && binding.EntryRoot != null &&
+                   binding.ModsScreen != null && binding.SkinsScreen != null &&
+                   binding.ModsEntryRoot != null && binding.SkinsEntryRoot != null &&
                    binding.Session != null && binding.Menu != null &&
                    ReferenceEquals(binding.Ui, _ui) &&
                    ReferenceEquals(binding.OptionsScreen, _ui.optionsMenuScreen) &&
                    ReferenceEquals(binding.ModsScreen, _modsScreen) &&
-                   ReferenceEquals(binding.EntryRoot, _entryRoot) &&
+                   ReferenceEquals(binding.SkinsScreen, _skinsScreen) &&
+                   ReferenceEquals(binding.ModsEntryRoot, _entryRoot) &&
+                   ReferenceEquals(binding.SkinsEntryRoot, _skinsEntryRoot) &&
                    ReferenceEquals(binding.Session, _session) &&
                    ReferenceEquals(binding.Menu, _menu);
         }
@@ -129,7 +157,7 @@ namespace DualSouls.Mods.Silksong
             if (manager == null || manager.UICanvas == null ||
                 manager.optionsMenuScreen == null) return;
             if (_lifecycle.Current != null || _ui != null || _entryRoot != null ||
-                _modsScreen != null)
+                _skinsEntryRoot != null || _modsScreen != null || _skinsScreen != null)
             {
                 if (BindingIsAlive() && ReferenceEquals(_ui, manager)) return;
                 CancelAndClearBinding();
@@ -160,13 +188,17 @@ namespace DualSouls.Mods.Silksong
                 _session = session;
                 _menu = session.Menu;
                 _ui = manager;
-                BuildEntry(content, template.gameObject);
+                BuildRouteEntry(content, template.gameObject, EntryY,
+                                NativeMenuRoute.Mods, "MODS");
+                BuildRouteEntry(content, template.gameObject, EntryY - RowStep,
+                                NativeMenuRoute.Skins, "SKINS");
                 BuildModsScreen(options.gameObject, template.gameObject);
+                BuildSkinsScreen(options.gameObject, template.gameObject);
                 _lifecycle.Bind(new NativeMenuBinding(
-                    manager, manager.optionsMenuScreen, _modsScreen,
-                    _session, _menu, _entryRoot));
+                    manager, manager.optionsMenuScreen, _modsScreen, _skinsScreen,
+                    _session, _menu, _entryRoot, _skinsEntryRoot));
                 _topologyWarningLogged = false;
-                Debug.Log("[Silksong Mods] bound native paused Options -> Mods route.");
+                Debug.Log("[Silksong Mods] bound native paused Options -> Mods/Skins routes.");
             }
             catch (Exception error)
             {
@@ -205,24 +237,37 @@ namespace DualSouls.Mods.Silksong
             return button;
         }
 
-        void BuildEntry(Transform content, GameObject template)
+        void BuildRouteEntry(Transform content, GameObject template, float y,
+                             NativeMenuRoute route, string label)
         {
-            _entryRoot = Instantiate(template, content, false);
-            _entryRoot.name = "Mods";
-            RectTransform wrapper = _entryRoot.transform as RectTransform;
-            wrapper.anchoredPosition = new Vector2(wrapper.anchoredPosition.x, EntryY);
+            GameObject root = Instantiate(template, content, false);
+            root.name = label;
+            RectTransform wrapper = root.transform as RectTransform;
+            wrapper.anchoredPosition = new Vector2(wrapper.anchoredPosition.x, y);
 
-            MenuButton source = _entryRoot.GetComponentInChildren<MenuButton>(true);
-            if (source == null) throw new InvalidOperationException("Mods entry template has no MenuButton.");
+            MenuButton source = root.GetComponentInChildren<MenuButton>(true);
+            if (source == null)
+                throw new InvalidOperationException(label + " entry template has no MenuButton.");
             source.enabled = false;
-            _entryButton = source.gameObject.AddComponent<SilksongNativeModsEntryButton>();
-            CopySelectable(source, _entryButton);
-            _entryButton.Owner = this;
-            _entryButton.FlashEffect = source.flashEffect;
+            var button = source.gameObject.AddComponent<SilksongNativeModsEntryButton>();
+            CopySelectable(source, button);
+            button.Owner = this;
+            button.Route = (int)route;
+            button.FlashEffect = source.flashEffect;
             UnityObject.Destroy(source);
-            DisableForeignDrivers(_entryRoot);
-            SetButtonText(_entryRoot, "MODS");
-            _entryRoot.SetActive(false);
+            DisableForeignDrivers(root);
+            SetButtonText(root, label);
+            root.SetActive(false);
+            if (route == NativeMenuRoute.Mods)
+            {
+                _entryRoot = root;
+                _entryButton = button;
+            }
+            else
+            {
+                _skinsEntryRoot = root;
+                _skinsEntryButton = button;
+            }
         }
 
         void BuildModsScreen(GameObject optionsScreen, GameObject rowTemplate)
@@ -264,6 +309,66 @@ namespace DualSouls.Mods.Silksong
             _modsScreen.defaultHighlight = _buttons[0];
             _title.text = "MODS";
             root.SetActive(false);
+        }
+
+        void BuildSkinsScreen(GameObject optionsScreen, GameObject rowTemplate)
+        {
+            GameObject root = Instantiate(optionsScreen, _ui.UICanvas.transform, false);
+            root.name = "SkinsMenuScreen";
+            root.SetActive(false);
+            _skinsScreen = root.GetComponent<MenuScreen>();
+            if (_skinsScreen == null)
+                throw new InvalidOperationException("Options screen clone has no typed MenuScreen.");
+            MenuButtonList oldList = root.GetComponent<MenuButtonList>();
+            if (oldList != null) oldList.enabled = false;
+            _skinsScreen.backButton = null;
+            Transform title = root.transform.Find("Title");
+            _skinsTitle = title != null ? title.GetComponentInChildren<TmpText>(true) : null;
+            if (_skinsTitle == null)
+                throw new InvalidOperationException("Skins title text is unavailable.");
+            Transform controls = root.transform.Find("Controls");
+            if (controls != null) controls.gameObject.SetActive(false);
+            Transform content = root.transform.Find("Content");
+            if (content == null)
+                throw new InvalidOperationException("Skins content root is unavailable.");
+            for (int i = content.childCount - 1; i >= 0; i--)
+            {
+                GameObject child = content.GetChild(i).gameObject;
+                child.SetActive(false);
+                UnityObject.Destroy(child);
+            }
+            for (int index = 0; index < VisibleRows + 3; index++)
+                CreateSkinButton(content, rowTemplate, index);
+            DisableForeignDrivers(root);
+            _skinsScreen.defaultHighlight = _skinButtons[0];
+            _skinsTitle.text = "SKINS";
+            root.SetActive(false);
+        }
+
+        void CreateSkinButton(Transform parent, GameObject template, int visualIndex)
+        {
+            GameObject wrapper = Instantiate(template, parent, false);
+            wrapper.name = "SkinsRow" + visualIndex;
+            RectTransform rect = wrapper.transform as RectTransform;
+            rect.anchoredPosition = new Vector2(rect.anchoredPosition.x,
+                FirstRowY - RowStep * visualIndex);
+            MenuButton source = wrapper.GetComponentInChildren<MenuButton>(true);
+            if (source == null)
+                throw new InvalidOperationException("Native Skins row has no MenuButton.");
+            source.enabled = false;
+            var button = source.gameObject.AddComponent<SilksongNativeSkinButton>();
+            CopySelectable(source, button);
+            button.Owner = this;
+            button.FlashEffect = source.flashEffect;
+            button.navigation = new Navigation { mode = Navigation.Mode.None };
+            UnityObject.Destroy(source);
+            RectTransform buttonRect = button.transform as RectTransform;
+            if (buttonRect != null)
+                buttonRect.sizeDelta = new Vector2(buttonRect.sizeDelta.x, 70f);
+            DisableForeignDrivers(wrapper);
+            _skinButtonRoots.Add(wrapper);
+            _skinButtons.Add(button);
+            _skinLabels.Add(SetButtonText(wrapper, "SKIN"));
         }
 
         void CreateButton(Transform parent, GameObject template, ButtonRole role,
@@ -343,6 +448,7 @@ namespace DualSouls.Mods.Silksong
                 if (behaviour == null || behaviour is Animator || behaviour is Graphic ||
                     behaviour is CanvasGroup || behaviour is MenuScreen ||
                     behaviour is SilksongNativeModsButton ||
+                    behaviour is SilksongNativeSkinButton ||
                     behaviour is SilksongNativeModsEntryButton) continue;
                 behaviour.enabled = false;
             }
@@ -352,15 +458,18 @@ namespace DualSouls.Mods.Silksong
         {
             if (_gameButton == null || _audioButton == null || _videoButton == null ||
                 _controllerButton == null || _keyboardButton == null) return;
-            SetVertical(_gameButton, includeMods ? (Selectable)_entryButton : _keyboardButton,
+            SetVertical(_gameButton, includeMods ? (Selectable)_skinsEntryButton : _keyboardButton,
                         _audioButton);
             SetVertical(_audioButton, _gameButton, _videoButton);
             SetVertical(_videoButton, _audioButton, _controllerButton);
             SetVertical(_controllerButton, _videoButton, _keyboardButton);
             SetVertical(_keyboardButton, _controllerButton,
                         includeMods ? (Selectable)_entryButton : _gameButton);
-            if (includeMods && _entryButton != null)
-                SetVertical(_entryButton, _keyboardButton, _gameButton);
+            if (includeMods && _entryButton != null && _skinsEntryButton != null)
+            {
+                SetVertical(_entryButton, _keyboardButton, _skinsEntryButton);
+                SetVertical(_skinsEntryButton, _entryButton, _gameButton);
+            }
         }
 
         static void SetVertical(Selectable selectable, Selectable up, Selectable down)
@@ -372,18 +481,22 @@ namespace DualSouls.Mods.Silksong
             selectable.navigation = navigation;
         }
 
-        internal void Open()
+        internal void Open(NativeMenuRoute route)
         {
             NativeMenuBinding binding = _lifecycle.Current;
-            if (_nativeOpen || !BindingIsAlive(binding) ||
-                !binding.EntryRoot.activeInHierarchy ||
+            GameObject entry = route == NativeMenuRoute.Mods
+                ? binding?.ModsEntryRoot
+                : binding?.SkinsEntryRoot;
+            if (_nativeOpen || !BindingIsAlive(binding) || entry == null ||
+                !entry.activeInHierarchy ||
                 !_lifecycle.TryBegin(out SilksongNativeMenuTransition<NativeMenuBinding> transition))
                 return;
-            _transitionCoroutine = StartCoroutine(OpenRoutine(binding, transition));
+            _transitionCoroutine = StartCoroutine(OpenRoutine(binding, transition, route));
         }
 
         IEnumerator OpenRoutine(NativeMenuBinding binding,
-                                SilksongNativeMenuTransition<NativeMenuBinding> transition)
+                                SilksongNativeMenuTransition<NativeMenuBinding> transition,
+                                NativeMenuRoute route)
         {
             yield return binding.Ui.HideMenu(binding.OptionsScreen);
             if (!OpenTransitionStillAvailable(binding, transition))
@@ -392,10 +505,22 @@ namespace DualSouls.Mods.Silksong
                 yield break;
             }
 
-            binding.Menu.Open();
+            _openRoute = route;
+            if (route == NativeMenuRoute.Mods)
+            {
+                binding.Menu.Open();
+                Paint();
+            }
+            else
+            {
+                RefreshSkinMenu();
+                PaintSkins();
+            }
             _nativeOpen = true;
-            Paint();
-            yield return binding.Ui.ShowMenu(binding.ModsScreen);
+            if (route == NativeMenuRoute.Mods)
+                yield return binding.Ui.ShowMenu(binding.ModsScreen);
+            else
+                yield return binding.Ui.ShowMenu(binding.SkinsScreen);
             if (!OpenTransitionStillAvailable(binding, transition))
             {
                 CancelOpenTransition(binding, transition);
@@ -424,9 +549,12 @@ namespace DualSouls.Mods.Silksong
                                  SilksongNativeMenuTransition<NativeMenuBinding> transition,
                                  bool showOptions)
         {
-            binding.Menu.Close();
+            if (_openRoute == NativeMenuRoute.Mods) binding.Menu.Close();
             _nativeOpen = false;
-            yield return binding.Ui.HideMenu(binding.ModsScreen);
+            if (_openRoute == NativeMenuRoute.Mods)
+                yield return binding.Ui.HideMenu(binding.ModsScreen);
+            else
+                yield return binding.Ui.HideMenu(binding.SkinsScreen);
             if (!TransitionStillCurrent(binding, transition)) yield break;
 
             if (showOptions && binding.Ui.uiState == UIState.PAUSED)
@@ -453,10 +581,12 @@ namespace DualSouls.Mods.Silksong
             SilksongNativeMenuTransition<NativeMenuBinding> transition)
         {
             if (!_lifecycle.Cancel(transition, binding)) return;
-            if (_nativeOpen) binding.Menu.Close();
+            if (_nativeOpen && _openRoute == NativeMenuRoute.Mods) binding.Menu.Close();
             _nativeOpen = false;
             if (binding.ModsScreen != null)
                 binding.ModsScreen.gameObject.SetActive(false);
+            if (binding.SkinsScreen != null)
+                binding.SkinsScreen.gameObject.SetActive(false);
             _transitionCoroutine = null;
         }
 
@@ -610,6 +740,174 @@ namespace DualSouls.Mods.Silksong
                 : value.Replace('_', ' ').Replace('-', ' ').ToUpperInvariant();
         }
 
+        internal void OpenEntry(int route)
+        {
+            Open((NativeMenuRoute)route);
+        }
+
+        internal void SelectSkin(SilksongNativeSkinButton button)
+        {
+            if (button == null || _skinMenu == null) return;
+            _skinMenu.SelectRow(button.DataIndex);
+            PaintSkins();
+        }
+
+        internal void SubmitSkin(SilksongNativeSkinButton button)
+        {
+            if (button == null || _skinMenu == null || _lifecycle.Transitioning) return;
+            SelectSkin(button);
+            NativeSkinMenuRow row = _skinMenu.Selected;
+            if (row.Kind == NativeSkinMenuRowKind.Back) { Close(); return; }
+            NativeSkinMutation mutation = row.Kind == NativeSkinMenuRowKind.Mode
+                ? _skinMenu.CycleMode(1)
+                : row.Kind == NativeSkinMenuRowKind.Sprites
+                    ? _skinMenu.CycleSprites(1)
+                    : _skinMenu.ConfirmSelected();
+            ApplySkinMutation(mutation);
+        }
+
+        internal void MoveSkin(SilksongNativeSkinButton button, MoveDirection direction)
+        {
+            if (button == null || _skinMenu == null || _lifecycle.Transitioning) return;
+            SelectSkin(button);
+            if (direction == MoveDirection.Left || direction == MoveDirection.Right)
+            {
+                int delta = direction == MoveDirection.Left ? -1 : 1;
+                NativeSkinMenuRow row = _skinMenu.Selected;
+                if (row.Kind == NativeSkinMenuRowKind.Mode)
+                    ApplySkinMutation(_skinMenu.CycleMode(delta));
+                else if (row.Kind == NativeSkinMenuRowKind.Sprites)
+                    ApplySkinMutation(_skinMenu.CycleSprites(delta));
+                return;
+            }
+            if (direction != MoveDirection.Up && direction != MoveDirection.Down) return;
+            _skinMenu.Move(direction == MoveDirection.Up ? -1 : 1);
+            PaintSkins();
+            FocusSkin();
+        }
+
+        void FocusSkin()
+        {
+            if (_skinMenu == null) return;
+            int dataIndex = _skinMenu.SelectedRowIndex;
+            for (int index = 0; index < _skinButtons.Count; index++)
+                if (_skinButtonRoots[index].activeInHierarchy &&
+                    _skinButtons[index].DataIndex == dataIndex)
+                {
+                    _skinButtons[index].Select();
+                    return;
+                }
+        }
+
+        void ApplySkinMutation(NativeSkinMutation mutation)
+        {
+            if (_skinMenu == null || mutation.Kind == NativeSkinMutationKind.None) return;
+            string expected = _skinMenu.Snapshot.ConfigSha256;
+            bool accepted = false;
+            try
+            {
+                accepted = mutation.Kind == NativeSkinMutationKind.SetMode
+                    ? SkinBridge.CallStatic<bool>("setMode", SkinProfileId, expected, mutation.Value)
+                    : mutation.Kind == NativeSkinMutationKind.SetSpriteScope
+                        ? SkinBridge.CallStatic<bool>("setSpriteScope", SkinProfileId, expected, mutation.Value)
+                        : SkinBridge.CallStatic<bool>("confirmPack", SkinProfileId, expected, mutation.Value);
+            }
+            catch (Exception error)
+            {
+                _skinStatus = "CHANGE FAILED · " + error.GetBaseException().Message;
+            }
+            if (accepted)
+            {
+                SilksongModsRuntime runtime = SilksongModsRuntime.Current;
+                if (runtime != null) runtime.InvalidateSkinLibrary();
+                _skinStatus = "";
+            }
+            else if (string.IsNullOrEmpty(_skinStatus))
+                _skinStatus = "CHANGE NOT APPLIED · REFRESHED";
+            // A false result is stale/busy authority: repaint only from a new checked snapshot.
+            RefreshSkinMenu();
+            PaintSkins();
+            FocusSkin();
+        }
+
+        AndroidJavaClass SkinBridge => _skinBridge ?? (_skinBridge = new AndroidJavaClass(
+            "dev.silksong.launcher.runtime.SkinLibraryRuntimeBridge"));
+
+        void RefreshSkinMenu()
+        {
+            try
+            {
+                string json = SkinBridge.CallStatic<string>("readMenuSnapshot", SkinProfileId);
+                if (string.IsNullOrEmpty(json) || json.Length > MaximumSkinSnapshotBytes)
+                    throw new InvalidOperationException("Invalid native skin snapshot length.");
+                WireSkinSnapshot wire = JsonUtility.FromJson<WireSkinSnapshot>(json);
+                if (wire == null || !wire.ok)
+                    throw new InvalidOperationException((wire != null ? wire.code : "MISSING") +
+                                                        ": " + (wire != null ? wire.detail : "snapshot"));
+                if (!string.Equals(wire.profileId, SkinProfileId, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Native skin snapshot belongs to another profile.");
+                WireSkinPack[] sourcePacks = wire.packs ?? Array.Empty<WireSkinPack>();
+                if (sourcePacks.Length > 2048)
+                    throw new InvalidOperationException("Native skin pack count exceeds bound.");
+                var packs = new NativeSkinPackDescriptor[sourcePacks.Length];
+                for (int index = 0; index < sourcePacks.Length; index++)
+                    packs[index] = new NativeSkinPackDescriptor(sourcePacks[index].id,
+                        sourcePacks[index].name, sourcePacks[index].author);
+                var snapshot = new NativeSkinMenuSnapshot(wire.profileId, wire.configSha256,
+                    wire.mode, wire.spriteScope, wire.selectedPackId,
+                    wire.eligiblePackIds ?? Array.Empty<string>(), packs);
+                if (_skinMenu == null) _skinMenu = new NativeSkinMenuModel(snapshot, VisibleRows);
+                else _skinMenu.Replace(snapshot);
+                if (_skinStatus.StartsWith("SKINS UNAVAILABLE", StringComparison.Ordinal))
+                    _skinStatus = "";
+            }
+            catch (Exception error)
+            {
+                _skinStatus = "SKINS UNAVAILABLE · " + error.GetBaseException().Message;
+                Debug.LogWarning("[Silksong Skins] " + _skinStatus);
+            }
+        }
+
+        void PaintSkins()
+        {
+            if (_skinLabels.Count != VisibleRows + 3 || _skinsTitle == null) return;
+            if (_skinMenu == null)
+            {
+                for (int index = 0; index < _skinButtonRoots.Count; index++)
+                    _skinButtonRoots[index].SetActive(false);
+                _skinsTitle.text = string.IsNullOrEmpty(_skinStatus) ? "SKINS" : _skinStatus;
+                return;
+            }
+            IReadOnlyList<NativeSkinMenuRow> visible = _skinMenu.VisibleRows;
+            for (int slot = 0; slot < _skinButtons.Count; slot++)
+            {
+                bool shown = slot < visible.Count;
+                GameObject root = _skinButtonRoots[slot];
+                if (root.activeSelf != shown) root.SetActive(shown);
+                if (!shown) { _skinButtons[slot].DataIndex = -1; continue; }
+                NativeSkinMenuRow row = visible[slot];
+                int dataIndex = -1;
+                for (int index = 0; index < _skinMenu.Rows.Count; index++)
+                    if (ReferenceEquals(_skinMenu.Rows[index], row)) { dataIndex = index; break; }
+                _skinButtons[slot].DataIndex = dataIndex;
+                _skinButtons[slot].interactable = row.IsActionable;
+                _skinLabels[slot].text = row.Label.ToUpperInvariant() +
+                    (string.IsNullOrEmpty(row.Value) ? "" : "     " + row.Value);
+            }
+            _skinsTitle.text = string.IsNullOrEmpty(_skinStatus) ? "SKINS" : _skinStatus;
+        }
+
+#pragma warning disable CS0649
+        [Serializable] sealed class WireSkinPack { public string id, name, author; }
+        [Serializable] sealed class WireSkinSnapshot
+        {
+            public bool ok;
+            public string code, detail, profileId, configSha256, mode, spriteScope, selectedPackId;
+            public string[] eligiblePackIds;
+            public WireSkinPack[] packs;
+        }
+#pragma warning restore CS0649
+
         void CancelAndClearBinding()
         {
             NativeMenuBinding binding = _lifecycle.Current;
@@ -620,7 +918,8 @@ namespace DualSouls.Mods.Silksong
             }
 
             _lifecycle.Clear();
-            if (binding != null && _nativeOpen) binding.Menu.Close();
+            if (binding != null && _nativeOpen && _openRoute == NativeMenuRoute.Mods)
+                binding.Menu.Close();
             _nativeOpen = false;
             ClearBinding();
         }
@@ -629,24 +928,37 @@ namespace DualSouls.Mods.Silksong
         {
             WireOptionsNavigation(false);
             if (_entryRoot != null) UnityObject.Destroy(_entryRoot);
+            if (_skinsEntryRoot != null) UnityObject.Destroy(_skinsEntryRoot);
             if (_modsScreen != null) UnityObject.Destroy(_modsScreen.gameObject);
+            if (_skinsScreen != null) UnityObject.Destroy(_skinsScreen.gameObject);
             _buttons.Clear();
             _buttonRoots.Clear();
             _labels.Clear();
+            _skinButtons.Clear();
+            _skinButtonRoots.Clear();
+            _skinLabels.Clear();
             _entryRoot = null;
+            _skinsEntryRoot = null;
             _entryButton = null;
+            _skinsEntryButton = null;
             _modsScreen = null;
+            _skinsScreen = null;
             _title = null;
+            _skinsTitle = null;
             _gameButton = _audioButton = _videoButton = null;
             _controllerButton = _keyboardButton = null;
             _ui = null;
             _session = null;
             _menu = null;
+            _skinMenu = null;
         }
 
         void OnDestroy()
         {
             CancelAndClearBinding();
+            AndroidJavaClass bridge = _skinBridge;
+            _skinBridge = null;
+            if (bridge != null) bridge.Dispose();
         }
     }
 
@@ -655,6 +967,7 @@ namespace DualSouls.Mods.Silksong
     {
         internal SilksongNativeModsMenu Owner;
         internal Animator FlashEffect;
+        internal int Route;
 
         void ISubmitHandler.OnSubmit(BaseEventData eventData)
         {
@@ -662,7 +975,7 @@ namespace DualSouls.Mods.Silksong
             ForceDeselect();
             Flash();
             PlaySubmitSound();
-            Owner.Open();
+            Owner.OpenEntry(Route);
         }
 
         void IPointerClickHandler.OnPointerClick(PointerEventData eventData)
@@ -720,6 +1033,57 @@ namespace DualSouls.Mods.Silksong
         {
             base.OnSelect(eventData);
             Owner?.Select(this);
+        }
+
+        void Flash()
+        {
+            if (FlashEffect == null) return;
+            FlashEffect.ResetTrigger("Flash");
+            FlashEffect.SetTrigger("Flash");
+        }
+    }
+
+    public sealed class SilksongNativeSkinButton : MenuSelectable,
+        ISubmitHandler, IPointerClickHandler, IMoveHandler, ICancelHandler, ISelectHandler
+    {
+        internal SilksongNativeModsMenu Owner;
+        internal Animator FlashEffect;
+        internal int DataIndex = -1;
+
+        void ISubmitHandler.OnSubmit(BaseEventData eventData)
+        {
+            if (!interactable || Owner == null) return;
+            Flash();
+            PlaySubmitSound();
+            Owner.SubmitSkin(this);
+        }
+
+        void IPointerClickHandler.OnPointerClick(PointerEventData eventData)
+        {
+            Owner?.SelectSkin(this);
+            ((ISubmitHandler)this).OnSubmit(eventData);
+        }
+
+        void IMoveHandler.OnMove(AxisEventData eventData)
+        {
+            if (!interactable || Owner == null) return;
+            Owner.MoveSkin(this, eventData.moveDir);
+            eventData.Use();
+        }
+
+        void ICancelHandler.OnCancel(BaseEventData eventData)
+        {
+            if (!interactable || Owner == null) return;
+            ForceDeselect();
+            PlayCancelSound();
+            Owner.Close();
+            eventData.Use();
+        }
+
+        void ISelectHandler.OnSelect(BaseEventData eventData)
+        {
+            base.OnSelect(eventData);
+            Owner?.SelectSkin(this);
         }
 
         void Flash()

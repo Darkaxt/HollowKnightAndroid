@@ -76,6 +76,11 @@ namespace DualSouls.Mods.Silksong
             if (session != null) session.Tick();
         }
 
+        internal void InvalidateSkinLibrary()
+        {
+            if (skinLibrary != null) skinLibrary.Invalidate();
+        }
+
         void OnDestroy()
         {
             if (!ReferenceEquals(Current, this)) return;

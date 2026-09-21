@@ -26,6 +26,10 @@
     <Content Include="../hollow-knight-patches/src/mods/HollowKnightGameTweakApi.cs" Link="source-contracts/HollowKnightGameTweakApi.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/dualsouls/HkStageHooks.cs" Link="source-contracts/HkStageHooks.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/dualsouls/HollowKnightModsPresenter.cs" Link="source-contracts/HollowKnightModsPresenter.cs" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../hollow-knight-patches/src/mods/HollowKnightNativeModsMenu.cs" Link="native-skin-contracts/HollowKnightNativeModsMenu.cs" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../silksong-patches/src/mods/SilksongNativeModsMenu.cs" Link="native-skin-contracts/SilksongNativeModsMenu.cs" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../hollow-knight-patches/src/mods/HollowKnightModsRuntime.cs" Link="native-skin-contracts/HollowKnightModsRuntime.cs" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../silksong-patches/src/mods/SilksongModsRuntime.cs" Link="native-skin-contracts/SilksongModsRuntime.cs" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="..\shared-patches\src\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="../silksong-patches/src/dualscreen/DsPortHudState.cs" Link="Silksong/DsPortHudState.cs" />
     <Compile Include="../silksong-patches/src/dualscreen/DsPortSelectState.cs" Link="Silksong/DsPortSelectState.cs" />
