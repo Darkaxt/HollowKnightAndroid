@@ -21,7 +21,8 @@ class SkinLibraryRuntimeBridgeTest {
         val access = SkinLibraryRuntimeAccess(store)
         val wire = JsonParser.parseString(access.readConfiguration()).asJsonObject
         assertTrue(wire["ok"].asBoolean); assertEquals("hollow-knight",wire["profileId"].asString)
-        assertEquals("OFF",wire["mode"].asString); assertEquals(64,wire["configSha256"].asString.length)
+        assertEquals("OFF",wire["mode"].asString); assertEquals("ALL", wire["spriteScope"].asString)
+        assertEquals(64,wire["configSha256"].asString.length)
     }
     @Test fun `bounded last observation never writes configuration and stale observations are rejected`() {
         PinnedCatalogFixture.load()
@@ -103,6 +104,10 @@ class SkinLibraryRuntimeBridgeTest {
             assertFalse(SkinLibraryRuntimeBridge.confirmDeath("a".repeat(32),1))
             assertFalse(SkinLibraryRuntimeBridge.cancelDeath("a".repeat(32),1))
             assertFalse(SkinLibraryRuntimeBridge.cancelRotation("a".repeat(32)))
+            assertFalse(JsonParser.parseString(SkinLibraryRuntimeBridge.readMenuSnapshot("silksong")).asJsonObject["ok"].asBoolean)
+            assertFalse(SkinLibraryRuntimeBridge.setMode("silksong", "a".repeat(64), "OFF"))
+            assertFalse(SkinLibraryRuntimeBridge.setSpriteScope("silksong", "a".repeat(64), "ALL"))
+            assertFalse(SkinLibraryRuntimeBridge.confirmPack("silksong", "a".repeat(64), "a"))
         } finally { GameProcessStartup.resetForTests() }
     }
     private fun importedStore(): SkinLibraryStore {
@@ -116,6 +121,41 @@ class SkinLibraryRuntimeBridgeTest {
         val packs = store.read().required().packs; store.select(packs[0].id).required()
         packs.forEach { store.setEligibility(it.id,true).required() }; store.advanceMode().required(); store.advanceMode().required()
         return store
+    }
+
+    @Test fun `native menu snapshot is bounded profile checked and contains exact compatible packs`() {
+        val store = importedStore()
+        val access = SkinLibraryRuntimeAccess(store)
+        val wireText = access.readMenuSnapshot("hollow-knight")
+        val wire = JsonParser.parseString(wireText).asJsonObject
+        val document = store.read().required()
+
+        assertTrue(wire["ok"].asBoolean)
+        assertEquals("hollow-knight", wire["profileId"].asString)
+        assertEquals(store.configurationIdentity(document), wire["configSha256"].asString)
+        assertEquals(document.mode.name, wire["mode"].asString)
+        assertEquals(document.spriteScope.name, wire["spriteScope"].asString)
+        assertEquals(document.selectedPackId, wire["selectedPackId"].asString)
+        assertEquals(document.packs.map { it.id }, wire["packs"].asJsonArray.map { it.asJsonObject["id"].asString })
+        assertTrue(wireText.toByteArray().size <= SkinLibraryRuntimeAccess.MAX_MENU_SNAPSHOT_BYTES)
+
+        val rejected = JsonParser.parseString(access.readMenuSnapshot("silksong")).asJsonObject
+        assertFalse(rejected["ok"].asBoolean)
+        assertEquals("PROFILE_REJECTED", rejected["code"].asString)
+    }
+
+    @Test fun `native menu mutations require profile and current configuration`() {
+        val store = importedStore()
+        val access = SkinLibraryRuntimeAccess(store)
+        val current = store.read().required()
+        val config = store.configurationIdentity(current)
+        val selected = requireNotNull(current.selectedPackId)
+
+        assertFalse(access.setMode("silksong", config, LibraryMode.ON.name))
+        assertFalse(access.setSpriteScope("hollow-knight", "0".repeat(64), SpriteScope.CHARACTER.name))
+        assertFalse(access.confirmPack("hollow-knight", "0".repeat(64), selected))
+        assertTrue(access.setSpriteScope("hollow-knight", config, SpriteScope.CHARACTER.name))
+        assertEquals(SpriteScope.CHARACTER, store.read().required().spriteScope)
     }
 
     @Test fun `JNI malformed authority returns error instead of fallback configuration`() {

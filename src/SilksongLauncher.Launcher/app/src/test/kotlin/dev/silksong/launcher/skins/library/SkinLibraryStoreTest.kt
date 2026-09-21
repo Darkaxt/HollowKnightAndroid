@@ -297,6 +297,123 @@ class SkinLibraryStoreTest {
         assertEquals(before, File(store.paths.root, "library.json").readBytes().toList())
     }
 
+    @Test fun `stale native configuration mutation is rejected without changing authority`() {
+        val store = fastStore()
+        val pack = importPack(store, "First")
+        val expected = store.configurationIdentity(store.read().required())
+        store.confirmPack(expected, pack.id).required()
+        val before = store.read().required()
+
+        assertTrue(store.setMode(expected, LibraryMode.ON) is SkinResult.Error)
+        assertEquals(before, store.read().required())
+    }
+
+    @Test fun `mode and scope mutations renew or cancel rotation state atomically`() {
+        val store = fastStore()
+        val pack = importPack(store, "First")
+        var current = store.read().required()
+        store.confirmPack(store.configurationIdentity(current), pack.id).required()
+        current = store.read().required()
+        store.setMode(store.configurationIdentity(current), LibraryMode.ROTATE).required()
+        val rotating = store.read().required()
+        assertNotNull(rotating.rotationRun)
+
+        store.setSpriteScope(store.configurationIdentity(rotating), SpriteScope.CHARACTER_HUD).required()
+        val scoped = store.read().required()
+        assertEquals(SpriteScope.CHARACTER_HUD, scoped.spriteScope)
+        assertNotEquals(rotating.rotationRun, scoped.rotationRun)
+        assertEquals(0L, scoped.lastDeath)
+        assertNull(scoped.pendingPackId)
+
+        store.setMode(store.configurationIdentity(scoped), LibraryMode.OFF).required()
+        val off = store.read().required()
+        assertEquals(LibraryMode.OFF, off.mode)
+        assertNull(off.rotationRun)
+    }
+
+    @Test fun `active scope mutation verifies selected pack before publication`() {
+        val store = fastStore()
+        val pack = LibraryPack("missing", "Missing", "Unknown", "a".repeat(64), "b".repeat(64), "c".repeat(64))
+        val current = SkinLibraryDocument(mode = LibraryMode.ON, selectedPackId = pack.id, packs = listOf(pack))
+        val authority = File(store.paths.root, "library.json").apply {
+            requireNotNull(parentFile).mkdirs()
+            writeBytes(SkinLibraryCodec.encode(current))
+        }
+        val before = authority.readBytes().toList()
+
+        assertTrue(store.setSpriteScope(store.configurationIdentity(current), SpriteScope.CHARACTER) is SkinResult.Error)
+        assertEquals(before, authority.readBytes().toList())
+    }
+
+    @Test fun `launcher eligibility changes renew current rotation state`() {
+        val store = fastStore()
+        val first = importPack(store, "First")
+        val second = importPack(store, "Second")
+        store.select(first.id).required()
+        store.setEligibility(first.id, true).required()
+        store.advanceMode().required()
+        store.advanceMode().required()
+        val before = store.startRuntime().required()
+        val run = requireNotNull(before.rotationRun)
+        store.confirmDeath(run, 1).required()
+
+        store.setEligibility(second.id, true).required()
+        val changed = store.read().required()
+        assertNotEquals(run, changed.rotationRun)
+        assertEquals(0L, changed.lastDeath)
+        assertNull(changed.pendingPackId)
+        assertTrue(changed.queuedDeathOccurrences.isEmpty())
+    }
+
+    @Test fun `launcher removal of eligible pack renews current rotation state`() {
+        val store = fastStore()
+        val first = importPack(store, "First")
+        val second = importPack(store, "Second")
+        val third = importPack(store, "Third")
+        store.select(first.id).required()
+        store.setEligibility(second.id, true).required()
+        store.setEligibility(third.id, true).required()
+        store.advanceMode().required()
+        store.advanceMode().required()
+        val before = store.startRuntime().required()
+        val run = requireNotNull(before.rotationRun)
+        store.confirmDeath(run, 1).required()
+
+        store.remove(third.id).required()
+        val changed = store.read().required()
+        assertNotEquals(run, changed.rotationRun)
+        assertEquals(0L, changed.lastDeath)
+        assertNull(changed.pendingPackId)
+        assertFalse(third.id in changed.eligiblePackIds)
+    }
+
+    @Test fun `confirm pack selects in OFF and ON but toggles ordered ROTATE eligibility`() {
+        val store = fastStore()
+        val first = importPack(store, "First")
+        val second = importPack(store, "Second")
+        fun config() = store.configurationIdentity(store.read().required())
+
+        store.confirmPack(config(), first.id).required()
+        assertEquals(first.id, store.read().required().selectedPackId)
+        assertEquals(LibraryMode.OFF, store.read().required().mode)
+
+        store.setMode(config(), LibraryMode.ON).required()
+        store.confirmPack(config(), second.id).required()
+        assertEquals(second.id, store.read().required().selectedPackId)
+
+        store.setMode(config(), LibraryMode.ROTATE).required()
+        val beforeToggle = store.read().required()
+        store.confirmPack(config(), first.id).required()
+        val eligible = store.read().required()
+        assertEquals(second.id, eligible.selectedPackId)
+        assertEquals(listOf(first.id), eligible.eligiblePackIds)
+        assertNotEquals(beforeToggle.rotationRun, eligible.rotationRun)
+
+        store.confirmPack(config(), first.id).required()
+        assertTrue(store.read().required().eligiblePackIds.isEmpty())
+        assertEquals(second.id, store.read().required().selectedPackId)
+    }
+
     private fun importPack(store: SkinLibraryStore, name: String): LibraryPack {
         val decoder = PngDecoder { _, info ->
             SkinResult.Ok(DecodeResult(info.width, info.height, info.width.toLong() * info.height))

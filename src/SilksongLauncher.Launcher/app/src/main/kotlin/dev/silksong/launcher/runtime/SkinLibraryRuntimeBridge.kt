@@ -2,7 +2,9 @@ package dev.silksong.launcher.runtime
 
 import android.content.Context
 import com.google.gson.JsonArray
+import com.google.gson.JsonNull
 import com.google.gson.JsonObject
+import com.google.gson.JsonPrimitive
 import dev.silksong.launcher.profiles.GameProfiles
 import dev.silksong.launcher.skins.contracts.SkinImportCode
 import dev.silksong.launcher.skins.contracts.SkinResult
@@ -30,6 +32,22 @@ object SkinLibraryRuntimeBridge {
             current.readConfiguration()
         } catch (error: Exception) { failure(SkinImportCode.DURABILITY_UNAVAILABLE.name, error.message.orEmpty()) }
     }
+    @JvmStatic fun readMenuSnapshot(profileId: String): String = try {
+        requireProfile(profileId)
+        runtimeAccess().readMenuSnapshot(profileId)
+    } catch (error: Exception) { failure("PROFILE_REJECTED", error.message.orEmpty()) }
+    @JvmStatic fun setMode(profileId: String, expectedConfiguration: String, mode: String): Boolean = try {
+        requireProfile(profileId)
+        runtimeAccess().setMode(profileId, expectedConfiguration, mode)
+    } catch (_: Exception) { false }
+    @JvmStatic fun setSpriteScope(profileId: String, expectedConfiguration: String, scope: String): Boolean = try {
+        requireProfile(profileId)
+        runtimeAccess().setSpriteScope(profileId, expectedConfiguration, scope)
+    } catch (_: Exception) { false }
+    @JvmStatic fun confirmPack(profileId: String, expectedConfiguration: String, packId: String): Boolean = try {
+        requireProfile(profileId)
+        runtimeAccess().confirmPack(profileId, expectedConfiguration, packId)
+    } catch (_: Exception) { false }
     @JvmStatic fun reportResult(configSha256: String, activePackId: String, activeTreeSha256: String, status: String, detail: String): Boolean =
         try {
             GameProcessStartup.requireProfile(requireNotNull(launchedProfile) { "Skin runtime is not initialized" })
@@ -51,6 +69,15 @@ object SkinLibraryRuntimeBridge {
         GameProcessStartup.requireProfile(requireNotNull(launchedProfile) { "Skin runtime is not initialized" })
         access?.reportRotation(config, run, occurrence, id, tree, status, detail) ?: false
     } catch (_: Exception) { false }
+    private fun requireProfile(profileId: String) {
+        check(profileId == requireNotNull(launchedProfile) { "Skin runtime is not initialized" }) {
+            "Native skin menu belongs to another launched profile"
+        }
+        GameProcessStartup.requireProfile(profileId)
+    }
+    private fun runtimeAccess(): SkinLibraryRuntimeAccess = access ?: synchronized(this) {
+        access ?: requireNotNull(factory) { "Skin runtime is not initialized" }.invoke().also { access = it }
+    }
     internal fun resetForTests() = synchronized(this) { launchedProfile = null; factory = null; access = null }
     internal fun failure(code: String, detail: String) = JsonObject().apply {
         addProperty("ok", false); addProperty("code", code); addProperty("detail", detail.take(1024))
@@ -61,12 +88,57 @@ internal class SkinLibraryRuntimeAccess(private val store: SkinLibraryStore) {
     private var verifiedPack: LibraryPack? = null
     private var verifiedManifest: SkinManifestDocument? = null
     private var initialized = false
+    fun readMenuSnapshot(profileId: String): String {
+        if (profileId != store.profileId) return SkinLibraryRuntimeBridge.failure("PROFILE_REJECTED", "Native skin menu belongs to another profile")
+        val result = store.locked(nonblocking = true) {
+            val document = if (!initialized) store.startRuntime().required().also { initialized = true } else store.readLocked()
+            val packs = document.packs.onEach { pack ->
+                require(store.requireVerified(pack).games.containsKey(store.profileId)) { "Installed skin is incompatible with this profile" }
+            }
+            val wire = JsonObject().apply {
+                addProperty("ok", true)
+                addProperty("profileId", store.profileId)
+                addProperty("configSha256", store.configurationIdentity(document))
+                addProperty("mode", document.mode.name)
+                addProperty("spriteScope", document.spriteScope.name)
+                add("selectedPackId", document.selectedPackId?.let(::JsonPrimitive) ?: JsonNull.INSTANCE)
+                add("eligiblePackIds", JsonArray().apply { document.eligiblePackIds.forEach(::add) })
+                add("rotationRun", document.rotationRun?.let(::JsonPrimitive) ?: JsonNull.INSTANCE)
+                addProperty("lastDeath", document.lastDeath)
+                add("pendingPackId", document.pendingPackId?.let(::JsonPrimitive) ?: JsonNull.INSTANCE)
+                add("queuedDeathOccurrences", JsonArray().apply { document.queuedDeathOccurrences.forEach(::add) })
+                add("packs", JsonArray().apply { packs.forEach { pack ->
+                    add(JsonObject().apply {
+                        addProperty("id", pack.id); addProperty("name", pack.name); addProperty("author", pack.author)
+                    })
+                } })
+            }.toString()
+            require(wire.toByteArray(Charsets.UTF_8).size <= MAX_MENU_SNAPSHOT_BYTES) { "Native skin menu snapshot exceeds byte bound" }
+            SkinResult.Ok(wire)
+        }
+        return when (result) {
+            is SkinResult.Ok -> result.value
+            is SkinResult.Error -> SkinLibraryRuntimeBridge.failure(result.code.name, result.detail)
+        }
+    }
+    fun setMode(profileId: String, expectedConfiguration: String, mode: String): Boolean =
+        profileId == store.profileId && runCatching { LibraryMode.valueOf(mode) }.getOrNull()?.let {
+            store.setMode(expectedConfiguration, it) is SkinResult.Ok
+        } == true
+    fun setSpriteScope(profileId: String, expectedConfiguration: String, scope: String): Boolean =
+        profileId == store.profileId && runCatching { SpriteScope.valueOf(scope) }.getOrNull()?.let {
+            store.setSpriteScope(expectedConfiguration, it) is SkinResult.Ok
+        } == true
+    fun confirmPack(profileId: String, expectedConfiguration: String, packId: String): Boolean =
+        profileId == store.profileId && store.confirmPack(expectedConfiguration, packId) is SkinResult.Ok
+
     fun readConfiguration(): String {
         val result = store.locked(nonblocking = true) {
             val document = if (!initialized) store.startRuntime().required().also { initialized = true } else store.readLocked()
             val wire = JsonObject().apply {
                 addProperty("ok", true); addProperty("profileId", store.profileId)
                 addProperty("configSha256", store.configurationIdentity(document)); addProperty("mode", document.mode.name)
+                addProperty("spriteScope", document.spriteScope.name)
                 addProperty("rotationRun", document.rotationRun.orEmpty()); addProperty("lastDeath", document.lastDeath)
                 addProperty("pendingOccurrence", if (document.pendingPackId == null) 0 else document.lastDeath)
                 addProperty("rotationDetail", if (document.eligiblePackIds.isEmpty()) "No eligible skins; death rotation is a no-op" else
@@ -104,4 +176,6 @@ internal class SkinLibraryRuntimeAccess(private val store: SkinLibraryStore) {
             SkinResult.Ok(Unit)
         } is SkinResult.Ok
     fun report(config: String, id: String, tree: String, status: String, detail: String) = store.recordObservation(config, id, tree, status, detail)
+
+    companion object { const val MAX_MENU_SNAPSHOT_BYTES = SkinLibraryCodec.MAX_BYTES }
 }

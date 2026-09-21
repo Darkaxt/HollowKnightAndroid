@@ -82,6 +82,40 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
         } is SkinResult.Ok
 
     fun read(nonblocking: Boolean = false): SkinResult<SkinLibraryDocument> = locked(nonblocking) { SkinResult.Ok(readLocked()) }
+    fun setMode(expectedConfiguration: String, mode: LibraryMode): SkinResult<Unit> = mutateExpected(expectedConfiguration) { value ->
+        if (value.mode == mode) value
+        else {
+            if (mode != LibraryMode.OFF) {
+                val pack = requireNotNull(value.packs.singleOrNull { it.id == value.selectedPackId }) {
+                    "Select a pack before turning skins ON"
+                }
+                requireVerified(pack)
+            }
+            renewRotation(value.copy(mode = mode))
+        }
+    }
+    fun setSpriteScope(expectedConfiguration: String, scope: SpriteScope): SkinResult<Unit> = mutateExpected(expectedConfiguration) { value ->
+        if (value.spriteScope == scope) value
+        else {
+            if (value.mode != LibraryMode.OFF) {
+                val pack = requireNotNull(value.packs.singleOrNull { it.id == value.selectedPackId }) {
+                    "Selected pack was removed; refresh and retry"
+                }
+                requireVerified(pack)
+            }
+            renewRotation(value.copy(spriteScope = scope))
+        }
+    }
+    fun confirmPack(expectedConfiguration: String, id: String): SkinResult<Unit> = mutateExpected(expectedConfiguration) { value ->
+        val pack = requireNotNull(value.packs.singleOrNull { it.id == id }) { "Pack was removed; refresh and retry" }
+        requireVerified(pack)
+        val changed = when (value.mode) {
+            LibraryMode.OFF, LibraryMode.ON -> value.copy(selectedPackId = id)
+            LibraryMode.ROTATE -> value.copy(eligiblePackIds = if (id in value.eligiblePackIds)
+                value.eligiblePackIds - id else value.eligiblePackIds + id)
+        }
+        if (changed == value) value else renewRotation(changed)
+    }
     fun select(id: String): SkinResult<Unit> = mutate { value ->
         val pack = value.packs.singleOrNull { it.id == id } ?: error("Selected pack was removed; refresh and retry")
         requireVerified(pack)
@@ -102,7 +136,8 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
     }
     fun setEligibility(id: String, eligible: Boolean): SkinResult<Unit> = mutate { value ->
         require(value.packs.any { it.id == id }) { "Pack was removed; refresh and retry" }
-        value.copy(eligiblePackIds = if (eligible) (value.eligiblePackIds + id).distinct() else value.eligiblePackIds - id)
+        val changed = value.copy(eligiblePackIds = if (eligible) (value.eligiblePackIds + id).distinct() else value.eligiblePackIds - id)
+        if (changed == value) value else renewRotation(changed)
     }
     fun advanceMode(): SkinResult<Unit> = mutate { value ->
         val mode = when (value.mode) { LibraryMode.OFF -> LibraryMode.ON; LibraryMode.ON -> LibraryMode.ROTATE; LibraryMode.ROTATE -> LibraryMode.OFF }
@@ -114,7 +149,7 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
     fun remove(id: String): SkinResult<Unit> = mutate { value ->
         checkEditable(value, id)
         require(value.packs.any { it.id == id }) { "Pack was removed; refresh and retry" }
-        value.copy(packs = value.packs.filterNot { it.id == id }, selectedPackId = value.selectedPackId.takeUnless { it == id }, eligiblePackIds = value.eligiblePackIds - id)
+        renewRotation(value.copy(packs = value.packs.filterNot { it.id == id }, selectedPackId = value.selectedPackId.takeUnless { it == id }, eligiblePackIds = value.eligiblePackIds - id))
     }
     internal fun install(pack: LibraryPack, replacing: LibraryPack? = null): SkinResult<Unit> = mutate { value ->
         requireVerified(pack)
@@ -131,6 +166,16 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
     }
     internal fun checkEditable(value: SkinLibraryDocument, id: String) {
         check(value.mode == LibraryMode.OFF || (value.selectedPackId != id && value.pendingPackId != id)) { "Selected or pending skin is in use: turn skins OFF, then retry replacement/removal" }
+    }
+    private fun mutateExpected(expectedConfiguration: String, action: (SkinLibraryDocument) -> SkinLibraryDocument): SkinResult<Unit> = locked {
+        val old = readLocked()
+        require(SkinLibraryCodec.digest(expectedConfiguration) && configurationIdentity(old) == expectedConfiguration) {
+            "Skin configuration changed; refresh and retry"
+        }
+        val next = action(old)
+        SkinLibraryCodec.validate(next)
+        if (next != old) commit(next)
+        SkinResult.Ok(Unit)
     }
     private fun mutate(action: (SkinLibraryDocument) -> SkinLibraryDocument): SkinResult<Unit> = locked {
         val old = readLocked(); val next = action(old); SkinLibraryCodec.validate(next)
@@ -172,8 +217,10 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
             val document = if (catalog.profile.legacyMigrationAllowed && fs.exists(legacy)) {
                 val old = SkinRegistryStore(paths.root, quota, fs).snapshotForLibrary().required().document
                 val packs = old.packs.sortedBy { it.id }.map { p -> LibraryPack(p.id, p.name, p.author, p.candidateKey, p.treeSha256, p.importReceiptSha256).also(::requireVerified) }
-                SkinLibraryDocument(selectedPackId = old.activation.selectedPackId, packs = packs,
-                    eligiblePackIds = old.packs.filter { it.rotationEligible }.sortedBy { it.id }.map { it.id })
+                val mode = LibraryMode.valueOf(old.activation.mode.name)
+                SkinLibraryDocument(mode = mode, selectedPackId = old.activation.selectedPackId, packs = packs,
+                    eligiblePackIds = old.packs.filter { it.rotationEligible }.sortedBy { it.id }.map { it.id },
+                    spriteScope = SkinLibraryCodec.legacySpriteScope(mode, profileId))
             } else SkinLibraryDocument()
             commit(document)
         }

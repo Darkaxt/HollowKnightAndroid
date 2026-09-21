@@ -14,12 +14,13 @@ import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 
 enum class LibraryMode { OFF, ON, ROTATE }
+enum class SpriteScope { ALL, CHARACTER_HUD, CHARACTER }
 data class LibraryPack(val id: String, val name: String, val author: String, val candidateKey: String,
     val treeSha256: String, val receiptSha256: String)
 data class SkinLibraryDocument(val mode: LibraryMode = LibraryMode.OFF, val selectedPackId: String? = null,
     val packs: List<LibraryPack> = emptyList(), val eligiblePackIds: List<String> = emptyList(),
     val rotationRun: String? = null, val lastDeath: Long = 0, val pendingPackId: String? = null,
-    val queuedDeathOccurrences: List<Long> = emptyList())
+    val queuedDeathOccurrences: List<Long> = emptyList(), val spriteScope: SpriteScope = SpriteScope.ALL)
 
 /** The only durable configuration document. Eligibility order is explicit, never inferred from display sorting. */
 object SkinLibraryCodec {
@@ -58,6 +59,7 @@ object SkinLibraryCodec {
         validate(value)
         val root = JsonObject().apply {
             addProperty("schemaVersion", 1); addProperty("profileId", owner); addProperty("mode", value.mode.name)
+            addProperty("spriteScope", value.spriteScope.name)
             add("selectedPackId", value.selectedPackId?.let(::JsonPrimitive) ?: JsonNull.INSTANCE)
             add("packs", JsonArray().apply { value.packs.forEach { p -> add(JsonObject().apply {
                 addProperty("id", p.id); addProperty("name", p.name); addProperty("author", p.author)
@@ -74,12 +76,16 @@ object SkinLibraryCodec {
     fun decode(bytes: ByteArray, profileId: String = PROFILE): SkinLibraryDocument = try {
         val owner = requireProfile(profileId)
         val root = strictJson(bytes).asJsonObject
+        val baseKeys = mutableListOf("schemaVersion", "profileId", "mode", "selectedPackId", "packs", "eligiblePackIds")
+        if (root.has("spriteScope")) baseKeys += "spriteScope"
         if (root.has("queuedDeathOccurrences"))
-            keys(root, "schemaVersion", "profileId", "mode", "selectedPackId", "packs", "eligiblePackIds", "rotationRun", "lastDeath", "pendingPackId", "queuedDeathOccurrences")
+            baseKeys += listOf("rotationRun", "lastDeath", "pendingPackId", "queuedDeathOccurrences")
         else if (root.has("rotationRun") || root.has("lastDeath") || root.has("pendingPackId"))
-            keys(root, "schemaVersion", "profileId", "mode", "selectedPackId", "packs", "eligiblePackIds", "rotationRun", "lastDeath", "pendingPackId")
-        else keys(root, "schemaVersion", "profileId", "mode", "selectedPackId", "packs", "eligiblePackIds")
+            baseKeys += listOf("rotationRun", "lastDeath", "pendingPackId")
+        keys(root, *baseKeys.toTypedArray())
         require(root["schemaVersion"].toString() == "1" && text(root["profileId"]) == owner) { "Unsupported library profile/schema" }
+        val mode = LibraryMode.valueOf(text(root["mode"]))
+        val spriteScope = root["spriteScope"]?.let { SpriteScope.valueOf(text(it)) } ?: legacySpriteScope(mode, owner)
         val packs = root["packs"].asJsonArray.map { item -> item.asJsonObject.let { p ->
             keys(p, "id", "name", "author", "candidateKey", "treeSha256", "receiptSha256")
             LibraryPack(text(p["id"]), text(p["name"]), text(p["author"]), text(p["candidateKey"]), text(p["treeSha256"]), text(p["receiptSha256"]))
@@ -89,12 +95,18 @@ object SkinLibraryCodec {
                 element.toString().matches(Regex("0|[1-9][0-9]{0,18}")))
             return element.toString().toLong()
         }
-        SkinLibraryDocument(LibraryMode.valueOf(text(root["mode"])), root["selectedPackId"].takeUnless { it.isJsonNull }?.let(::text),
+        SkinLibraryDocument(mode, root["selectedPackId"].takeUnless { it.isJsonNull }?.let(::text),
             packs, root["eligiblePackIds"].asJsonArray.map(::text), root["rotationRun"]?.takeUnless { it.isJsonNull }?.let(::text),
             root["lastDeath"]?.let(::occurrence) ?: 0,
             root["pendingPackId"]?.takeUnless { it.isJsonNull }?.let(::text),
-            root["queuedDeathOccurrences"]?.asJsonArray?.map(::occurrence) ?: emptyList()).also(::validate)
+            root["queuedDeathOccurrences"]?.asJsonArray?.map(::occurrence) ?: emptyList(), spriteScope).also(::validate)
     } catch (error: Exception) { throw IllegalArgumentException("Invalid skin library: ${error.message}", error) }
+
+    internal fun legacySpriteScope(mode: LibraryMode, profileId: String): SpriteScope {
+        val owner = requireProfile(profileId)
+        return if (mode != LibraryMode.ROTATE) SpriteScope.ALL
+        else if (owner == "silksong") SpriteScope.CHARACTER else SpriteScope.CHARACTER_HUD
+    }
 
     internal fun strictJson(bytes: ByteArray, maximum: Int = MAX_BYTES): JsonElement {
         require(bytes.size in 1..maximum) { "JSON byte bound exceeded" }

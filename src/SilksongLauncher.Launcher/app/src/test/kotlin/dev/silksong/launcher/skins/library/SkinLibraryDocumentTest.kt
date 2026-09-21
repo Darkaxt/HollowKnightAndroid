@@ -7,13 +7,15 @@ class SkinLibraryDocumentTest {
     private val a = LibraryPack("a", "Pack A", "Unknown", "a".repeat(64), "b".repeat(64), "c".repeat(64))
     private val b = a.copy(id = "b", candidateKey = "d".repeat(64))
 
-    @Test fun `round trip preserves explicit selection and eligibility order`() {
-        val document = SkinLibraryDocument(mode = LibraryMode.ROTATE, selectedPackId = "a", packs = listOf(a, b), eligiblePackIds = listOf("b", "a"))
+    @Test fun `round trip preserves explicit selection eligibility order and sprite scope`() {
+        val document = SkinLibraryDocument(mode = LibraryMode.ROTATE, selectedPackId = "a", packs = listOf(a, b),
+            eligiblePackIds = listOf("b", "a"), spriteScope = SpriteScope.CHARACTER_HUD)
         assertEquals(document, SkinLibraryCodec.decode(SkinLibraryCodec.encode(document)))
     }
     @Test fun `fresh library is OFF and does not choose an imported pack`() {
         val document = SkinLibraryDocument(packs = listOf(a))
         assertEquals(LibraryMode.OFF, document.mode)
+        assertEquals(SpriteScope.ALL, document.spriteScope)
         assertNull(document.selectedPackId)
         assertTrue(document.eligiblePackIds.isEmpty())
         assertEquals(document, SkinLibraryCodec.decode(SkinLibraryCodec.encode(document)))
@@ -32,11 +34,14 @@ class SkinLibraryDocumentTest {
     @Test fun `rotation extension round trips and legacy document remains accepted`() {
         val legacy = SkinLibraryCodec.encode(SkinLibraryDocument(LibraryMode.ROTATE, "a", listOf(a,b), listOf("a","b"))).toString(Charsets.UTF_8)
         val extended = com.google.gson.JsonParser.parseString(legacy).asJsonObject.apply {
+            remove("spriteScope")
             addProperty("rotationRun", "e".repeat(32)); addProperty("lastDeath", 7); addProperty("pendingPackId", "b")
         }
         val decoded = runCatching { SkinLibraryCodec.decode(extended.toString().toByteArray()) }
         assertTrue("Bounded rotation extension must decode: ${decoded.exceptionOrNull()}", decoded.isSuccess)
-        assertEquals(extended, com.google.gson.JsonParser.parseString(SkinLibraryCodec.encode(decoded.getOrThrow()).toString(Charsets.UTF_8)))
+        assertEquals(SpriteScope.CHARACTER_HUD, decoded.getOrThrow().spriteScope)
+        assertEquals("CHARACTER_HUD", com.google.gson.JsonParser.parseString(
+            SkinLibraryCodec.encode(decoded.getOrThrow()).toString(Charsets.UTF_8)).asJsonObject["spriteScope"].asString)
         val old = com.google.gson.JsonParser.parseString(legacy).asJsonObject.apply {
             remove("rotationRun"); remove("lastDeath"); remove("pendingPackId"); remove("queuedDeathOccurrences")
         }
@@ -45,6 +50,28 @@ class SkinLibraryDocumentTest {
             val bad = extended.deepCopy().apply { add(key, com.google.gson.JsonParser.parseString(value)) }
             assertThrows(IllegalArgumentException::class.java) { SkinLibraryCodec.decode(bad.toString().toByteArray()) }
         }
+    }
+
+    @Test fun `legacy sprite scope defaults use profile authority and mode`() {
+        fun legacy(mode: LibraryMode, profileId: String): SkinLibraryDocument {
+            val selected = if (mode == LibraryMode.OFF) null else "a"
+            val root = com.google.gson.JsonParser.parseString(SkinLibraryCodec.encode(
+                SkinLibraryDocument(mode = mode, selectedPackId = selected, packs = listOf(a)), profileId,
+            ).toString(Charsets.UTF_8)).asJsonObject
+            root.remove("spriteScope")
+            return SkinLibraryCodec.decode(root.toString().toByteArray(), profileId)
+        }
+
+        assertEquals(SpriteScope.ALL, legacy(LibraryMode.OFF, "hollow-knight").spriteScope)
+        assertEquals(SpriteScope.ALL, legacy(LibraryMode.ON, "hollow-knight").spriteScope)
+        assertEquals(SpriteScope.CHARACTER_HUD, legacy(LibraryMode.ROTATE, "hollow-knight").spriteScope)
+        assertEquals(SpriteScope.CHARACTER, legacy(LibraryMode.ROTATE, "silksong").spriteScope)
+    }
+
+    @Test fun `unknown sprite scope fails closed`() {
+        val encoded = SkinLibraryCodec.encode(SkinLibraryDocument()).toString(Charsets.UTF_8)
+            .replace("\"ALL\"", "\"HUD_ONLY\"")
+        assertThrows(IllegalArgumentException::class.java) { SkinLibraryCodec.decode(encoded.toByteArray()) }
     }
 
     @Test fun `document byte bound is enforced before parsing`() {
