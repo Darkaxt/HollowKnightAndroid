@@ -37,7 +37,6 @@ class HollowKnightNativeModsMenuContractTest(unittest.TestCase):
             "HideMenu(binding.OptionsScreen)",
         ):
             self.assertIn(seam, source)
-        self.assertNotIn("System.Reflection", source)
         self.assertNotIn("GetField(", source)
         self.assertNotIn("GetMethod(", source)
 
@@ -154,10 +153,17 @@ class HollowKnightNativeModsMenuContractTest(unittest.TestCase):
         self.assertNotIn("DirectDisplay", source)
         self.assertNotIn("HkDirectDisplayAdapter", source)
 
-    def test_exact_project_references_text_mesh_pro_for_native_labels(self):
+    def test_native_labels_use_runtime_text_contract_without_tmp_reference(self):
+        source = self.source()
         project = PROJECT.read_text(encoding="utf-8")
-        self.assertIn('<Reference Include="Unity.TextMeshPro">', project)
-        self.assertIn('$(HollowKnightManaged)/Unity.TextMeshPro.dll', project)
+        self.assertNotIn("using TMPro;", source)
+        self.assertNotIn("List<TextMeshProUGUI>", source)
+        self.assertNotIn("GetComponentInChildren<TextMeshProUGUI>", source)
+        self.assertIn('type.Namespace == "TMProOld"', source)
+        self.assertIn('type.Namespace == "TMPro"', source)
+        self.assertIn('type.GetProperty("text")', source)
+        self.assertNotIn('<Reference Include="Unity.TextMeshPro">', project)
+        self.assertNotIn('$(HollowKnightManaged)/Unity.TextMeshPro.dll', project)
 
 
 if __name__ == "__main__":

@@ -2,9 +2,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using DualSouls.Mods;
 using GlobalEnums;
-using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -63,11 +63,49 @@ namespace DualSouls.Mods.HollowKnight
             public float Y { get; }
         }
 
+        sealed class NativeText
+        {
+            readonly Component _component;
+            readonly PropertyInfo _textProperty;
+
+            NativeText(Component component, PropertyInfo textProperty)
+            {
+                _component = component;
+                _textProperty = textProperty;
+            }
+
+            public string Text
+            {
+                set { _textProperty.SetValue(_component, value, null); }
+            }
+
+            public static NativeText Find(GameObject root)
+            {
+                if (root == null) return null;
+                Component[] components = root.GetComponentsInChildren<Component>(true);
+                for (int i = 0; i < components.Length; i++)
+                {
+                    Component component = components[i];
+                    if (component == null) continue;
+                    Type type = component.GetType();
+                    bool knownNamespace = type.Namespace == "TMProOld" ||
+                                          type.Namespace == "TMPro";
+                    if (!knownNamespace ||
+                        (type.Name != "TextMeshPro" && type.Name != "TextMeshProUGUI"))
+                        continue;
+                    PropertyInfo textProperty = type.GetProperty("text");
+                    if (textProperty != null && textProperty.CanWrite)
+                        return new NativeText(component, textProperty);
+                }
+                return null;
+            }
+        }
+
         readonly List<OptionButton> _optionButtons = new List<OptionButton>();
         readonly List<HollowKnightNativeModsButton> _buttons =
             new List<HollowKnightNativeModsButton>();
         readonly List<GameObject> _buttonRoots = new List<GameObject>();
-        readonly List<TextMeshProUGUI> _labels = new List<TextMeshProUGUI>();
+        readonly List<NativeText> _labels = new List<NativeText>();
 
         NativeMenuBinding _binding;
         HollowKnightModsSession _session;
@@ -77,7 +115,7 @@ namespace DualSouls.Mods.HollowKnight
         GameObject _entryRoot;
         MenuButton _entrySelectable;
         HollowKnightNativeModsEntryButton _entryButton;
-        TextMeshProUGUI _title;
+        NativeText _title;
         Coroutine _transitionCoroutine;
         int _generation;
         bool _transitioning;
@@ -293,7 +331,7 @@ namespace DualSouls.Mods.HollowKnight
             if (oldList != null) UnityObject.Destroy(oldList);
 
             _title = _modsScreen.title != null
-                ? _modsScreen.title.GetComponentInChildren<TextMeshProUGUI>(true)
+                ? NativeText.Find(_modsScreen.title.gameObject)
                 : null;
             if (_title == null)
                 throw new InvalidOperationException("Options title text is unavailable.");
@@ -321,7 +359,7 @@ namespace DualSouls.Mods.HollowKnight
 
             DisableForeignDrivers(root);
             _modsScreen.defaultHighlight = _buttons[0].Selectable;
-            _title.text = "MODS";
+            _title.Text = "MODS";
             root.SetActive(false);
         }
 
@@ -351,18 +389,18 @@ namespace DualSouls.Mods.HollowKnight
                 buttonRect.sizeDelta = new Vector2(buttonRect.sizeDelta.x,
                                                    Math.Min(buttonRect.sizeDelta.y, rowStep - 4f));
             DisableForeignDrivers(wrapper);
-            TextMeshProUGUI label = SetButtonText(wrapper, initialText);
+            NativeText label = SetButtonText(wrapper, initialText);
             _buttonRoots.Add(wrapper);
             _buttons.Add(button);
             _labels.Add(label);
         }
 
-        static TextMeshProUGUI SetButtonText(GameObject root, string value)
+        static NativeText SetButtonText(GameObject root, string value)
         {
-            TextMeshProUGUI text = root.GetComponentInChildren<TextMeshProUGUI>(true);
+            NativeText text = NativeText.Find(root);
             if (text == null)
                 throw new InvalidOperationException("Native button text is unavailable.");
-            text.text = value;
+            text.Text = value;
             return text;
         }
 
@@ -620,9 +658,9 @@ namespace DualSouls.Mods.HollowKnight
         void Paint()
         {
             if (_menu == null || _labels.Count != 9) return;
-            _labels[0].text = "GROUP  <  " + Friendly(_menu.Groups[_menu.SelectedGroupIndex]) +
+            _labels[0].Text = "GROUP  <  " + Friendly(_menu.Groups[_menu.SelectedGroupIndex]) +
                               "  >  " + (_menu.SelectedGroupIndex + 1) + "/" + _menu.Groups.Count;
-            _labels[1].text = "MASTER MODS     " +
+            _labels[1].Text = "MASTER MODS     " +
                               (_session.Controller.MasterEnabled ? "ON" : "OFF");
 
             IReadOnlyList<TweakDescriptor> rows = _menu.CurrentRows;
@@ -642,14 +680,14 @@ namespace DualSouls.Mods.HollowKnight
                 else if (descriptor.ControlKind == TweakControlKind.Command) value = "RUN";
                 else if (descriptor.ControlKind == TweakControlKind.Route) value = "OPEN";
                 else value = Friendly(_session.Controller.Value(descriptor.Id));
-                _labels[slot + 2].text = descriptor.Title.ToUpperInvariant() + "     " + value;
+                _labels[slot + 2].Text = descriptor.Title.ToUpperInvariant() + "     " + value;
             }
 
-            _labels[7].text = "RESET ALL MODS";
-            _labels[8].text = "BACK";
+            _labels[7].Text = "RESET ALL MODS";
+            _labels[8].Text = "BACK";
             string status = _menu.Message;
             TweakDescriptor selected = _menu.Selected;
-            _title.text = string.IsNullOrEmpty(status)
+            _title.Text = string.IsNullOrEmpty(status)
                 ? "MODS  ·  " + (selected != null ? selected.Title.ToUpperInvariant() :
                                   Friendly(_menu.Groups[_menu.SelectedGroupIndex]))
                 : "MODS  ·  " + status.ToUpperInvariant();

@@ -63,10 +63,6 @@
       <HintPath>$(HollowKnightManaged)/UnityEngine.UI.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="Unity.TextMeshPro">
-      <HintPath>$(HollowKnightManaged)/Unity.TextMeshPro.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
     <Reference Include="Unity.InputSystem">
       <HintPath>$(HollowKnightManaged)/Unity.InputSystem.dll</HintPath>
       <Private>false</Private>
