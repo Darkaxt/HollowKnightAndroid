@@ -80,7 +80,11 @@ namespace DualSouls.Mods.Silksong
         SilksongNativeModsEntryButton _entryButton;
         SilksongNativeModsEntryButton _skinsEntryButton;
         TmpText _title;
+        TmpText _status;
         TmpText _skinsTitle;
+        TmpText _skinsStatus;
+        GameObject _statusRoot;
+        GameObject _skinsStatusRoot;
         string _skinStatus = "";
         MenuButton _gameButton;
         MenuButton _audioButton;
@@ -291,6 +295,7 @@ namespace DualSouls.Mods.Silksong
             if (controls != null) controls.gameObject.SetActive(false);
             Transform content = root.transform.Find("Content");
             if (content == null) throw new InvalidOperationException("Options content root is unavailable.");
+            DisableInheritedButtonsOutsideContent(root, content);
             for (int i = content.childCount - 1; i >= 0; i--)
             {
                 GameObject child = content.GetChild(i).gameObject;
@@ -302,8 +307,9 @@ namespace DualSouls.Mods.Silksong
             CreateButton(content, rowTemplate, ButtonRole.Master, 1, "MASTER MODS");
             for (int i = 0; i < VisibleRows; i++)
                 CreateButton(content, rowTemplate, ButtonRole.Row, i + 2, "MOD");
-            CreateButton(content, rowTemplate, ButtonRole.Reset, 7, "RESET ALL MODS");
-            CreateButton(content, rowTemplate, ButtonRole.Back, 8, "BACK");
+            CreateStatus(content, rowTemplate, 7);
+            CreateButton(content, rowTemplate, ButtonRole.Reset, 8, "RESET ALL MODS");
+            CreateButton(content, rowTemplate, ButtonRole.Back, 9, "BACK");
 
             DisableForeignDrivers(root);
             _modsScreen.defaultHighlight = _buttons[0];
@@ -331,6 +337,7 @@ namespace DualSouls.Mods.Silksong
             Transform content = root.transform.Find("Content");
             if (content == null)
                 throw new InvalidOperationException("Skins content root is unavailable.");
+            DisableInheritedButtonsOutsideContent(root, content);
             for (int i = content.childCount - 1; i >= 0; i--)
             {
                 GameObject child = content.GetChild(i).gameObject;
@@ -339,6 +346,7 @@ namespace DualSouls.Mods.Silksong
             }
             for (int index = 0; index < VisibleRows + 3; index++)
                 CreateSkinButton(content, rowTemplate, index);
+            CreateSkinStatus(content, rowTemplate, VisibleRows + 3);
             DisableForeignDrivers(root);
             _skinsScreen.defaultHighlight = _skinButtons[0];
             _skinsTitle.text = "SKINS";
@@ -369,6 +377,38 @@ namespace DualSouls.Mods.Silksong
             _skinButtonRoots.Add(wrapper);
             _skinButtons.Add(button);
             _skinLabels.Add(SetButtonText(wrapper, "SKIN"));
+        }
+
+        void CreateStatus(Transform parent, GameObject template, int visualIndex)
+        {
+            _statusRoot = CreateStatusRow(parent, template, "ModsStatus", visualIndex,
+                                          out _status);
+        }
+
+        void CreateSkinStatus(Transform parent, GameObject template, int visualIndex)
+        {
+            _skinsStatusRoot = CreateStatusRow(parent, template, "SkinsStatus", visualIndex,
+                                               out _skinsStatus);
+        }
+
+        static GameObject CreateStatusRow(Transform parent, GameObject template, string name,
+                                          int visualIndex, out TmpText label)
+        {
+            GameObject wrapper = Instantiate(template, parent, false);
+            wrapper.name = name;
+            RectTransform rect = wrapper.transform as RectTransform;
+            if (rect != null)
+                rect.anchoredPosition = new Vector2(rect.anchoredPosition.x,
+                    FirstRowY - RowStep * visualIndex);
+            MenuButton source = wrapper.GetComponentInChildren<MenuButton>(true);
+            if (source == null)
+                throw new InvalidOperationException("Native status row has no MenuButton.");
+            source.interactable = false;
+            source.enabled = false;
+            source.navigation = new Navigation { mode = Navigation.Mode.None };
+            DisableForeignDrivers(wrapper);
+            label = SetButtonText(wrapper, "STATUS     READY");
+            return wrapper;
         }
 
         void CreateButton(Transform parent, GameObject template, ButtonRole role,
@@ -437,6 +477,17 @@ namespace DualSouls.Mods.Silksong
                 if (match != null) return match;
             }
             return null;
+        }
+
+        static void DisableInheritedButtonsOutsideContent(GameObject root, Transform content)
+        {
+            MenuButton[] buttons = root.GetComponentsInChildren<MenuButton>(true);
+            for (int index = 0; index < buttons.Length; index++)
+            {
+                MenuButton button = buttons[index];
+                if (button != null && !button.transform.IsChildOf(content))
+                    button.gameObject.SetActive(false);
+            }
         }
 
         static void DisableForeignDrivers(GameObject root)
@@ -697,7 +748,7 @@ namespace DualSouls.Mods.Silksong
 
         void Paint()
         {
-            if (_menu == null || _labels.Count != 9) return;
+            if (_menu == null || _labels.Count != 9 || _title == null || _status == null) return;
             _labels[0].text = "GROUP  <  " + Friendly(_menu.Groups[_menu.SelectedGroupIndex]) +
                               "  >  " + (_menu.SelectedGroupIndex + 1) + "/" + _menu.Groups.Count;
             _labels[1].text = "MASTER MODS     " +
@@ -726,11 +777,9 @@ namespace DualSouls.Mods.Silksong
             _labels[7].text = "RESET ALL MODS";
             _labels[8].text = "BACK";
             string status = _menu.Message;
-            TweakDescriptor selected = _menu.Selected;
-            _title.text = string.IsNullOrEmpty(status)
-                ? "MODS  ·  " + (selected != null ? selected.Title.ToUpperInvariant() :
-                                  Friendly(_menu.Groups[_menu.SelectedGroupIndex]))
-                : "MODS  ·  " + status.ToUpperInvariant();
+            _title.text = "MODS";
+            _status.text = "STATUS     " +
+                (string.IsNullOrEmpty(status) ? "READY" : status.ToUpperInvariant());
         }
 
         static string Friendly(string value)
@@ -870,12 +919,15 @@ namespace DualSouls.Mods.Silksong
 
         void PaintSkins()
         {
-            if (_skinLabels.Count != VisibleRows + 3 || _skinsTitle == null) return;
+            if (_skinLabels.Count != VisibleRows + 3 || _skinsTitle == null ||
+                _skinsStatus == null) return;
+            _skinsTitle.text = "SKINS";
+            _skinsStatus.text = "STATUS     " +
+                (string.IsNullOrEmpty(_skinStatus) ? "READY" : _skinStatus.ToUpperInvariant());
             if (_skinMenu == null)
             {
                 for (int index = 0; index < _skinButtonRoots.Count; index++)
                     _skinButtonRoots[index].SetActive(false);
-                _skinsTitle.text = string.IsNullOrEmpty(_skinStatus) ? "SKINS" : _skinStatus;
                 return;
             }
             IReadOnlyList<NativeSkinMenuRow> visible = _skinMenu.VisibleRows;
@@ -894,7 +946,6 @@ namespace DualSouls.Mods.Silksong
                 _skinLabels[slot].text = row.Label.ToUpperInvariant() +
                     (string.IsNullOrEmpty(row.Value) ? "" : "     " + row.Value);
             }
-            _skinsTitle.text = string.IsNullOrEmpty(_skinStatus) ? "SKINS" : _skinStatus;
         }
 
 #pragma warning disable CS0649
@@ -944,7 +995,11 @@ namespace DualSouls.Mods.Silksong
             _modsScreen = null;
             _skinsScreen = null;
             _title = null;
+            _status = null;
             _skinsTitle = null;
+            _skinsStatus = null;
+            _statusRoot = null;
+            _skinsStatusRoot = null;
             _gameButton = _audioButton = _videoButton = null;
             _controllerButton = _keyboardButton = null;
             _ui = null;

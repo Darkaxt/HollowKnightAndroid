@@ -134,6 +134,27 @@ class SilksongNativeModsMenuContractTest(unittest.TestCase):
         self.assertNotIn("DsModsScreen", source)
         self.assertNotIn("DsTouch", source)
 
+    def test_cloned_screens_hide_inherited_buttons_outside_custom_content(self):
+        source = self.source()
+        for signature in ("void BuildModsScreen(", "void BuildSkinsScreen("):
+            build = method_body(source, signature)
+            self.assertIn("DisableInheritedButtonsOutsideContent(root, content);", build)
+        helper = method_body(source, "static void DisableInheritedButtonsOutsideContent(")
+        self.assertIn("!button.transform.IsChildOf(content)", helper)
+        self.assertIn("button.gameObject.SetActive(false);", helper)
+
+    def test_mods_and_skins_titles_stay_fixed_with_bounded_status_rows(self):
+        source = self.source()
+        paint = method_body(source, "void Paint()")
+        skins = method_body(source, "void PaintSkins()")
+        self.assertIn('_title.text = "MODS";', paint)
+        self.assertNotIn('"MODS  ·  "', paint)
+        self.assertIn("_status.text =", paint)
+        self.assertIn('_skinsTitle.text = "SKINS";', skins)
+        self.assertIn("_skinsStatus.text =", skins)
+        self.assertIn("CreateStatus(", method_body(source, "void BuildModsScreen("))
+        self.assertIn("CreateSkinStatus(", method_body(source, "void BuildSkinsScreen("))
+
 
 if __name__ == "__main__":
     unittest.main()
