@@ -92,6 +92,7 @@ public static class DsGameArt
         _questCounter = null; _nextCounterSearch = 0f;
         _toolDividers.Clear(); _nextDividerSearch = 0f;
         _unlockItem = null; _nextUnlockSearch = 0f;
+        _floatingSlots = null; _nextFloatingSearch = 0f;
         _toolTween = null; _nextTweenSearch = 0f;
         System.Array.Clear(_toolRings, 0, _toolRings.Length); _nextRingSearch = 0f;
         _lockedSocket = null; _nextLockedSearch = 0f;
@@ -845,6 +846,70 @@ public static class DsGameArt
 
     static CollectableItem _unlockItem;
     static float _nextUnlockSearch;
+
+    public struct ExtraSlot
+    {
+        public string Id;
+        public ToolItemType Type;
+    }
+
+    static InventoryFloatingToolSlots _floatingSlots;
+    static float _nextFloatingSearch;
+
+    public static List<ExtraSlot> ExtraToolSlots()
+    {
+        var result = new List<ExtraSlot>();
+        if (_floatingSlots == null && Time.unscaledTime >= _nextFloatingSearch)
+        {
+            _nextFloatingSearch = Time.unscaledTime + 2f;
+            try
+            {
+                var all = Resources.FindObjectsOfTypeAll<InventoryFloatingToolSlots>();
+                for (int i = 0; i < all.Length && _floatingSlots == null; i++)
+                    if (all[i] != null && all[i].gameObject.scene.IsValid()) _floatingSlots = all[i];
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[DualScreen] extra tool slots unavailable: " + e.Message);
+            }
+        }
+        if (_floatingSlots == null) return result;
+
+        try
+        {
+            var cursed = GlobalSettings.Gameplay.CursedCrest;
+            if (cursed != null && cursed.IsEquipped) return result;
+
+            var configs = typeof(InventoryFloatingToolSlots).GetField("configs", Priv)
+                ?.GetValue(_floatingSlots) as System.Array;
+            if (configs == null) return result;
+
+            object current = null;
+            foreach (var config in configs)
+            {
+                if (config == null) continue;
+                var test = config.GetType().GetField("Condition")?.GetValue(config) as PlayerDataTest;
+                if (test != null && test.IsFulfilled) current = config;
+            }
+            if (current == null) return result;
+
+            var slots = current.GetType().GetField("Slots")?.GetValue(current) as System.Array;
+            if (slots == null) return result;
+            foreach (var slot in slots)
+            {
+                if (slot == null) continue;
+                var id = slot.GetType().GetField("Id")?.GetValue(slot) as string;
+                var type = slot.GetType().GetField("Type")?.GetValue(slot);
+                if (string.IsNullOrEmpty(id) || !(type is ToolItemType)) continue;
+                result.Add(new ExtraSlot { Id = id, Type = (ToolItemType)type });
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[DualScreen] extra tool slots unreadable: " + e.Message);
+        }
+        return result;
+    }
 
     public class ToolTween
     {

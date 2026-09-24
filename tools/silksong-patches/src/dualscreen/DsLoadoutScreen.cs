@@ -86,6 +86,7 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
     int _lockedPick = -1;
     readonly List<ToolItem> _slotTools = new List<ToolItem>();
     readonly List<RectTransform> _slotRects = new List<RectTransform>();
+    readonly List<string> _slotExtra = new List<string>();
 
     string _crestId;
     int _toolSignature;
@@ -223,6 +224,8 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
                 int bound = binding.HasValue ? 1 + (int)binding.Value : 0;
                 hash = hash * 31 + (unlocked ? 1 : 0) + (equipped ? 2 : 0) + left * 7 + bound * 5;
             }
+            foreach (var extra in DsGameArt.ExtraToolSlots())
+                hash = hash * 31 + extra.Id.GetHashCode() + (int)extra.Type;
         }
         catch { }
         return DsGameArt.ToolListRing(null) != null ? hash : ~hash;
@@ -454,33 +457,27 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
     /// </summary>
     void AddExtraSlots()
     {
-        List<string> names = null;
-        try { names = PlayerData.instance.ExtraToolEquips.GetValidNames(); } catch { }
-        if (names == null || names.Count == 0) return;
-
-        var tools = new List<ToolItem>();
-        for (int i = 0; i < names.Count; i++)
-        {
-            ToolCrestsData.SlotData data;
-            try { data = PlayerData.instance.ExtraToolEquips.GetData(names[i]); } catch { continue; }
-            if (string.IsNullOrEmpty(data.EquippedTool)) continue;
-
-            ToolItem tool = null;
-            try { tool = ToolItemManager.GetToolByName(data.EquippedTool); } catch { }
-            if (tool != null) tools.Add(tool);
-        }
-        if (tools.Count == 0) return;
+        var extra = DsGameArt.ExtraToolSlots();
+        if (extra.Count == 0) return;
 
         // Centred as a row beneath the crest, clear of its lowest slot.
         const float gap = 18f;
-        float width = tools.Count * ExtraIcon + (tools.Count - 1) * gap;
+        float width = extra.Count * ExtraIcon + (extra.Count - 1) * gap;
         float x = (LeftW - width) * 0.5f;
         float y = _crestH - ExtraIcon - 8f;
 
-        for (int i = 0; i < tools.Count; i++)
+        for (int i = 0; i < extra.Count; i++)
         {
-            AddSlot(x, y, ExtraIcon, DsTheme.ToolTypeColor(tools[i].Type), tools[i],
-                    tools[i].Type, false);
+            ToolItem tool = null;
+            try
+            {
+                string held = PlayerData.instance.ExtraToolEquips.GetData(extra[i].Id).EquippedTool;
+                if (!string.IsNullOrEmpty(held)) tool = ToolItemManager.GetToolByName(held);
+            }
+            catch { }
+
+            AddSlot(x, y, ExtraIcon, DsTheme.ToolTypeColor(extra[i].Type), tool,
+                    extra[i].Type, false, -1, extra[i].Id);
             x += ExtraIcon + gap;
         }
     }
@@ -495,7 +492,7 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
     /// One slot around the crest, remembered so the cursor can land on it.
     /// </summary>
     void AddSlot(float x, float y, float size, Color ringColour, ToolItem tool,
-                 ToolItemType type, bool locked, int index = -1)
+                 ToolItemType type, bool locked, int index = -1, string extraId = null)
     {
         var holder = DsWidgets.Rect(_crestBox, "slot" + _slotRects.Count);
         DsWidgets.Place(holder, x, y, size, size);
@@ -505,6 +502,7 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
         _slotRects.Add(holder);
         _slotLocked.Add(locked);
         _slotIndex.Add(index);
+        _slotExtra.Add(extraId);
         _slotColour.Add(locked ? LockedGrey : ringColour);
     }
 
@@ -621,7 +619,7 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
         for (int i = 0; i < _slotRects.Count; i++)
             if (_slotRects[i] != null) UnityEngine.Object.Destroy(_slotRects[i].gameObject);
         _slots.Clear(); _slotTools.Clear(); _slotRects.Clear();
-        _slotLocked.Clear(); _slotIndex.Clear(); _slotColour.Clear();
+        _slotLocked.Clear(); _slotIndex.Clear(); _slotColour.Clear(); _slotExtra.Clear();
         _lockedPick = -1;
     }
 
@@ -1469,10 +1467,9 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
         try { return tool != null ? tool.InventorySpriteBase : null; } catch { return null; }
     }
 
-    void FlyIn(ToolItem tool, int crestSlot, Rect from)
+    void FlyIn(ToolItem tool, int drawn, Rect from)
     {
-        int drawn = _slotIndex.IndexOf(crestSlot);
-        if (drawn < 0 || _slotTools[drawn] != tool) return;
+        if (drawn < 0 || drawn >= _slots.Count || _slotTools[drawn] != tool) return;
 
         var icon = _slots[drawn];
         Sprite art = ToolSprite(tool);
@@ -1532,7 +1529,7 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
                 open[i] = !locked;
             }
 
-            int target = -1;
+            int free = -1, taken = -1;
             if (tool.Type == ToolItemType.Skill)
             {
                 // Skills go in the one neutral skill slot, not in any of them.
@@ -1541,33 +1538,58 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
                     if (!open[i]) continue;
                     if (crest.Slots[i].Type == ToolItemType.Skill &&
                         crest.Slots[i].AttackBinding == AttackToolBinding.Neutral)
-                    { target = i; break; }
+                    {
+                        if (string.IsNullOrEmpty(slots[i])) free = i; else taken = i;
+                        break;
+                    }
                 }
             }
             else
             {
                 // An empty slot of the right colour if there is one; otherwise
                 // the last of that colour, which is then replaced.
-                int lastOfType = -1, firstFree = -1;
                 for (int i = 0; i < crest.Slots.Length; i++)
                 {
                     if (!open[i] || crest.Slots[i].Type != tool.Type) continue;
-                    lastOfType = i;
-                    if (string.IsNullOrEmpty(slots[i])) firstFree = i;
+                    taken = i;
+                    if (string.IsNullOrEmpty(slots[i])) free = i;
                 }
-                target = firstFree >= 0 ? firstFree : lastOfType;
             }
-            if (target < 0) return;      // this crest has nowhere to put it
+
+            string extraFree = null, extraTaken = null;
+            foreach (var extra in DsGameArt.ExtraToolSlots())
+            {
+                if (extra.Type != tool.Type) continue;
+                bool empty = string.IsNullOrEmpty(
+                    PlayerData.instance.ExtraToolEquips.GetData(extra.Id).EquippedTool);
+                if (empty && extraFree == null) extraFree = extra.Id;
+                if (extraTaken == null) extraTaken = extra.Id;
+            }
+
+            int target = free;
+            string extraTarget = null;
+            if (target < 0)
+            {
+                if (extraFree != null) extraTarget = extraFree;
+                else if (taken >= 0) target = taken;
+                else extraTarget = extraTaken;
+            }
+            if (target < 0 && extraTarget == null) return;      // nowhere to put it
 
             Rect from;
             bool fly = _grid.IconBox(tool.name, out from);
 
-            slots[target] = tool.name;
-            ToolItemManager.SetEquippedTools(crestId, slots);
+            if (target >= 0)
+            {
+                slots[target] = tool.name;
+                ToolItemManager.SetEquippedTools(crestId, slots);
+            }
+            else ToolItemManager.SetExtraEquippedTool(extraTarget, tool);
             ToolItemManager.SendEquippedChangedEvent();
             Refresh(force: true);
 
-            if (fly) FlyIn(tool, target, from);
+            if (fly)
+                FlyIn(tool, target >= 0 ? _slotIndex.IndexOf(target) : _slotExtra.IndexOf(extraTarget), from);
         }
         catch (Exception e) { Debug.LogWarning("[DualScreen] equip failed: " + e.Message); }
     }
