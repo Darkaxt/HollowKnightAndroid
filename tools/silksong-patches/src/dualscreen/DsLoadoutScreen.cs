@@ -75,6 +75,7 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
     float _crestH;
 
     readonly DsIconGrid _grid = new DsIconGrid();
+    readonly DsToolTween _tween = new DsToolTween();
     readonly List<Image> _slots = new List<Image>();
     /// <summary>Whether each drawn slot is still locked, and which crest slot it is.</summary>
     readonly List<bool> _slotLocked = new List<bool>();
@@ -140,11 +141,13 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
                     detailRule: false,
                     capReach: ListX - (LeftX + LeftW + ListX) * 0.5f);
 
+        _tween.Build(host);
+
         Refresh(force: true);
     }
 
     public void OnShow() { Refresh(force: true); }
-    public void OnHide() { ShowCrestPicker(false); }
+    public void OnHide() { ShowCrestPicker(false); _tween.Cancel(); }
 
     public void Tick(float dt)
     {
@@ -160,6 +163,7 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
             Refresh(force: false);
         }
         _grid.Tick();
+        _tween.Tick(dt);
     }
 
     // ── data ────────────────────────────────────────────────────────────────
@@ -611,6 +615,7 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
 
     void ClearSlots()
     {
+        _tween.Cancel();
         for (int i = 0; i < _slotRects.Count; i++)
             if (_slotRects[i] != null) UnityEngine.Object.Destroy(_slotRects[i].gameObject);
         _slots.Clear(); _slotTools.Clear(); _slotRects.Clear();
@@ -1400,10 +1405,42 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
     {
         try
         {
+            Sprite sprite = null;
+            Rect from = default(Rect), to = default(Rect);
+            int drawn = _slotTools.IndexOf(tool);
+            Sprite art = ToolSprite(tool);
+            if (drawn >= 0 && art != null && _slots[drawn] != null && _slots[drawn].sprite == art &&
+                _grid.IconBox(tool.name, out to))
+            {
+                sprite = art;
+                from = DsWidgets.PlacedRect(_host, _slots[drawn].rectTransform);
+            }
+
             ToolItemManager.UnequipTool(tool);
             Refresh(force: true);
+
+            if (sprite != null) _tween.Return(sprite, from, to);
         }
         catch (Exception e) { Debug.LogWarning("[DualScreen] unequip failed: " + e.Message); }
+    }
+
+    static Sprite ToolSprite(ToolItem tool)
+    {
+        try { return tool != null ? tool.InventorySpriteBase : null; } catch { return null; }
+    }
+
+    void FlyIn(ToolItem tool, int crestSlot, Rect from)
+    {
+        int drawn = _slotIndex.IndexOf(crestSlot);
+        if (drawn < 0 || _slotTools[drawn] != tool) return;
+
+        var icon = _slots[drawn];
+        Sprite art = ToolSprite(tool);
+        if (icon == null || art == null || icon.sprite != art) return;
+
+        icon.enabled = false;
+        _tween.Place(art, from, DsWidgets.PlacedRect(_host, icon.rectTransform), tool.Type,
+                     () => { if (icon != null) icon.enabled = true; });
     }
 
     /// <summary>
@@ -1482,10 +1519,15 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
             }
             if (target < 0) return;      // this crest has nowhere to put it
 
+            Rect from;
+            bool fly = _grid.IconBox(tool.name, out from);
+
             slots[target] = tool.name;
             ToolItemManager.SetEquippedTools(crestId, slots);
             ToolItemManager.SendEquippedChangedEvent();
             Refresh(force: true);
+
+            if (fly) FlyIn(tool, target, from);
         }
         catch (Exception e) { Debug.LogWarning("[DualScreen] equip failed: " + e.Message); }
     }

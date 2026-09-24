@@ -467,6 +467,16 @@ public static class DsWidgets
         rt.sizeDelta = new Vector2(w, h);
     }
 
+    public static UnityEngine.Rect PlacedRect(RectTransform space, RectTransform rt)
+    {
+        var corners = new Vector3[4];
+        rt.GetWorldCorners(corners);
+        Vector3 min = space.InverseTransformPoint(corners[0]);
+        Vector3 max = space.InverseTransformPoint(corners[2]);
+        var area = space.rect;
+        return new UnityEngine.Rect(min.x - area.xMin, area.yMax - max.y, max.x - min.x, max.y - min.y);
+    }
+
     public static void SetActive(Component c, bool on)
     {
         if (c != null && c.gameObject.activeSelf != on) c.gameObject.SetActive(on);

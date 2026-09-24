@@ -92,6 +92,7 @@ public static class DsGameArt
         _questCounter = null; _nextCounterSearch = 0f;
         _toolDividers.Clear(); _nextDividerSearch = 0f;
         _unlockItem = null; _nextUnlockSearch = 0f;
+        _toolTween = null; _nextTweenSearch = 0f;
         _lockedSocket = null; _nextLockedSearch = 0f;
         _journalFrames = default(JournalFrames);
         _journalRule = default(JournalRule);
@@ -843,6 +844,60 @@ public static class DsGameArt
 
     static CollectableItem _unlockItem;
     static float _nextUnlockSearch;
+
+    public class ToolTween
+    {
+        public Material Flash;
+        public Sprite Glow;
+        public Vector2 GlowScale = Vector2.one;
+    }
+
+    static ToolTween _toolTween;
+    static float _nextTweenSearch;
+
+    public static ToolTween ToolTweenArt()
+    {
+        if (_toolTween != null) return _toolTween;
+        if (Time.unscaledTime < _nextTweenSearch) return null;
+        _nextTweenSearch = Time.unscaledTime + 2f;
+
+        try
+        {
+            var rendererField = typeof(InventoryItemToolTween).GetField("spriteRenderer", Priv);
+            var colouredField = typeof(InventoryItemToolTween).GetField("toolColoured", Priv);
+            var all = Resources.FindObjectsOfTypeAll<InventoryItemToolTween>();
+            for (int i = 0; i < all.Length && _toolTween == null; i++)
+            {
+                if (all[i] == null) continue;
+                var sr = rendererField != null ? rendererField.GetValue(all[i]) as SpriteRenderer : null;
+                var flash = sr != null ? sr.sharedMaterial : null;
+                if (flash == null || !flash.HasProperty("_FlashAmount")) continue;
+
+                var art = new ToolTween { Flash = flash };
+                var coloured = colouredField != null
+                    ? colouredField.GetValue(all[i]) as SpriteRenderer[] : null;
+                if (coloured != null)
+                {
+                    for (int c = 0; c < coloured.Length; c++)
+                    {
+                        var r = coloured[c];
+                        if (r == null || r.sprite == null || r.gameObject.name != "Glow") continue;
+                        art.Glow = r.sprite;
+                        art.GlowScale = r.transform.localScale;
+                        break;
+                    }
+                }
+                _toolTween = art;
+                Debug.Log("[DsGameArt] tool tween: flash '" + flash.name + "' glow " +
+                          (art.Glow != null ? "'" + art.Glow.name + "' x" + art.GlowScale : "none"));
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[DualScreen] tool tween art unavailable: " + e.Message);
+        }
+        return _toolTween;
+    }
 
     // ── the journal ─────────────────────────────────────────────────────────
 

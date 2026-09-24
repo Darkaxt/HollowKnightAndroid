@@ -422,6 +422,22 @@ public class DsIconGrid
         return false;
     }
 
+    public bool IconBox(string key, out Rect box)
+    {
+        box = default(Rect);
+        if (string.IsNullOrEmpty(key)) return false;
+        for (int i = 0; i < _placed.Count; i++)
+        {
+            var p = _placed[i];
+            if (p.ItemIndex >= _flat.Count || _flat[p.ItemIndex].Key != key) continue;
+            float w = p.W - _iconPad * 2f, h = p.H - _iconPad * 2f;
+            float y = Mathf.Clamp(p.Y - _scroll + _iconPad, 0f, Mathf.Max(0f, _gridH - h));
+            box = new Rect(_gridLeft + p.X + _iconPad, DsTheme.Pad + y, w, h);
+            return true;
+        }
+        return false;
+    }
+
     public void Tick()
     {
         float dt = Time.unscaledDeltaTime;
