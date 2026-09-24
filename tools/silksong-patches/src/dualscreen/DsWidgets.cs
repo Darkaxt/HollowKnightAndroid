@@ -404,6 +404,12 @@ public static class DsWidgets
         return new UnityEngine.Rect(px - iw * 0.5f, py - ih * 0.5f, iw, ih);
     }
 
+    public static Vector2 MeshSize(Sprite sprite)
+    {
+        Vector2 mid, size;
+        return sprite != null && MeshBox(sprite, out mid, out size) ? size : Vector2.zero;
+    }
+
     /// <summary>
     /// A sprite mesh's corners, in the units and about the pivot that
     /// Image.GenerateSprite maps from. Both are zero for a sprite with no mesh

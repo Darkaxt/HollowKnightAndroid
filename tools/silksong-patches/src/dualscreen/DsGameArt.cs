@@ -93,6 +93,7 @@ public static class DsGameArt
         _toolDividers.Clear(); _nextDividerSearch = 0f;
         _unlockItem = null; _nextUnlockSearch = 0f;
         _toolTween = null; _nextTweenSearch = 0f;
+        System.Array.Clear(_toolRings, 0, _toolRings.Length); _nextRingSearch = 0f;
         _lockedSocket = null; _nextLockedSearch = 0f;
         _journalFrames = default(JournalFrames);
         _journalRule = default(JournalRule);
@@ -897,6 +898,41 @@ public static class DsGameArt
             Debug.LogWarning("[DualScreen] tool tween art unavailable: " + e.Message);
         }
         return _toolTween;
+    }
+
+    static readonly string[] ToolRingSprites =
+    {
+        "UI_tool_slot_attack0004", "UI_tool_slot_attack0004_up", "UI_tool_slot_attack0004_down",
+    };
+
+    static readonly Sprite[] _toolRings = new Sprite[3];
+    static float _nextRingSearch;
+
+    public static Sprite ToolListRing(AttackToolBinding? binding)
+    {
+        int want = binding.HasValue ? Mathf.Clamp((int)binding.Value, 0, ToolRingSprites.Length - 1) : 0;
+        if (_toolRings[want] != null) return _toolRings[want];
+        if (Time.unscaledTime < _nextRingSearch) return null;
+        _nextRingSearch = Time.unscaledTime + 2f;
+
+        try
+        {
+            var all = Resources.FindObjectsOfTypeAll<Sprite>();
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] == null) continue;
+                int at = System.Array.IndexOf(ToolRingSprites, all[i].name);
+                if (at < 0 || _toolRings[at] != null) continue;
+                _toolRings[at] = all[i];
+                Debug.Log("[DsGameArt] tool list ring: '" + all[i].name + "' " +
+                          all[i].rect.width + "x" + all[i].rect.height);
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[DualScreen] tool list ring unavailable: " + e.Message);
+        }
+        return _toolRings[want];
     }
 
     // ── the journal ─────────────────────────────────────────────────────────

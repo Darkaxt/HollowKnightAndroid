@@ -219,11 +219,13 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
                 try { unlocked = tool.IsUnlockedNotHidden; } catch { }
                 try { equipped = tool.IsEquipped; } catch { }
                 try { left = tool.SavedData.AmountLeft; } catch { }
-                hash = hash * 31 + (unlocked ? 1 : 0) + (equipped ? 2 : 0) + left * 7;
+                var binding = equipped ? Binding(tool) : null;
+                int bound = binding.HasValue ? 1 + (int)binding.Value : 0;
+                hash = hash * 31 + (unlocked ? 1 : 0) + (equipped ? 2 : 0) + left * 7 + bound * 5;
             }
         }
         catch { }
-        return hash;
+        return DsGameArt.ToolListRing(null) != null ? hash : ~hash;
     }
 
     // ── the crest ───────────────────────────────────────────────────────────
@@ -682,6 +684,7 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
             sections.Add(sec);
         }
 
+        var iconSizes = new List<float>();
         try
         {
             foreach (var tool in ToolItemManager.GetAllTools())
@@ -714,7 +717,10 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
                 try { int left = tool.SavedData.AmountLeft; if (left > 0) badge = left.ToString(); } catch { }
 
                 bool equipped = false;
-                try { equipped = tool.IsEquipped; } catch { }
+                try { equipped = tool.IsEquippedHud; } catch { }
+
+                if (icon != null && icon.pixelsPerUnit > 0f)
+                    iconSizes.Add(Mathf.Max(icon.rect.width, icon.rect.height) / icon.pixelsPerUnit);
 
                 bucket.Items.Add(new DsItem
                 {
@@ -728,13 +734,47 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
                     // type, the way the game's does -- see
                     // InventoryItemTool.CursorColor.
                     Glow = DsTheme.ToolTypeColor(tool.Type),
+                    Ring = equipped ? DsGameArt.ToolListRing(Binding(tool)) : null,
+                    RingColour = DsTheme.ToolTypeColor(tool.Type),
                 });
             }
         }
         catch { }
 
+        Grid.RingScale = ListRingScale(iconSizes);
         Grid.EmptyMessage = "No tools yet";
         Grid.SetSections(sections);
+    }
+
+    const float RingToIcon = 13f / 14f;
+
+    float _loggedRingScale = -1f;
+
+    static AttackToolBinding? Binding(ToolItem tool)
+    {
+        try { return ToolItemManager.GetAttackToolBinding(tool); } catch { return null; }
+    }
+
+    float ListRingScale(List<float> iconSizes)
+    {
+        var ring = DsGameArt.ToolListRing(null);
+        if (ring == null || iconSizes.Count == 0) return 1f;
+
+        iconSizes.Sort();
+        float typical = iconSizes[iconSizes.Count / 2];
+        float circle = DsWidgets.MeshSize(ring).x;
+        if (circle <= 0f) circle = ring.bounds.size.x;
+        if (typical <= 0f || circle <= 0f) return 1f;
+
+        float scale = circle * RingToIcon / typical *
+                      Mathf.Clamp(DsConfig.Int("tool_ring_pct", 100), 10, 300) / 100f;
+        if (Mathf.Abs(scale - _loggedRingScale) > 0.001f)
+        {
+            _loggedRingScale = scale;
+            Debug.Log("[DualScreen] tool list ring: " + circle.ToString("0.00") + "u circle, typical icon " +
+                      typical.ToString("0.00") + "u, drawn at " + (scale * 100f).ToString("0") + "% of the icon");
+        }
+        return scale;
     }
     // ── input ───────────────────────────────────────────────────────────────
 

@@ -44,6 +44,8 @@ public struct DsItem
     /// share a name.
     /// </summary>
     public string Key;
+    public Sprite Ring;
+    public Color RingColour;
 }
 
 /// <summary>A titled run of items. A grid with one untitled section is a plain grid.</summary>
@@ -68,6 +70,7 @@ public class DsIconGrid
     class Cell
     {
         public RectTransform Root;
+        public Image Ring;
         public Image Icon;
         public TmpText Badge;
     }
@@ -207,6 +210,10 @@ public class DsIconGrid
     bool _dirty;
 
     public string EmptyMessage = "Nothing here yet";
+
+    public float RingScale = 1f;
+
+    readonly Dictionary<Sprite, float> _ringInk = new Dictionary<Sprite, float>();
 
     /// <param name="left">Left edge of the grid column, in layout space.</param>
     /// <param name="width">Width of the grid column.</param>
@@ -604,9 +611,41 @@ public class DsIconGrid
                 DsWidgets.SetActive(cell.Badge, show);
                 if (show) cell.Badge.text = item.Badge;
             }
+
+            bool ringed = item.Ring != null && RingScale > 0f;
+            DsWidgets.SetActive(cell.Ring, ringed);
+            if (ringed) PaintRing(cell.Ring, item, p);
         }
 
         PaintCursor();
+    }
+
+    void PaintRing(Image ring, DsItem item, Placed p)
+    {
+        var sprite = item.Ring;
+        float ink;
+        if (!_ringInk.TryGetValue(sprite, out ink))
+        {
+            float full = sprite.bounds.size.x;
+            float mesh = DsWidgets.MeshSize(sprite).x;
+            ink = full > 0f && mesh > 0f ? Mathf.Clamp01(mesh / full) : 1f;
+            _ringInk[sprite] = ink;
+        }
+
+        float circle = Mathf.Min((p.W - _iconPad * 2f) * RingScale, p.W);
+        var r = sprite.rect;
+        float w = circle / Mathf.Max(ink, 0.01f);
+        float h = w * r.height / Mathf.Max(1f, r.width);
+
+        ring.sprite = sprite;
+        ring.useSpriteMesh = true;
+        ring.preserveAspect = true;
+        ring.color = item.RingColour;
+        var rt = ring.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = Vector2.zero;
+        rt.sizeDelta = new Vector2(w, h);
     }
 
     /// <summary>
@@ -762,6 +801,8 @@ public class DsIconGrid
             // a grid of tinted squares reads as a spreadsheet, and the game
             // draws its inventory as bare art on the panel. The selection is
             // drawn once, by the cursor that travels -- see DsCursor.
+            var ring = DsWidgets.Icon(root, "ring", null, Color.clear);
+            ring.gameObject.SetActive(false);
             var icon = DsWidgets.Icon(root, "icon", null, Color.white);
             DsWidgets.Stretch(icon.rectTransform, _iconPad);
 
@@ -795,7 +836,7 @@ public class DsIconGrid
                                 _cell - bw - insetX, _cell - bh - insetY, bw, bh);
             }
 
-            _cells.Add(new Cell { Root = root, Icon = icon, Badge = badge });
+            _cells.Add(new Cell { Root = root, Ring = ring, Icon = icon, Badge = badge });
         }
 
         // Cells and headers are added to the same parent as the grid's cursor
