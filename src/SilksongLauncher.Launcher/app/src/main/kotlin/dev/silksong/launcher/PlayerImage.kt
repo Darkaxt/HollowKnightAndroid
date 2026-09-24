@@ -499,14 +499,6 @@ object PlayerImage {
 
         // What has actually been rewritten, counted off the tree.
         //
-        // The reader below was meant to be this, and cannot be: retarget-tree
-        // prints nothing this side of the runtime -- the per-group line in the
-        // log came back empty on a Retroid Pocket Flip 2, after a run that
-        // rewrote all 2068 bundles perfectly well. Whatever it says goes
-        // nowhere we can see, and with one group holding the whole tree the
-        // bar could then only move once, at the end. It read 0% for seven
-        // minutes of a working retarget.
-        //
         // The files answer without being asked. A bundle rewritten after this
         // started has an mtime to prove it, and that is true whatever the tool
         // does or does not print. Both paths report through [publish], so the
@@ -545,10 +537,7 @@ object PlayerImage {
                 if (count == 0) continue
                 val before = finished
                 // What retarget-tree is documented to print: "  N / M  (Ts)"
-                // every hundred bundles, which exec folds in with stdout. It
-                // has never been seen to arrive; the count above is what
-                // actually moves the bar, and this is kept only because it
-                // costs nothing and would be the better answer if it came.
+                // every hundred bundles, which exec folds in with stdout.
                 val r = run(surgery, context, listOf("retarget-tree", group.absolutePath, group.absolutePath)) { line ->
                     PROGRESS.find(line)?.let { m ->
                         val n = m.groupValues[1].toIntOrNull() ?: return@let
@@ -743,6 +732,7 @@ object PlayerImage {
         if (!depot.isDirectory) return "that folder does not exist yet"
         val entries = depot.listFiles().orEmpty().sortedBy { it.name }
         if (entries.isEmpty()) return "that folder is empty"
+        if (DepotFetcher.isInterrupted(depot)) return "the download from Steam into it did not finish"
 
         // Before anything about what is missing: this folder holds a complete
         // and correct copy of the game, and naming what is absent from it
@@ -774,6 +764,7 @@ object PlayerImage {
     fun depotProblemSummary(depot: File): String = when {
         !depot.isDirectory -> "that folder does not exist yet"
         depot.listFiles().orEmpty().isEmpty() -> "that folder is empty"
+        DepotFetcher.isInterrupted(depot) -> "the download from Steam into it did not finish"
         foreignBuild(depot) != null -> "that is the ${foreignBuild(depot)?.label} build, not the Linux one"
         partialDataDir(depot) != null -> "a data folder is there, but the copy did not finish"
         else -> "no game data in it"
@@ -978,13 +969,18 @@ object PlayerImage {
     ): Toolchain.Result {
         val r = tryRun(surgery, context, args, onLine)
         if (!r.ok) {
-            throw IOException(
-                "bundle-surgery ${args.firstOrNull()} failed: " +
-                    (r.output.trim().lines().lastOrNull() ?: "exit ${r.code}").take(300),
-            )
+            val command = args.firstOrNull()
+            val said = r.output.lines().map { it.trim() }.filter { it.isNotEmpty() }
+            for (line in said.takeLast(FAILURE_TAIL_LINES)) LauncherLog.log("bundle-surgery $command: $line")
+            val why = said.firstOrNull { it.startsWith("✗") }?.removePrefix("✗")?.trim()
+                ?: said.lastOrNull()
+                ?: "it printed nothing"
+            throw IOException("bundle-surgery $command failed with exit ${r.code}: ${why.take(300)}")
         }
         return r
     }
+
+    private const val FAILURE_TAIL_LINES = 12
 
     private suspend fun tryRun(
         surgery: File,

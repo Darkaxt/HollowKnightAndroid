@@ -132,8 +132,9 @@ object DepotLocation {
     fun present(context: Context): Boolean = candidates(context).any { usable(it) }
 
     /** A folder holding a copy of the game this port can actually be built from. */
-    private fun usable(dir: File): Boolean =
-        PlayerImage.depotData(dir) != null && PlayerImage.foreignBuild(dir) == null
+    fun usable(dir: File): Boolean =
+        !DepotFetcher.isInterrupted(dir) &&
+            PlayerImage.depotData(dir) != null && PlayerImage.foreignBuild(dir) == null
 
     // ── the pointer ────────────────────────────────────────────────────────
 
