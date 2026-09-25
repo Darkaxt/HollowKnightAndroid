@@ -501,27 +501,22 @@ public sealed class DsHudView : MonoBehaviour
         DsWidgets.SetActive(image, false);
     }
     /// <summary>
-    /// The space beside the silk bar, in panel pixels, or a zero-width rect
-    /// while the HUD is not drawn.
+    /// The band beneath the mask row, in panel pixels, or an empty rect while
+    /// the HUD is not drawn.
     ///
-    /// This is the room the tools used to occupy, and it is where the designs
-    /// put the screen's title. The shell asks rather than assuming, because
-    /// where the silk bar ends depends on the player's maximum silk, and where
-    /// the band sits depends on the framing.
+    /// It is where the designs put the screen's title, beside the silk bar.
+    /// The shell asks rather than assuming, because where the band sits depends
+    /// on the framing. It is there whether or not any tools are equipped.
     /// </summary>
     public UnityEngine.Rect TitleSpace
     {
         get
         {
-            if (_texture == null || _image == null || _image.color.a <= 0f ||
-                _rowSplitPx <= 1f || _toolSplitPx <= 1f)
+            if (_texture == null || _image == null || _image.color.a <= 0f || _rowSplitPx <= 1f)
                 return new UnityEngine.Rect(0f, 0f, 0f, 0f);
 
             float pad = HudPad;
-            float left = pad + _toolSplitPx + ToolGap;
-            float top = pad + _rowSplitPx;
-            return new UnityEngine.Rect(left, top,
-                                        Mathf.Max(0f, _healthEndPx + pad - left),
+            return new UnityEngine.Rect(pad, pad + _rowSplitPx, _texture.width,
                                         _texture.height - _rowSplitPx);
         }
     }
@@ -636,7 +631,8 @@ public sealed class DsHudView : MonoBehaviour
         // where the health ENDS is what decides where they start, and that
         // moves with the player's mask count. Measuring to the tools' own
         // native position instead left a gap that grew as masks were lost.
-        float healthRight = Mathf.Max(rightmost, LayoutPosition(_capRAnchor).x);
+        Vector3 cap = LayoutPosition(_capRAnchor);
+        float healthRight = Mathf.Max(rightmost, cap.x);
         _tools.GetComponentsInChildren(true, _toolIcons);
         foreach (var icon in _toolIcons)
         {
@@ -647,7 +643,7 @@ public sealed class DsHudView : MonoBehaviour
 
         // Slot origins and the unanimated spool cap define layout. Sampling
         // sprite meshes made damage/appear frames permanently shrink the HUD.
-        rightmost = Mathf.Max(rightmost, LayoutPosition(_capRAnchor).x);
+        rightmost = Mathf.Max(rightmost, cap.x);
         var framing = new DsHudFrame(anchor, pitch, rightmost,
             new Vector2(_texture.width, _texture.height), DsLayout.Current.Hud.height / DsLayout.HudHeight, _zoom);
         _bounds = framing.LayoutBounds;
@@ -665,7 +661,7 @@ public sealed class DsHudView : MonoBehaviour
         t.SetPositionAndRotation(_hudRoot.position + _hudRoot.rotation * position, _hudRoot.rotation);
         _capture.orthographicSize = framing.HalfHeight;
         _capture.aspect = (float)_texture.width / _texture.height;
-        MeasureToolSplit(framing, anchor, pitch, healthRight);
+        MeasureToolSplit(framing, anchor, pitch, healthRight, cap.y);
         return true;
     }
 
@@ -684,7 +680,8 @@ public sealed class DsHudView : MonoBehaviour
     /// capture is framed at MaskPixelPitch per mask, so any sub-rectangle can be
     /// drawn one-to-one on the header without distorting.
     ///
-    ///   _rowSplitPx     y of the line between the mask row and the band below
+    ///   _rowSplitPx     y of the line between the mask row and the band below,
+    ///                   measured to the silk bar until tools refine it
     ///   _healthEndPx    x where the HEALTH ends -- moves with the mask count
     ///   _toolSplitPx    x where the TOOLS begin in the game's own layout
     ///   _maskCentrePx   y of the mask row's centre, to line the tools up with
@@ -695,17 +692,24 @@ public sealed class DsHudView : MonoBehaviour
     /// them, which never moves, and drawn just past the end of the health,
     /// which moves every time a mask is gained or lost.
     /// </summary>
-    void MeasureToolSplit(DsHudFrame framing, Vector3 anchor, float pitch, float healthRight)
+    void MeasureToolSplit(DsHudFrame framing, Vector3 anchor, float pitch, float healthRight, float silkY)
     {
         _rowSplitPx = 0f;
         _healthEndPx = 0f;
         _toolSplitPx = 0f;
         _maskCentrePx = 0f;
         _toolOffsetPx = 0f;
-        if (_activeTools <= 0) return;
 
         float ppu = framing.PixelPitch / pitch;
         if (ppu <= 0f) return;
+
+        float texLeftWorld = framing.Position.x - _texture.width / (2f * ppu);
+        float texTopWorld = framing.Position.y + _texture.height / (2f * ppu);
+
+        if (silkY < anchor.y - pitch * 0.25f)
+            _rowSplitPx = Mathf.Clamp((texTopWorld - (anchor.y + silkY) * 0.5f) * ppu, 0f, _texture.height);
+
+        if (_activeTools <= 0) return;
 
         float leftmost = float.MaxValue, sumY = 0f;
         int counted = 0;
@@ -723,9 +727,6 @@ public sealed class DsHudView : MonoBehaviour
         // The tools have to be BELOW the masks for any of this to mean
         // anything. If the game ever lays them out level, leave it alone.
         if (toolsY >= anchor.y - pitch * 0.25f) return;
-
-        float texLeftWorld = framing.Position.x - _texture.width / (2f * ppu);
-        float texTopWorld = framing.Position.y + _texture.height / (2f * ppu);
 
         // Half a slot of air either side of each cut, so none falls through art.
         _healthEndPx = Mathf.Clamp((healthRight + pitch * 0.6f - texLeftWorld) * ppu, 0f, _texture.width);

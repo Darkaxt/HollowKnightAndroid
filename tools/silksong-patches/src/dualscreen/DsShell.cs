@@ -745,10 +745,10 @@ public class DsShell
     static float TitleBottomGap => Mathf.Clamp(DsConfig.Int("header_title_gap_px", 6), 0, 80);
 
     /// <summary>
-    /// Put the screen's name beside the silk bar, in the room the tools left.
+    /// Put the screen's name in the band beside the silk bar.
     ///
-    /// Re-placed every frame because that room is not fixed: it ends where the
-    /// health ends, and the health grows and shrinks with the player's masks.
+    /// Re-placed every frame because that band is not fixed: it moves with the
+    /// HUD's framing, which changes with the player's masks.
     /// </summary>
     void RefreshTitle(Entry e)
     {
