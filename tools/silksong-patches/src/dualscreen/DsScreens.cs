@@ -86,7 +86,7 @@ public abstract class DsGridScreen : IDsScreen
 
     public virtual void OnGesture(DsGesture g) { Grid.OnGesture(g); }
 
-    void Refresh()
+    protected void Refresh()
     {
         _buffer.Clear();
 
@@ -185,6 +185,11 @@ public class DsInventoryScreen : DsGridScreen, IDsActionBar
     const float DetailW = 320f;
 
     readonly DsHornetPanel _hornet = new DsHornetPanel();
+
+    // One use per this long, whatever the finger does. A knob, because how
+    // quick is too quick is a matter of feel and a rebuild costs ten minutes.
+    static float UseCooldown => Mathf.Clamp(DsConfig.Int("use_cooldown_ms", 1000), 0, 10000) / 1000f;
+    float _nextUse;
 
     public override string Id => "inventory";
     public override string Title => "INVENTORY";
@@ -363,15 +368,20 @@ public class DsInventoryScreen : DsGridScreen, IDsActionBar
         if (item == null) return;
 
         bool consumable = false, now = false;
+        int amount = 0;
         try { consumable = item.IsConsumable(); } catch { }
         if (!consumable) return;
+        try { amount = item.CollectedAmount; } catch { }
+        if (amount <= 0) return;
         try { now = item.CanConsumeRightNow(); } catch { }
 
         // Shown disabled rather than withdrawn when it cannot be used. The item
         // IS a thing you drink; that it would do nothing at this moment is
         // worth saying, and it is what the game says too -- it draws the same
-        // prompt greyed (forceDisabled) instead of removing it.
-        into.Add(new DsAction("USE", now ? (Action)(() => Consume(item)) : null, !now,
+        // prompt greyed (forceDisabled) instead of removing it. The cooldown
+        // greys it the same way, which also says the tap was taken.
+        bool ready = now && Time.unscaledTime >= _nextUse;
+        into.Add(new DsAction("USE", ready ? (Action)(() => Consume(item)) : null, !ready,
                               DsActionPlace.Pane));
     }
 
@@ -473,27 +483,49 @@ public class DsInventoryScreen : DsGridScreen, IDsActionBar
 
     /// <summary>
     /// Drink it, which is the whole of what InventoryItemCollectable's consume
-    /// coroutine actually DOES to the save: the response, then the item.
+    /// coroutine actually DOES to the save: the item, and its response.
     ///
     /// Everything else in that routine is presentation -- the hold, the shake,
-    /// the sounds, the fade -- and belongs to a pane we are not drawing. The
-    /// two calls below are taken from the end of ConsumeRoutine, in its order:
-    /// the response first, because TakeItemOnConsume decides separately whether
-    /// the item is spent at all, and some are not.
+    /// the sounds, the fade -- and belongs to a pane we are not drawing.
+    ///
+    /// The two calls are ConsumeRoutine's, in the OPPOSITE order: the item is
+    /// taken first, and the response is paid only once the count has actually
+    /// gone down. That, and not the checks before it, is what makes a free use
+    /// impossible: whatever the taps or the timing, nothing is handed out for
+    /// an item that did not leave the bag. TakeItemOnConsume false means an
+    /// item that is never spent, and only the cooldown holds it back.
+    ///
+    /// The checks are still the game's Submit, asked again because the button
+    /// was built a frame ago and two taps can land in one. The grid is re-read
+    /// straight after, rather than on its one-second timer.
     /// </summary>
-    static void Consume(CollectableItem item)
+    void Consume(CollectableItem item)
     {
+        if (Time.unscaledTime < _nextUse) return;
         try
         {
-            item.ConsumeItemResponse();
+            int before = item.CollectedAmount;
+            if (before <= 0 || !item.IsConsumable() || !item.CanConsumeRightNow()) return;
+            _nextUse = Time.unscaledTime + UseCooldown;
+
             bool take = true;
             try { take = item.TakeItemOnConsume; } catch { }
-            if (take) item.Take(1, showCounter: false);
+            if (take)
+            {
+                item.Take(1, showCounter: false);
+                if (item.CollectedAmount >= before)
+                {
+                    Debug.LogWarning("[DualScreen] use: '" + item.name + "' was not taken, so it pays nothing");
+                    return;
+                }
+            }
+            item.ConsumeItemResponse();
         }
         catch (Exception e)
         {
             Debug.LogWarning("[DualScreen] use failed: " + e.Message);
         }
+        Refresh();
     }
 }
 // ── Journal ─────────────────────────────────────────────────────────────────
