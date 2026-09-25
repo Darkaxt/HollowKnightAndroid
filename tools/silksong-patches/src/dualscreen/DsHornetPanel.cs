@@ -84,6 +84,7 @@ public class DsHornetPanel
     const float RETRY_SECONDS = 3f;
     int _retries;
     float _nextRetry;
+    float _nextArtCheck;
     bool _wasInventoryOpen;
 
     /// <summary>
@@ -262,7 +263,7 @@ public class DsHornetPanel
             _retries = 0;
             _nextRetry = Time.unscaledTime + RETRY_SECONDS;
         }
-        else if (_built && !InventoryJustOpened() && !RetryDue())
+        else if (_built && !InventoryJustOpened() && !RetryDue() && !ArtLost())
         {
             RefreshCounts();
             return;
@@ -310,15 +311,41 @@ public class DsHornetPanel
         return true;
     }
 
+    /// <summary>
+    /// Whether a piece we drew has lost its art. The sprites are the game's,
+    /// and when it unloads the bundle they came from they are destroyed under
+    /// us, which uGUI draws as a plain white quad.
+    /// </summary>
+    bool ArtLost()
+    {
+        if (Time.unscaledTime < _nextArtCheck) return false;
+        _nextArtCheck = Time.unscaledTime + 1f;
+        for (int i = 0; i < _slots.Count; i++)
+        {
+            var images = _slots[i].Images;
+            for (int j = 0; j < images.Count; j++)
+            {
+                var img = images[j];
+                if (img != null && (img.sprite == null || img.sprite.texture == null)) return true;
+            }
+        }
+        return false;
+    }
+
     // Enough of the save's identity to notice a different one, without reading
-    // anything expensive: the two counters and the crest change together.
+    // anything expensive: the two counters and the crest change together. And
+    // the GameCameras the art is read from, because quitting to the menu
+    // destroys it and unloads its bundle -- the needle's sprites with it -- so
+    // reloading the same save is a change even though nothing in it differs.
     static string SaveKey()
     {
         try
         {
             var pd = PlayerData.instance;
+            var cameras = GameCameras.SilentInstance;
             return pd.CurrentCrestID + "/" + pd.nailUpgrades + "/" + pd.maxHealthBase +
-                   "/" + pd.silkMax + "/" + pd.heartPieces + "/" + pd.silkSpoolParts;
+                   "/" + pd.silkMax + "/" + pd.heartPieces + "/" + pd.silkSpoolParts +
+                   "/" + (cameras != null ? cameras.GetInstanceID() : 0);
         }
         catch { return ""; }
     }
