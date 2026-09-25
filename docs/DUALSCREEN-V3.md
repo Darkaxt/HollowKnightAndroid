@@ -283,6 +283,19 @@ embedded in `DsSliderArt` as base64 PNG, for the same reason the dividers are.
 The mapping and the grab live in `DsZoomSlider`, which has no UI in it so that `test.ps1`
 can run it.
 
+## Title card
+
+Outside a save the panel shows the port's own logo, `docs/Bottom_Screen_Logo.webp`, where it
+used to show the game's title. It is embedded in `DsLogoArt` as base64 PNG like the rest of
+our art. Unlike the game's logo, it is not localised.
+
+The art is drawn for this panel: 1240×1080, white on transparent, with the margins built in
+and the logo a little above the middle. So the card fits the whole image to the panel rather
+than centring its ink, which on the Thor puts it pixel for pixel where it was drawn.
+
+The texture is loaded non-readable. At that size the CPU copy would be another 5 MB, kept
+for nothing, since nothing reads it back.
+
 ## Interactivity
 
 We want to make the Dual screen menu completely replace the in-game menu, this means we

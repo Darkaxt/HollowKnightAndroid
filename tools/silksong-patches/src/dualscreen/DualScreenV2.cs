@@ -187,7 +187,7 @@ public class DualScreenV2 : MonoBehaviour
             DispatchGestures();
         }
 
-        // Outside a save, the panel shows the game's title instead of the tabs.
+        // Outside a save, the panel shows the title card instead of the tabs.
         //
         // The grace applies only to LEAVING gameplay. DsGameData.InGame goes
         // false for a few frames during any scene load -- there is no hero

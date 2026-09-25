@@ -178,7 +178,7 @@ public class DsShell
         // outside a save there is no screen worth showing and no tab worth
         // offering, so the whole frame goes away rather than sitting there
         // greyed out.
-        _title.Build(_root, Mathf.RoundToInt(_w), Mathf.RoundToInt(_h));
+        _title.Build(_root);
 
         // Match the initial _idle state, rather than waiting for the first
         // SetIdle to disagree with it.
@@ -189,7 +189,7 @@ public class DsShell
     }
 
     /// <summary>
-    /// Outside a save, show the game's title instead of the tabs.
+    /// Outside a save, show the title card instead of the tabs.
     ///
     /// The shell owns this rather than each screen, because "there is no save
     /// loaded" is a fact about the whole panel, not about the Journal. It also
@@ -500,7 +500,7 @@ public class DsShell
 
     public void Tick(float dt)
     {
-        if (_idle) { _title.Tick(); return; }
+        if (_idle) return;
         RefreshTabArt();
         _tabCursor.Tick(dt);
         TickSlide(dt);

@@ -691,9 +691,9 @@ own render rig behind it, and a broken rig should cost the tab it is on rather
 than the tab the player lands on.)
 
 **Outside a save there are no tabs at all.** The shell hides the strip and the
-whole body and shows the game's own "Hollow Knight Silksong" logo instead,
-borrowed from `UIManager.gameTitle` — the same `SpriteRenderer` the main menu
-fades in, so the localised variant comes for free through `LogoLanguage`.
+whole body and shows a title card instead. It first borrowed the game's own
+"Hollow Knight Silksong" logo from `UIManager.gameTitle`; it now shows the
+port's own, `docs/Bottom_Screen_Logo.webp` — see `DUALSCREEN-V3.md`.
 
 This belongs to the shell rather than to each screen, because "no save is
 loaded" is a fact about the panel, not about the Journal; the alternative was
@@ -709,13 +709,13 @@ thing that looks like a bug. Two details are load-bearing:
   before the first time we have ever been in game there is nothing to protect,
   so the delay does not apply at boot.
 
-Finding the logo also wants an identity check rather than a type match:
-`LogoLanguage` is not unique to the title — Team Cherry's studio logo is
-localised through the same component, and during the intro it is the only one
-loaded, so an unfiltered `FindObjectsOfTypeAll` reliably returns the wrong logo
-and caches it for the session. The lookup matches the game's own object name
-(`"LogoTitle"`) and keeps upgrading until the sprite comes from `UIManager`
-itself.
+While the card borrowed the game's logo, finding it also wanted an identity
+check rather than a type match: `LogoLanguage` is not unique to the title — Team
+Cherry's studio logo is localised through the same component, and during the
+intro it is the only one loaded, so an unfiltered `FindObjectsOfTypeAll`
+reliably returned the wrong logo and cached it for the session. The lookup
+matched the game's own object name (`"LogoTitle"`) and kept upgrading until the
+sprite came from `UIManager` itself.
 
 Note that this is **not** the game's own pane order, and deliberately so. The
 game has five panes — `InventoryPaneList.PaneTypes { Inv=0, Tools=1, Quests=2,
@@ -1148,7 +1148,8 @@ range. It cost three rounds.
 ### Borrowing the game's art, and the two ways it goes wrong
 
 Both of the second screen's borrowed images — the No-Map symbol and the title
-logo — needed the same two lessons, which is enough of a pattern to write down.
+logo, since replaced by our own — needed the same two lessons, which is enough
+of a pattern to write down.
 
 **Match the instance, not the type.** `LogoLanguage` is not unique to the title:
 Team Cherry's studio logo is localised through the same component, and during
