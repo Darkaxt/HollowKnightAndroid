@@ -85,20 +85,9 @@ rebuilding. You can still enable/disable mods without rebuilding.
 2. Say yes when it offers to rebuild, or carry on and rebuild later.
 3. Config files appear in `mods/config` after the first launch.
 
-The Mods screen lists everything it found, marks each one **built** or **not
-built**, and says what the weaver made of it — how many patches it applied and
-every one it could not. Copying DLLs into
-`Android/data/com.jakobkhansen.silksong/files/mods` by hand still works and is
-picked up the same way.
-
-The rebuild only redoes the conversion and the native compile, and only when
-the folder actually changed — and the compile is incremental, so it is a few
-minutes rather than the twenty the first build took. Drop a mod in and press
-Launch and the launcher offers to rebuild, or to play the build you have.
-
-If a rebuild is interrupted, resume it before playing. Completed work is
-reused, but the launcher will not run a partly installed game. Mod build
-indicators update only after installation succeeds.
+The Mods screen lists everything it found, marks each one **built** or **not built**, and
+says how many patches it applied and every one it could not. The rebuild is incremental,
+so installing a new mod should not take long.
 
 **What does not work**: transpilers, patch targets computed at runtime,
 `Reflection.Emit`, and loading a DLL discovered at runtime. There is no IL left
@@ -109,29 +98,22 @@ and left out, rather than breaking compilation for the other mods.
 
 ### The configuration menu
 
-Mods that expose settings expect
-[BepInEx's Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager/releases)
-to be there to draw them. It works here — download the BepInEx 5 build and
-install its folder the same way as any other mod.
+Mods that expose settings expect [BepInEx's Configuration
+Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager/releases) to be there to
+draw them. Install it the same way as any other mod.
 
-Open it with L3+R3 (Same as F1 on PC). That binding lives in `mods/config/BepInEx.cfg` and
-is read at startup, so it can be changed to any key or button without rebuilding — and
-because it is a BepInEx setting like any other, the menu lists it, under Advanced
-settings.
-
-It is not shipped with the app, and neither is BepInEx: mods are your files,
-downloaded by you, and the build that compiles them into the game happens on
-your device.
+Open it with L3+R3. That binding lives in `mods/config/BepInEx.cfg` and because it is a
+BepInEx setting like any other, the menu lists it, under Advanced settings.
 
 ### Tested mods
 
 Built and played on device. Links go to the page each was downloaded from.
 
-- [BepInEx 5 + Configuration Manager](https://www.nexusmods.com/hollowknightsilksong/mods/26) — (only needed for configuration menu)
+- [BepInEx 5 + Configuration Manager](https://www.nexusmods.com/hollowknightsilksong/mods/26) (only needed for configuration menu)
 - [AutoMap](https://www.nexusmods.com/hollowknightsilksong/mods/31)
-- [SaveScopedConfig](https://www.nexusmods.com/hollowknightsilksong/mods/1123) — required by AutoMap
-- [Bonfire Teleport](https://www.nexusmods.com/hollowknightsilksong/mods/156) — (use the normal in-game map to teleport)
-- [Stakes of Marika – Rebirth Anywhere](https://www.nexusmods.com/hollowknightsilksong/mods/46) — (partial, no custom spawnpoint)
+- [SaveScopedConfig](https://www.nexusmods.com/hollowknightsilksong/mods/1123) (required by AutoMap)
+- [Bonfire Teleport](https://www.nexusmods.com/hollowknightsilksong/mods/156) (use the normal in-game map to teleport)
+- [Stakes of Marika – Rebirth Anywhere](https://www.nexusmods.com/hollowknightsilksong/mods/46) (partial, no custom spawnpoint)
 - [Healthbar & Damage Show](https://www.nexusmods.com/hollowknightsilksong/mods/28)
 
 If a mod is not working for you, feel free to open an issue, but I cannot guarantee that
