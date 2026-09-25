@@ -16,16 +16,16 @@ Steam integration for game files and cloud saves.
 
 ## Features
 
-- **Dual screen**: Show interactive map, inventory, crests, tasks and journal on the second screen
+- **Dual screen**: Full implementation of the in-game menu for dual screen devices. Show map, use items, change your crest and more
 - **Steam integration (optional)**: Sign in to Steam if you want the app to download game files and/or your Steam cloud saves for you
 - **High performance**: Compiles to native arm64 via IL2CPP and uses Vulkan shaders
 - **Fully open source and legal**: Supply your own game files either manually or through Steam sign-in (the app downloads them for you)
-- **Compilation on device**: Just download the APK and supply the game files, porting happens on device (20–30 min on a Snapdragon 8 Gen 2)
-- **Mod support (beta)**: BepInEx 5 plugins, woven into the game at build time (see [Mod support](#modsupport))
+- **Compilation on device**: Download the APK and supply the game files, porting happens on device (20–30 min on Snapdragon 8 Gen 2)
+- **Mod support (beta)**: BepInEx 5 plugin support (see [Mod support](#modsupport))
 - **QoL settings**: Skip intro, set resolution, auto upload/download cloud saves etc.
-- **Any device**: Any Android device works, single screen as well. Android 13 only for now (Android 15 is not supported at the moment)
+- **Any device**: Any Android device works, single screen as well.
 
-## Getting started
+## Setup
 
 1. Download the latest APK from
    [Releases](https://github.com/jakobkhansen/SilksongAndroid/releases/latest)
@@ -33,8 +33,8 @@ Steam integration for game files and cloud saves.
 2. Supply your own game files. Either copy them across from your PC yourself,
    or let the app fetch them for you by signing in to Steam.
 3. Press the button. The app fetches everything it needs and builds the game.
-   The build takes 20–30 minutes on a Snapdragon 8 Gen 2, most of it the download and the compile.
-4. Play. After the first build, launching is instant.
+   The build takes 20–30 minutes on a Snapdragon 8 Gen 2.
+4. Play!
 
 Any device should do (tested on the AYN Thor and the Retroid Pocket Flip 2). Open an issue
 if your device doesn't work.
@@ -130,7 +130,7 @@ Built and played on device. Links go to the page each was downloaded from.
 - [BepInEx 5 + Configuration Manager](https://www.nexusmods.com/hollowknightsilksong/mods/26) — (only needed for configuration menu)
 - [AutoMap](https://www.nexusmods.com/hollowknightsilksong/mods/31)
 - [SaveScopedConfig](https://www.nexusmods.com/hollowknightsilksong/mods/1123) — required by AutoMap
-- [Bonfire Teleport](https://www.nexusmods.com/hollowknightsilksong/mods/156) — (use top-screen full map to teleport)
+- [Bonfire Teleport](https://www.nexusmods.com/hollowknightsilksong/mods/156) — (use the normal in-game map to teleport)
 - [Stakes of Marika – Rebirth Anywhere](https://www.nexusmods.com/hollowknightsilksong/mods/46) — (partial, no custom spawnpoint)
 - [Healthbar & Damage Show](https://www.nexusmods.com/hollowknightsilksong/mods/28)
 
@@ -157,13 +157,12 @@ tested on real hardware before release.
 
 This repository and the APK contain **no game content and nothing Unity-made**. Silksong
 is © Team Cherry, and none of its code, art or audio is distributed here. The APK is a
-build system: it downloads Unity's toolchain, takes *your* game files (supplied by hand,
-or fetched with your own Steam account), and compiles a playable build on your own device.
+build system: it downloads Unity's toolchain, takes *your* game files, and compiles a
+playable build on your own device.
 
 The tooling is MIT-licensed; see [LICENSE](LICENSE). Third-party open-source
 components shipped in the APK are listed in [NOTICE.md](NOTICE.md), which also
 records what the APK deliberately does *not* contain.
-
 
 ## Building from source
 
