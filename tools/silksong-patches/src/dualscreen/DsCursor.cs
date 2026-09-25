@@ -112,6 +112,8 @@ public class DsCursor
 
     public bool Visible => _shown;
 
+    public bool Moving => _shown && _t < 1f;
+
     /// <param name="glowIndex">
     /// Where the light goes in the parent's child order. Zero -- behind
     /// everything -- is right for a screen body, whose children are all content.
@@ -226,12 +228,12 @@ public class DsCursor
     /// is what makes the handover look like one cursor crossing a boundary
     /// rather than two cursors blinking.
     /// </summary>
-    public void Seed(Rect where, Color glow)
+    public void Seed(Rect where, Color glow, string key = null)
     {
         _from = _to = _now = where;
         _fromColor = _toColor = _nowColor = glow;
         _t = 1f;
-        _key = null;          // the next MoveTo counts as a new target
+        _key = key;           // a MoveTo with any other key travels from here
         if (!_shown) { _shown = true; SetActive(true); }
         Apply(1f);
     }

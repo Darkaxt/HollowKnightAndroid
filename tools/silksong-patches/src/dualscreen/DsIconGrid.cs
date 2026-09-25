@@ -117,10 +117,13 @@ public class DsIconGrid
     //                counters in the character column, a tool socketed in the
     //                crest. Those must not be clipped to the grid's column.
     //
-    // Only one is ever shown, and the one taking over is seeded with the other's
-    // position so the handover reads as a single cursor crossing a boundary.
+    // Only one is ever shown. Leaving the grid, the free cursor is seeded with
+    // the grid's position; coming back, the free cursor flies all the way to
+    // the cell and hands over when it lands, because the grid's own would be
+    // clipped out of sight until it crossed into the column.
     readonly DsCursor _cursor = new DsCursor();
     readonly DsCursor _freeCursor = new DsCursor();
+    bool _landing;
     RectTransform _host;
     // Somewhere other than a cell owns the cursor -- the needle, say. Kept in
     // host space, already converted by whoever set it.
@@ -450,6 +453,7 @@ public class DsIconGrid
         float dt = Time.unscaledDeltaTime;
         _cursor.Tick(dt);
         _freeCursor.Tick(dt);
+        if (_landing && !_freeCursor.Moving) PaintCursor();
         if (!_dirty) return;
         _dirty = false;
         Layout();
@@ -658,6 +662,7 @@ public class DsIconGrid
     /// </summary>
     void PaintCursor()
     {
+        _landing = false;
         if (_hasExternalTarget)
         {
             // Handing over from the grid: start the free cursor where the grid's
@@ -676,6 +681,7 @@ public class DsIconGrid
 
         if (_selected < 0 || _selected >= _flat.Count)
         {
+            if (_external) return;
             _cursor.Hide(); _freeCursor.Hide(); return;
         }
 
@@ -690,9 +696,10 @@ public class DsIconGrid
 
             if (_freeCursor.Visible)
             {
-                var f = _freeCursor.Current;
-                _cursor.Seed(new Rect(f.x - _gridLeft, f.y - DsTheme.Pad, f.width, f.height),
-                             _freeCursor.CurrentGlow);
+                _freeCursor.MoveTo(new Rect(_gridLeft + box.x, DsTheme.Pad + box.y, box.width, box.height),
+                                   _flat[_selected].Glow, _selectedKey);
+                if (_freeCursor.Moving) { _landing = true; return; }
+                _cursor.Seed(box, _freeCursor.CurrentGlow, _selectedKey);
                 _freeCursor.Hide();
             }
             _cursor.MoveTo(box, _flat[_selected].Glow, _selectedKey);
