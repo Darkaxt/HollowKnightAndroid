@@ -188,9 +188,9 @@ Two places where we knowingly differ, both because this panel is a touch screen:
 
 - The game binds the toggle to `MenuActions.Super` and draws a **Y** glyph beside it.
   Nothing here is reachable by controller, so it takes the header action bar every other
-  screen's controls live in, reading `HIDE COMPLETED` / `SHOW COMPLETED`. It is absent
-  entirely when nothing is finished — a button that hides an empty group is a control the
-  player has to press in order to learn it does nothing.
+  screen's controls live in, reading `HIDE COMPLETED` / `SHOW COMPLETED`, and finished
+  quests start hidden. It is absent entirely when nothing is finished — a button that hides
+  an empty group is a control the player has to press in order to learn it does nothing.
 - The game's divider between the prioritised quest and the rest is an invisible `Spacer`.
   Set two across, the priorities stop in the middle of a row and the break is genuinely
   hard to see, so ours is drawn. It appears only when a prioritised quest actually exists.

@@ -365,7 +365,7 @@ public class DsTasksScreen : IDsScreen, IDsActionBar
     // toggle is offered on the strength of this, so hiding them cannot hide the
     // control that brings them back.
     int _completedCount;
-    bool _showCompleted = true;
+    bool _showCompleted;
 
     public string Id { get { return "tasks"; } }
     public string Title { get { return "TASKS"; } }
@@ -1050,6 +1050,8 @@ public class DsTasksScreen : IDsScreen, IDsActionBar
         _placed.Clear();
 
         DsWidgets.SetActive(_empty, _entries.Count == 0);
+        if (_empty != null)
+            _empty.text = _completedCount > 0 ? "No tasks in progress" : "No tasks accepted";
 
         while (_cells.Count < _entries.Count) _cells.Add(MakeCell(_cells.Count));
         for (int i = 0; i < _cells.Count; i++)
