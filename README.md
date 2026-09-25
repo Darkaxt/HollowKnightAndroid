@@ -10,7 +10,7 @@ Steam integration for game files and cloud saves.
 </p>
 
 <p align="center">
-  <img width="901" height="1001" alt="IMG_1698 (3)" src="https://github.com/user-attachments/assets/54d383c5-69fd-48d2-b201-54bbd94a2e43" />
+  <img width="676" height="751" alt="IMG_1698 (3)" src="https://github.com/user-attachments/assets/54d383c5-69fd-48d2-b201-54bbd94a2e43" />
 </p>
 
 
