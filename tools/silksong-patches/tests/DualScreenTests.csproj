@@ -13,6 +13,7 @@
     <Compile Include="..\src\dualscreen\DsTouch.cs" Link="DsTouch.cs" />
     <Compile Include="..\src\dualscreen\DsLayout.cs" Link="DsLayout.cs" />
     <Compile Include="..\src\dualscreen\DsHudRouting.cs" Link="DsHudRouting.cs" />
+    <Compile Include="..\src\dualscreen\DsZoomSlider.cs" Link="DsZoomSlider.cs" />
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>$(Player)\UnityEngine.CoreModule.dll</HintPath>
     </Reference>

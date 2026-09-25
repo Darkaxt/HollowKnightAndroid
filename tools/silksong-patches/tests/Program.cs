@@ -20,6 +20,7 @@ static class Program
         Resize();
         Pinch();
         DragAndFling();
+        ZoomSlider();
         Console.WriteLine("Dual-screen layout, HUD routing and gestures: " + assertions + " assertions passed");
     }
 
@@ -466,6 +467,62 @@ static class Program
         Types(input, DsGestureType.Down, DsGestureType.Drag, DsGestureType.Up);
         input.Poll(new[] { P(TouchPhase.Began, 100, 100, 4), P(TouchPhase.Ended, 200, 100, 4.5) }, 1);
         Assert(input.Gestures.All(g => g.Type != DsGestureType.Tap), "Release movement became a tap");
+    }
+
+    static void ZoomSlider()
+    {
+        const float min = 0.25f, max = 6f;
+        var slider = new DsZoomSlider(new Rect(1161, 12, DsZoomSlider.TrackWidth, 652), min, max);
+
+        Assert(Math.Abs(slider.Position(1f) - 0.5f) < 1e-6f && slider.Zoom(0.5f) == 1f,
+            "The framing the map opens at is not the middle of the slider");
+        Assert(Math.Abs(slider.Zoom(0f) - min) < 1e-5f && Math.Abs(slider.Zoom(1f) - max) < 1e-4f,
+            "The slider's ends are not the zoom limits");
+        Assert(slider.Position(min * 0.5f) == 0f && slider.Position(max * 2f) == 1f &&
+               slider.Position(0f) == 0.5f && slider.Position(float.NaN) == 0.5f,
+            "An out-of-range zoom put the thumb off the track");
+        float previous = 0f;
+        for (int i = 0; i <= 100; i++)
+        {
+            float t = i / 100f, zoom = slider.Zoom(t);
+            Assert(zoom > previous, "Zoom does not rise steadily up the slider");
+            Assert(Math.Abs(slider.Position(zoom) - t) < 1e-4f, "Zoom and thumb position disagree");
+            previous = zoom;
+        }
+
+        Rect thumb = slider.Thumb(1f);
+        Assert(slider.Track.Contains(thumb.center) &&
+               Math.Abs(thumb.center.y - slider.Track.center.y) <= 1f &&
+               Math.Abs(thumb.center.x - slider.Track.center.x) <= 0.5f,
+            "The thumb does not sit in the middle of the track at the default zoom");
+        Assert(slider.Thumb(max).yMin >= slider.Track.yMin + DsZoomSlider.CapHeight &&
+               slider.Thumb(min).yMax <= slider.Track.yMax - DsZoomSlider.CapHeight,
+            "The thumb runs over the arrowheads");
+
+        Assert(slider.Grab(thumb.center, 1f) && slider.Held, "The thumb could not be grabbed");
+        Assert(slider.Drag(thumb.center) == 1f, "Touching the thumb changed the zoom");
+        Assert(slider.Drag(thumb.center - new Vector2(0, 100)) > 1f, "Dragging up did not zoom in");
+        Assert(slider.Drag(thumb.center + new Vector2(0, 100)) < 1f, "Dragging down did not zoom out");
+        float zoomed = slider.Drag(thumb.center - new Vector2(0, 100));
+        Assert(Math.Abs(slider.Thumb(zoomed).center.y - (thumb.center.y - 100)) <= 1f,
+            "The thumb does not stay under the finger");
+        Assert(Math.Abs(slider.Drag(new Vector2(thumb.center.x, -5000)) - max) < 1e-4f &&
+               Math.Abs(slider.Drag(new Vector2(thumb.center.x, 5000)) - min) < 1e-5f,
+            "Dragging past an end did not stop at the zoom limit");
+        Assert(slider.Drag(thumb.center) == 1f, "Dragging back to the grab point did not restore the zoom");
+        slider.Release();
+        Assert(!slider.Held, "The slider stayed held after release");
+
+        Vector2 track = new Vector2(slider.Hit.xMax - 1, slider.Track.yMin + 1);
+        Assert(slider.Grab(track, 2f) && Math.Abs(slider.Drag(track) - 2f) < 1e-4f,
+            "Grabbing the track away from the thumb jumped the zoom");
+        Assert(slider.Drag(track - new Vector2(0, 50)) > 2f, "A drag from the track did not zoom");
+        Assert(!slider.Grab(new Vector2(slider.Hit.xMin - 1, thumb.center.y), 1f) && !slider.Held,
+            "A press beside the slider grabbed it");
+        Assert(!slider.Grab(new Vector2(thumb.center.x, slider.Track.yMax + 1), 1f),
+            "A press below the track grabbed the slider");
+        Throws<ArgumentOutOfRangeException>(() => new DsZoomSlider(slider.Track, 1f, max));
+        Throws<ArgumentOutOfRangeException>(() => new DsZoomSlider(slider.Track, min, 1f));
     }
 }
 

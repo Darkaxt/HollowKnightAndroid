@@ -59,7 +59,8 @@ This runs the real gesture recognizer and coordinate mapping against Unity's
 managed types, plus the Android touch buffer on the JVM. It covers scaled and
 inset surfaces, bottom-tab hit coordinates, header/body/footer isolation, HUD
 framing, render-scope restoration (including failure paths), fast taps,
-cancellation, pinch, flings, resize/background resets, and queue overflow.
+cancellation, pinch, flings, resize/background resets, the map's zoom slider, and queue
+overflow.
 It needs the player module, an
 Android SDK and a JDK, but not a game depot or a running Unity player.
 

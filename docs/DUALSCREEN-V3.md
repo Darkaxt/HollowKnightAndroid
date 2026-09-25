@@ -261,6 +261,28 @@ Two consequences worth recording, because both were silent:
   as top-aligned; in a full-height column the prose floats in the middle of the panel with
   a gap under its own title. Description panes take `TopLeft`.
 
+### Map zoom slider
+
+The map has a zoom slider down its right edge, as `v3-markers.webp` draws it. The art is
+ours — `docs/Slider.webp` is the track and `docs/Slider_Bar.webp` the thumb — and is
+embedded in `DsSliderArt` as base64 PNG, for the same reason the dividers are.
+
+- **Drag up to zoom in, down to zoom out.** A finger anywhere on the track takes hold of
+  the thumb where it already is rather than jumping it there, so a touch alone never
+  changes the zoom. A pinch moves the thumb too.
+- **The middle is the framing the map opens at**, which is where the design puts the
+  thumb. Each half is its own logarithmic scale, down to the 0.25× floor below and up to
+  the 6× ceiling above, so RESET always puts the thumb back in the middle.
+- **It fades with RESET**: hidden until the map is touched, solid for three seconds after
+  the last touch, then gone over 0.6 s. Pressing RESET hides it at once, along with RESET
+  itself. Only a slider that is showing can be grabbed, so while it is faded out a drag
+  along the right edge pans the map like anywhere else.
+- The track is nine-sliced at its arrowheads, so only the shaft stretches with the map.
+- RESET moved left, to sit beside the slider's lower end rather than on top of it.
+
+The mapping and the grab live in `DsZoomSlider`, which has no UI in it so that `test.ps1`
+can run it.
+
 ## Interactivity
 
 We want to make the Dual screen menu completely replace the in-game menu, this means we

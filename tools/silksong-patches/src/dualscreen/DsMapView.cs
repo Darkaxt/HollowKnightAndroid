@@ -69,8 +69,8 @@ public class DsMapView
 
     Vector2 _pan;
     float _zoom = 1f;
-    const float MinZoom = 0.25f;
-    const float MaxZoom = 6f;
+    public const float MinZoom = 0.25f;
+    public const float MaxZoom = 6f;
     float _mapUnitsPerPixel = 0.01f;
     float _nextAssert;
     float _nextCompass;
@@ -1685,6 +1685,16 @@ public class DsMapView
     {
         if (factor <= 0f || float.IsNaN(factor)) return;
         _zoom = Mathf.Clamp(_zoom * factor, MinZoom, MaxZoom);
+    }
+
+    /// <summary>The zoom the player has chosen on top of the framing. 1 is none.</summary>
+    public float ZoomLevel { get { return _zoom; } }
+
+    /// <summary>Set the zoom outright, for the slider. Clamped as a pinch is.</summary>
+    public void SetZoom(float zoom)
+    {
+        if (!(zoom > 0f)) return;
+        _zoom = Mathf.Clamp(zoom, MinZoom, MaxZoom);
     }
 
     public void ResetPan() { _pan = Vector2.zero; }

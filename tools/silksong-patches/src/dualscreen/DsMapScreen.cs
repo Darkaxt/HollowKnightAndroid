@@ -66,13 +66,18 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip
     int _markerPick = -1;
     readonly List<int> _stripTypes = new List<int>();
     float _holdUntil;
-    // When the player last did something to the map, for the RESET button's
-    // fade. Unscaled, because the game holds timeScale at zero while its own
-    // menu -- and so this panel -- is open.
+    // When the player last did something to the map, for the fade of RESET and
+    // the zoom slider. Unscaled, because the game holds timeScale at zero while
+    // its own menu -- and so this panel -- is open.
     float _lastTouch;
-    /// <summary>How long RESET stays solid after the last touch, then fades over.</summary>
-    const float ResetHold = 3f;
-    const float ResetFade = 0.6f;
+    /// <summary>How long RESET and the zoom slider stay solid after the last touch, then fade over.</summary>
+    const float ControlsHold = 3f;
+    const float ControlsFade = 0.6f;
+    const float SliderInsetX = 10f;
+    const float SliderInsetY = 12f;
+    DsZoomSlider _slider;
+    Image _sliderTrack, _sliderThumb;
+    bool _sliderGesture;
     MapZone _zone = MapZone.NONE;
     float _nextSymbolHunt;
     float _nextHeader;
@@ -161,7 +166,32 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip
         fade.raycastTarget = false;
         DsWidgets.Stretch(fade.rectTransform);
 
+        BuildSlider(w, h);
+
         Apply(State.Idle, force: true);
+    }
+
+    void BuildSlider(float w, float h)
+    {
+        Sprite track = DsSliderArt.Track, thumb = DsSliderArt.Thumb;
+        if (track == null || thumb == null) return;
+
+        _slider = new DsZoomSlider(
+            new Rect(w - SliderInsetX - DsZoomSlider.TrackWidth, SliderInsetY,
+                     DsZoomSlider.TrackWidth, h - SliderInsetY * 2f),
+            DsMapView.MinZoom, DsMapView.MaxZoom);
+
+        _sliderTrack = DsWidgets.Icon(_mapPanel, "zoom-track", track, Color.white);
+        _sliderTrack.type = Image.Type.Sliced;
+        _sliderTrack.useSpriteMesh = false;
+        _sliderTrack.preserveAspect = false;
+        DsWidgets.Place(_sliderTrack.rectTransform, _slider.Track);
+
+        _sliderThumb = DsWidgets.Icon(_mapPanel, "zoom-thumb", thumb, Color.white);
+        _sliderThumb.useSpriteMesh = false;
+        _sliderThumb.preserveAspect = false;
+
+        PaintSlider();
     }
 
     public void OnShow()
@@ -173,6 +203,8 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip
     public void OnHide()
     {
         _markerMode = false;
+        _sliderGesture = false;
+        if (_slider != null) _slider.Release();
         // Stop rendering the moment the tab goes away. The content is left
         // enabled deliberately: "zones active, display off" is the state the
         // game itself sits in between maps, so there is nothing to restore and
@@ -214,11 +246,31 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip
         if (want == State.Idle && _state == State.Map && Time.unscaledTime < _holdUntil)
         {
             _view.SetVisible(false);
+            PaintSlider();
             return;
         }
 
         Apply(want, force: false);
         RefreshText();
+        PaintSlider();
+    }
+
+    void PaintSlider()
+    {
+        if (_slider == null) return;
+
+        if (_state != State.Map) _slider.Release();
+        else if (_slider.Held) _lastTouch = Time.unscaledTime;
+
+        float alpha = _state == State.Map ? ControlsAlpha() : 0f;
+        DsWidgets.SetActive(_sliderTrack, alpha > 0f);
+        DsWidgets.SetActive(_sliderThumb, alpha > 0f);
+        if (alpha <= 0f) return;
+
+        var ink = new Color(1f, 1f, 1f, alpha);
+        _sliderTrack.color = ink;
+        _sliderThumb.color = ink;
+        DsWidgets.Place(_sliderThumb.rectTransform, _slider.Thumb(_view.ZoomLevel));
     }
 
     void Apply(State s, bool force)
@@ -411,10 +463,12 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip
 
         if (_state != State.Map) return;
 
+        if (SliderGesture(g, p)) return;
+
         // Any touch on the map counts as interaction, whether or not it moves
-        // anything: RESET fades on a timer, and reaching for the map is exactly
-        // when the player wants it back. Taken before the marker-mode return
-        // below, so pinning a marker keeps it alive too.
+        // anything: RESET and the zoom slider fade on a timer, and reaching for
+        // the map is exactly when the player wants them back. Taken before the
+        // marker-mode return below, so pinning a marker keeps them alive too.
         if (_mapRect.Contains(p)) _lastTouch = Time.unscaledTime;
 
         // Placing and removing happen on a tap; pan and zoom fall through below,
@@ -431,6 +485,38 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip
                 if (_mapRect.Contains(p)) _view.Zoom(g.Scale);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Give the gesture to the zoom slider if the finger landed on it. True if
+    /// it did, the Tap that ends such a touch included, so that one never
+    /// places a pin.
+    ///
+    /// Only a slider already showing can be grabbed: while it is faded out, a
+    /// drag near the right edge pans the map like any other. A pinch always
+    /// goes to the map.
+    /// </summary>
+    bool SliderGesture(DsGesture g, Vector2 layoutPoint)
+    {
+        if (_slider == null) return false;
+
+        Vector2 local = layoutPoint - _mapRect.position;
+        if (g.Type == DsGestureType.Down)
+        {
+            _slider.Release();
+            _sliderGesture = ControlsAlpha() > 0f && _slider.Grab(local, _view.ZoomLevel);
+        }
+        else if (g.Type == DsGestureType.Pinch)
+        {
+            _slider.Release();
+            _sliderGesture = false;
+        }
+        if (!_sliderGesture) return false;
+
+        _lastTouch = Time.unscaledTime;
+        if (g.Type == DsGestureType.Drag && _slider.Held) _view.SetZoom(_slider.Drag(local));
+        else if (g.Type == DsGestureType.Up) _slider.Release();
+        return true;
     }
 
     // ── marker mode ─────────────────────────────────────────────────────────
@@ -602,30 +688,37 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip
         // it is exactly what this panel is trying not to be. A few seconds
         // after the last touch it goes; the next touch brings it back, which is
         // the moment you might want it.
-        float alpha = ResetAlpha();
+        float alpha = ControlsAlpha();
         if (alpha > 0f && _view.ViewMoved)
-            into.Add(new DsAction("RESET", () => _view.ResetView(), false,
+            into.Add(new DsAction("RESET", ResetView, false,
                                   DsActionPlace.Pane, alpha));
     }
 
-    /// <summary>
-    /// How solid RESET should be right now: fully on until <see cref="ResetHold"/>
-    /// after the last touch, then out over <see cref="ResetFade"/>, then gone.
-    /// </summary>
-    float ResetAlpha()
+    void ResetView()
     {
-        // Never touched this session -- so the view is wherever it opened, and
-        // there is nothing to offer a way back from.
-        if (_lastTouch <= 0f) return 0f;
-
-        float since = Time.unscaledTime - _lastTouch;
-        if (since <= ResetHold) return 1f;
-        if (since >= ResetHold + ResetFade) return 0f;
-        return 1f - (since - ResetHold) / ResetFade;
+        _view.ResetView();
+        _lastTouch = 0f;
     }
 
     /// <summary>
-    /// The bottom-right corner of the body.
+    /// How solid RESET and the zoom slider should be right now: fully on until
+    /// <see cref="ControlsHold"/> after the last touch, then out over
+    /// <see cref="ControlsFade"/>, then gone.
+    /// </summary>
+    float ControlsAlpha()
+    {
+        // Not touched since the session began or the last RESET -- so the view
+        // is wherever it opened, and there is nothing to offer a way back from.
+        if (_lastTouch <= 0f) return 0f;
+
+        float since = Time.unscaledTime - _lastTouch;
+        if (since <= ControlsHold) return 1f;
+        if (since >= ControlsHold + ControlsFade) return 0f;
+        return 1f - (since - ControlsHold) / ControlsFade;
+    }
+
+    /// <summary>
+    /// The bottom-right corner of the body, left of the zoom slider.
     ///
     /// The map has no description column to hang a strip under -- it is one
     /// surface, edge to edge -- so this is a corner of its own rather than a
@@ -639,7 +732,9 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip
             const float w = 220f, margin = 24f;
             float h = DsActionBar.PaneBand(1);
             var body = DsLayout.Current.Body;
-            return new Rect(body.xMax - w - margin, body.yMax - h - margin, w, h);
+            float right = body.xMax - margin;
+            if (_slider != null) right = Mathf.Min(right, _mapRect.x + _slider.Hit.xMin);
+            return new Rect(right - w, body.yMax - h - margin, w, h);
         }
     }
 }
