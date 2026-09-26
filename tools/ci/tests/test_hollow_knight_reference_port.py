@@ -253,6 +253,100 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         self.assertNotIn("PlayerPrefs", source)
 
+    def test_map_controls_toggle_native_world_map_and_restore_area_view(self):
+        controls = strip_csharp_comments(read(MAP_CONTROLS))
+        map_source = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Map.cs")
+        )
+        hud = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Hud.cs")
+        )
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        build = method_body(
+            controls,
+            r"void\s+BuildMapControls\s*\([^)]*\)",
+        )
+        position = method_body(
+            controls,
+            r"void\s+PositionMapControls\s*\([^)]*\)",
+        )
+        handle_tap = method_body(
+            controls,
+            r"bool\s+HandleMapControlTap\s*\([^)]*\)",
+        )
+        toggle = method_body(
+            controls,
+            r"void\s+SetWorldMapMode\s*\([^)]*\)",
+        )
+        setup = method_body(
+            map_source,
+            r"void\s+SetupQuickMap\s*\([^)]*\)",
+        )
+        has_any = method_body(
+            map_source,
+            r"bool\s+HasAnyMap\s*\([^)]*\)",
+        )
+        disable_areas = method_body(
+            map_source,
+            r"void\s+DisableAllMapAreas\s*\([^)]*\)",
+        )
+        map_tick = method_body(
+            map_source,
+            r"void\s+MapTick\s*\([^)]*\)",
+        )
+        frame_tick = method_body(
+            map_source,
+            r"void\s+MapFrameTick\s*\([^)]*\)",
+        )
+        world_bounds = method_body(
+            map_source,
+            r"bool\s+TryWorldBounds\s*\([^)]*\)",
+        )
+        clone = method_body(
+            map_source,
+            r"void\s+BuildMapClone\s*\([^)]*\)",
+        )
+        hud_strip = method_body(
+            hud,
+            r"void\s+PositionHudStrip\s*\([^)]*\)",
+        )
+        update = method_body(
+            frame,
+            r"void\s+UpdateCompanion\s*\([^)]*\)",
+        )
+
+        self.assertIn("bool mapWorldMode", map_source)
+        self.assertIn("bool mapAnyAvailable", map_source)
+        self.assertIn("mapViewAction", controls)
+        self.assertIn('"FULL MAP"', build)
+        self.assertIn('mapWorldMode ? "AREA MAP" : "FULL MAP"', position)
+        self.assertIn("SetMapAction(mapViewAction, showViewSwitch", position)
+        self.assertLess(
+            handle_tap.index("mapViewAction.Hit.Contains(world)"),
+            handle_tap.index("if (!mapAvailable"),
+        )
+        self.assertLess(
+            handle_tap.index("mapViewAction.Hit.Contains(world)"),
+            handle_tap.index("PlaceOrRemoveMarker(world)"),
+        )
+        self.assertIn("SetWorldMapMode(!mapWorldMode)", handle_tap)
+        self.assertIn("pd != null && pd.hasMap", has_any)
+        self.assertIn("mapAnyAvailable = (tab.cur == COMP_MAP) && HasAnyMap()", map_tick)
+        self.assertIn("mapWorldMode ? mapAnyAvailable : HasMapForCurrentZone()", map_tick)
+        self.assertIn("if (mapAnyAvailable) MapPinchTick()", update)
+        self.assertIn("effectiveTab == COMP_MAP && mapWorldMode", hud_strip)
+        self.assertIn("mapNeedsSetup = true", toggle)
+        self.assertIn("ResetMapView()", toggle)
+        self.assertIn("m.WorldMap()", setup)
+        self.assertLess(setup.index("DisableAllMapAreas(m)"), setup.index("m.WorldMap()"))
+        self.assertIn("m.areaDirtmouth", disable_areas)
+        self.assertIn("area.SetActive(false)", disable_areas)
+        self.assertIn("mapWorldMode ? TryWorldBounds(m, out b)", frame_tick)
+        self.assertIn("area.activeSelf", world_bounds)
+        self.assertIn("mapWorldMode = false", clone)
+
     def test_h3_mods_presenter_owns_the_h2_view_boundary(self):
         presenter = strip_csharp_comments(read(MODS_PRESENTER))
         hooks = strip_csharp_comments(read(REFERENCE_ROOT / "HkStageHooks.cs"))

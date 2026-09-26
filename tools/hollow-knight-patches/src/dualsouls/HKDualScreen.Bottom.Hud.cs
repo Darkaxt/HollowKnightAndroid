@@ -274,7 +274,8 @@ public partial class HKDualScreen
             if (areaNameR == null) { try { areaNameR = (areaNameTmp as Component).GetComponent<Renderer>(); } catch { } }   // PERF: cached (was 2x GetComponent per frame)
             float anHalfW = areaNameR != null ? areaNameR.bounds.extents.x : 0f;
             areaNameT.localPosition = new Vector3(cfg.compAreaNameX * s * asp - anHalfW, cfg.compAreaNameY * s, 4f);
-            bool showName = cfg.compAreaName == 1 && effectiveTab != COMP_CHARM;   // fix#3(164-fb): the Charms tab shows the NOTCH row in this corner instead
+            bool showName = cfg.compAreaName == 1 && effectiveTab != COMP_CHARM &&
+                            !(effectiveTab == COMP_MAP && mapWorldMode);   // a world map is not the current area
             // PERF: ZoneName does a language-sheet lookup — resolve only when the RAW zone key changes, not per frame.
             string zRaw = showName ? "" : null;
             if (showName) { try { var g = GameManager.instance; if (g != null) zRaw = g.GetCurrentMapZone(); } catch { } }

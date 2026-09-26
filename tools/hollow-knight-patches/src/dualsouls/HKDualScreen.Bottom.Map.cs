@@ -17,9 +17,13 @@ public partial class HKDualScreen
 
     string lastMapZone = "", lastMapScene = "";   // live-refresh: re-run the quick-map on zone/room change
 
-    bool mapAvailable;             // gate: current zone's quick-map (LB) is obtained — else render nothing (no map/markers/name)
+    bool mapAvailable;             // selected view is available: current paper for area mode, any map for world mode
 
-    bool mapContentVisible;        // the clone is currently SHOWING a quick-map (false after the no-map hide / before the first setup)
+    bool mapAnyAvailable;          // the player owns a map somewhere; keeps FULL MAP reachable in an unmapped zone
+
+    bool mapContentVisible;        // the clone is currently showing its selected map view
+
+    bool mapWorldMode;             // false = current-area quick map; true = native full Hallownest map
 
     int mapStowStamp = -1;         // MapContentStamp() when the Map tab was last stowed; unchanged on return -> no re-setup, compass only
 
@@ -140,8 +144,33 @@ public partial class HKDualScreen
         catch { return false; }
     }
 
-    // Show the CURRENT-ZONE quick-map (the LB view) on the clone: one area active, centred, with a live
-    // compass (GameMap.Update tracks the hero every frame). Dispatch by GameManager.GetCurrentMapZone().
+    bool HasAnyMap()
+    {
+        try
+        {
+            var pd = PlayerData.instance;
+            return pd != null && pd.hasMap;
+        }
+        catch { return false; }
+    }
+
+    static void DisableAllMapAreas(GameMap m)
+    {
+        var areas = new[] {
+            m.areaAncientBasin, m.areaCity, m.areaCliffs, m.areaCrossroads,
+            m.areaCrystalPeak, m.areaDeepnest, m.areaFogCanyon, m.areaFungalWastes,
+            m.areaGreenpath, m.areaKingdomsEdge, m.areaQueensGardens,
+            m.areaRestingGrounds, m.areaDirtmouth, m.areaWaterways,
+        };
+        for (int i = 0; i < areas.Length; i++)
+        {
+            GameObject area = areas[i];
+            if (area != null) area.SetActive(false);
+        }
+    }
+
+    // Show the selected native map view on the clone. Area mode dispatches the current-zone quick map;
+    // world mode clears every area first and lets GameMap.WorldMap activate the PlayerData-owned set.
     void SetupQuickMap(GameMap m)
     {
         var pd = PlayerData.instance;
@@ -155,23 +184,33 @@ public partial class HKDualScreen
             // a blanket enable that would also reveal renderers HK itself keeps disabled on active objects.
             foreach (var r in mapHiddenRs) if (r != null) r.enabled = true;
             mapHiddenRs.Clear();
-            switch (z)
+            if (mapWorldMode)
             {
-                case "ABYSS": m.QuickMapAncientBasin(); break;
-                case "CITY": case "KINGS_STATION": case "SOUL_SOCIETY": case "LURIENS_TOWER": m.QuickMapCity(); break;
-                case "CLIFFS": m.QuickMapCliffs(); break;
-                case "CROSSROADS": case "SHAMAN_TEMPLE": m.QuickMapCrossroads(); break;
-                case "MINES": m.QuickMapCrystalPeak(); break;
-                case "DEEPNEST": case "BEASTS_DEN": m.QuickMapDeepnest(); break;
-                case "FOG_CANYON": case "MONOMON_ARCHIVE": m.QuickMapFogCanyon(); break;
-                case "WASTES": case "QUEENS_STATION": m.QuickMapFungalWastes(); break;
-                case "GREEN_PATH": m.QuickMapGreenpath(); break;
-                case "OUTSKIRTS": case "HIVE": case "COLOSSEUM": m.QuickMapKingdomsEdge(); break;
-                case "ROYAL_GARDENS": m.QuickMapQueensGardens(); break;
-                case "RESTING_GROUNDS": m.QuickMapRestingGrounds(); break;
-                case "TOWN": case "KINGS_PASS": m.QuickMapDirtmouth(); break;
-                case "WATERWAYS": case "GODSEEKER_WASTE": m.QuickMapWaterways(); break;
-                default: m.WorldMap(); break;   // dream world / unknown -> full map fallback
+                // WorldMap only enables owned roots; it does not disable stale roots left by an earlier
+                // view or save. Clear them first so the native method remains the sole activation authority.
+                DisableAllMapAreas(m);
+                m.WorldMap();
+            }
+            else
+            {
+                switch (z)
+                {
+                    case "ABYSS": m.QuickMapAncientBasin(); break;
+                    case "CITY": case "KINGS_STATION": case "SOUL_SOCIETY": case "LURIENS_TOWER": m.QuickMapCity(); break;
+                    case "CLIFFS": m.QuickMapCliffs(); break;
+                    case "CROSSROADS": case "SHAMAN_TEMPLE": m.QuickMapCrossroads(); break;
+                    case "MINES": m.QuickMapCrystalPeak(); break;
+                    case "DEEPNEST": case "BEASTS_DEN": m.QuickMapDeepnest(); break;
+                    case "FOG_CANYON": case "MONOMON_ARCHIVE": m.QuickMapFogCanyon(); break;
+                    case "WASTES": case "QUEENS_STATION": m.QuickMapFungalWastes(); break;
+                    case "GREEN_PATH": m.QuickMapGreenpath(); break;
+                    case "OUTSKIRTS": case "HIVE": case "COLOSSEUM": m.QuickMapKingdomsEdge(); break;
+                    case "ROYAL_GARDENS": m.QuickMapQueensGardens(); break;
+                    case "RESTING_GROUNDS": m.QuickMapRestingGrounds(); break;
+                    case "TOWN": case "KINGS_PASS": m.QuickMapDirtmouth(); break;
+                    case "WATERWAYS": case "GODSEEKER_WASTE": m.QuickMapWaterways(); break;
+                    default: DisableAllMapAreas(m); break;
+                }
             }
             m.StopPan();
             // QuickMapX force-activates these auto-markers regardless of progress. Gate them to match HK:
@@ -418,24 +457,24 @@ public partial class HKDualScreen
     // compass fade -> Wayward-Compass equip watch -> scenesMapped (Quill/rest) watch -> hasPin* purchase watch.
     void MapTick()
     {
-        // Gate: render the map only if the current zone's quick-map is actually obtained (LB works in-game).
-        // Otherwise (e.g. a fresh King's Pass save with no map) hide the whole clone -> no map, no markers.
-        // Tracked against what the clone is actually SHOWING (mapContentVisible), not against last frame's flag — the
-        // flag is false on every other tab, so a tab return used to look like "availability regained" and re-ran setup.
-        mapAvailable = (tab.cur == COMP_MAP) && HasMapForCurrentZone();
+        // The area view follows Hollow Knight's LB gate. The full-world view follows the inventory
+        // map gate instead, so FULL MAP remains reachable while standing in an unpurchased-map zone.
+        mapAnyAvailable = (tab.cur == COMP_MAP) && HasAnyMap();
+        mapAvailable = (tab.cur == COMP_MAP) &&
+                       (mapWorldMode ? mapAnyAvailable : HasMapForCurrentZone());
         if (tab.cur != COMP_MAP || mapClone == null) return;   // nothing below applies off the Map tab / before the clone exists
 
         if (!mapAvailable)
         {
-            if (mapContentVisible)   // just entered a no-map zone -> hide the whole clone once
+            if (mapContentVisible)   // selected view became unavailable -> hide exactly its live renderers once
             {
                 mapHiddenRs.Clear();
                 foreach (var r in mapClone.GetComponentsInChildren<Renderer>(true)) if (r != null && r.enabled) { r.enabled = false; mapHiddenRs.Add(r); }   // remember exactly what WE hid
                 mapContentVisible = false; fit.valid = false;
             }
-            return;   // no quick-map here -> nothing to maintain
+            return;   // the FULL MAP action may remain available through mapAnyAvailable
         }
-        if (!mapContentVisible) mapNeedsSetup = true;   // just obtained/entered a mapped zone -> full deferred setup below
+        if (!mapContentVisible) mapNeedsSetup = true;   // selected view became available -> full deferred setup below
 
         var m = mapGm != null ? mapGm : (mapGm = mapClone.GetComponent<GameMap>());   // one GetComponent, cached
         var gm = GameManager.instance; var pd = PlayerData.instance;
@@ -664,22 +703,24 @@ public partial class HKDualScreen
     {
         mapClone.transform.localPosition = Vector3.zero;   // pin at compRoot EVERY frame
         compFrameTick++;
-        string area = ResolveMapArea(lastMapZone);   // the zone the quick-map was set up for
+        string area = mapWorldMode ? "__WORLD__" : ResolveMapArea(lastMapZone);
         if (!mapNeedsSetup && (mapAreaBFor != area || mapAreaBTries > 0))
         {
             if (mapAreaBTries > 0) mapAreaBTries--;
             var m = mapGm != null ? mapGm : (mapGm = mapClone.GetComponent<GameMap>());
-            Bounds b;
-            if (m != null && TryAreaBounds(m, lastMapZone, out b))
+            Bounds b = default;
+            bool measured = m != null && (mapWorldMode ? TryWorldBounds(m, out b) :
+                                          TryAreaBounds(m, lastMapZone, out b));
+            if (measured)
             {
                 bool changed = !mapAreaBValid || mapAreaBFor != area || (b.center - mapAreaB.center).sqrMagnitude > 1e-4f || (b.size - mapAreaB.size).sqrMagnitude > 1e-4f;
                 mapAreaB = b; mapAreaBValid = true; mapAreaBFor = area;
-                if (changed) Dbg($"HKDS mapfit area={area} ext=({b.extents.x:F2},{b.extents.y:F2}) c=({b.center.x:F2},{b.center.y:F2})");
+                if (changed) Dbg($"HKDS mapfit view={area} ext=({b.extents.x:F2},{b.extents.y:F2}) c=({b.center.x:F2},{b.center.y:F2})");
             }
             else
             {
                 Vector3 c; float sz;
-                if (TryMapBounds(mapClone, out c, out sz)) { fit = new FitResult { center = c, ortho = sz, valid = true }; mapAreaBValid = false; mapAreaBFor = area; Dbg($"HKDS mapfit FALLBACK zone={lastMapZone} ortho={sz:F2}"); }
+                if (TryMapBounds(mapClone, out c, out sz)) { fit = new FitResult { center = c, ortho = sz, valid = true }; mapAreaBValid = false; mapAreaBFor = area; Dbg($"HKDS mapfit FALLBACK view={area} zone={lastMapZone} ortho={sz:F2}"); }
             }
         }
         mapFitIsArea = mapAreaBValid && mapAreaBFor == area;
@@ -766,8 +807,35 @@ public partial class HKDualScreen
     // transforms are), plus the area's ACTIVE TMP title(s) (mesh forced so the bounds are real on the setup frame).
     bool TryAreaBounds(GameMap m, string z, out Bounds b)
     {
+        return TryAreaObjectBounds(AreaObjFor(m, z), out b);
+    }
+
+    // Full-map fit is the union of the native area roots that WorldMap activated. Each included
+    // area's complete authored extent is measured, including rooms not yet revealed by the Quill.
+    bool TryWorldBounds(GameMap m, out Bounds b)
+    {
         b = default; bool have = false;
-        var area = AreaObjFor(m, z); if (area == null || mapClone == null) return false;
+        var areas = new[] {
+            m.areaAncientBasin, m.areaCity, m.areaCliffs, m.areaCrossroads,
+            m.areaCrystalPeak, m.areaDeepnest, m.areaFogCanyon, m.areaFungalWastes,
+            m.areaGreenpath, m.areaKingdomsEdge, m.areaQueensGardens,
+            m.areaRestingGrounds, m.areaDirtmouth, m.areaWaterways,
+        };
+        for (int i = 0; i < areas.Length; i++)
+        {
+            GameObject area = areas[i];
+            if (area == null || !area.activeSelf) continue;
+            Bounds areaBounds;
+            if (!TryAreaObjectBounds(area, out areaBounds)) continue;
+            if (!have) { b = areaBounds; have = true; } else b.Encapsulate(areaBounds);
+        }
+        return have;
+    }
+
+    bool TryAreaObjectBounds(GameObject area, out Bounds b)
+    {
+        b = default; bool have = false;
+        if (area == null || mapClone == null) return false;
         var w2l = mapClone.transform.worldToLocalMatrix;
         var areaT = area.transform;
         var srs = area.GetComponentsInChildren<SpriteRenderer>(true);
@@ -991,7 +1059,8 @@ public partial class HKDualScreen
         // Start()/Update() still run (compass, display).
         foreach (var fsm in mapClone.GetComponentsInChildren<PlayMakerFSM>(true)) fsm.enabled = false;
         mapClone.SetActive(true);
-        mapNeedsSetup = true;   // WorldMap()/SetupMap() deferred until the clone's Start() sets gm/pd/hero
+        mapNeedsSetup = true;   // native map setup is deferred until the clone's Start() sets gm/pd/hero
+        mapWorldMode = false;
         mapContentVisible = false; mapAreaBValid = false; mapAreaBFor = null; mapFitIsArea = false;   // fresh clone: nothing shown/measured yet
         realMapGm = null;
         lastMapZone = ""; lastMapScene = ""; lastScenesMapped = -1; lastPinStamp = -1; compassPending = false;

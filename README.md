@@ -32,8 +32,9 @@ project artwork.
   state.
 - Dual-screen companion support on compatible Android handhelds. Hollow Knight’s
   lower screen provides its resident HUD, Inventory, Map, and Charms pages, with
-  animated page/cursor movement, touch map markers, pinch/pan, a visible zoom
-  slider, and animated reset. Silksong’s lower screen provides the live
+  animated page/cursor movement, touch map markers, current-area/full-world map
+  switching, pinch/pan, a visible zoom slider, and animated reset. Silksong’s
+  lower screen provides the live
   health/Silk HUD, inventory, Crest and Tools, Tasks, Journal, an interactive
   map with markers and zoom, and touch actions for supported items and loadout
   changes. The complete cross-game HUD, pages, Mods, and skins parity target is

@@ -45,11 +45,10 @@ not substitute for that comparison.
   yellow, and white markers while respecting owned types and spare counts.
 - **HK-V2-04 — not applicable:** Silk, Crests, Tools, and Tasks are
   Silksong-only mechanics and must not be invented for Hollow Knight.
-- **HK-V2-05 — deferred to the Map page:** add an explicit quick-map/full-world
-  toggle only after the new marker/zoom controls pass the next batched device
-  check. Acceptance requires correct fit, compass, marker editing, reset, and
-  return to the current-area map without disturbing Hollow Knight’s mature map
-  state.
+- **HK-V2-05 — closed, implemented:** the Map page switches explicitly between
+  the mature current-area quick map and Hollow Knight’s native full-world map.
+  Each view receives its own stable fit while preserving compass, marker editing,
+  pan/zoom, animated reset, and a direct return to the current-area map.
 - **HK-V2-06 — closed, profile-correct:** the duplicate upper health-HUD option
   remains available to Silksong only. Hollow Knight hides that inert setting and
   keeps transferred HUD ownership on the lower display.

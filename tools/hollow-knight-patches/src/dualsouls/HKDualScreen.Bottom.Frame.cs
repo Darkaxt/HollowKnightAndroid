@@ -1194,10 +1194,10 @@ public partial class HKDualScreen
         // the clone's content bounds when available (centres it); else fall back to compRoot (still
         // renders, just off-centre). compZoom = ortho zoom; compOff shifts the view.
         Vector3 frameCenter = compRoot.position;
-        if (tab.cur == COMP_MAP && mapClone != null && mapAvailable)
+        if (tab.cur == COMP_MAP && mapClone != null)
         {
-            MapFrameTick(ref frameCenter);   // B6: pin the map clone + full-area fit (per area, no burst)
-            MapPinchTick();                  // B5: pinch zoom / drag pan / tap reset on the map (dusklight-style)
+            if (mapAvailable) MapFrameTick(ref frameCenter);   // selected map view is ready: pin + fit it
+            if (mapAnyAvailable) MapPinchTick();              // keep FULL MAP tappable in a no-current-map zone
         }
         else if ((tab.cur == COMP_CHARM || tab.cur == COMP_INV) && paneClone != null)
         {

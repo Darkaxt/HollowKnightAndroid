@@ -19,7 +19,7 @@ public partial class HKDualScreen
         public bool Normalized;
     }
 
-    MapActionButton mapMarkerAction, mapMarkerTypeAction;
+    MapActionButton mapViewAction, mapMarkerAction, mapMarkerTypeAction;
     LineRenderer mapZoomTrack;
     SpriteRenderer mapZoomThumb;
     Sprite mapControlPill;
@@ -43,6 +43,8 @@ public partial class HKDualScreen
     {
         if (frameRoot == null || nativeRoot == null) return;
         if (mapControlPill == null) mapControlPill = MakePillSprite();
+        if (mapViewAction == null)
+            mapViewAction = BuildMapActionButton(nativeRoot, "F_MapView", "FULL MAP");
         if (mapMarkerAction == null)
             mapMarkerAction = BuildMapActionButton(nativeRoot, "F_MapMarkers", "MARKERS");
         if (mapMarkerTypeAction == null)
@@ -188,6 +190,7 @@ public partial class HKDualScreen
 
     void PositionMapControls(float s, float asp, float innerTop, float innerBottom, bool onMap)
     {
+        bool showViewSwitch = onMap && mapAnyAvailable && mapClone != null && mapGm != null;
         bool showMap = onMap && mapAvailable && mapClone != null && mapGm != null &&
                        mapContentVisible && !mapNeedsSetup;
         if (!showMap) SetMapMarkerMode(false);
@@ -199,9 +202,13 @@ public partial class HKDualScreen
         float topY = cam.position.y + innerTop * s;
         float bottomY = cam.position.y + innerBottom * s;
         float actionX = cam.position.x + 0.68f * s * asp;
+        SetMapAction(mapViewAction, showViewSwitch,
+            mapWorldMode ? "AREA MAP" : "FULL MAP",
+            new Vector3(actionX, topY - 0.10f * s, cam.position.z + 3.4f), zf,
+            Color.white, new Color(0.08f, 0.08f, 0.1f, 1f));
         SetMapAction(mapMarkerAction, haveMarkers,
             mapMarkerMode ? "DONE" : "MARKERS",
-            new Vector3(actionX, topY - 0.10f * s, cam.position.z + 3.4f), zf,
+            new Vector3(actionX, topY - 0.23f * s, cam.position.z + 3.4f), zf,
             Color.white, new Color(0.08f, 0.08f, 0.1f, 1f));
 
         EnsureSelectedMarkerType();
@@ -213,7 +220,7 @@ public partial class HKDualScreen
             ? MAP_MARKER_NAMES[mapMarkerType] + "  " + spare : "NO MARKERS";
         SetMapAction(mapMarkerTypeAction, haveMarkers && mapMarkerMode,
             markerLabel,
-            new Vector3(actionX, topY - 0.23f * s, cam.position.z + 3.4f), zf,
+            new Vector3(actionX, topY - 0.36f * s, cam.position.z + 3.4f), zf,
             markerColor, markerText);
 
         bool showSlider = showMap;
@@ -222,7 +229,8 @@ public partial class HKDualScreen
         if (!showSlider) { mapZoomHeld = false; return; }
 
         mapZoomX = cam.position.x + 0.90f * s * asp;
-        mapZoomTopY = topY - (mapMarkerMode ? 0.38f : 0.24f) * s;
+        float sliderTopOffset = mapMarkerMode ? 0.51f : (haveMarkers ? 0.38f : 0.24f);
+        mapZoomTopY = topY - sliderTopOffset * s;
         mapZoomBottomY = bottomY + 0.12f * s;
         if (mapZoomTopY <= mapZoomBottomY + 0.15f * s)
             mapZoomTopY = mapZoomBottomY + 0.15f * s;
@@ -298,8 +306,14 @@ public partial class HKDualScreen
 
     bool HandleMapControlTap(Vector3 world)
     {
-        if (tab.cur != COMP_MAP || !mapAvailable || !mapContentVisible ||
-            mapNeedsSetup || mapGm == null) return false;
+        if (tab.cur != COMP_MAP || !mapAnyAvailable || mapGm == null) return false;
+        if (ValidButton(mapViewAction) && mapViewAction.Root.gameObject.activeSelf &&
+            mapViewAction.Hit.Contains(world))
+        {
+            SetWorldMapMode(!mapWorldMode);
+            return true;
+        }
+        if (!mapAvailable || !mapContentVisible || mapNeedsSetup) return false;
         if (ValidButton(mapMarkerAction) && mapMarkerAction.Root.gameObject.activeSelf &&
             mapMarkerAction.Hit.Contains(world))
         {
@@ -322,6 +336,18 @@ public partial class HKDualScreen
         if (world.x < mapControlLeftX || world.x > mapControlRightX ||
             world.y < mapControlBottomY || world.y > mapControlTopY) return false;
         return PlaceOrRemoveMarker(world);
+    }
+
+    void SetWorldMapMode(bool world)
+    {
+        if (mapWorldMode == world) return;
+        mapWorldMode = world;
+        mapNeedsSetup = true;
+        mapAreaBValid = false;
+        mapAreaBFor = null;
+        mapAreaBTries = 3;
+        ResetMapView();
+        Dbg(world ? "HKDS map view -> full map" : "HKDS map view -> current area");
     }
 
     void SetMapMarkerMode(bool active)
@@ -475,6 +501,7 @@ public partial class HKDualScreen
 
     void TeardownMapControls()
     {
+        mapViewAction = null;
         mapMarkerAction = null;
         mapMarkerTypeAction = null;
         mapZoomTrack = null;
