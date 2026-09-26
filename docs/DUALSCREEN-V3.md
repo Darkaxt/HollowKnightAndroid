@@ -32,6 +32,32 @@ Visual acceptance requires side-by-side comparison with the Hollow Knight
 reference in ordinary gameplay. Source similarity and synthetic host tests do
 not substitute for that comparison.
 
+### Hollow Knight v2 parity ledger
+
+- **HK-V2-01 — closed, retained:** Hollow Knight already owns the full lower
+  surface, resident HUD, Inventory/Map/Charms pages, dynamic panel geometry,
+  dividers, item details/actions, map pan/pinch, and animated reset.
+- **HK-V2-02 — closed, implemented:** page slides now preserve outgoing-pane
+  camera compensation; tab and item carets travel over the native 150 ms cursor
+  interval instead of teleporting.
+- **HK-V2-03 — closed, implemented:** the Map page has a visible touch zoom
+  slider and a marker mode that places/removes the game’s native blue, red,
+  yellow, and white markers while respecting owned types and spare counts.
+- **HK-V2-04 — not applicable:** Silk, Crests, Tools, and Tasks are
+  Silksong-only mechanics and must not be invented for Hollow Knight.
+- **HK-V2-05 — deferred to the Map page:** add an explicit quick-map/full-world
+  toggle only after the new marker/zoom controls pass the next batched device
+  check. Acceptance requires correct fit, compass, marker editing, reset, and
+  return to the current-area map without disturbing Hollow Knight’s mature map
+  state.
+- **HK-V2-06 — closed, profile-correct:** the duplicate upper health-HUD option
+  remains available to Silksong only. Hollow Knight hides that inert setting and
+  keeps transferred HUD ownership on the lower display.
+- **HK-MODS-01 — gated, not discarded:** remove Hollow Knight’s legacy lower
+  Mods presenter immediately after the upper Options → Mods catalog passes the
+  contract’s automated parity and live controller gate in both games. Closure
+  requires no reachable lower gear, pane, hit region, or input owner.
+
 ## Built-in Mods
 
 The complete reference catalog is required. The names below describe required

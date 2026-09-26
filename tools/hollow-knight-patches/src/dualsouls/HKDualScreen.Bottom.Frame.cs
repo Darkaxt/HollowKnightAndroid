@@ -363,12 +363,16 @@ public partial class HKDualScreen
             }
         }
         catch (Exception e) { Dbg($"HKDS map reset btn err {e.Message}"); }
+        BuildMapControls(root);
         Dbg($"HKDS frame built, parts={frameEdge.Count} tabs={frameTabs.Count}");
     }
 
     Transform mapMaskTopT, mapMaskBotT;   // MAP-tab clip masks: black quads over everything past the inner rect (above the top-sep fleur / below the tab fleur); chrome sorts ABOVE them, map content below
     Renderer mapMaskTopR, mapMaskBotR;    // their renderers, cached at build (PositionFrame toggles them per frame)
     int tabColorCol = -1;                 // active display column the tab colors were last set for (reflection-set only on change)
+    const float TabCaretMoveSeconds = 0.15f;
+    int tabFleurMoveCol = -1;
+    float tabFleurMoveFromX, tabFleurMoveX, tabFleurMoveT = 1f;
     Transform mapResetT; Component mapResetTmp; Renderer mapResetR;   // RESET button centred on the top fleur, shown only when the pinch view isn't default
     SpriteRenderer mapResetPillSR;   // white pill behind the RESET text (text drawn black on top)
 
@@ -536,6 +540,27 @@ public partial class HKDualScreen
         }
     }
 
+    float AnimateTabFleurX(int activeCol, float targetX)
+    {
+        if (tabFleurMoveCol < 0)
+        {
+            tabFleurMoveCol = activeCol;
+            tabFleurMoveX = targetX;
+            tabFleurMoveT = 1f;
+        }
+        else if (activeCol != tabFleurMoveCol)
+        {
+            tabFleurMoveCol = activeCol;
+            tabFleurMoveFromX = tabFleurMoveX;
+            tabFleurMoveT = 0f;
+        }
+        if (tabFleurMoveT < 1f)
+            tabFleurMoveT = Mathf.Min(1f,
+                tabFleurMoveT + Time.unscaledDeltaTime / TabCaretMoveSeconds);
+        tabFleurMoveX = Mathf.Lerp(tabFleurMoveFromX, targetX, tabFleurMoveT);
+        return tabFleurMoveX;
+    }
+
     void PositionFrame()
     {
         if (frameRoot == null || attrCam == null) return;
@@ -634,6 +659,7 @@ public partial class HKDualScreen
         if (actHave)
         {
             float charmsW = charmsHave ? charmsB.size.x : actB.size.x;
+            float fleurX = AnimateTabFleurX(activeCol, actB.center.x);
             // A native localized title can be much wider than its tab cell.
             // Keep each selected fleur inside that cell instead of allowing
             // its source-aspect quad to grow across or beyond the display.
@@ -646,7 +672,7 @@ public partial class HKDualScreen
                 float w = Mathf.Min(charmsW * Mathf.Max(0.05f, cfg.compBotFleurWScale), fleurMaxW);
                 float sc = Mathf.Max(0.0001f, w / botFleurAspWH), hh = sc * 0.5f;
                 botFleurT.localScale = new Vector3(sc, sc * (cfg.compBotFleurFlip == 1 ? -1f : 1f), sc);
-                botFleurT.position = new Vector3(actB.center.x, textTop + gap + hh, actB.center.z - 0.1f);   // above, edge = gap over text top
+                botFleurT.position = new Vector3(fleurX, textTop + gap + hh, actB.center.z - 0.1f);   // above, edge = gap over text top
                 frameInnerBotFrac = (textTop + gap + hh * 2f - cam.position.y) / s;   // B6: the box's inner BOTTOM = this fleur's top edge (ortho fracs) -> the map's full-area fit stops here
             }
             else frameInnerBotFrac = (textTop + gap - cam.position.y) / s;
@@ -655,7 +681,7 @@ public partial class HKDualScreen
                 float w2 = Mathf.Min(charmsW * Mathf.Max(0.05f, cfg.compBotFleur2WScale), fleurMaxW);
                 float sc2 = Mathf.Max(0.0001f, w2 / botFleur2AspWH), hh2 = sc2 * 0.5f;
                 botFleur2T.localScale = new Vector3(sc2, sc2 * (cfg.compBotFleur2Flip == 1 ? -1f : 1f), sc2);
-                botFleur2T.position = new Vector3(actB.center.x, textBot - gap - hh2, actB.center.z - 0.1f);  // below, edge = gap under text bottom
+                botFleur2T.position = new Vector3(fleurX, textBot - gap - hh2, actB.center.z - 0.1f);  // below, edge = gap under text bottom
             }
         }
         // Full-width horizontal separators (#5 HUD->box, #6 box->tabs): centred in X, width = compSepW of the
@@ -726,6 +752,7 @@ public partial class HKDualScreen
                 }
             }
         }
+        PositionMapControls(s, asp, yt, yb, onMap);
         CacheModsTabHits();
     }
 
@@ -735,7 +762,7 @@ public partial class HKDualScreen
         if (frameRoot != null) { Destroy(frameRoot); frameRoot = null; }
         DestroyOwnedAssets();   // Materials / Meshes / Textures / Sprites we created for the frame (see Own)
         frameEdge.Clear(); frameBase.Clear(); frameTabs.Clear(); frameTabLabels.Clear(); frameTabLabelsPending = false; frameTabBuildFailed = false;
-        botFleurT = botFleur2T = sepTopT = sepBotT = null; mapMaskTopT = mapMaskBotT = null; mapMaskTopR = mapMaskBotR = null; mapResetT = null; mapResetTmp = null; mapResetR = null; mapResetPillSR = null; tabColorCol = -1; frameInnerBotFrac = frameInnerTopFrac = float.NaN; selBox = null; sel.item = null; sel.invKey = null; sel.charmN = 0; sel.kind = -1; paneCursor = null; paneCursorFor = null;
+        botFleurT = botFleur2T = sepTopT = sepBotT = null; mapMaskTopT = mapMaskBotT = null; mapMaskTopR = mapMaskBotR = null; mapResetT = null; mapResetTmp = null; mapResetR = null; mapResetPillSR = null; tabColorCol = -1; tabFleurMoveCol = -1; tabFleurMoveT = 1f; frameInnerBotFrac = frameInnerTopFrac = float.NaN; selBox = null; sel.item = null; sel.invKey = null; sel.charmN = 0; sel.kind = -1; paneCursor = null; paneCursorFor = null;
         costPipRoot = null; charmBoardsFor = null;   // redesign: re-create cost pips + rebuild the per-clone charm cache for the fresh pane
         areaNameT = null; areaNameTmp = null; areaNameR = null; lastAreaZoneRaw = "\u0001"; lastAreaName = "\u0001";   // sentinel: the rebuilt TMP starts blank — force a re-set even for the same zone
         statsT = null; statsTmp = null; lastStats = "x"; statsR = null; battLevelR = null; noMapR = null; tabMidR = null;
@@ -747,6 +774,7 @@ public partial class HKDualScreen
         //     Net effect: one build-time config edit blanked the row until the process restarted.
         equipRowRoot = null; equipCharmSRs.Clear(); lastEquipStamp = int.MinValue;
         if (battIconSR != null) { Destroy(battIconSR.gameObject); battIconSR = null; } battIconT = null; battIconTex = null; battIconLvl = -2;
+        TeardownMapControls();
         ClearModsFrameReferences();   // gear objects/assets died with frameRoot/DestroyOwnedAssets
         if (battLevelT != null) { Destroy(battLevelT.gameObject); battLevelT = null; } battLevelTmp = null; lastBattLevel = "z";
     }
@@ -1124,6 +1152,7 @@ public partial class HKDualScreen
         tab.cur = tab.tap >= 0 ? tab.tap : Mathf.Clamp(cfg.compTab, 0, 2);
         if (tab.cur != prevTab)
         {
+            SetMapMarkerMode(false);
             // (pinch zoom/pan PERSIST across tab switches — only the RESET button / an area change clears them)
             if (slideOutClone != null) StowSlideClone();   // a switch mid-slide finishes the previous slide instantly
             var fromClone = prevTab == COMP_MAP ? mapClone : prevTab == COMP_INV ? invCloneCache : prevTab == COMP_CHARM ? charmCloneCache : null;

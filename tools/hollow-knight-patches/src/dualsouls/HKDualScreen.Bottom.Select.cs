@@ -242,6 +242,12 @@ public partial class HKDualScreen
         try
         {
             int tc = transport.TouchCount;
+            if (MapControlTouchTick(tc))
+            {
+                pinchLastDist = -1f;
+                dragLastValid = false;
+                return;
+            }
             if (tc >= 2)
             {
                 float ax = transport.T0X, ay = transport.T0Y;
@@ -302,20 +308,18 @@ public partial class HKDualScreen
             {
                 lastCleanTapSeq = cts;
                 bool consumed = false;
-                if (mapResetR != null && mapResetR.enabled)
+                float tx = transport.CleanTapX, ty = transport.CleanTapY;
+                Vector3 world = TouchToWorld(tx, ty);
+                if (HandleMapControlTap(world)) consumed = true;
+                if (!consumed && mapResetR != null && mapResetR.enabled)
                 {
-                    float tx = transport.CleanTapX, ty = transport.CleanTapY;
-                    Vector3 w = TouchToWorld(tx, ty);
                     var b = mapResetR.bounds; b.Expand(new Vector3(0.6f, 0.6f, 10f));   // generous thumb pad
-                    if (w.x >= b.min.x && w.x <= b.max.x && w.y >= b.min.y && w.y <= b.max.y) { ResetMapViewAnimated(); Dbg("HKDS map view reset (button, animated)"); consumed = true; }
+                    if (world.x >= b.min.x && world.x <= b.max.x && world.y >= b.min.y && world.y <= b.max.y) { ResetMapViewAnimated(); Dbg("HKDS map view reset (button, animated)"); consumed = true; }
                 }
                 // BENCH TELEPORT [user]: with the tweak on, a clean tap on a bench PIN travels there
-                // (recorded benches only, tap-again confirm). Never while the reset pill took the tap.
-                if (!consumed && HkStageHooks.TweaksAvailable && HkStageHooks.TweaksMenuVisible)
-                {
-                    float tx2 = transport.CleanTapX, ty2 = transport.CleanTapY;
-                    BenchPinTap(TouchToWorld(tx2, ty2));
-                }
+                // (recorded benches only, tap-again confirm). Marker mode owns map taps while active.
+                if (!consumed && !mapMarkerMode && HkStageHooks.TweaksAvailable && HkStageHooks.TweaksMenuVisible)
+                    BenchPinTap(world);
             }
         }
         catch (Exception e) { WarnOnce("map pinch", e); }

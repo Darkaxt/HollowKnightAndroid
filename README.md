@@ -30,17 +30,20 @@ project artwork.
 - On-device conversion and ARM64 compilation from user-supplied Linux files.
 - Independent game profiles, saves, generations, mod settings, and launch
   state.
-- Dual-screen companion support on compatible Android handhelds. Silksong’s
-  lower screen provides the live health/Silk HUD, inventory, Crest and Tools,
-  Tasks, Journal, an interactive map with markers and zoom, and touch actions
-  for supported items and loadout changes. The complete cross-game HUD, pages,
-  Mods, and skins parity target is defined in
-  [`docs/DUALSCREEN-V3.md`](docs/DUALSCREEN-V3.md) and remains under active
-  development.
+- Dual-screen companion support on compatible Android handhelds. Hollow Knight’s
+  lower screen provides its resident HUD, Inventory, Map, and Charms pages, with
+  animated page/cursor movement, touch map markers, pinch/pan, a visible zoom
+  slider, and animated reset. Silksong’s lower screen provides the live
+  health/Silk HUD, inventory, Crest and Tools, Tasks, Journal, an interactive
+  map with markers and zoom, and touch actions for supported items and loadout
+  changes. The complete cross-game HUD, pages, Mods, and skins parity target is
+  defined in [`docs/DUALSCREEN-V3.md`](docs/DUALSCREEN-V3.md) and remains under
+  active development.
 - Optional Steam sign-in can download the selected Linux depot, resume an
   interrupted download, and synchronize Steam Cloud saves.
 - Per-profile quality-of-life settings include resolution, aspect ratio, intro
-  skipping, cloud behavior, and an optional duplicate top-screen health HUD.
+  skipping, and cloud behavior. Silksong also offers an optional duplicate
+  top-screen health HUD; Hollow Knight keeps its transferred HUD lower-only.
 - Build-time BepInEx 5 and Harmony compatibility for a supported subset of
   managed mods.
 - Atomic generation publishing so an interrupted build cannot replace the last

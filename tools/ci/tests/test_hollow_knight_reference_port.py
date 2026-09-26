@@ -11,6 +11,7 @@ REFERENCE_ROOT = SOURCE_ROOT / "dualsouls"
 MODS_ROOT = SOURCE_ROOT / "mods"
 ADAPTER = REFERENCE_ROOT / "HkDirectDisplayAdapter.cs"
 MODS_PRESENTER = REFERENCE_ROOT / "HollowKnightModsPresenter.cs"
+MAP_CONTROLS = REFERENCE_ROOT / "HKDualScreen.Bottom.MapControls.cs"
 MODS_RUNTIME = MODS_ROOT / "HollowKnightModsRuntime.cs"
 FLASH_POLICY = MODS_ROOT / "HollowKnightLifebloodFlashPolicy.cs"
 FLASH_CORE = MODS_ROOT / "HollowKnightFlashPolicyCore.cs"
@@ -184,13 +185,64 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             select,
             r"Bounds\s+AnimateSelectionBounds\s*\([^)]*\)",
         )
+        animate_tab = method_body(
+            frame,
+            r"float\s+AnimateTabFleurX\s*\([^)]*\)",
+        )
 
         self.assertIn("slideStartCamPos = attrCam.transform.position", update)
         self.assertIn("slideCamValid = true", update)
         self.assertIn("SelectionMoveSeconds = 0.15f", select)
+        self.assertIn("TabCaretMoveSeconds = 0.15f", frame)
         self.assertIn("Time.unscaledDeltaTime", animate)
         self.assertIn("Vector3.Lerp", animate)
+        self.assertIn("Time.unscaledDeltaTime", animate_tab)
+        self.assertIn("Mathf.Lerp", animate_tab)
         self.assertIn("AnimateSelectionBounds(selBB, sel.item)", select)
+        self.assertIn("AnimateTabFleurX(activeCol, actB.center.x)", frame)
+
+    def test_map_controls_use_native_marker_state_and_visible_zoom(self):
+        source = strip_csharp_comments(read(MAP_CONTROLS))
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        select = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Select.cs")
+        )
+        build_frame = method_body(frame, r"void\s+BuildFrame\s*\(\s*\)")
+        position_frame = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
+        update = method_body(frame, r"void\s+UpdateCompanion\s*\([^)]*\)")
+        pinch = method_body(select, r"void\s+MapPinchTick\s*\(\s*\)")
+
+        self.assertIn("sealed class MapActionButton", source)
+        self.assertIn("LineRenderer mapZoomTrack", source)
+        self.assertIn("void PositionMapControls(", source)
+        self.assertIn("bool MapControlTouchTick(", source)
+        self.assertIn("bool HandleMapControlTap(", source)
+        for field in (
+            "placedMarkers_b", "placedMarkers_r",
+            "placedMarkers_y", "placedMarkers_w",
+            "spareMarkers_b", "spareMarkers_r",
+            "spareMarkers_y", "spareMarkers_w",
+        ):
+            with self.subTest(native_marker_field=field):
+                self.assertIn(field, source)
+        self.assertIn("mapGm.SetupMapMarkers()", source)
+        self.assertIn("mapClone.transform.InverseTransformPoint(world)", source)
+        self.assertIn("Mathf.Exp(Mathf.Log(maxZoom) * position)", source)
+        self.assertIn("BuildMapControls(root)", build_frame)
+        self.assertIn("PositionMapControls(s, asp, yt, yb, onMap)", position_frame)
+        self.assertIn("SetMapMarkerMode(false)", update)
+        self.assertLess(
+            pinch.index("MapControlTouchTick(tc)"),
+            pinch.index("if (tc >= 2)"),
+        )
+        self.assertLess(
+            pinch.index("HandleMapControlTap(world)"),
+            pinch.index("mapResetR != null"),
+        )
+        self.assertIn("!mapMarkerMode", pinch)
+        self.assertNotIn("PlayerPrefs", source)
 
     def test_h3_mods_presenter_owns_the_h2_view_boundary(self):
         presenter = strip_csharp_comments(read(MODS_PRESENTER))
