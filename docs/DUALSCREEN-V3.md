@@ -59,10 +59,15 @@ not substitute for that comparison.
   batched map comparison must decide whether a fade improves Hollow Knight
   without dimming labels, markers, or the compass; closure requires a bounded
   fade on all four edges with no map bleed during pan or zoom.
-- **HK-MODS-01 — gated, not discarded:** remove Hollow Knight’s legacy lower
-  Mods presenter immediately after the upper Options → Mods catalog passes the
-  contract’s automated parity and live controller gate in both games. Closure
-  requires no reachable lower gear, pane, hit region, or input owner.
+- **HK-MODS-01 — live-gated; automated parity closed:** the exact required
+  catalog and metadata are enforced for both adapters by
+  `test_builtin_mods_catalog.py`, while the shared menu-model tests and both
+  native-menu contract suites prove grouped row/window reachability, visible
+  unavailable explanations, master/reset/Back, command/route dispatch, and
+  controller event routing. The duplicate `SKINS OPEN` row is excluded. Do not
+  remove Hollow Knight’s legacy lower Mods presenter until live controller
+  validation passes in both games. Final closure still requires no reachable
+  lower gear, pane, hit region, or input owner.
 
 ## Built-in Mods
 
