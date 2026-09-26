@@ -149,6 +149,17 @@ class LauncherProfileSelectionTest {
     }
 
     @Test
+    fun `top HUD duplication setting is only offered for Silksong`() {
+        SelectedGameStore(context).set(GameProfiles.require("hollow-knight"))
+        val hollowKnight = Robolectric.buildActivity(SettingsActivity::class.java).setup().get()
+        assertEquals(View.GONE, hollowKnight.findViewById<View>(R.id.group_show_top_hud).visibility)
+
+        SelectedGameStore(context).set(GameProfiles.require("silksong"))
+        val silksong = Robolectric.buildActivity(SettingsActivity::class.java).setup().get()
+        assertEquals(View.VISIBLE, silksong.findViewById<View>(R.id.group_show_top_hud).visibility)
+    }
+
+    @Test
     fun `production runtime does not show fake evidence banner`() {
         val activity = Robolectric.buildActivity(LauncherActivity::class.java).setup().get()
 

@@ -27,6 +27,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.Switch
 import dev.silksong.launcher.profiles.ProfileBuildPaths
@@ -64,6 +65,10 @@ class SettingsActivity : Activity() {
         swDualScreen = findViewById(R.id.sw_dual_screen)
         swShowTopHud = findViewById(R.id.sw_show_top_hud)
         swWideAspect = findViewById(R.id.sw_wide_aspect)
+
+        val showTopHudSupported = buildPaths.profile.id == "silksong"
+        findViewById<View>(R.id.group_show_top_hud).visibility =
+            if (showTopHudSupported) View.VISIBLE else View.GONE
 
         val btnBack: Button = findViewById(R.id.btn_settings_back)
 
