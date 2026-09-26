@@ -213,9 +213,14 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         position_frame = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
         update = method_body(frame, r"void\s+UpdateCompanion\s*\([^)]*\)")
         pinch = method_body(select, r"void\s+MapPinchTick\s*\(\s*\)")
+        handle_tap = method_body(
+            source,
+            r"bool\s+HandleMapControlTap\s*\([^)]*\)",
+        )
 
         self.assertIn("sealed class MapActionButton", source)
         self.assertIn("LineRenderer mapZoomTrack", source)
+        self.assertIn("mapContentVisible && !mapNeedsSetup", source)
         self.assertIn("void PositionMapControls(", source)
         self.assertIn("bool MapControlTouchTick(", source)
         self.assertIn("bool HandleMapControlTap(", source)
@@ -242,6 +247,10 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             pinch.index("mapResetR != null"),
         )
         self.assertIn("!mapMarkerMode", pinch)
+        self.assertLess(
+            handle_tap.index("mapResetR.bounds"),
+            handle_tap.index("PlaceOrRemoveMarker(world)"),
+        )
         self.assertNotIn("PlayerPrefs", source)
 
     def test_h3_mods_presenter_owns_the_h2_view_boundary(self):

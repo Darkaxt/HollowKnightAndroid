@@ -188,7 +188,8 @@ public partial class HKDualScreen
 
     void PositionMapControls(float s, float asp, float innerTop, float innerBottom, bool onMap)
     {
-        bool showMap = onMap && mapAvailable && mapClone != null;
+        bool showMap = onMap && mapAvailable && mapClone != null && mapGm != null &&
+                       mapContentVisible && !mapNeedsSetup;
         if (!showMap) SetMapMarkerMode(false);
         bool haveMarkers = showMap && AnyMarkerUnlocked();
         float zf = (s / Mathf.Max(0.01f, frameRefOrtho)) * cfg.compFrameScale;
@@ -257,7 +258,8 @@ public partial class HKDualScreen
 
     bool MapControlTouchTick(int touchCount)
     {
-        if (transport == null || attrCam == null || tab.cur != COMP_MAP || !mapAvailable)
+        if (transport == null || attrCam == null || tab.cur != COMP_MAP || !mapAvailable ||
+            !mapContentVisible || mapNeedsSetup || mapGm == null)
         {
             mapZoomHeld = false;
             return false;
@@ -296,7 +298,8 @@ public partial class HKDualScreen
 
     bool HandleMapControlTap(Vector3 world)
     {
-        if (tab.cur != COMP_MAP || !mapAvailable) return false;
+        if (tab.cur != COMP_MAP || !mapAvailable || !mapContentVisible ||
+            mapNeedsSetup || mapGm == null) return false;
         if (ValidButton(mapMarkerAction) && mapMarkerAction.Root.gameObject.activeSelf &&
             mapMarkerAction.Hit.Contains(world))
         {
@@ -310,6 +313,12 @@ public partial class HKDualScreen
             return true;
         }
         if (!mapMarkerMode) return false;
+        if (mapResetR != null && mapResetR.enabled)
+        {
+            Bounds reset = mapResetR.bounds;
+            reset.Expand(new Vector3(0.6f, 0.6f, 10f));
+            if (reset.Contains(world)) return false;   // the normal RESET action keeps priority
+        }
         if (world.x < mapControlLeftX || world.x > mapControlRightX ||
             world.y < mapControlBottomY || world.y > mapControlTopY) return false;
         return PlaceOrRemoveMarker(world);
