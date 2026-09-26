@@ -27,6 +27,11 @@ namespace DualSouls.Mods.Silksong
         const float FirstRowY = -25f;
         const float RowStep = 78f;
         const float ButtonTextHorizontalInset = 80f;
+        const float DescriptionHorizontalInset = 220f;
+        const float DescriptionMinimumFontSize = 16f;
+        const float DescriptionFontSize = 24f;
+        const float ResetVisualIndex = 8.35f;
+        const float BackVisualIndex = 9.45f;
 
         internal enum NativeMenuRoute { Mods, Skins }
         enum ButtonRole { Group, Master, Row, Reset, Back }
@@ -311,8 +316,9 @@ namespace DualSouls.Mods.Silksong
             for (int i = 0; i < VisibleRows; i++)
                 CreateButton(content, rowTemplate, ButtonRole.Row, i + 2, "MOD");
             CreateDescription(content, rowTemplate, 7);
-            CreateButton(content, rowTemplate, ButtonRole.Reset, 8, "RESET ALL MODS");
-            CreateButton(content, rowTemplate, ButtonRole.Back, 9, "BACK");
+            CreateButton(content, rowTemplate, ButtonRole.Reset, ResetVisualIndex,
+                         "RESET ALL MODS");
+            CreateButton(content, rowTemplate, ButtonRole.Back, BackVisualIndex, "BACK");
 
             DisableForeignDrivers(root);
             _modsScreen.defaultHighlight = _buttons[0];
@@ -411,11 +417,12 @@ namespace DualSouls.Mods.Silksong
             source.navigation = new Navigation { mode = Navigation.Mode.None };
             DisableForeignDrivers(wrapper);
             label = SetButtonText(wrapper, "Choose a category.");
+            ConfigureDescription(label);
             return wrapper;
         }
 
         void CreateButton(Transform parent, GameObject template, ButtonRole role,
-                          int visualIndex, string initialText)
+                          float visualIndex, string initialText)
         {
             GameObject wrapper = Instantiate(template, parent, false);
             wrapper.name = "Mods" + role + visualIndex;
@@ -499,6 +506,19 @@ namespace DualSouls.Mods.Silksong
                 ? TMProOld.TextAlignmentOptions.Right
                 : TMProOld.TextAlignmentOptions.Left;
             text.enableWordWrapping = false;
+        }
+
+        static void ConfigureDescription(TmpText text)
+        {
+            RectTransform rect = text.transform as RectTransform;
+            if (rect != null)
+                rect.sizeDelta = new Vector2(-DescriptionHorizontalInset, rect.sizeDelta.y);
+            text.alignment = TMProOld.TextAlignmentOptions.Center;
+            text.enableWordWrapping = false;
+            text.enableAutoSizing = true;
+            text.fontSizeMin = DescriptionMinimumFontSize;
+            text.fontSizeMax = DescriptionFontSize;
+            text.fontSize = Mathf.Min(text.fontSize, DescriptionFontSize);
         }
 
         static Transform FindDescendant(Transform parent, string exactName)

@@ -23,6 +23,11 @@ namespace DualSouls.Mods.HollowKnight
         const int MaximumSkinSnapshotBytes = 262144;
         const string SkinProfileId = "hollow-knight";
         const float ButtonTextHorizontalInset = 80f;
+        const float DescriptionHorizontalInset = 220f;
+        const float DescriptionMinimumFontSize = 16f;
+        const float DescriptionFontSize = 24f;
+        const float ResetVisualIndex = 8.35f;
+        const float BackVisualIndex = 9.45f;
         const float MaximumRowStep = 78f;
         const float MinimumRowStep = 58f;
 
@@ -136,6 +141,43 @@ namespace DualSouls.Mods.HollowKnight
                 if (uiText == null) return;
                 uiText.horizontalOverflow = HorizontalWrapMode.Overflow;
                 uiText.verticalOverflow = VerticalWrapMode.Overflow;
+            }
+
+            public void ConfigureDescription()
+            {
+                ConfigureSingleLine(DescriptionHorizontalInset);
+
+                Text uiText = _component as Text;
+                if (uiText != null)
+                {
+                    uiText.fontSize = Math.Min(uiText.fontSize, (int)DescriptionFontSize);
+                    uiText.resizeTextForBestFit = true;
+                    uiText.resizeTextMinSize = (int)DescriptionMinimumFontSize;
+                    uiText.resizeTextMaxSize = (int)DescriptionFontSize;
+                    uiText.alignment = TextAnchor.MiddleCenter;
+                    return;
+                }
+
+                TrySetProperty("enableWordWrapping", false);
+                TrySetProperty("enableAutoSizing", true);
+                TrySetProperty("fontSizeMin", DescriptionMinimumFontSize);
+                TrySetProperty("fontSizeMax", DescriptionFontSize);
+                TrySetProperty("fontSize", DescriptionFontSize);
+                TrySetEnumProperty("alignment", "Center");
+            }
+
+            void TrySetProperty(string name, object value)
+            {
+                PropertyInfo property = _component.GetType().GetProperty(name);
+                if (property != null && property.CanWrite)
+                    property.SetValue(_component, value, null);
+            }
+
+            void TrySetEnumProperty(string name, string value)
+            {
+                PropertyInfo property = _component.GetType().GetProperty(name);
+                if (property == null || !property.CanWrite || !property.PropertyType.IsEnum) return;
+                property.SetValue(_component, Enum.Parse(property.PropertyType, value), null);
             }
 
             public static NativeText Find(GameObject root)
@@ -459,9 +501,10 @@ namespace DualSouls.Mods.HollowKnight
             for (int i = 0; i < VisibleRows; i++)
                 CreateButton(content, rowTemplate, ButtonRole.Row, i + 2, firstY, rowStep, "MOD");
             CreateDescription(content, rowTemplate, 7, firstY, rowStep);
-            CreateButton(content, rowTemplate, ButtonRole.Reset, 8, firstY, rowStep,
-                         "RESET ALL MODS");
-            CreateButton(content, rowTemplate, ButtonRole.Back, 9, firstY, rowStep, "BACK");
+            CreateButton(content, rowTemplate, ButtonRole.Reset, ResetVisualIndex,
+                         firstY, rowStep, "RESET ALL MODS");
+            CreateButton(content, rowTemplate, ButtonRole.Back, BackVisualIndex,
+                         firstY, rowStep, "BACK");
 
             DisableForeignDrivers(root);
             _modsScreen.defaultHighlight = _buttons[0].Selectable;
@@ -550,6 +593,7 @@ namespace DualSouls.Mods.HollowKnight
             source.navigation = new Navigation { mode = Navigation.Mode.None };
             DisableForeignDrivers(wrapper);
             label = SetButtonText(wrapper, "Choose a category.");
+            label.ConfigureDescription();
             return wrapper;
         }
 
@@ -582,7 +626,7 @@ namespace DualSouls.Mods.HollowKnight
         }
 
         void CreateButton(Transform parent, GameObject template, ButtonRole role,
-                          int visualIndex, float firstY, float rowStep, string initialText)
+                          float visualIndex, float firstY, float rowStep, string initialText)
         {
             GameObject wrapper = Instantiate(template, parent, false);
             wrapper.name = "Mods" + role + visualIndex;

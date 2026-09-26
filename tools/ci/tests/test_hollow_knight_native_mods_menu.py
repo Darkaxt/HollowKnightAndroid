@@ -187,6 +187,20 @@ class HollowKnightNativeModsMenuContractTest(unittest.TestCase):
         create = method_body(source, "void CreateButton(")
         self.assertIn("SetButtonText(wrapper, initialText, fullRow: true)", create)
 
+    def test_description_uses_a_bounded_single_line_above_separate_commands(self):
+        source = self.source()
+        configure = method_body(source, "void ConfigureDescription()")
+        self.assertIn("ConfigureSingleLine(DescriptionHorizontalInset)", configure)
+        self.assertIn('TrySetProperty("enableWordWrapping", false)', configure)
+        self.assertIn('TrySetProperty("enableAutoSizing", true)', configure)
+        self.assertIn('TrySetProperty("fontSizeMin", DescriptionMinimumFontSize)', configure)
+        self.assertIn('TrySetProperty("fontSize", DescriptionFontSize)', configure)
+        create = method_body(source, "static GameObject CreateDescriptionRow(")
+        self.assertIn("label.ConfigureDescription();", create)
+        build = method_body(source, "void BuildModsScreen(")
+        self.assertIn("ResetVisualIndex", build)
+        self.assertIn("BackVisualIndex", build)
+
     def test_cloned_screens_hide_inherited_buttons_outside_custom_content(self):
         source = self.source()
         for signature in ("void BuildModsScreen(", "void BuildSkinsScreen("):

@@ -143,6 +143,20 @@ class SilksongNativeModsMenuContractTest(unittest.TestCase):
         self.assertIn("!button.transform.IsChildOf(content)", helper)
         self.assertIn("button.gameObject.SetActive(false);", helper)
 
+    def test_description_uses_a_bounded_single_line_above_separate_commands(self):
+        source = self.source()
+        configure = method_body(source, "static void ConfigureDescription(TmpText text)")
+        self.assertIn("text.enableWordWrapping = false", configure)
+        self.assertIn("text.enableAutoSizing = true", configure)
+        self.assertIn("text.fontSizeMin = DescriptionMinimumFontSize", configure)
+        self.assertIn("text.fontSize = Mathf.Min(text.fontSize, DescriptionFontSize)", configure)
+        self.assertIn("-DescriptionHorizontalInset", configure)
+        create = method_body(source, "static GameObject CreateDescriptionRow(")
+        self.assertIn("ConfigureDescription(label);", create)
+        build = method_body(source, "void BuildModsScreen(")
+        self.assertIn("ResetVisualIndex", build)
+        self.assertIn("BackVisualIndex", build)
+
     def test_mod_rows_use_native_name_and_value_columns(self):
         source = self.source()
         create = method_body(source, "void CreateButton(")
