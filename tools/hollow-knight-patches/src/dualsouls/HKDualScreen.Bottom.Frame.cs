@@ -1131,7 +1131,10 @@ public partial class HKDualScreen
             if (cfg.compTabSlide == 1 && fromReady && prevTab >= 0 && attrCam != null)
             {
                 slideOutClone = fromClone; slideT = 0f;
-                slideDir = TAB_TO_COL[Mathf.Clamp(tab.cur, 0, 2)] > TAB_TO_COL[Mathf.Clamp(prevTab, 0, 2)] ? 1 : -1;   // travel direction from the display column order slideStartCamPos = attrCam.transform.position; slideCamValid = true;
+                slideDir = TAB_TO_COL[Mathf.Clamp(tab.cur, 0, 2)] >
+                           TAB_TO_COL[Mathf.Clamp(prevTab, 0, 2)] ? 1 : -1;
+                slideStartCamPos = attrCam.transform.position;
+                slideCamValid = true;
             }
             sel.invKey = null; sel.charmN = 0; sel.item = null; sel.kind = -1;   // tab change clears the item selection
             if (invCloneCache != null) ClearInvDetail(invCloneCache);            // ...and blank the cached INV detail (cache reuse skips the settle-clear)

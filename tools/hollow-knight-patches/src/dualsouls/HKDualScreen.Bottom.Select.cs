@@ -35,6 +35,43 @@ public partial class HKDualScreen
 
     Transform selCurTL, selCurTR, selCurBL, selCurBR, selCurFor;   // cached cursor corners + the item they were wired for (event-gated setup; per-frame only repositions)
 
+    const float SelectionMoveSeconds = 0.15f;   // Hollow Knight's InventoryCursor.moveTime
+    Transform selectionMoveTarget;
+    Bounds selectionMoveFrom, selectionMoveNow;
+    float selectionMoveT = 1f;
+    bool selectionMoveShown;
+
+    Bounds AnimateSelectionBounds(Bounds target, Transform key)
+    {
+        bool changed = key != selectionMoveTarget;
+        if (!selectionMoveShown)
+        {
+            selectionMoveShown = true;
+            selectionMoveFrom = selectionMoveNow = target;
+            selectionMoveT = 1f;
+        }
+        else if (changed)
+        {
+            selectionMoveFrom = selectionMoveNow;
+            selectionMoveT = 0f;
+        }
+        selectionMoveTarget = key;
+        if (selectionMoveT < 1f)
+            selectionMoveT = Mathf.Min(1f,
+                selectionMoveT + Time.unscaledDeltaTime / SelectionMoveSeconds);
+        selectionMoveNow = new Bounds(
+            Vector3.Lerp(selectionMoveFrom.center, target.center, selectionMoveT),
+            Vector3.Lerp(selectionMoveFrom.size, target.size, selectionMoveT));
+        return selectionMoveNow;
+    }
+
+    void ResetSelectionAnimation()
+    {
+        selectionMoveTarget = null;
+        selectionMoveT = 1f;
+        selectionMoveShown = false;
+    }
+
     // [B5] Selected-item highlight box (5-pt rectangle loop, placed around the tapped item in PositionSelection) — the
     // fallback when the pane clone has no HK "Cursor" object. Parented under frameRoot so TeardownFrame frees it.
     void BuildSelBox()
@@ -76,6 +113,8 @@ public partial class HKDualScreen
             catch { }
         }
         bool selOk = showSel && selBB.size.x > 0.05f;
+        if (selOk) selBB = AnimateSelectionBounds(selBB, sel.item);
+        else ResetSelectionAnimation();
         if (paneClone != null)
         {
             if (paneCursorFor != paneClone) { paneCursor = FindDeep(paneClone.transform, "Cursor"); paneCursorFor = paneClone; selCurFor = null; }

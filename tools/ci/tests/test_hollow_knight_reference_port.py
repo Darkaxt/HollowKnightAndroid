@@ -172,6 +172,26 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
                 with self.subTest(module=filename, token=token):
                     self.assertIn(token, source)
 
+    def test_page_and_selection_cursors_travel_instead_of_teleporting(self):
+        frame = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
+        )
+        select = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Select.cs")
+        )
+        update = method_body(frame, r"void\s+UpdateCompanion\s*\([^)]*\)")
+        animate = method_body(
+            select,
+            r"Bounds\s+AnimateSelectionBounds\s*\([^)]*\)",
+        )
+
+        self.assertIn("slideStartCamPos = attrCam.transform.position", update)
+        self.assertIn("slideCamValid = true", update)
+        self.assertIn("SelectionMoveSeconds = 0.15f", select)
+        self.assertIn("Time.unscaledDeltaTime", animate)
+        self.assertIn("Vector3.Lerp", animate)
+        self.assertIn("AnimateSelectionBounds(selBB, sel.item)", select)
+
     def test_h3_mods_presenter_owns_the_h2_view_boundary(self):
         presenter = strip_csharp_comments(read(MODS_PRESENTER))
         hooks = strip_csharp_comments(read(REFERENCE_ROOT / "HkStageHooks.cs"))
