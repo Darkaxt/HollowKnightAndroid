@@ -190,7 +190,8 @@ public partial class HKDualScreen
 
     void PositionMapControls(float s, float asp, float innerTop, float innerBottom, bool onMap)
     {
-        bool showViewSwitch = onMap && mapAnyAvailable && mapClone != null && mapGm != null;
+        bool showViewSwitch = onMap && !mapMarkerMode && mapAnyAvailable &&
+                              mapClone != null && mapGm != null;
         bool showMap = onMap && mapAvailable && mapClone != null && mapGm != null &&
                        mapContentVisible && !mapNeedsSetup;
         if (!showMap) SetMapMarkerMode(false);
@@ -208,7 +209,8 @@ public partial class HKDualScreen
             Color.white, new Color(0.08f, 0.08f, 0.1f, 1f));
         SetMapAction(mapMarkerAction, haveMarkers,
             mapMarkerMode ? "DONE" : "MARKERS",
-            new Vector3(actionX, topY - 0.23f * s, cam.position.z + 3.4f), zf,
+            new Vector3(actionX, topY - (mapMarkerMode ? 0.10f : 0.23f) * s,
+                        cam.position.z + 3.4f), zf,
             Color.white, new Color(0.08f, 0.08f, 0.1f, 1f));
 
         EnsureSelectedMarkerType();
@@ -220,7 +222,7 @@ public partial class HKDualScreen
             ? MAP_MARKER_NAMES[mapMarkerType] + "  " + spare : "NO MARKERS";
         SetMapAction(mapMarkerTypeAction, haveMarkers && mapMarkerMode,
             markerLabel,
-            new Vector3(actionX, topY - 0.36f * s, cam.position.z + 3.4f), zf,
+            new Vector3(actionX, topY - 0.23f * s, cam.position.z + 3.4f), zf,
             markerColor, markerText);
 
         bool showSlider = showMap;
@@ -229,7 +231,7 @@ public partial class HKDualScreen
         if (!showSlider) { mapZoomHeld = false; return; }
 
         mapZoomX = cam.position.x + 0.90f * s * asp;
-        float sliderTopOffset = mapMarkerMode ? 0.51f : (haveMarkers ? 0.38f : 0.24f);
+        float sliderTopOffset = haveMarkers ? 0.38f : 0.24f;
         mapZoomTopY = topY - sliderTopOffset * s;
         mapZoomBottomY = bottomY + 0.12f * s;
         if (mapZoomTopY <= mapZoomBottomY + 0.15f * s)

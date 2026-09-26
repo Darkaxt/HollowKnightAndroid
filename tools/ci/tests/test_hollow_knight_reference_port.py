@@ -326,6 +326,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("mapViewAction", controls)
         self.assertIn('"FULL MAP"', build)
         self.assertIn('mapWorldMode ? "AREA MAP" : "FULL MAP"', position)
+        self.assertIn("showViewSwitch = onMap && !mapMarkerMode", position)
         self.assertIn("SetMapAction(mapViewAction, showViewSwitch", position)
         self.assertLess(
             handle_tap.index("mapViewAction.Hit.Contains(world)"),
