@@ -41,8 +41,9 @@ not substitute for that comparison.
   camera compensation; tab and item carets travel over the native 150 ms cursor
   interval instead of teleporting.
 - **HK-V2-03 — closed, implemented:** the Map page has a visible touch zoom
-  slider and a marker mode that places/removes the game’s native blue, red,
-  yellow, and white markers while respecting owned types and spare counts.
+  slider and a marker mode that switches to the full-world view before placing
+  or removing the game’s native blue, red, yellow, and white markers while
+  respecting owned types and spare counts.
 - **HK-V2-04 — not applicable:** Silk, Crests, Tools, and Tasks are
   Silksong-only mechanics and must not be invented for Hollow Knight.
 - **HK-V2-05 — closed, implemented:** the Map page switches explicitly between
@@ -52,6 +53,12 @@ not substitute for that comparison.
 - **HK-V2-06 — closed, profile-correct:** the duplicate upper health-HUD option
   remains available to Silksong only. Hollow Knight hides that inert setting and
   keeps transferred HUD ownership on the lower display.
+- **HK-V2-07 — device-visual target:** Silksong’s map picture uses a narrow soft
+  fade at its four edges; Hollow Knight currently uses its established hard clip
+  at the context-box boundary. Do not replace that proven clip blind. The next
+  batched map comparison must decide whether a fade improves Hollow Knight
+  without dimming labels, markers, or the compass; closure requires a bounded
+  fade on all four edges with no map bleed during pan or zoom.
 - **HK-MODS-01 — gated, not discarded:** remove Hollow Knight’s legacy lower
   Mods presenter immediately after the upper Options → Mods catalog passes the
   contract’s automated parity and live controller gate in both games. Closure

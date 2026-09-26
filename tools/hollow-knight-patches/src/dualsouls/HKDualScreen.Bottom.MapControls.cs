@@ -353,6 +353,7 @@ public partial class HKDualScreen
     void SetMapMarkerMode(bool active)
     {
         mapMarkerMode = active && AnyMarkerUnlocked();
+        if (mapMarkerMode && !mapWorldMode) SetWorldMapMode(true);
         if (mapMarkerMode) EnsureSelectedMarkerType();
     }
 

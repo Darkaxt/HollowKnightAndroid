@@ -280,6 +280,10 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             controls,
             r"void\s+SetWorldMapMode\s*\([^)]*\)",
         )
+        marker_mode = method_body(
+            controls,
+            r"void\s+SetMapMarkerMode\s*\([^)]*\)",
+        )
         setup = method_body(
             map_source,
             r"void\s+SetupQuickMap\s*\([^)]*\)",
@@ -332,6 +336,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             handle_tap.index("PlaceOrRemoveMarker(world)"),
         )
         self.assertIn("SetWorldMapMode(!mapWorldMode)", handle_tap)
+        self.assertIn("if (mapMarkerMode && !mapWorldMode) SetWorldMapMode(true)", marker_mode)
         self.assertIn("pd != null && pd.hasMap", has_any)
         self.assertIn("mapAnyAvailable = (tab.cur == COMP_MAP) && HasAnyMap()", map_tick)
         self.assertIn("mapWorldMode ? mapAnyAvailable : HasMapForCurrentZone()", map_tick)
