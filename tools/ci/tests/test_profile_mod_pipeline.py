@@ -264,18 +264,15 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertGreaterEqual(source.count('from(rootProject.file("../../tools/shared-patches/src"))'), 2)
         self.assertIn('into("src/shared")', source)
 
-    def test_silksong_mods_are_process_owned_and_reachable_from_ds_port(self):
+    def test_silksong_mods_are_process_owned_and_only_reachable_from_native_menu(self):
         bootstrap = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DualScreenV2.cs").read_text(encoding="utf-8")
-        port = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsPortRuntime.cs").read_text(encoding="utf-8")
-        frame = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsPortFrame.cs").read_text(encoding="utf-8")
-        presenter_path = REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsPortMods.cs"
         runtime_path = REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" / "SilksongModsRuntime.cs"
-        shell = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsShell.cs").read_text(encoding="utf-8")
+        native_menu_path = REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" / "SilksongNativeModsMenu.cs"
 
         self.assertTrue(runtime_path.is_file())
-        self.assertTrue(presenter_path.is_file())
+        self.assertTrue(native_menu_path.is_file())
         runtime = runtime_path.read_text(encoding="utf-8")
-        presenter = presenter_path.read_text(encoding="utf-8")
+        native_menu = native_menu_path.read_text(encoding="utf-8")
         bootstrap_body = bootstrap[bootstrap.index("static void Bootstrap()") : bootstrap.index("public static bool ShouldRun()")]
         self.assertIn("SilksongProcessStartup.Run(", bootstrap_body)
         self.assertLess(bootstrap_body.index("SilksongModsRuntime.EnsureStarted"), bootstrap_body.index("ShouldRun()"))
@@ -292,31 +289,17 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertIn("SilksongSkinRestorePump.Create(skins)", runtime)
         self.assertIn("if (!session.TeardownComplete)", runtime)
         self.assertIn("new PendingTweakTeardown()", runtime)
-        self.assertIn("_pending.TryRetain(session)", runtime)
         self.assertIn("_pending.Tick()", runtime)
         self.assertIn("session.Tick()", runtime)
         self.assertNotIn("Display.", runtime)
-        self.assertIn("new DsPortMods", port)
-        self.assertIn("SetModsGestureConsumer", port)
-        self.assertIn("SetModsGestureConsumer(null)", port)
-        self.assertIn("ModsAnchor", frame)
-        self.assertIn("ModsAnchor", presenter)
-        self.assertIn("CloneModsLabel", presenter)
-        self.assertIn("TweakMenuModel", presenter)
-        self.assertIn("TweakPresenterPaintInvalidation", presenter)
-        self.assertIn("TweakPresenterModelPaintStamp.Compute", presenter)
-        self.assertIn("TweakPresenterGeometryPaintStamp.WithLayoutRevision", presenter)
-        self.assertIn("_frame.LayoutRevision", presenter)
-        self.assertIn("_paint.ShouldPaint", presenter)
-        self.assertIn("_paint.Acknowledge", presenter)
-        self.assertNotIn("if (_modal != null) Paint();", presenter)
-        self.assertIn("_session.SetPresenterAttached(false)", presenter)
-        self.assertIn("_setConsumer(null)", presenter)
-        self.assertNotIn("_session.Dispose()", presenter)
-        self.assertIn("Reset()", presenter)
-        self.assertNotIn("new DsShell", bootstrap + port)
-        self.assertNotIn("DsModsScreen", bootstrap + port + presenter)
-        self.assertIn("new DsModsScreen", shell)
+        self.assertIn("gameObject.AddComponent<SilksongNativeModsMenu>();", runtime)
+        self.assertIn("SilksongNativeModsEntryButton", native_menu)
+        self.assertIn("_skinsEntryButton", native_menu)
+
+        self.assertIn("new DsShell(_screen.Root)", bootstrap)
+        self.assertNotIn("new DsPortRuntime", bootstrap)
+        self.assertNotIn("new DsPortMods", bootstrap)
+        self.assertNotIn("new DsModsScreen", bootstrap)
 
     def test_silksong_mods_presenter_encodes_oracle_list_detail_touch_and_resident_entry(self):
         presenter_path = REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsPortMods.cs"

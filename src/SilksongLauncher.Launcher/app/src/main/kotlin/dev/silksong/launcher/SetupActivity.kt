@@ -283,9 +283,10 @@ class SetupActivity : Activity() {
     /** The game's own files are on this device, however they got here. */
     private fun haveGameFiles(): Boolean =
         runtime.evidenceKind == EvidenceKind.EMULATOR_FAKE ||
-            depotDir?.let {
-                PlayerImage.depotData(it) != null && PlayerImage.foreignBuild(it) == null
-            } == true
+            depotDir?.let { DepotLocation.usable(profile, it) } == true
+
+    private fun downloadInterrupted(): Boolean =
+        DepotFetcher.isInterrupted(DepotLocation.downloadTarget(buildPaths))
 
     /**
      * A finished build, made from a different mods folder than the one on disk
@@ -541,6 +542,16 @@ class SetupActivity : Activity() {
                     "${profile.steamDepotId}. Install ${profile.displayName} for Linux in Steam, or " +
                     "download that depot with DepotDownloader, then point this at it."
                 primary.visibility = View.GONE
+                secondary.text = "Choose folder"
+                secondary.visibility = View.VISIBLE
+            }
+            !readyToPort && !haveGame && downloadInterrupted() -> {
+                status.text = message ?: "The download did not finish"
+                detail.text = "The download from Steam stopped part of the way through, so " +
+                    "some of the game's files are still missing.\n\n" +
+                    "Downloading again picks up where it stopped rather than starting over."
+                primary.text = if (signedIn()) "Download from Steam" else "Sign in to Steam"
+                primary.visibility = View.VISIBLE
                 secondary.text = "Choose folder"
                 secondary.visibility = View.VISIBLE
             }
@@ -1005,6 +1016,11 @@ class SetupActivity : Activity() {
         val staging = depotStagingDir
         if (depot == null || staging == null) {
             say("No external storage to work in.")
+            return
+        }
+        if (download == null && DepotFetcher.isInterrupted(depot)) {
+            LauncherLog.log("depot: the download into $depot did not finish, and there is no sign-in to finish it")
+            say("The download did not finish. Sign in to Steam to finish it.")
             return
         }
 

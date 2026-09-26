@@ -42,7 +42,7 @@
 //
 // Off unless asked for; the knob file is re-read every second.
 //
-//     F=/sdcard/Android/data/com.jakobkhansen.silksong/files/input_probe
+//     F=/sdcard/Android/data/io.github.darkaxt.dualsouls/files/input_probe
 //     adb shell "echo 'on=1' > $F"           # attach/detach/active-device churn
 //     adb shell "echo 'on=1 names=1' > $F"   # + Input.GetJoystickNames() changes
 //     adb shell "echo 'on=1 edges=1' > $F"   # + every button edge, with frame gap

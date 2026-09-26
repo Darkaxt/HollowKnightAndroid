@@ -18,17 +18,61 @@
 //     deliberately not in the interface yet.
 
 #if UNITY_ANDROID && !UNITY_EDITOR
+using System.Collections.Generic;
 using UnityEngine;
+
+/// <summary>
+/// A screen whose header title is not simply its name.
+///
+/// The Map is the one that has this: the designs show the AREA there --
+/// "Choral Chambers" -- rather than the word MAP, because which tab you are on
+/// is already obvious from the caret in the strip below, while where you are
+/// is the thing you opened the map to find out.
+/// </summary>
+public interface IDsHeaderTitle
+{
+    /// <summary>Null or empty falls back to the screen's Title.</summary>
+    string HeaderTitle { get; }
+}
+
+/// <summary>
+/// One button in a screen's replacement tab strip.
+/// </summary>
+public struct DsStripItem
+{
+    public Sprite Icon;
+    /// <summary>A count beside the icon, e.g. how many pins are left. Null for none.</summary>
+    public string Badge;
+    public bool Selected;
+    /// <summary>Drawn dim; still tappable, so it can explain itself.</summary>
+    public bool Dim;
+}
+
+/// <summary>
+/// A screen that takes the tab strip over for a mode of its own.
+///
+/// The map does this for marker mode: the v3 notes ask for the tabs to be
+/// replaced by the unlocked marker icons while placing pins, which also stops
+/// the player leaving the mode by accident through a tab they meant to tap a
+/// pin with.
+/// </summary>
+public interface IDsTabStrip
+{
+    /// <summary>False leaves the ordinary tabs alone.</summary>
+    bool StripOverride { get; }
+    void CollectStrip(List<DsStripItem> into);
+    void OnStripSelect(int index);
+}
 
 public interface IDsScreen
 {
     /// <summary>Stable identifier, used for persistence. Not shown.</summary>
     string Id { get; }
 
-    /// <summary>Shown in the tab strip. Localised where the game gives us a string.</summary>
+    /// <summary>Fallback label while the native tab icon is unavailable.</summary>
     string Title { get; }
 
-    /// <summary>False hides the tab entirely — e.g. a map in a zone with no map.</summary>
+    /// <summary>Eligibility for Next navigation. Native unlock filtering is deferred.</summary>
     bool Available { get; }
 
     /// <summary>Build the UI under <paramref name="host"/>. Called once.</summary>

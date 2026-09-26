@@ -33,7 +33,7 @@
 // It is OFF unless asked for, and the knob file is re-read every second, so
 // turning it on does not even need a restart:
 //
-//     F=/sdcard/Android/data/com.jakobkhansen.silksong/files/trap_probe
+//     F=/sdcard/Android/data/io.github.darkaxt.dualsouls/files/trap_probe
 //     adb shell "echo 'on=1' > $F"          # dump every 2s
 //     adb logcat -d | grep TrapProbe
 //

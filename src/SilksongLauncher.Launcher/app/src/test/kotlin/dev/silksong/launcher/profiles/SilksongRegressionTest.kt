@@ -243,6 +243,25 @@ class SilksongRegressionTest {
     }
 
     @Test
+    fun `interrupted profile download is not usable as source`() {
+        val root = File("build/test-silksong-regression/interrupted-depot").absoluteFile
+        root.deleteRecursively()
+        val profile = GameProfiles.require("silksong")
+        File(root, "${profile.dataDirectoryName}/globalgamemanagers").writeFixture("fixture")
+        File(root, "Hollow Knight Silksong.x86_64").writeFixture("fixture")
+
+        assertTrue(DepotLocation.usable(profile, root))
+
+        File(root, ".download-started").writeText(profile.steamDepotId.toString())
+        assertFalse(DepotLocation.usable(profile, root))
+
+        File(root, ".download-complete").writeText(profile.steamDepotId.toString())
+        assertTrue(DepotLocation.usable(profile, root))
+
+        root.deleteRecursively()
+    }
+
+    @Test
     fun `selected source pointer belongs to the Silksong profile`() {
         val root = File("build/test-silksong-regression/source-pointer").absoluteFile
         root.deleteRecursively()

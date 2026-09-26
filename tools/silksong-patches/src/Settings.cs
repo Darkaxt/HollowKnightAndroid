@@ -14,7 +14,7 @@
 //
 // The path is Application.persistentDataPath, which on this platform is the
 // app's external files directory -- confirmed on device, where a patch logged
-// "/storage/emulated/0/Android/data/com.jakobkhansen.silksong/files". The launcher's
+// "/storage/emulated/0/Android/data/io.github.darkaxt.dualsouls/files". The launcher's
 // getExternalFilesDir(null) is the same directory, so neither side has to know
 // the package name or guess at a layout.
 //

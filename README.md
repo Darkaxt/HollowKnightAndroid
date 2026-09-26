@@ -30,14 +30,33 @@ project artwork.
 - On-device conversion and ARM64 compilation from user-supplied Linux files.
 - Independent game profiles, saves, generations, mod settings, and launch
   state.
-- Dual-screen companion support on compatible Android handhelds. The complete
-  HUD, pages, Mods, and skins parity target is defined in
+- Dual-screen companion support on compatible Android handhelds. Silksong’s
+  lower screen provides the live health/Silk HUD, inventory, Crest and Tools,
+  Tasks, Journal, an interactive map with markers and zoom, and touch actions
+  for supported items and loadout changes. The complete cross-game HUD, pages,
+  Mods, and skins parity target is defined in
   [`docs/DUALSCREEN-V3.md`](docs/DUALSCREEN-V3.md) and remains under active
   development.
+- Optional Steam sign-in can download the selected Linux depot, resume an
+  interrupted download, and synchronize Steam Cloud saves.
+- Per-profile quality-of-life settings include resolution, aspect ratio, intro
+  skipping, cloud behavior, and an optional duplicate top-screen health HUD.
 - Build-time BepInEx 5 and Harmony compatibility for a supported subset of
   managed mods.
 - Atomic generation publishing so an interrupted build cannot replace the last
   working game generation.
+
+## Setup
+
+1. Install a signed APK built from this repository.
+2. Select Hollow Knight or Silksong in the launcher.
+3. Supply that game’s complete Linux files by choosing their folder, or sign in
+   to Steam and let the launcher download the supported Linux depot.
+4. Start porting. The first on-device build takes roughly 20–30 minutes on a
+   Snapdragon 8 Gen 2; later rebuilds reuse cached tools and intermediate work.
+5. Keep the selected source files available. They remain the authority for
+   repairs and updates, and Silksong reads its Addressables content there while
+   running.
 
 ## Supported inputs
 
@@ -72,7 +91,10 @@ configuration and enablement changes take effect after relaunching the game.
 
 Open **Mods** for the selected game in the launcher, choose **Install a mod from
 a folder**, and select the mod's complete folder. Supporting libraries and
-packaged data are copied with the plugin.
+packaged data are copied with the plugin. The Mods screen reports which plugins
+were built, how many patches were applied, and which patches could not be
+compiled. Rebuilds are incremental, so adding one mod does not repeat every
+unchanged conversion step.
 
 Shared imported mods are stored under:
 
@@ -113,6 +135,18 @@ The following mods have been tested with the supported Silksong profile:
 - [Healthbar & Damage Show](https://www.nexusmods.com/hollowknightsilksong/mods/28)
 
 Other mods are not guaranteed to work.
+
+## Steam Cloud saves
+
+Steam sign-in can also pull and push the selected profile’s Steam Cloud saves.
+Users may synchronize manually before or after playing, or enable the automatic
+cloud options in Settings. Save conflicts are reported rather than silently
+choosing a side; keeping an independent backup is still recommended.
+
+QR-code and password sign-in use
+[JavaSteam](https://github.com/Longi94/JavaSteam), an open-source Steam client.
+The launcher does not store the Steam password. It retains only Steam’s issued
+login token, encrypted in Android storage, and does not send it elsewhere.
 
 ## Building from source
 

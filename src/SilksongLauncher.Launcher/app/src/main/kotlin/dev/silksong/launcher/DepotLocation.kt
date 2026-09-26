@@ -165,10 +165,12 @@ object DepotLocation {
         candidates(context, paths).any { usable(paths.profile, it) }
 
     /** A folder holding a copy of the game this port can actually be built from. */
-    private fun usable(dir: File): Boolean =
-        PlayerImage.depotData(dir) != null && PlayerImage.foreignBuild(dir) == null
+    fun usable(dir: File): Boolean =
+        !DepotFetcher.isInterrupted(dir) &&
+            PlayerImage.depotData(dir) != null && PlayerImage.foreignBuild(dir) == null
 
-    private fun usable(profile: GameProfile, dir: File): Boolean {
+    fun usable(profile: GameProfile, dir: File): Boolean {
+        if (DepotFetcher.isInterrupted(dir)) return false
         val data = PlayerImage.depotData(dir) ?: return false
         return data.name == profile.dataDirectoryName &&
             profile.executableNames.any { File(data.parentFile, it).isFile } &&

@@ -1,5 +1,6 @@
 using AssetsTools.NET;
 using AssetsTools.NET.Extra;
+using Microsoft.Win32.SafeHandles;
 using System.Text;
 
 namespace BundleSurgery;
@@ -45,6 +46,28 @@ internal static class Program
         AppContext.BaseDirectory, "classdata.tpk");
 
     internal static int Main(string[] args)
+    {
+        if (OperatingSystem.IsAndroid()) WriteConsoleToStderr();
+        try
+        {
+            return Run(args);
+        }
+        catch (Exception e)
+        {
+            Console.Error.WriteLine($"  ✗ {e}");
+            return 1;
+        }
+    }
+
+    static void WriteConsoleToStderr()
+    {
+        var stderr = new FileStream(new SafeFileHandle(2, ownsHandle: false), FileAccess.Write, bufferSize: 0);
+        var writer = TextWriter.Synchronized(new StreamWriter(stderr, new UTF8Encoding(false)) { AutoFlush = true });
+        Console.SetOut(writer);
+        Console.SetError(writer);
+    }
+
+    static int Run(string[] args)
     {
         if (args.Length < 1)
         {

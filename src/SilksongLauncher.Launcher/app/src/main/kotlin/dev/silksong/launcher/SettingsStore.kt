@@ -78,6 +78,15 @@ class SettingsStore(
         set(value) { prefs.edit().putBoolean(KEY_DUAL_SCREEN, value).apply() }
 
     /**
+     * Also keep the original health / crest / silk / equipped-tool HUD on the main screen
+     * while dual-screen rendering is active. Defaults OFF and is exported
+     * for the next game launch. Has no effect without a working second screen.
+     */
+    var showTopHud: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_TOP_HUD, false)
+        set(value) { prefs.edit().putBoolean(KEY_SHOW_TOP_HUD, value).apply() }
+
+    /**
      * Unlock the aspect ratio.
      *
      * Silksong clamps the shape it renders into to between 1.6 : 1 and
@@ -124,6 +133,7 @@ class SettingsStore(
             append(KEY_PERF_OVERLAY).append('=').append(perfOverlay).append('\n')
             append(KEY_SKIP_INTRO).append('=').append(skipIntro).append('\n')
             append(KEY_DUAL_SCREEN).append('=').append(dualScreen).append('\n')
+            append(KEY_SHOW_TOP_HUD).append('=').append(showTopHud).append('\n')
             append(KEY_WIDE_ASPECT).append('=').append(wideAspect).append('\n')
         }
         try {
@@ -148,6 +158,7 @@ class SettingsStore(
         const val KEY_PERF_OVERLAY = "perf_overlay"
         const val KEY_SKIP_INTRO = "skip_intro"
         const val KEY_DUAL_SCREEN = "dualscreen_enabled"
+        const val KEY_SHOW_TOP_HUD = "dualscreen_show_top_hud"
         const val KEY_WIDE_ASPECT = "wide_aspect"
     }
 }

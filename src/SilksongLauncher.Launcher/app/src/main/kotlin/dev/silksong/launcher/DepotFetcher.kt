@@ -117,6 +117,11 @@ object DepotFetcher {
 
     private fun completeMarker(installDir: File) = File(installDir, ".download-complete")
 
+    fun isInterrupted(installDir: File): Boolean =
+        startedMarker(installDir).isFile && !completeMarker(installDir).isFile
+
+    private fun startedMarker(installDir: File) = File(installDir, ".download-started")
+
     /**
      * Deletes files the last attempt allocated but never filled.
      *
@@ -175,6 +180,9 @@ object DepotFetcher {
         // cancelled has left holes the resume cannot see. See dropUnwritten.
         val dropped = dropUnwritten(installDir)
         if (dropped > 0) LauncherLog.log("dropped $dropped unwritten file(s) from a previous attempt")
+
+        completeMarker(installDir).delete()
+        startedMarker(installDir).writeText(profile.steamDepotId.toString())
 
         // JavaSteam logs through its own LogManager, which has no listener by
         // default, so everything it has to say about a stalled download is
@@ -268,6 +276,7 @@ object DepotFetcher {
                 // Only now, and only here: everything above has to have run
                 // without throwing for the depot to be worth trusting later.
                 completeMarker(installDir).writeText(profile.steamDepotId.toString())
+                startedMarker(installDir).delete()
                 LauncherLog.log("Depot download complete")
                 send(Event.Done)
             }

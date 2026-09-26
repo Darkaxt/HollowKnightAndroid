@@ -9,7 +9,7 @@
 // The file is optional and absent by default:
 //
 //     adb shell 'echo "canvasmode=overlay testcard=1" > \
-//         /sdcard/Android/data/com.jakobkhansen.silksong/files/dualscreen_v2'
+//         /sdcard/Android/data/io.github.darkaxt.dualsouls/files/dualscreen_v2'
 //
 // Nothing here is a shipping setting. Real settings come from the launcher
 // through SilksongPatches.Settings; this is for turning a knob on a device that

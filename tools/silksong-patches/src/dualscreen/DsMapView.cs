@@ -69,8 +69,8 @@ public class DsMapView
 
     Vector2 _pan;
     float _zoom = 1f;
-    const float MinZoom = 0.25f;
-    const float MaxZoom = 6f;
+    public const float MinZoom = 0.25f;
+    public const float MaxZoom = 6f;
     float _mapUnitsPerPixel = 0.01f;
     float _nextAssert;
     float _nextCompass;
@@ -414,6 +414,15 @@ public class DsMapView
             _nextAssert = 0f;
             _pan = Vector2.zero;
             _zoom = 1f;
+            // The full map's latched framing belongs to the map it was measured
+            // from, so it goes with it. Without this, loading another save
+            // while in full-map mode reopened it at the PREVIOUS save's frame:
+            // Aim kept the old _worldHalf and centre, and since pan and zoom
+            // had just been zeroed the view also looked untouched, so RESET --
+            // which is now offered only when the player has moved something --
+            // was not there to recover with either.
+            _worldLatched = false;
+            _worldAreas = 0;
             _forceAssert = true;
             _zoneBoundsOk = false;
             _lastDropped = 0;
@@ -882,7 +891,51 @@ public class DsMapView
         return count;
     }
 
+    /// <summary>
+    /// A point on the panel's map rect, as a 0..1 viewport fraction, turned
+    /// into a position in the GAME MAP's local space -- which is the space
+    /// PlayerData.placedMarkers stores pins in.
+    ///
+    /// Through the render camera rather than by arithmetic on the pan and zoom:
+    /// the camera already is the pan and zoom, so asking it cannot drift out of
+    /// step with what is on screen.
+    /// </summary>
+    public bool TryToMapLocal(Vector2 uv, out Vector2 local)
+    {
+        local = Vector2.zero;
+        if (_map == null || _rooms == null) return false;
+        try
+        {
+            Vector3 world = _rooms.ViewportToWorldPoint(new Vector3(uv.x, uv.y, 0f));
+            local = _map.transform.InverseTransformPoint(world);
+            return true;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>The reverse, for finding which pin a tap landed on.</summary>
+    public bool TryToViewport(Vector2 local, out Vector2 uv)
+    {
+        uv = Vector2.zero;
+        if (_map == null || _rooms == null) return false;
+        try
+        {
+            Vector3 world = _map.transform.TransformPoint(local);
+            Vector3 v = _rooms.WorldToViewportPoint(world);
+            uv = new Vector2(v.x, v.y);
+            return true;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Redraw the game's own pin objects after the list changes.</summary>
+    public void RefreshMarkers()
+    {
+        try { if (_map != null) _map.SetupMapMarkers(); } catch { }
+    }
+
     int _worldAreas;
+
 
     // ── framing ─────────────────────────────────────────────────────────────
 
@@ -1634,9 +1687,34 @@ public class DsMapView
         _zoom = Mathf.Clamp(_zoom * factor, MinZoom, MaxZoom);
     }
 
+    /// <summary>The zoom the player has chosen on top of the framing. 1 is none.</summary>
+    public float ZoomLevel { get { return _zoom; } }
+
+    /// <summary>Set the zoom outright, for the slider. Clamped as a pinch is.</summary>
+    public void SetZoom(float zoom)
+    {
+        if (!(zoom > 0f)) return;
+        _zoom = Mathf.Clamp(zoom, MinZoom, MaxZoom);
+    }
+
     public void ResetPan() { _pan = Vector2.zero; }
 
     public void ResetZoom() { _zoom = 1f; }
+
+    /// <summary>
+    /// Whether the player has dragged or pinched away from the framing this
+    /// mode opens at.
+    ///
+    /// Exactly the condition under which RESET would do something, which is the
+    /// condition under which it is offered at all: on the area map, which is
+    /// where most of the time is spent, the panel stays clean. Both fields move
+    /// only in Pan, Zoom and the resets below, so this cannot answer yes to a
+    /// framing the player did not choose.
+    /// </summary>
+    public bool ViewMoved
+    {
+        get { return _pan != Vector2.zero || !Mathf.Approximately(_zoom, 1f); }
+    }
 
     /// <summary>
     /// Back to the framing this mode opens at.

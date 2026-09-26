@@ -168,7 +168,7 @@ public static class DsWidgets
     /// <summary>A rule across a boundary. <paramref name="y"/> is its centre line.</summary>
     public static RectTransform HRule(Transform parent, string name, float x, float y, float length)
     {
-        var rt = Box(parent, name, DsTheme.Rule).rectTransform;
+        var rt = RuleImage(parent, name, DsRuleArt.Horizontal).rectTransform;
         Place(rt, x, y - DsTheme.RuleThickness * 0.5f, length, DsTheme.RuleThickness);
         return rt;
     }
@@ -176,9 +176,61 @@ public static class DsWidgets
     /// <summary>A rule down a gutter. <paramref name="x"/> is its centre line.</summary>
     public static RectTransform VRule(Transform parent, string name, float x, float y, float length)
     {
-        var rt = Box(parent, name, DsTheme.Rule).rectTransform;
+        var rt = RuleImage(parent, name, DsRuleArt.Vertical).rectTransform;
         Place(rt, x - DsTheme.RuleThickness * 0.5f, y, DsTheme.RuleThickness, length);
         return rt;
+    }
+
+    /// <summary>
+    /// The cap that marks a group inside a grid. <paramref name="y"/> is the
+    /// line it leaves from, not the top of the art.
+    ///
+    /// Drawn at its own size and never stretched: the cap is a vertical tick
+    /// with a stroke trailing off it, and stretching would smear the tick into
+    /// a bar. It is only ever shrunk, and then in proportion, for a column too
+    /// narrow to seat it.
+    /// </summary>
+    public static RectTransform SectionRule(Transform parent, string name, float x, float y,
+                                            float maxLength, Color color)
+    {
+        var art = DsRuleArt.Section;
+        if (art == null)
+        {
+            // What this screen drew before the art existed.
+            var plain = Box(parent, name, color).rectTransform;
+            Place(plain, x, y - DsTheme.RuleThickness * 0.5f, maxLength, DsTheme.RuleThickness);
+            return plain;
+        }
+
+        float w = Mathf.Min(DsRuleArt.SectionW, maxLength);
+        float h = DsRuleArt.SectionH * (w / DsRuleArt.SectionW);
+        var rt = RuleImage(parent, name, art, color).rectTransform;
+        Place(rt, x, y - h * (DsRuleArt.SectionLine / DsRuleArt.SectionH), w, h);
+        return rt;
+    }
+
+    /// <summary>
+    /// A rule's Image, drawn as a plain stretched quad.
+    ///
+    /// useSpriteMesh is deliberately OFF, where DsWidgets.Icon has it on. A tight
+    /// sprite mesh samples only the drawn geometry, which is right for an atlas
+    /// icon and wrong here: these lines are mostly transparent by design, and a
+    /// trimmed mesh would crop away the very taper that is the decoration.
+    /// </summary>
+    static Image RuleImage(Transform parent, string name, Sprite art, Color? tint = null)
+    {
+        var rt = Rect(parent, name);
+        var img = rt.gameObject.AddComponent<Image>();
+        img.type = Image.Type.Simple;
+        img.useSpriteMesh = false;
+        img.preserveAspect = false;
+        img.sprite = art ?? DsTheme.White;
+        // The art is pure white with the shape carried entirely in its alpha, so
+        // the panel's own bone tint still applies and the rules stay the colour
+        // the rest of the UI is.
+        img.color = tint ?? DsTheme.Rule;
+        img.raycastTarget = false;
+        return img;
     }
 
     /// <summary>
@@ -204,7 +256,17 @@ public static class DsWidgets
         var rt = Rect(parent, name);
         var t = rt.gameObject.AddComponent<TmpText>();
         var font = display ? DsTheme.Display : DsTheme.Body;
-        if (font != null) t.font = font;
+        if (font != null)
+        {
+            t.font = font;
+            // And the material with it. A TMP component built at runtime keeps
+            // whatever material it was constructed with, and a material carries
+            // the ATLAS TEXTURE: leave it behind and the glyph rects of one font
+            // are used to sample another font's atlas, which does not fail
+            // loudly -- most letters land on something plausible and a few come
+            // out as fragments of the wrong glyph.
+            try { if (font.material != null) t.fontSharedMaterial = font.material; } catch { }
+        }
         t.text = text;
         t.fontSize = size;
         t.color = color;
@@ -291,12 +353,188 @@ public static class DsWidgets
         rt.anchoredPosition = new Vector2(-frac.x * w, -frac.y * h);
     }
 
+    /// <summary>
+    /// Set an icon's sprite and size it so the sprite's VISIBLE INK fills
+    /// maxW x maxH, rather than its rectangle.
+    ///
+    /// The difference is the whole point. The game's slot symbols are 181x181
+    /// sprites with a small glyph adrift in a sea of transparency; fitted by
+    /// their RECT -- which is what FitCentred does -- a symbol asked to fill
+    /// four-fifths of a socket drew at about a quarter of it, and no amount of
+    /// raising the fraction fixed it because the padding scaled with the glyph.
+    ///
+    /// Sprite.bounds is the trimmed mesh, so the ratio of it to the full rect
+    /// says how much of the sprite is ink. Sizing by that makes the request
+    /// mean what it says: "this much of the socket, filled".
+    /// </summary>
+    public static void FitInk(Image img, Sprite sprite, float maxW, float maxH)
+    {
+        if (img == null || sprite == null) return;
+
+        float ppu = sprite.pixelsPerUnit;
+        if (ppu <= 0f) ppu = 100f;
+
+        var full = sprite.rect;
+        float inkW = sprite.bounds.size.x * ppu;
+        float inkH = sprite.bounds.size.y * ppu;
+
+        // A sprite with no trim, or one we cannot measure, is its own rect.
+        if (inkW <= 0.01f || inkH <= 0.01f || full.width <= 0f || full.height <= 0f)
+        {
+            FitCentred(img, sprite, maxW, maxH);
+            return;
+        }
+
+        img.sprite = sprite;
+        img.color = Color.white;
+
+        float scale = Mathf.Min(maxW / inkW, maxH / inkH);
+        float w = full.width * scale;
+        float h = full.height * scale;
+
+        var rt = img.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(w, h);
+
+        // The ink's centre, as a fraction of the full rect -- the same
+        // correction FitCentred makes, for the same reason: a trimmed mesh is
+        // not centred in the rect it was trimmed from.
+        Vector2 unitsFull = new Vector2(full.width / ppu, full.height / ppu);
+        Vector3 c = sprite.bounds.center;
+        Vector2 frac = new Vector2(
+            unitsFull.x > 0f ? c.x / unitsFull.x : 0f,
+            unitsFull.y > 0f ? c.y / unitsFull.y : 0f);
+
+        rt.anchoredPosition = new Vector2(-frac.x * w, -frac.y * h);
+    }
+
+    /// <summary>
+    /// The box an <see cref="Icon"/> actually PAINTS inside the box it was
+    /// <see cref="Place"/>d in.
+    ///
+    /// For putting a cursor on one. An icon's rect is not its ink: the art is
+    /// fitted to the sprite's own aspect inside a square rect, and a sprite
+    /// trimmed in an atlas carries an offset besides -- so brackets hung on the
+    /// rect's corners frame a box the eye cannot see, and land off-centre by
+    /// however far the trim is uneven.
+    ///
+    /// This is Image.GenerateSprite's own arithmetic, spelled out rather than
+    /// approximated, because there are three separate things moving the ink and
+    /// missing any one of them leaves the cursor crooked in a way that looks
+    /// like a rounding error:
+    ///
+    ///   * preserveAspect fits the sprite's FULL rect into the rect, which is
+    ///     what sets the drawn size;
+    ///   * the mesh is then mapped through `vertex / bounds.size * drawnSize`,
+    ///     so how much of the drawn size the ink covers is the ratio of the two;
+    ///   * and it is finally shifted by `(rectPivot - spritePivot) * drawnSize`,
+    ///     which for our top-left-pivoted widgets is most of their own size.
+    ///
+    /// The mesh's own corners are read from Sprite.vertices rather than from
+    /// Sprite.bounds, so the answer does not depend on which of the two that
+    /// property turns out to describe.
+    ///
+    /// Only for icons drawn the way <see cref="Icon"/> draws them -- with
+    /// useSpriteMesh. A plain quad is placed by the sprite's PADDING instead,
+    /// which is different arithmetic.
+    /// </summary>
+    public static UnityEngine.Rect InkRect(Image img, UnityEngine.Rect box)
+    {
+        if (img == null || img.sprite == null || !img.useSpriteMesh) return box;
+        var sprite = img.sprite;
+
+        Vector2 full = sprite.rect.size;
+        if (full.x <= 0f || full.y <= 0f) return box;
+
+        float dw = box.width, dh = box.height;
+        if (img.preserveAspect)
+        {
+            float aspect = full.x / full.y;
+            if (dw / Mathf.Max(dh, 0.0001f) > aspect) dw = dh * aspect;
+            else dh = dw / Mathf.Max(aspect, 0.0001f);
+        }
+
+        Vector3 bounds = sprite.bounds.size;
+        if (bounds.x <= 0.0001f || bounds.y <= 0.0001f) return box;
+
+        Vector2 mid, ink;
+        if (!MeshBox(sprite, out mid, out ink)) return box;
+
+        Vector2 rectPivot = img.rectTransform.pivot;
+        Vector2 spritePivot = new Vector2(sprite.pivot.x / full.x, sprite.pivot.y / full.y);
+
+        // Where the mesh's centre lands, relative to the rect's own pivot.
+        float cx = (mid.x / bounds.x - (rectPivot.x - spritePivot.x)) * dw;
+        float cy = (mid.y / bounds.y - (rectPivot.y - spritePivot.y)) * dh;
+        float iw = (ink.x / bounds.x) * dw;
+        float ih = (ink.y / bounds.y) * dh;
+
+        // That space is y-UP from the pivot; a placed box is y-down from its
+        // top-left corner, which is (pivot.x, 1 - pivot.y) of the way into it.
+        float px = box.x + rectPivot.x * box.width + cx;
+        float py = box.y + (1f - rectPivot.y) * box.height - cy;
+        return new UnityEngine.Rect(px - iw * 0.5f, py - ih * 0.5f, iw, ih);
+    }
+
+    public static Vector2 MeshSize(Sprite sprite)
+    {
+        Vector2 mid, size;
+        return sprite != null && MeshBox(sprite, out mid, out size) ? size : Vector2.zero;
+    }
+
+    /// <summary>
+    /// A sprite mesh's corners, in the units and about the pivot that
+    /// Image.GenerateSprite maps from. Both are zero for a sprite with no mesh
+    /// worth measuring.
+    /// </summary>
+    static bool MeshBox(Sprite sprite, out Vector2 mid, out Vector2 size)
+    {
+        mid = Vector2.zero;
+        size = Vector2.zero;
+
+        Vector2[] v;
+        try { v = sprite.vertices; } catch { return false; }
+        if (v == null || v.Length == 0) return false;
+
+        float x0 = v[0].x, x1 = v[0].x, y0 = v[0].y, y1 = v[0].y;
+        for (int i = 1; i < v.Length; i++)
+        {
+            if (v[i].x < x0) x0 = v[i].x; else if (v[i].x > x1) x1 = v[i].x;
+            if (v[i].y < y0) y0 = v[i].y; else if (v[i].y > y1) y1 = v[i].y;
+        }
+
+        mid = new Vector2((x0 + x1) * 0.5f, (y0 + y1) * 0.5f);
+        size = new Vector2(x1 - x0, y1 - y0);
+        return size.x > 0.0001f && size.y > 0.0001f;
+    }
+
     public static void Stretch(RectTransform rt, float pad = 0f)
     {
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
         rt.offsetMin = new Vector2(pad, pad);
         rt.offsetMax = new Vector2(-pad, -pad);
+    }
+
+    public static Image CursorCorner(RectTransform parent, string name, Sprite sprite,
+                                     Vector2 anchor, bool rotate, float size, float inset)
+    {
+        var img = Icon(parent, name, sprite, Color.white);
+        var rt = img.rectTransform;
+        rt.anchorMin = rt.anchorMax = anchor;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(size, size);
+        rt.anchoredPosition = new Vector2(anchor.x < 0.5f ? inset : -inset,
+                                          anchor.y < 0.5f ? inset : -inset);
+        if (rotate) rt.localRotation = Quaternion.Euler(0f, 0f, 180f);
+        img.gameObject.SetActive(false);
+        return img;
+    }
+
+    public static void Place(RectTransform rt, UnityEngine.Rect bounds)
+    {
+        Place(rt, bounds.x, bounds.y, bounds.width, bounds.height);
     }
 
     /// <summary>Place a rect by top-left corner, in panel pixels with y down.</summary>
@@ -306,6 +544,16 @@ public static class DsWidgets
         rt.pivot = new Vector2(0f, 1f);
         rt.anchoredPosition = new Vector2(x, -y);
         rt.sizeDelta = new Vector2(w, h);
+    }
+
+    public static UnityEngine.Rect PlacedRect(RectTransform space, RectTransform rt)
+    {
+        var corners = new Vector3[4];
+        rt.GetWorldCorners(corners);
+        Vector3 min = space.InverseTransformPoint(corners[0]);
+        Vector3 max = space.InverseTransformPoint(corners[2]);
+        var area = space.rect;
+        return new UnityEngine.Rect(min.x - area.xMin, area.yMax - max.y, max.x - min.x, max.y - min.y);
     }
 
     public static void SetActive(Component c, bool on)

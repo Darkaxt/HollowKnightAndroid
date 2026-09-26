@@ -11,6 +11,14 @@
 # the real one against the depot it already has.
 #
 # Usage:  pwsh tools/silksong-patches/check.ps1
+#
+# Run it BARE. Do not pipe its output -- not `| Select-Object -Last 5`, not
+# `| Select-String error`. It hangs, with no output, looking exactly like a
+# slow compile, and leaves a dotnet behind that the next run then waits on.
+# The reason is the one described further down against the build call itself:
+# MSBuild writes to the console handle while a PowerShell pipeline is
+# buffering, and the two deadlock. It already prints only four lines, so there
+# is nothing worth filtering.
 [CmdletBinding()]
 param(
     # Where the game's own assemblies live. Any depot copy will do.
@@ -31,11 +39,13 @@ $sharedSrc = Join-Path $repo 'tools\shared-patches\src'
 # polling one from Update() turns an expected intro/loading state into a stream
 # of false errors.  Keep the title-card lookup on Unity's quiet object scan.
 $titleCardSource = Get-Content (Join-Path $src 'dualscreen\DsTitleCard.cs') -Raw
-if ($titleCardSource -match 'var\s+ui\s*=\s*UIManager\.instance') {
-    throw '[check] DsTitleCard must not poll UIManager.instance before the menu scene exists'
-}
-if ($titleCardSource -notmatch 'FindObjectsOfTypeAll<UIManager>') {
-    throw '[check] DsTitleCard must locate UIManager through the quiet Unity object scan'
+if ($titleCardSource -match 'UIManager') {
+    if ($titleCardSource -match 'var\s+ui\s*=\s*UIManager\.instance') {
+        throw '[check] DsTitleCard must not poll UIManager.instance before the menu scene exists'
+    }
+    if ($titleCardSource -notmatch 'FindObjectsOfTypeAll<UIManager>') {
+        throw '[check] DsTitleCard must locate UIManager through the quiet Unity object scan'
+    }
 }
 
 if (-not $Depot) {
@@ -181,13 +191,29 @@ $out = @()
 foreach ($f in @($log, "$log.err")) {
     if (Test-Path $f) { $out += Get-Content $f -ErrorAction SilentlyContinue }
 }
-$errors = $out | Select-String -Pattern 'error '
-if ($errors) {
-    $errors | Select-Object -First 30 | ForEach-Object { Write-Host $_ -ForegroundColor Red }
-    throw "[check] FAILED ($($errors.Count) error(s))"
-}
+
+# The compiler's own exit code decides, not a text search.
+#
+# This used to grep the log for 'error ', which PowerShell matches
+# case-INSENSITIVELY and as a bare substring. On any machine with an
+# authenticated NuGet feed configured, the restore prints lines like
+# "warning : Error Message: IncorrectConfiguration" from the credential
+# provider -- and a hundred of those turned a build that had reported
+# "Build succeeded. 0 Error(s)" into "[check] FAILED (114 error(s))".
+#
+# The diagnostics are still printed, matched on MSBuild's actual format
+# (`...: error CS1234: ...`), which needs an error CODE after the keyword and
+# so cannot be satisfied by prose containing the word.
+$diagnostics = $out | Select-String -Pattern ':\s+error\s+[A-Za-z]+[0-9]+' -CaseSensitive
 if ($exitCode -ne 0) {
-    throw "[check] dotnet build exited with $exitCode"
+    if ($diagnostics) {
+        $diagnostics | Select-Object -First 30 | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+    } else {
+        # Failed without a recognisable diagnostic: show the tail, or the
+        # failure is invisible.
+        $out | Select-Object -Last 30 | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+    }
+    throw "[check] FAILED (dotnet build exit $exitCode, $($diagnostics.Count) diagnostic(s))"
 }
 Write-Host "[check] OK - $($sources.Count) sources compile against the depot" -ForegroundColor Green
 if ($Output) {

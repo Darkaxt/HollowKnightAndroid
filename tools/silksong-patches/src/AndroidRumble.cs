@@ -31,7 +31,7 @@
 //
 // Knobs, live, for tuning without a rebuild (see TrapProbe for the same idiom):
 //
-//     F=/sdcard/Android/data/com.jakobkhansen.silksong/files/rumble
+//     F=/sdcard/Android/data/io.github.darkaxt.dualsouls/files/rumble
 //     adb shell "echo 'log=1' > $F"        # log what is being played
 //     adb shell "echo 'off=1' > $F"        # disable entirely
 //     adb shell "echo 'scale=1.5' > $F"    # amplitude multiplier

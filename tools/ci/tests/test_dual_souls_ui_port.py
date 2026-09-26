@@ -798,40 +798,53 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
             with self.subTest(source=source.name):
                 self.assertTrue(source.is_file(), f"missing Stage 1 source: {source.name}")
 
-    def test_production_entry_uses_the_empty_port_runtime_not_the_authored_shell(self):
+    def test_production_entry_uses_the_v2_shell_through_the_shared_display_host(self):
         source = read(DUAL_SCREEN)
-        self.assertRegex(source, r"\bDsPortRuntime\s+_port\s*;")
-        self.assertRegex(
-            source,
-            r"_port\s*=\s*new\s+DsPortRuntime\s*\(\s*screen\s*\)\s*;",
-        )
+        self.assertRegex(source, r"\bDsShell\s+_shell\s*;")
+        self.assertRegex(source, r"\bShellContent\s+_shellContent\s*;")
         presentation_assignment = source.index("_screen = new DsPresentation(_releasePump.transform);")
         host_construction = source.index("_host = new DirectDisplayHost(")
         presence_publication = source.index("_host.SetDisplayPresent(")
         bringup_yield = source.index("yield return screen.Bringup();")
         ready_guard = source.index("if (!present || !screen.Ready)")
-        runtime_construction = source.index("_port = new DsPortRuntime(screen);")
+        shell_build_call = source.index("BuildShell(null);")
+        content_construction = source.index("_shellContent = new ShellContent(_shell);")
+        content_attachment = source.index("host.AttachContent(_shellContent);")
+        readiness_publication = source.index(
+            "host.SetPresentationReady(true, screen.Width, screen.Height);"
+        )
         self.assertLess(presentation_assignment, host_construction)
         self.assertLess(host_construction, presence_publication)
         self.assertLess(presence_publication, bringup_yield)
         self.assertLess(bringup_yield, ready_guard)
-        self.assertLess(ready_guard, runtime_construction)
+        self.assertLess(ready_guard, shell_build_call)
+        self.assertLess(shell_build_call, content_construction)
+        self.assertLess(content_construction, content_attachment)
+        self.assertLess(content_attachment, readiness_publication)
+        build_shell = csharp_method_body(source, r"void\s+BuildShell\s*\([^)]*\)")
+        self.assertLess(
+            build_shell.index("_shell = new DsShell(_screen.Root);"),
+            build_shell.index("RegisterScreens(_shell);"),
+        )
+        self.assertLess(
+            build_shell.index("RegisterScreens(_shell);"),
+            build_shell.index("_shell.Finish("),
+        )
+        self.assertIn("RegisterScreens(_shell);", source)
         for rejected in (
-            r"\bDsShell\s+_shell\b",
-            r"new\s+DsShell\s*\(",
-            r"\bRegisterScreens\s*\(",
+            r"\bDsPortRuntime\s+_port\b",
+            r"new\s+DsPortRuntime\s*\(",
+            r"sealed\s+class\s+PortContent\b",
         ):
             with self.subTest(rejected=rejected):
                 self.assertNotRegex(source, rejected)
 
-    def test_no_production_dualscreen_source_constructs_the_dormant_shell(self):
-        violations = []
+    def test_only_production_entry_constructs_the_v2_shell(self):
+        constructors = []
         for path in sorted(DUALSCREEN_SOURCES.glob("*.cs")):
-            if path.name == "DsShell.cs":
-                continue  # retained dormant type; its declaration is not reachability
             if re.search(r"new\s+DsShell\s*\(", read(path)):
-                violations.append(path.name)
-        self.assertEqual([], violations, "production sources must not construct DsShell")
+                constructors.append(path.name)
+        self.assertEqual(["DualScreenV2.cs"], constructors)
 
     def test_presentation_owns_only_the_proven_content_and_overlay_layers(self):
         source = read(PRESENTATION)
@@ -1840,7 +1853,10 @@ static class Program
         bind = csharp_method_body(source, r"void\s+BindGameManager\s*\(\s*\)")
         unbind = csharp_method_body(source, r"void\s+UnbindGameManager\s*\(\s*\)")
         self.assertIn("ReferenceEquals(current, _gameManager)", bind)
-        self.assertLess(bind.index("_port.RestoreHud();"), bind.index("UnbindGameManager();"))
+        self.assertLess(
+            bind.index("_shellContent.BeforeSceneTransition();"),
+            bind.index("UnbindGameManager();"),
+        )
         for event, handler in (("GameStateChange", "_stateHandler"),
                                ("GamePausedChange", "_pauseHandler"),
                                ("UnloadingLevel", "_unloadHandler"),
@@ -1849,25 +1865,35 @@ static class Program
             self.assertIn(f"_gameManager.{event} -= {handler}", unbind)
         self.assertIn("ReferenceEquals(_gameManager, null)", unbind)
         self.assertIn("_managerCallbacks.Unbind()", unbind)
-        self.assertIn("_managerCallbacks.Bind(current,", bind)
+        self.assertIn("_managerCallbacks.Bind(", bind)
+        self.assertIn("current, current == null || current.IsInSceneTransition", bind)
         self.assertIn("_stateHandler = state => subscription.State(", bind)
         self.assertIn("_pauseHandler = paused => subscription.Pause(paused)", bind)
         self.assertIn("_unloadHandler = subscription.Unloading", bind)
         self.assertIn("_finishedHandler = () => subscription.Finished()", bind)
-        self.assertIn("new DsHudManagerCallbacks(() => GameManager.SilentInstance", source)
+        self.assertIn("new DsHudManagerCallbacks(", source)
+        self.assertIn("() => GameManager.SilentInstance", source)
         state = read(PORT_HUD_STATE)
         self.assertIn("ReferenceEquals(owner, _owner)", state)
         self.assertIn("ReferenceEquals(owner, _current())", state)
         self.assertIn("if (!Accept(owner) || !TransitionPending) return", state)
         self.assertNotRegex(source, r"sceneUnloaded\s*\+=")
         pre = csharp_method_body(source, r"void\s+BeforeNativeUnload\s*\(\s*\)")
-        self.assertIn("_port.BeforeSceneTransition();", pre)
+        self.assertIn("_shellContent.BeforeSceneTransition();", pre)
         finished = csharp_method_body(source, r"void\s+OnFinishedEnteringScene\s*\(\s*\)")
-        self.assertIn("_port.FinishedEnteringScene();", finished)
+        self.assertIn("_shellContent.FinishedEnteringScene();", finished)
         self.assertNotIn("Restore", finished)
-        late = csharp_method_body(source, r"void\s+LateUpdate\s*\(\s*\)")
-        self.assertIn("_port.LateTick();", late)
-        self.assertIn("_port.RestoreHud();", late)
+        shell = read(DUALSCREEN_SOURCES / "DsShell.cs")
+        transitioning = csharp_method_body(
+            shell, r"public\s+void\s+SetTransitioning\s*\([^)]*\)"
+        )
+        self.assertLess(
+            transitioning.index("EndSlide();"),
+            transitioning.index("_transitioning = transitioning;"),
+        )
+        self.assertIn("_actions.Clear();", transitioning)
+        self.assertIn("_gestures.Reset();", transitioning)
+        self.assertIn("UpdateOperational();", transitioning)
         self.assertIn("[DefaultExecutionOrder(10000)]", source)
 
     def test_native_template_layer_provenance_is_reconciled_before_tick_and_restore(self):
@@ -1893,13 +1919,15 @@ static class Program
         bootstrap = csharp_method_body(source, r"static\s+void\s+Bootstrap\s*\(\s*\)")
         self.assertIn("DsHudReleasePump.BlocksReplacement", bootstrap)
         self.assertIn("ReferenceEquals(Instance, null)", bootstrap)
-        for method in ("Update", "LateUpdate", "RequestActivation", "OnDisplaysUpdated", "OnApplicationPause"):
+        for method in ("Update", "RequestActivation", "OnDisplaysUpdated", "OnApplicationPause"):
             body = csharp_method_body(source, rf"void\s+{method}\s*\([^)]*\)")
             self.assertIn("!_releaseState.CanRoute", body)
+        bringup = csharp_method_body(source, r"IEnumerator\s+Bringup\s*\(\s*\)")
+        self.assertIn("!_releaseState.CanRoute", bringup)
         shutdown = csharp_method_body(source, r"void\s+Shutdown\s*\(\s*\)")
         self.assertIn("_releaseState.RequestShutdown(", shutdown)
         self.assertNotIn("Instance = null", shutdown)
-        self.assertNotIn("_port = null", shutdown)
+        self.assertNotIn("_shell = null", shutdown)
         self.assertIn("void OnDestroy() { Shutdown(); }", source)
         self.assertIn("void OnApplicationQuit() { Shutdown(); }", source)
         release = csharp_method_body(source, r"void\s+ReleasePresentation\s*\(\s*\)")
@@ -1909,7 +1937,10 @@ static class Program
         self.assertIn("DontDestroyOnLoad(go)", pump)
         self.assertIn("_state.Retry()", pump)
         self.assertLess(pump.index("if (!_state.Completed) return"), pump.index("Destroy(gameObject)"))
-        for forbidden in ("DirectDisplayHost", "Bringup(", "SetEnabled(", "DsInput", "_port.", "LateTick("):
+        for forbidden in (
+            "DirectDisplayHost", "Bringup(", "SetEnabled(", "DsInput",
+            "_shellContent.", "SetTransportActive(",
+        ):
             self.assertNotIn(forbidden, pump)
         state = read(PORT_HUD_STATE)
         release = csharp_method_body(state, r"public\s+void\s+ReleasePresentation\s*\(\s*\)")
@@ -2035,39 +2066,45 @@ static class Program
         for forbidden in (".SaveData =", ".Take(1", 'Set(slot, "IsUnlocked"', ".CustomAction(" ):
             self.assertNotIn(forbidden, source)
 
-    def test_hold_liveness_uses_the_single_drained_input_snapshot(self):
+    def test_v2_shell_drains_each_input_snapshot_and_dispatches_cancellation(self):
         entry = read(DUAL_SCREEN)
         input_source = read(DUALSCREEN_SOURCES / "DsInput.cs")
-        runtime = read(PORT_RUNTIME)
-        progress = read(DUALSCREEN_SOURCES / "DsPortProgress.cs")
-        inventory = read(DUALSCREEN_SOURCES / "DsPortProgress.Inventory.cs")
-        loadout = read(DUALSCREEN_SOURCES / "DsPortProgress.Loadout.cs")
+        shell = read(DUALSCREEN_SOURCES / "DsShell.cs")
 
-        self.assertIn("public bool SingleTouchActive => _active.Count == 1;", input_source)
+        self.assertIn("public IList<DsGesture> Gestures => _out;", input_source)
+        poll_input = csharp_method_body(
+            input_source, r"public\s+void\s+Poll\s*\(IList<DsTouch\.Point>[^)]*\)"
+        )
+        self.assertLess(poll_input.index("_out.Clear();"), poll_input.index("Process(events[i])"))
+
         update = csharp_method_body(entry, r"void\s+Update\s*\(\s*\)")
         poll = update.index("_input.Poll();")
-        forward = update.index("_port.SetTouchState(_input.SingleTouchActive);")
-        gestures = update.index("var gestures = _input.Gestures;")
-        self.assertLess(poll, forward)
-        self.assertLess(forward, gestures)
+        dispatch = update.index("DispatchGestures();", poll)
+        self.assertLess(poll, dispatch)
+        self.assertEqual(1, update.count("_input.Poll();"))
+
+        dispatcher = csharp_method_body(entry, r"void\s+DispatchGestures\s*\(\s*\)")
+        self.assertIn("var gestures = _input.Gestures;", dispatcher)
+        self.assertIn(
+            "for (int i = 0; i < gestures.Count; i++) _shell.OnGesture(gestures[i]);",
+            dispatcher,
+        )
 
         deactivate = csharp_method_body(entry, r"void\s+SetTouchFenceActive\s*\([^)]*\)")
         cancel = deactivate.index("_input.Cancel();")
-        forward_cancel = deactivate.index("_port.SetTouchState(_input.SingleTouchActive);")
-        dispatch = deactivate.index("var gestures = _input.Gestures;")
-        self.assertLess(cancel, forward_cancel)
-        self.assertLess(forward_cancel, dispatch)
+        dispatch_cancel = deactivate.index("DispatchGestures();", cancel)
+        self.assertLess(cancel, dispatch_cancel)
 
-        runtime_forward = csharp_method_body(runtime, r"public\s+void\s+SetTouchState\s*\([^)]*\)")
-        self.assertIn("_progress.SetTouchState(singleTouchActive);", runtime_forward)
-        progress_forward = csharp_method_body(progress, r"public\s+void\s+SetTouchState\s*\([^)]*\)")
-        self.assertIn("_inventory.SetTouchState(singleTouchActive);", progress_forward)
-        self.assertIn("_loadout.SetTouchState(singleTouchActive);", progress_forward)
+        cancel_input = csharp_method_body(input_source, r"public\s+void\s+Cancel\s*\(\s*\)")
+        self.assertLess(cancel_input.index("_out.Clear();"), cancel_input.index("CancelState();"))
+        cancel_state = csharp_method_body(input_source, r"void\s+CancelState\s*\(\s*\)")
+        self.assertIn("if (_down) Emit(DsGestureType.Up, _last, Vector2.zero);", cancel_state)
 
-        for source in (inventory, loadout):
-            self.assertNotIn("DsTouch.CollectSecondScreen(", source)
-            held = csharp_method_body(source, r"bool\s+TouchHeld\s*\([^)]*\)")
-            self.assertIn("_singleTouchActive", held)
+        shell_gesture = csharp_method_body(shell, r"public\s+void\s+OnGesture\s*\([^)]*\)")
+        self.assertLess(
+            shell_gesture.index("if (!_operational) return;"),
+            shell_gesture.index("_gestures.Route("),
+        )
 
     def test_loadout_socket_custom_icon_uses_owned_factory_without_static_item_setter(self):
         source = read(DUALSCREEN_SOURCES / "DsPortProgress.Loadout.cs")
@@ -2327,19 +2364,27 @@ static class Program
         for field in ("aspect", "orthographicSize", "projectionMatrix"):
             self.assertNotRegex(source, rf"camera\.{field}\s*=(?!=)")
 
-    def test_map_pending_restoration_uses_existing_outer_release_owner(self):
-        runtime = read(PORT_RUNTIME)
-        restore = csharp_method_body(runtime, r"public\s+void\s+RestoreHud\s*\([^)]*\)")
-        self.assertIn("_map.Invalidate();", restore)
-        self.assertIn("finally", restore)
+    def test_shell_restoration_uses_existing_outer_release_owner(self):
         entry = read(DUAL_SCREEN)
-        self.assertIn("() => { if (_port != null) _port.RestoreHud(); }", entry)
+        self.assertIn(
+            "() => { if (_shellContent != null) _shellContent.RestoreNative(); }",
+            entry,
+        )
         self.assertIn("_releaseState.ReleasePresentation()", entry)
         self.assertIn("_nextRetry = Time.unscaledTime + 0.25f", entry)
         self.assertIn("_state.Retry()", entry)
         self.assertIn("DsHudReleasePump.BlocksReplacement", entry)
-        content = entry.split("sealed class PortContent", 1)[1].split("public sealed class DsHudReleasePump", 1)[0]
-        self.assertLess(content.index("_port.Dispose();"), content.index("_port = null;"))
+        content = entry.split("sealed class ShellContent", 1)[1].split(
+            "public sealed class DsHudReleasePump", 1
+        )[0]
+        dispose = csharp_method_body(content, r"public\s+void\s+Dispose\s*\(\s*\)")
+        self.assertLess(dispose.index("_shell.SetVisible(false);"),
+                        dispose.index("_shell.Dispose();"))
+        self.assertLess(dispose.index("_shell.Dispose();"),
+                        dispose.index("_shell = null;"))
+        shell = read(DUALSCREEN_SOURCES / "DsShell.cs")
+        restore = csharp_method_body(shell, r"public\s+void\s+RestoreNative\s*\(\s*\)")
+        self.assertIn("_hud.SetVisible(false)", restore)
 
     def test_map_projects_native_compass_corpse_and_world_pin_groups_read_only(self):
         source = read(DUALSCREEN_SOURCES / "DsPortMap.cs")
@@ -2554,7 +2599,7 @@ static class Program
         self.assertLess(release.index("Object.DestroyImmediate(detail.Root)"), release.index("detail.Text.Clear()"))
         self.assertLess(release.index("detail.Text.Clear()"), release.index("while (detail.Materials.Count != 0)"))
 
-    def test_native_page_retirement_retries_on_inactive_restore_and_blocks_progress_publication(self):
+    def test_native_page_retirement_retries_and_shell_publication_is_gated(self):
         runtime = read(PORT_RUNTIME)
         restore = csharp_method_body(runtime, r"public\s+void\s+RestoreHud\s*\([^)]*\)")
         self.assertIn("_progress.Invalidate();", restore)
@@ -2567,10 +2612,24 @@ static class Program
         self.assertLess(tick.index("if (_retiringPages) Invalidate();"), tick.index("_tasks.Tick(eligible)"))
         gesture = csharp_method_body(progress, r"public\s+bool\s+OnGesture\s*\([^)]*\)")
         self.assertIn("if (_retiringPages) return true;", gesture)
+
         v2 = read(DUALSCREEN_SOURCES / "DualScreenV2.cs")
-        self.assertIn("{ _port.RestoreHud(); return; }", v2)
-        self.assertIn("_portContent.Dispose(); else if (_port != null) _port.Dispose();", v2)
+        self.assertIn(
+            "() => { if (_shellContent != null) _shellContent.RestoreNative(); }",
+            v2,
+        )
+        self.assertIn("if (_shellContent != null) _shellContent.Dispose();", v2)
+        self.assertIn("else if (_shell != null) _shell.Dispose();", v2)
         self.assertIn("DsHudReleasePump.Create(_releaseState)", v2)
+        shell = read(DUALSCREEN_SOURCES / "DsShell.cs")
+        operational = csharp_method_body(shell, r"void\s+UpdateOperational\s*\(\s*\)")
+        self.assertIn(
+            "bool operational = !_disposed && _visible && !_idle && !_transitioning;",
+            operational,
+        )
+        self.assertIn("_hud.SetVisible(operational)", operational)
+        shell_tick = csharp_method_body(shell, r"public\s+void\s+Tick\s*\([^)]*\)")
+        self.assertIn("if (!_operational) return;", shell_tick)
 
     def test_page_adapters_latch_destroyed_only_after_native_retirement_returns(self):
         for file in ("DsPortProgress.cs", "DsPortProgress.Tasks.cs", "DsPortProgress.Inventory.cs", "DsPortProgress.Loadout.cs"):

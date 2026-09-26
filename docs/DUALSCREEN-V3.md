@@ -40,7 +40,6 @@ all rows.
 
 ### General
 
-- Skins
 - Black background
 
 ### World

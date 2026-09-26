@@ -39,6 +39,14 @@ public class DsHornetPanel
         public RectTransform Root;
         public readonly List<Image> Images = new List<Image>();
         public string Name, Desc;
+        /// <summary>
+        /// The art's DRAWN box inside Root, in art space. Draw fits each widget
+        /// to its own aspect and centres it, so for anything that is not the
+        /// shape of its slot -- the needle above all, 96 wide in a box nearly
+        /// 600 tall -- the slot is mostly empty and framing it puts the cursor
+        /// a long way off the art.
+        /// </summary>
+        public Rect Art;
     }
 
     readonly List<Hit> _hits = new List<Hit>();
@@ -50,8 +58,12 @@ public class DsHornetPanel
 
     Slot _needle, _mask, _spool, _core, _ring;
     readonly List<Slot> _skills = new List<Slot>();
+    // The currency counters' boxes, in art space. They are not slots.
+    Rect _rosaryArt, _shellArt;
+    float _countY, _rosaryTextX, _shellTextX;
 
     float _x, _y, _w, _h;
+    float _artScale = 1f, _artX;
     float _ringCx, _ringCy, _ringR;
     bool _built;
     string _saveKey;
@@ -72,10 +84,15 @@ public class DsHornetPanel
     const float RETRY_SECONDS = 3f;
     int _retries;
     float _nextRetry;
+    float _nextArtCheck;
     bool _wasInventoryOpen;
 
-    /// <summary>Where taps send their name and description.</summary>
-    public System.Action<string, string> OnSelect;
+    /// <summary>
+    /// Where taps send their name, description, and the rect they occupy in
+    /// LAYOUT space, so the screen's cursor can travel to them the way it
+    /// travels between grid cells.
+    /// </summary>
+    public System.Action<string, string, Rect> OnSelect;
 
     // The ring is tighter than the game's, because the panel is narrower than a
     // 16:9 pane; the core and the mask are larger, because they are the two
@@ -111,6 +128,13 @@ public class DsHornetPanel
     const float SpoolAspect = 0.75f;
     const float CoreAspect = 1f;
 
+    // The narrowest this composition can be laid out at before the spool runs
+    // off the end of the panel: the needle's lane, then the mask and the spool
+    // shoulder to shoulder. Derived from the parts rather than written down as
+    // 516, so resizing any of them cannot silently invalidate it.
+    const float MinArtW = 12f + NeedleW + 8f + MaskSize + ShardGap + SpoolSize + 10f;
+    const float MinArtH = 762f;
+
     public void Build(RectTransform host, float x, float y, float w, float h)
     {
         _x = x; _y = y; _w = w; _h = h;
@@ -120,6 +144,34 @@ public class DsHornetPanel
         // boundary saying the same thing.
         _panel = DsWidgets.Rect(host, "hornet");
         DsWidgets.Place(_panel, x, y, w, h);
+
+        // Fit the existing composition rather than crushing the skill ring into
+        // the smaller space left by the shared HUD and bottom tabs.
+        //
+        // Both axes, not just height. The column used to be 520 px and only the
+        // height was ever short, so scaling by height alone was enough. Now that
+        // the description has its own column the character column is narrower
+        // than the composition's natural width, and laying out at the requested
+        // width would push the spool -- which sits shoulder to shoulder with the
+        // mask, with only a few pixels to spare at 520 -- off the end of it.
+        //
+        // So the art is laid out at its natural size and scaled to fit, which is
+        // what the height already did. At the old 520x664 this is the same
+        // number it always was, so nothing that fits today moves.
+        float artWidth = Mathf.Max(w, MinArtW);
+        float artHeight = Mathf.Max(h, MinArtH);
+        _artScale = Mathf.Min(w / artWidth, h / artHeight);
+        _artX = (w - artWidth * _artScale) * 0.5f;
+        var art = DsWidgets.Rect(_panel, "art");
+        DsWidgets.Place(art, _artX, 0f, artWidth, artHeight);
+        art.localScale = new Vector3(_artScale, _artScale, 1f);
+        _panel = art;
+
+        // Everything below lays out in ART space, so it must use the art's size
+        // rather than the column's. Missing this is how the currency row ended
+        // up measured against one width and drawn at another.
+        w = artWidth;
+        h = artHeight;
 
         _needle = MakeSlot("needle", 12f, 34f, NeedleW, h - 170f);
 
@@ -166,6 +218,21 @@ public class DsHornetPanel
         DsWidgets.Place(_shellIcon.rectTransform, w * 0.5f + 18f, curY, 58f, 58f);
         _shells = DsWidgets.Label(_panel, "shell-n", "", DsTheme.RowSize, DsTheme.Ink);
         if (_shells != null) DsWidgets.Place(_shells.rectTransform, w * 0.5f + 84f, curY + 6f, 200f, 46f);
+
+        // The two counters are tappable as well, which they were not: they are
+        // drawn straight onto the panel rather than through MakeSlot, so
+        // RebuildHits -- which walks the slots -- never saw them.
+        //
+        // Their boxes are finished in RefreshCounts, once there is a number in
+        // them. A label's RECT is generous -- it has to hold "800 / 800" -- but
+        // the text inside it is usually much shorter, and a box drawn to the
+        // rect put the bottom-right bracket out in empty space to the right of
+        // the figure.
+        _countY = curY - 6f;
+        _rosaryTextX = 84f;
+        _shellTextX = w * 0.5f + 84f;
+        _rosaryArt = new Rect(12f, _countY, 248f, 70f);
+        _shellArt = new Rect(w * 0.5f + 12f, _countY, 278f, 70f);
     }
 
     Slot MakeSlot(string name, float x, float y, float w, float h)
@@ -196,7 +263,7 @@ public class DsHornetPanel
             _retries = 0;
             _nextRetry = Time.unscaledTime + RETRY_SECONDS;
         }
-        else if (_built && !InventoryJustOpened() && !RetryDue())
+        else if (_built && !InventoryJustOpened() && !RetryDue() && !ArtLost())
         {
             RefreshCounts();
             return;
@@ -244,15 +311,41 @@ public class DsHornetPanel
         return true;
     }
 
+    /// <summary>
+    /// Whether a piece we drew has lost its art. The sprites are the game's,
+    /// and when it unloads the bundle they came from they are destroyed under
+    /// us, which uGUI draws as a plain white quad.
+    /// </summary>
+    bool ArtLost()
+    {
+        if (Time.unscaledTime < _nextArtCheck) return false;
+        _nextArtCheck = Time.unscaledTime + 1f;
+        for (int i = 0; i < _slots.Count; i++)
+        {
+            var images = _slots[i].Images;
+            for (int j = 0; j < images.Count; j++)
+            {
+                var img = images[j];
+                if (img != null && (img.sprite == null || img.sprite.texture == null)) return true;
+            }
+        }
+        return false;
+    }
+
     // Enough of the save's identity to notice a different one, without reading
-    // anything expensive: the two counters and the crest change together.
+    // anything expensive: the two counters and the crest change together. And
+    // the GameCameras the art is read from, because quitting to the menu
+    // destroys it and unloads its bundle -- the needle's sprites with it -- so
+    // reloading the same save is a change even though nothing in it differs.
     static string SaveKey()
     {
         try
         {
             var pd = PlayerData.instance;
+            var cameras = GameCameras.SilentInstance;
             return pd.CurrentCrestID + "/" + pd.nailUpgrades + "/" + pd.maxHealthBase +
-                   "/" + pd.silkMax + "/" + pd.heartPieces + "/" + pd.silkSpoolParts;
+                   "/" + pd.silkMax + "/" + pd.heartPieces + "/" + pd.silkSpoolParts +
+                   "/" + (cameras != null ? cameras.GetInstanceID() : 0);
         }
         catch { return ""; }
     }
@@ -302,6 +395,7 @@ public class DsHornetPanel
         }
         float offX = (boxW - artW) * 0.5f;
         float offY = (boxH - artH) * 0.5f;
+        slot.Art = new Rect(offX, offY, artW, artH);
 
         for (int i = 0; i < w.Pieces.Count; i++)
         {
@@ -365,21 +459,46 @@ public class DsHornetPanel
             if (s.Root == null || s.Images.Count == 0) continue;
             if (string.IsNullOrEmpty(s.Name) && string.IsNullOrEmpty(s.Desc)) continue;
 
-            // Layout space is measured from the top of the PANEL, but this
-            // panel's own rect is measured from the top of the screen's BODY,
-            // which starts below the tab strip. Leaving that out shifted every
-            // hitbox up by the height of the tabs, so only the top edge of an
-            // icon responded.
+            // The art's box within the slot, not the slot's. Falls back to the
+            // whole slot for anything that never recorded one.
+            Rect art = s.Art.width > 0f && s.Art.height > 0f
+                     ? s.Art
+                     : new Rect(0f, 0f, s.Root.sizeDelta.x, s.Root.sizeDelta.y);
+
             _hits.Add(new Hit
             {
-                X = _x + s.Root.anchoredPosition.x,
-                Y = DsTheme.ContentTop + _y - s.Root.anchoredPosition.y,
-                W = s.Root.sizeDelta.x,
-                H = s.Root.sizeDelta.y,
+                X = _x + _artX + (s.Root.anchoredPosition.x + art.x) * _artScale,
+                Y = DsLayout.Current.Body.y + _y + (-s.Root.anchoredPosition.y + art.y) * _artScale,
+                W = art.width * _artScale,
+                H = art.height * _artScale,
                 Name = s.Name,
                 Desc = s.Desc,
             });
         }
+
+        // The counters last, so a skill or the needle overlapping them would
+        // win on area; in practice they sit alone at the foot of the column.
+        //
+        // The description is the count itself. The game has no name or prose
+        // for either currency -- CurrencyType is a bare enum -- so rather than
+        // invent flavour text, the pane restates what is selected, which is the
+        // one thing about a counter worth reading.
+        AddRectHit(_rosaryArt, "Rosaries", _rosaries != null ? _rosaries.text : null);
+        AddRectHit(_shellArt, "Shell Shards", _shells != null ? _shells.text : null);
+    }
+
+    void AddRectHit(Rect art, string name, string desc)
+    {
+        if (art.width <= 0f || art.height <= 0f) return;
+        _hits.Add(new Hit
+        {
+            X = _x + _artX + art.x * _artScale,
+            Y = DsLayout.Current.Body.y + _y + art.y * _artScale,
+            W = art.width * _artScale,
+            H = art.height * _artScale,
+            Name = name,
+            Desc = desc ?? "",
+        });
     }
 
     void RefreshCounts()
@@ -398,6 +517,43 @@ public class DsHornetPanel
 
         if (_rosaryIcon != null) _rosaryIcon.enabled = _rosaryIcon.sprite != null;
         if (_shellIcon != null) _shellIcon.enabled = _shellIcon.sprite != null;
+
+        // Close the counters' boxes on the right at the end of the FIGURE
+        // rather than at the end of the label that holds it.
+        _rosaryArt = CountBox(_rosaries, 12f, _rosaryTextX);
+        _shellArt = CountBox(_shells, _shellTextX - 72f, _shellTextX);
+    }
+
+    /// <summary>
+    /// A counter's box: from its icon's left edge to the right edge of the text
+    /// actually drawn, which is what the cursor should frame.
+    ///
+    /// preferredWidth is the width the string WANTS, independent of the rect it
+    /// was given, so it tracks "212" growing into "1200" without the box ever
+    /// standing off the end of a short one.
+    /// </summary>
+    Rect CountBox(TmpText label, float left, float textX)
+    {
+        float right = textX + 120f;      // a sane width if TMP cannot answer
+        if (label != null)
+        {
+            try
+            {
+                // GetPreferredValues(text), not preferredWidth. The latter is
+                // derived from the layout the label has already been given and
+                // came back near the RECT's width -- which is sized for
+                // "800 / 800" and left the box for "212" standing well past the
+                // end of the figure. Asking for the string's own measurement
+                // sidesteps the rect entirely.
+                float w = 0f;
+                string s = label.text;
+                if (!string.IsNullOrEmpty(s)) w = label.GetPreferredValues(s).x;
+                if (w <= 1f) w = label.preferredWidth;
+                if (w > 1f) right = textX + w;
+            }
+            catch { }
+        }
+        return new Rect(left, _countY, Mathf.Max(60f, right - left), 70f);
     }
 
     /// <summary>True if the tap was ours.</summary>
@@ -417,7 +573,11 @@ public class DsHornetPanel
         }
         if (best < 0) return false;
 
-        if (OnSelect != null) OnSelect(_hits[best].Name, _hits[best].Desc);
+        if (OnSelect != null)
+        {
+            var h = _hits[best];
+            OnSelect(h.Name, h.Desc, new Rect(h.X, h.Y, h.W, h.H));
+        }
         return true;
     }
 
