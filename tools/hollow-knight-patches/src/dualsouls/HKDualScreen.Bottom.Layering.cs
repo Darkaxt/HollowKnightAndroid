@@ -156,12 +156,18 @@ public partial class HKDualScreen
         return hudFadedInGameplay;
     }
 
-    // [B1] The companion SHOW gate: on, no pause/inventory/dual-screen-off overlay, HK's HUD not faded, and no
-    // popup (dialogue box / tutorial prompt / attribution card) drawing on the bottom (popupAny, computed once
-    // per frame in Tick).
-    bool CompanionVisible(bool companionOn, bool overlay, bool hudFaded, bool popupAny)
+    // [B1] The companion SHOW gate. Pause and Inventory keep the resident lower-display page visible. A native HUD
+    // fade suppresses the companion only during active gameplay, while a routed lore/tutorial popup always owns
+    // the lower surface until it is gone.
+    bool CompanionVisible(
+        bool companionOn,
+        bool paused,
+        bool inventoryOpen,
+        bool hudFaded,
+        bool popupAny)
     {
-        return companionOn && !overlay && !hudFaded && !popupAny;
+        bool gameplayHudFaded = hudFaded && !paused && !inventoryOpen;
+        return companionOn && !gameplayHudFaded && !popupAny;
     }
 
     // [B1] True while the opening attribution ("Team Cherry presents" / the title card) actually draws on the

@@ -532,16 +532,16 @@ public partial class HKDualScreen : MonoBehaviour
         StripPrivateLayers();     // B1: keep the 3 private layers off every on-screen camera
         bool companionOn = dsOn && (compOn >= 0 ? compOn : cfg.companion) == 1;
 
-        bool overlay = paused || invOpen || !dsOn;   // pause/inventory still hide the companion and gameplay backdrop
-        // Backdrop + companion only during ACTIVE gameplay; menus/intro/cutscenes AND pause/inventory -> black+logo.
-        // HUD ownership is independent: while direct dual-display is active, masks/soul/geo stay on the lower display.
-        bgShow = gc != null && gc.hudCanvas != null && gc.hudCanvas.transform.gameObject.activeInHierarchy && !overlay;
+        bool presentationOverlay = paused || invOpen;
+        // Pause and Inventory suppress only the captured gameplay backdrop. The resident companion/page UI and
+        // native HUD remain visible on the lower display; they are part of that display's persistent product UI.
+        bgShow = gc != null && gc.hudCanvas != null && gc.hudCanvas.transform.gameObject.activeInHierarchy && !presentationOverlay;
         bool hudFadedInGameplay = HudFadedInGameplay(gc);   // B1: HK faded its HUD (lore tablet / cutscene) -> hide companion
 
         // Session boundary: QUIT-TO-MENU tears the companion down and re-arms the startup tab, so the next game
         // load starts fresh on cfg.compTab (Map) with re-cloned panes — the new save's data and any language
-        // changed in the menu included. (Pause/inventory only HIDE the clones — deliberately, to avoid rebuild
-        // stutter; the menu is the one real reset point. Without this the old tab + stale-language clones survived.)
+        // changed in the menu included. Pause and Inventory keep the existing clones live and visible; the menu
+        // is the one real reset point. Without this the old tab + stale-language clones survived.
         bool atMenu = false; try { atMenu = gm.gameState == GlobalEnums.GameState.MAIN_MENU; } catch { }
         if (atMenu && !wasAtMenu && (mapClone != null || invCloneCache != null || charmCloneCache != null || tab.built != -1))
         {
@@ -591,7 +591,7 @@ public partial class HKDualScreen : MonoBehaviour
 
             // attrCam belongs to the companion. (The opening attribution used to time-share it, but now
             // lives on tutLayer/promptCam — see ScanNode/CreditShowing.)
-            if (CompanionVisible(companionOn, overlay, hudFadedInGameplay, popupAny))
+            if (CompanionVisible(companionOn, paused, invOpen, hudFadedInGameplay, popupAny))
             {
                 attrCam.cullingMask = 1 << ATTR_LAYER;   // show companion
                 UpdateCompanion(src);
@@ -599,8 +599,8 @@ public partial class HKDualScreen : MonoBehaviour
             }
             else if (companionOn)
             {
-                // Overlay/popup up (pause / real select-map / dialogue / tutorial / credit). KEEP the clone
-                // alive (no teardown -> no rebuild/re-render when it closes); just hide it.
+                // A routed lore/tutorial popup or an in-gameplay HUD fade needs the lower surface. Keep the clone
+                // alive so it returns without rebuilding once that transient content is gone.
                 attrCam.cullingMask = 0;
             }
             else
@@ -692,9 +692,9 @@ public partial class HKDualScreen : MonoBehaviour
             var hudRoot = gc.hudCanvas.transform;
             if (hudRoot.parent != null && hudRoot.parent.parent != null)
                 hudRoot = hudRoot.parent.parent;   // Anchor TL (fallback: Hud Canvas)
-            // Pause and Inventory are presentation overlays, not ownership boundaries: they may hide the
-            // companion and backdrop, but masks/soul/geo remain exclusively on the lower display. Only an
-            // explicit product/transport restore returns this subtree to the upper UI layer.
+            // Pause and Inventory are presentation overlays, not ownership or visibility boundaries: the resident
+            // lower-display page UI and masks/soul/geo remain visible. Only an explicit product/transport restore
+            // returns this subtree to the upper UI layer.
             // PERF: the recursive walk over the whole HUD subtree ran EVERY frame; now on change / root change /
             // every 10 frames (catches HUD children HK spawns later, e.g. new mask/soul pieces) — invisible delay.
             int wantLayer = restoreToUpperDisplay ? UI_LAYER : hudLayer;

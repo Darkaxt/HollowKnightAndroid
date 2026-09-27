@@ -1422,12 +1422,12 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         self.assertIn("RelayerHud(cameras, true)", restore)
 
-    def test_active_direct_display_keeps_live_hud_on_lower_layer_during_overlays(self):
+    def test_active_direct_display_keeps_full_lower_hud_during_pause_and_inventory(self):
         source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
         tick = method_body(source, r"void\s+Tick\s*\(\s*\)")
         self.assertRegex(
             " ".join(tick.split()),
-            r"overlay\s*=\s*paused\s*\|\|\s*invOpen\s*\|\|\s*!dsOn",
+            r"presentationOverlay\s*=\s*paused\s*\|\|\s*invOpen",
         )
         self.assertIn("RelayerHud(gc, false)", tick)
         self.assertLess(
@@ -1435,16 +1435,34 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             tick.index("RelayerHud(gc, false)"),
         )
         self.assertIn(
-            "CompanionVisible(companionOn, overlay, hudFadedInGameplay, popupAny)",
+            "CompanionVisible(companionOn, paused, invOpen, hudFadedInGameplay, popupAny)",
             tick,
         )
-        self.assertNotIn("RelayerHud(gc, overlay", tick)
+        self.assertNotIn("RelayerHud(gc, presentationOverlay", tick)
 
         relayer = method_body(source, r"void\s+RelayerHud\s*\([^)]*\)")
         self.assertIn(
             "restoreToUpperDisplay ? UI_LAYER : hudLayer",
             relayer,
         )
+
+        layering = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Layering.cs")
+        )
+        companion_visible = method_body(
+            layering,
+            r"bool\s+CompanionVisible\s*\([^)]*\)",
+        )
+        self.assertIn(
+            "bool gameplayHudFaded = hudFaded && !paused && !inventoryOpen",
+            companion_visible,
+        )
+        self.assertIn(
+            "return companionOn && !gameplayHudFaded && !popupAny",
+            companion_visible,
+        )
+        self.assertNotIn("return companionOn && !paused", companion_visible)
+        self.assertNotIn("return companionOn && !inventoryOpen", companion_visible)
 
     def test_inactive_transport_cannot_run_bottom_screen_routing_hooks(self):
         source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
