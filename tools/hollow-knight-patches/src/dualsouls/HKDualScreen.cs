@@ -532,9 +532,9 @@ public partial class HKDualScreen : MonoBehaviour
         StripPrivateLayers();     // B1: keep the 3 private layers off every on-screen camera
         bool companionOn = dsOn && (compOn >= 0 ? compOn : cfg.companion) == 1;
 
-        bool overlay = paused || invOpen || !dsOn;   // pause/inventory OR dual-screen-off -> HUD to top, bottom blank
-        // Backdrop + HUD only during ACTIVE gameplay; menus/intro/cutscenes AND pause/inventory -> black+logo.
-        // Computed here (before SyncBgCapture) so the backdrop-cam gate uses this frame's value.
+        bool overlay = paused || invOpen || !dsOn;   // pause/inventory still hide the companion and gameplay backdrop
+        // Backdrop + companion only during ACTIVE gameplay; menus/intro/cutscenes AND pause/inventory -> black+logo.
+        // HUD ownership is independent: while direct dual-display is active, masks/soul/geo stay on the lower display.
         bgShow = gc != null && gc.hudCanvas != null && gc.hudCanvas.transform.gameObject.activeInHierarchy && !overlay;
         bool hudFadedInGameplay = HudFadedInGameplay(gc);   // B1: HK faded its HUD (lore tablet / cutscene) -> hide companion
 
@@ -554,11 +554,11 @@ public partial class HKDualScreen : MonoBehaviour
         if (gc != null && gc.hudCamera != null)
         {
             var src = gc.hudCamera;
-            // fix(1.0.2): with dual-screen OFF, hand everything back to the top screen instead of leaving it
-            // stranded on a private layer no enabled camera renders. The non-routing hooks still run — the
-            // legacy flash-config publisher and dreamgate tilemap repair are main-screen concerns.
+            // Reaching this point means the product and transport are active. Keep HUD ownership on the
+            // private lower-display layer through Pause and Inventory; RestoreReferenceRouting is the only
+            // path that hands it back to the upper UI layer when product/transport ownership ends.
             bool dsOff = cfg.dualScreen == 0;
-            RelayerHud(gc, overlay || dsOff);   // M : HK's HUD subtree -> bottom (hudLayer) or back to the top
+            RelayerHud(gc, false);   // M : active direct display always owns HK's HUD subtree on hudLayer
             if (dsOff)
             {
                 if (routedLayers.Count > 0) { RestoreRoutedLayers(); RestoreNameCard(); Dbg("HKDS dual-screen OFF -> routed objects returned to the main screen"); }
@@ -683,20 +683,21 @@ public partial class HKDualScreen : MonoBehaviour
     }
 
     // [M] Move the whole top-left HUD anchor (Anchor TL, two levels above Hud Canvas) onto the
-    // HUD layer — so effects that spawn near the masks but outside Hud Canvas also go bottom.
-    void RelayerHud(GameCameras gc, bool overlay)
+    // private lower-display HUD layer while direct display owns it. Product/transport teardown explicitly
+    // requests restoration to the original upper UI layer.
+    void RelayerHud(GameCameras gc, bool restoreToUpperDisplay)
     {
         if (gc.hudCanvas != null)
         {
             var hudRoot = gc.hudCanvas.transform;
             if (hudRoot.parent != null && hudRoot.parent.parent != null)
                 hudRoot = hudRoot.parent.parent;   // Anchor TL (fallback: Hud Canvas)
-            // While an overlay is up (PAUSE or INVENTORY), put the HUD back on its original UI
-            // layer so it leaves the bottom -> the bottom shows just black + logo like the intro.
-            // In normal play, route it to the private HUD layer (bottom).
+            // Pause and Inventory are presentation overlays, not ownership boundaries: they may hide the
+            // companion and backdrop, but masks/soul/geo remain exclusively on the lower display. Only an
+            // explicit product/transport restore returns this subtree to the upper UI layer.
             // PERF: the recursive walk over the whole HUD subtree ran EVERY frame; now on change / root change /
             // every 10 frames (catches HUD children HK spawns later, e.g. new mask/soul pieces) — invisible delay.
-            int wantLayer = overlay ? UI_LAYER : hudLayer;
+            int wantLayer = restoreToUpperDisplay ? UI_LAYER : hudLayer;
             if (wantLayer != hudLayerApplied || hudRoot != hudRootApplied || (Time.frameCount % 10) == 0)
             { SetLayerRecursive(hudRoot, wantLayer); hudLayerApplied = wantLayer; hudRootApplied = hudRoot; }
         }

@@ -1413,14 +1413,38 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertNotRegex(relayer, r"\b(?:Instantiate|Clone)\s*\(")
         self.assertNotIn("new GameObject", relayer)
 
+        direct = strip_csharp_comments(
+            read(REFERENCE_ROOT / "HKDualScreen.DirectDisplay.cs")
+        )
+        restore = method_body(
+            direct,
+            r"void\s+RestoreReferenceRouting\s*\(\s*\)",
+        )
+        self.assertIn("RelayerHud(cameras, true)", restore)
+
+    def test_active_direct_display_keeps_live_hud_on_lower_layer_during_overlays(self):
+        source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
         tick = method_body(source, r"void\s+Tick\s*\(\s*\)")
         self.assertRegex(
             " ".join(tick.split()),
             r"overlay\s*=\s*paused\s*\|\|\s*invOpen\s*\|\|\s*!dsOn",
         )
-        self.assertIn("RelayerHud(gc, overlay || dsOff)", tick)
-        self.assertIn("RestoreRoutedLayers()", tick)
-        self.assertIn("RestoreNameCard()", tick)
+        self.assertIn("RelayerHud(gc, false)", tick)
+        self.assertLess(
+            tick.index("if (!dsOn) return;"),
+            tick.index("RelayerHud(gc, false)"),
+        )
+        self.assertIn(
+            "CompanionVisible(companionOn, overlay, hudFadedInGameplay, popupAny)",
+            tick,
+        )
+        self.assertNotIn("RelayerHud(gc, overlay", tick)
+
+        relayer = method_body(source, r"void\s+RelayerHud\s*\([^)]*\)")
+        self.assertIn(
+            "restoreToUpperDisplay ? UI_LAYER : hudLayer",
+            relayer,
+        )
 
     def test_inactive_transport_cannot_run_bottom_screen_routing_hooks(self):
         source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
