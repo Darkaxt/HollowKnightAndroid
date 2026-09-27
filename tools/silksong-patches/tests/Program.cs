@@ -14,6 +14,7 @@ static class Program
         ShellGestures();
         HudVisibility();
         HudScopes();
+        HudSuppressionScopes();
         HudFraming();
         FastTap();
         HeldState();
@@ -317,6 +318,63 @@ static class Program
         canvasScope.Restore();
         Assert(new[] { worldCanvas, chargeRing, emptyRing }.All(p => p.Layer == DsHudRouting.SourceLayer),
             "Canvas batch layers were not restored before the next native update");
+    }
+
+    sealed class SuppressionTarget
+    {
+        public bool Alive = true, Suppressed, FailSuppress, FailRestore;
+    }
+
+    static DsHudSuppressionScope<SuppressionTarget> SuppressionScope() =>
+        new DsHudSuppressionScope<SuppressionTarget>(
+            target => target != null && target.Alive,
+            target => target.Suppressed,
+            (target, suppressed) => {
+                if (target.FailSuppress && suppressed)
+                    throw new InvalidOperationException("suppress");
+                if (target.FailRestore && !suppressed)
+                {
+                    target.FailRestore = false;
+                    throw new InvalidOperationException("restore");
+                }
+                target.Suppressed = suppressed;
+            });
+
+    static void HudSuppressionScopes()
+    {
+        var first = new SuppressionTarget();
+        var second = new SuppressionTarget();
+        var alreadySuppressed = new SuppressionTarget { Suppressed = true };
+        var dead = new SuppressionTarget { Alive = false };
+        var scope = SuppressionScope();
+
+        scope.Begin(new[] { first, second, first, alreadySuppressed, dead, null });
+        Assert(scope.Active && scope.Count == 2 && first.Suppressed && second.Suppressed,
+            "Overlay suppression did not own each live visible target exactly once");
+        Assert(alreadySuppressed.Suppressed && !dead.Suppressed,
+            "Overlay suppression changed pre-suppressed or unavailable targets");
+        Throws<InvalidOperationException>(() => scope.Begin(new[] { first }));
+        scope.Restore();
+        Assert(!scope.Active && !first.Suppressed && !second.Suppressed && alreadySuppressed.Suppressed,
+            "Overlay suppression did not restore only its own changes");
+        scope.Restore();
+
+        var failedBegin = new SuppressionTarget { FailSuppress = true };
+        scope = SuppressionScope();
+        Throws<InvalidOperationException>(() => scope.Begin(new[] { first, failedBegin }));
+        Assert(!scope.Active && !first.Suppressed && !failedBegin.Suppressed,
+            "A suppression failure stranded an earlier target");
+
+        var failedRestore = new SuppressionTarget();
+        scope = SuppressionScope();
+        scope.Begin(new[] { first, failedRestore });
+        failedRestore.FailRestore = true;
+        Throws<AggregateException>(() => scope.Restore());
+        Assert(scope.Active && !first.Suppressed && failedRestore.Suppressed && scope.Count == 1,
+            "One overlay restore failure blocked independent restoration");
+        scope.Restore();
+        Assert(!scope.Active && !failedRestore.Suppressed,
+            "A failed overlay restoration could not be retried");
     }
 
     static void HudFraming()

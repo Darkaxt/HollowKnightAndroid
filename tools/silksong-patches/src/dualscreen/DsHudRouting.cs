@@ -116,6 +116,71 @@ public sealed class DsHudRenderScope<T> where T : class
     }
 }
 
+// Temporarily hides only state this scope changed. Renderer and CanvasRenderer
+// adapters use the same fail-safe restoration path around one capture camera.
+public sealed class DsHudSuppressionScope<T> where T : class
+{
+    readonly Func<T, bool> _alive;
+    readonly Func<T, bool> _getSuppressed;
+    readonly Action<T, bool> _setSuppressed;
+    readonly List<T> _changed = new List<T>();
+
+    public bool Active { get; private set; }
+    public int Count => _changed.Count;
+
+    public DsHudSuppressionScope(Func<T, bool> alive, Func<T, bool> getSuppressed,
+                                 Action<T, bool> setSuppressed)
+    {
+        _alive = alive;
+        _getSuppressed = getSuppressed;
+        _setSuppressed = setSuppressed;
+    }
+
+    public void Begin(IList<T> targets)
+    {
+        if (Active) throw new InvalidOperationException("A HUD suppression scope is already active");
+        Active = true;
+        try
+        {
+            for (int i = 0; i < targets.Count; i++)
+            {
+                var target = targets[i];
+                if (!_alive(target) || _getSuppressed(target)) continue;
+                _changed.Add(target);
+                _setSuppressed(target, true);
+            }
+        }
+        catch
+        {
+            Restore();
+            throw;
+        }
+    }
+
+    public void Restore()
+    {
+        List<Exception> failures = null;
+        for (int i = _changed.Count - 1; i >= 0; i--)
+        {
+            var target = _changed[i];
+            try
+            {
+                if (_alive(target) && _getSuppressed(target))
+                    _setSuppressed(target, false);
+                _changed.RemoveAt(i);
+            }
+            catch (Exception e)
+            {
+                if (failures == null) failures = new List<Exception>();
+                failures.Add(e);
+            }
+        }
+        Active = _changed.Count > 0;
+        if (failures != null)
+            throw new AggregateException("Could not restore companion overlay rendering", failures);
+    }
+}
+
 public readonly struct DsHudFrame
 {
     public const float MaskPixelPitch = 55f;

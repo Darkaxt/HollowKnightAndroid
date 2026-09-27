@@ -19,6 +19,22 @@ public sealed class DsPresentation : DirectDisplayPresentation
 
     static DsPresentation _current;
 
+    /// <summary>
+    /// The one owned graph that shares layer 3 with transient native-HUD
+    /// capture. The capture camera suppresses this graph for only its render.
+    /// Layers 3 and 6 are Silksong's only unnamed layers; layer 7 is the game's
+    /// Currency Self Collide layer, so it cannot become a third private role.
+    /// </summary>
+    public static Transform OverlayCaptureRoot
+    {
+        get
+        {
+            return _current != null && _current.OverlayCanvas != null
+                ? _current.OverlayCanvas.transform
+                : null;
+        }
+    }
+
     public DsPresentation(Transform parent)
         : base(
             parent,

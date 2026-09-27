@@ -21,6 +21,8 @@ SHARED_DUALSCREEN_SOURCES = (
 DUAL_SCREEN = DUALSCREEN_SOURCES / "DualScreenV2.cs"
 PRESENTATION = SHARED_DUALSCREEN_SOURCES / "DirectDisplayPresentation.cs"
 PRESENTATION_SHIM = DUALSCREEN_SOURCES / "DsPresentation.cs"
+HUD_ROUTING = DUALSCREEN_SOURCES / "DsHudRouting.cs"
+HUD_VIEW = DUALSCREEN_SOURCES / "DsHudView.cs"
 DISPLAY_HOST = SHARED_DUALSCREEN_SOURCES / "DirectDisplayHost.cs"
 PORT_RUNTIME = DUALSCREEN_SOURCES / "DsPortRuntime.cs"
 PORT_LAYERS = DUALSCREEN_SOURCES / "DsPortLayers.cs"
@@ -901,6 +903,47 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         self.assertIsNotNone(owned_check)
         self.assertIn("camera == Camera", owned_check.group("body"))
         self.assertIn("camera == OverlayCamera", owned_check.group("body"))
+
+    def test_hud_capture_reuses_layer_three_only_with_owned_overlay_suppressed(self):
+        presentation = read(PRESENTATION_SHIM)
+        routing = read(HUD_ROUTING)
+        view = read(HUD_VIEW)
+        self.assertRegex(
+            presentation,
+            r"public\s+const\s+int\s+OVERLAY_LAYER\s*=\s*3\s*;",
+        )
+        self.assertRegex(
+            routing,
+            r"public\s+const\s+int\s+CaptureLayer\s*=\s*3\s*;",
+        )
+        self.assertIn("public static Transform OverlayCaptureRoot", presentation)
+        self.assertIn("_current.OverlayCanvas.transform", presentation)
+
+        build = csharp_method_body(
+            view,
+            r"public\s+void\s+Build\s*\(\s*RectTransform\s+host\s*,\s*float\s+width\s*,\s*float\s+height\s*\)",
+        )
+        self.assertIn("_overlayRoot = DsPresentation.OverlayCaptureRoot;", build)
+        self.assertIn("if (_overlayRoot == null)", build)
+
+        bind = csharp_method_body(view, r"bool\s+TryBind\s*\(\s*\)")
+        self.assertIn("!OwnedOverlay(renderer.transform)", bind)
+        self.assertIn("!OwnedOverlay(canvas.transform)", bind)
+
+        suppress = csharp_method_body(view, r"void\s+SuppressOverlay\s*\(\s*\)")
+        for required in (
+            "_overlayRoot.GetComponentsInChildren(true, _overlayRenderers);",
+            "_overlayRoot.GetComponentsInChildren(true, _overlayCanvasRenderers);",
+            "_overlayRendererScope.Begin(_overlayRenderers);",
+            "_overlayCanvasScope.Begin(_overlayCanvasRenderers);",
+        ):
+            self.assertIn(required, suppress)
+
+        before = csharp_method_body(view, r"void\s+BeforeCamera\s*\(\s*Camera\s+camera\s*\)")
+        self.assertLess(before.index("if (!FrameCamera())"), before.index("SuppressOverlay();"))
+        self.assertLess(before.index("SuppressOverlay();"), before.index("_scope.Begin(_targets);"))
+        restore = csharp_method_body(view, r"void\s+RestoreScope\s*\(\s*\)")
+        self.assertIn("RestoreOverlay();", restore)
 
     def test_shared_presentation_validates_config_and_owns_compatibility_statics(self):
         source = read(PRESENTATION)

@@ -20,10 +20,22 @@ public sealed class DsHudView : MonoBehaviour
     readonly List<Canvas> _toolCanvases = new List<Canvas>();
     readonly List<Graphic> _toolGraphics = new List<Graphic>();
     readonly List<GameObject> _canvasTargets = new List<GameObject>();
+    readonly List<Renderer> _overlayRenderers = new List<Renderer>();
+    readonly List<CanvasRenderer> _overlayCanvasRenderers = new List<CanvasRenderer>();
     readonly DsHudRenderScope<GameObject> _scope = new DsHudRenderScope<GameObject>(
         go => go != null, go => go.layer, (go, layer) => go.layer = layer);
     readonly DsHudRenderScope<GameObject> _canvasScope = new DsHudRenderScope<GameObject>(
         go => go != null, go => go.layer, (go, layer) => go.layer = layer);
+    readonly DsHudSuppressionScope<Renderer> _overlayRendererScope =
+        new DsHudSuppressionScope<Renderer>(
+            renderer => renderer != null,
+            renderer => renderer.forceRenderingOff,
+            (renderer, suppressed) => renderer.forceRenderingOff = suppressed);
+    readonly DsHudSuppressionScope<CanvasRenderer> _overlayCanvasScope =
+        new DsHudSuppressionScope<CanvasRenderer>(
+            renderer => renderer != null,
+            renderer => renderer.cull,
+            (renderer, suppressed) => renderer.cull = suppressed);
     Coroutine _canvasCleanup;
 
     Camera _capture, _scopedCamera;
@@ -35,7 +47,7 @@ public sealed class DsHudView : MonoBehaviour
     float _rowSplitPx, _healthEndPx, _toolSplitPx, _maskCentrePx, _toolOffsetPx;
     TmpText _fallback;
     GameCameras _gameCameras;
-    Transform _hudRoot, _health, _barParent, _capRAnchor, _tools;
+    Transform _overlayRoot, _hudRoot, _health, _barParent, _capRAnchor, _tools;
     SilkSpool _spool;
     BindOrbHudFrame _bindFrame;
     Bounds _bounds;
@@ -110,6 +122,9 @@ public sealed class DsHudView : MonoBehaviour
 
         try
         {
+            _overlayRoot = DsPresentation.OverlayCaptureRoot;
+            if (_overlayRoot == null)
+                throw new InvalidOperationException("The companion overlay graph is unavailable");
             _showTop = DsConfig.Bool("hud_show_top",
                 SilksongPatches.Settings.GetBool("dualscreen_show_top_hud", false));
             _zoom = DsConfig.Int("hud_zoom", 100) / 100f;
@@ -326,13 +341,15 @@ public sealed class DsHudView : MonoBehaviour
         foreach (var renderer in Resources.FindObjectsOfTypeAll<Renderer>())
         {
             if (renderer != null && renderer.gameObject.scene.IsValid() &&
-                renderer.gameObject.layer == DsHudRouting.CaptureLayer)
+                renderer.gameObject.layer == DsHudRouting.CaptureLayer &&
+                !OwnedOverlay(renderer.transform))
                 throw new InvalidOperationException("The health capture layer is in use by " + renderer.name);
         }
         foreach (var canvas in Resources.FindObjectsOfTypeAll<Canvas>())
         {
             if (canvas != null && canvas.gameObject.scene.IsValid() &&
-                canvas.gameObject.layer == DsHudRouting.CaptureLayer)
+                canvas.gameObject.layer == DsHudRouting.CaptureLayer &&
+                !OwnedOverlay(canvas.transform))
                 throw new InvalidOperationException("The health capture layer is in use by canvas " + canvas.name);
         }
 
@@ -361,6 +378,12 @@ public sealed class DsHudView : MonoBehaviour
             DsProbe.DumpHud(_roots);
         }
         return true;
+    }
+
+    bool OwnedOverlay(Transform target)
+    {
+        return _overlayRoot != null && target != null &&
+               (target == _overlayRoot || target.IsChildOf(_overlayRoot));
     }
 
     void BeforeCamera(Camera camera)
@@ -393,6 +416,7 @@ public sealed class DsHudView : MonoBehaviour
                     Waiting("Native health artwork is not ready");
                     return;
                 }
+                SuppressOverlay();
             }
 
             _scopedCamera = camera;
@@ -523,13 +547,35 @@ public sealed class DsHudView : MonoBehaviour
 
     void RestoreScope()
     {
+        List<Exception> failures = null;
         try { _scope.Restore(); }
-        finally
+        catch (Exception error)
         {
-            if (_scopedCamera != null)
-                _scopedCamera.cullingMask = DsHudRouting.RestoreMask(_scopedCamera.cullingMask, _savedMask);
-            _scopedCamera = null;
+            if (failures == null) failures = new List<Exception>();
+            failures.Add(error);
         }
+
+        var camera = _scopedCamera;
+        _scopedCamera = null;
+        try
+        {
+            if (camera != null)
+                camera.cullingMask = DsHudRouting.RestoreMask(camera.cullingMask, _savedMask);
+        }
+        catch (Exception error)
+        {
+            if (failures == null) failures = new List<Exception>();
+            failures.Add(error);
+        }
+
+        try { RestoreOverlay(); }
+        catch (Exception error)
+        {
+            if (failures == null) failures = new List<Exception>();
+            failures.Add(error);
+        }
+        if (failures != null)
+            throw new AggregateException("Could not restore HUD capture state", failures);
     }
 
     void RestoreAllScopes()
@@ -555,6 +601,58 @@ public sealed class DsHudView : MonoBehaviour
                 renderer.gameObject.layer == DsHudRouting.SourceLayer)
                 _targets.Add(renderer.gameObject);
         }
+    }
+
+    // Layer 3 is both the persistent companion-overlay role and the transient
+    // native-HUD capture role because Silksong has only two unnamed layers.
+    // Suppress every renderer owned by that known overlay graph between this
+    // capture camera's pre-cull and post-render callbacks, then restore it before
+    // the later overlay camera draws the companion display.
+    void SuppressOverlay()
+    {
+        if (_overlayRoot == null)
+            throw new InvalidOperationException("The companion overlay graph was released during HUD capture");
+        if (_overlayRendererScope.Active || _overlayCanvasScope.Active)
+            throw new InvalidOperationException("A companion overlay suppression scope is already active");
+
+        _overlayRenderers.Clear();
+        _overlayRoot.GetComponentsInChildren(true, _overlayRenderers);
+        _overlayCanvasRenderers.Clear();
+        _overlayRoot.GetComponentsInChildren(true, _overlayCanvasRenderers);
+        try
+        {
+            _overlayRendererScope.Begin(_overlayRenderers);
+            _overlayCanvasScope.Begin(_overlayCanvasRenderers);
+        }
+        catch (Exception suppress)
+        {
+            try { RestoreOverlay(); }
+            catch (Exception restore)
+            {
+                throw new AggregateException("Could not suppress the companion overlay for HUD capture",
+                                             suppress, restore);
+            }
+            throw;
+        }
+    }
+
+    void RestoreOverlay()
+    {
+        List<Exception> failures = null;
+        try { _overlayCanvasScope.Restore(); }
+        catch (Exception error)
+        {
+            if (failures == null) failures = new List<Exception>();
+            failures.Add(error);
+        }
+        try { _overlayRendererScope.Restore(); }
+        catch (Exception error)
+        {
+            if (failures == null) failures = new List<Exception>();
+            failures.Add(error);
+        }
+        if (failures != null)
+            throw new AggregateException("Could not restore the companion overlay after HUD capture", failures);
     }
 
     void PrepareCanvasScope()
