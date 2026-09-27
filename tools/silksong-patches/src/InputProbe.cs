@@ -13,38 +13,31 @@
 // tidy explanation, but pressing the bottom screen demonstrably does not break
 // the top one, so key routing is not it.
 //
-// What remains, and what this exists to catch, is InControl re-enumerating its
-// devices underneath the game. UnityInputDeviceManager.Update does this every
-// second:
+// Exact Hollow Knight 1.5.12620 and Silksong 1.0.29980 assembly inspection
+// ruled out the original legacy-InControl theory recorded here. Android uses
+// NewUnityInputDeviceManager, not UnityInputDeviceManager: it wraps
+// UnityEngine.InputSystem.Gamepad objects and reacts to InputSystem Added and
+// Removed notifications. Its Update method is empty.
 //
-//     deviceRefreshTimer += deltaTime;
-//     if (deviceRefreshTimer >= 1f) {
-//         QueryJoystickInfo();                       // Input.GetJoystickNames()
-//         if (JoystickInfoHasChanged) {
-//             DetachDevices();                       // every device, including
-//             AttachDevices();                       // the one being held
-//         }
-//     }
+// That revealed the persistent-failure path. NewUnityInputDeviceManager has no
+// reconciliation pass. If Android's DISPLAY_INFO reconfiguration around the
+// secondary viewport leaves InControl with a stale wrapper, or with no wrapper
+// for a Gamepad that InputSystem still exposes, no later frame repairs it. The
+// native pause menu uses the same InControl device list, which is why it fails
+// together with gameplay. DualSouls.Controllers.ControllerRecovery now
+// reconciles those two public device lists without taking controller input away
+// from the game.
 //
-// A detach sets InputManager.ActiveDevice to InputDevice.Null and throws away
-// every control's state, so a button held across the refresh is released and a
-// press that lands in the same frame is lost. It only takes the hashed list of
-// joystick names to wobble once, and the device has good reasons to wobble: it
-// exposes an "ODIN Station Virtual Mouse" alongside the pad, and Android logs
-// "InputReader: Reconfiguring input devices, changes=DISPLAY_INFO" whenever the
-// second panel's viewport is republished.
-//
-// InControl would normally say so itself -- it logs "Change in attached Unity
-// joysticks detected" -- but the game's InControlManager.LogMessage is an empty
-// method, so every InControl diagnostic is swallowed before it reaches the log.
-// That is why this has gone unnoticed, and it is the first thing fixed here: we
-// subscribe to InControl's own public events instead.
+// InControl would normally report its own attach/detach activity, but the
+// game's InControlManager.LogMessage is an empty method. This probe subscribes
+// to InControl's public events so a live run can confirm whether recovery was
+// needed and whether button edges resumed.
 //
 // Off unless asked for; the knob file is re-read every second.
 //
 //     F=/sdcard/Android/data/io.github.darkaxt.dualsouls/files/input_probe
 //     adb shell "echo 'on=1' > $F"           # attach/detach/active-device churn
-//     adb shell "echo 'on=1 names=1' > $F"   # + Input.GetJoystickNames() changes
+//     adb shell "echo 'on=1 names=1' > $F"   # + legacy joystick-name changes
 //     adb shell "echo 'on=1 edges=1' > $F"   # + every button edge, with frame gap
 //     adb logcat -d | grep InputProbe
 //
@@ -174,9 +167,9 @@ public class InputProbe : MonoBehaviour
         if (Flag("edges", false)) ReportEdges(gapMs);
     }
 
-    // Unity's own view of what is plugged in. This is the exact input to the
-    // hash InControl compares each second, so if it wobbles, this shows the
-    // wobble and names the device that caused it.
+    // Unity's legacy joystick-name view. The active InControl manager does not
+    // consume this list, but it remains useful as a platform reconfiguration
+    // cross-check beside the authoritative attach/detach events.
     void CheckJoystickNames()
     {
         string[] names;

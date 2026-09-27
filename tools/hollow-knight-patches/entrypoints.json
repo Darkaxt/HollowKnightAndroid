@@ -11,6 +11,12 @@
       "className": "HkDirectDisplayAdapter",
       "methodName": "Bootstrap",
       "loadTypes": 0
+    },
+    {
+      "nameSpace": "DualSouls.Controllers",
+      "className": "ControllerRecovery",
+      "methodName": "Bootstrap",
+      "loadTypes": 0
     }
   ]
 }
