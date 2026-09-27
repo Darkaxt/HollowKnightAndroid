@@ -567,12 +567,12 @@ public sealed class SilksongPortOverlayTests
         Assert.False(lease.Tick()); Assert.False(lease.Pending); Assert.Equal(1, restored);
     }
 
-    [Fact] public void VisibleFadeShortCircuitsModsTabsAndPageExactlyOnce()
+    [Fact] public void VisibleFadeShortCircuitsTabsAndPageExactlyOnce()
     {
         var native = new Native(); var state = new DsPortFadeState(native);
         int later = 0;
         Assert.True(DsPortGesturePrecedence.Consume(() => state.ConsumeGesture(true),
-            () => { later++; return true; }, () => { later++; return true; }, () => { later++; return true; }));
+            () => { later++; return true; }, () => { later++; return true; }));
         Assert.Equal(0, later);
         Assert.Equal(1, native.Reads);
         Assert.Equal(1, native.Presents);

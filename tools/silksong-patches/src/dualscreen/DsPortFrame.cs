@@ -46,9 +46,7 @@ public sealed class DsPortFrame
     RectTransform _tabRow;
     public RectTransform ContentMask { get; private set; }
     public RectTransform StatusAnchor { get; private set; }
-    public RectTransform ModsAnchor { get; private set; }
     RectTransform _statusMask;
-    RectTransform _modsMask;
 
     GameObject _topOrnament;
     GameObject _bottomOrnament;
@@ -64,7 +62,6 @@ public sealed class DsPortFrame
     DsPortFrameDecision _selectionState =
         DsPortFrameState.Initial(ApprovedPageOrder.Length, 0);
     float _slideT = 1f;
-    bool _modsOpen;
     bool _sourceStateKnown;
     bool _lastInGame;
     bool _buildAttempted;
@@ -177,12 +174,6 @@ public sealed class DsPortFrame
             DsPresentation.CONTENT_LAYER, new Vector2(0.04f, 0.78f), new Vector2(0.82f, 0.96f));
         _statusMask.gameObject.AddComponent<RectMask2D>();
         StatusAnchor = DsPortUtil.CreateRoot(_statusMask, "StatusAnchor",
-            DsPresentation.CONTENT_LAYER, Vector2.zero, Vector2.one);
-
-        _modsMask = DsPortUtil.CreateRoot(_frameRoot, "ModsMask",
-            DsPresentation.CONTENT_LAYER, new Vector2(0.86f, 0.78f), new Vector2(0.96f, 0.96f));
-        _modsMask.gameObject.AddComponent<RectMask2D>();
-        ModsAnchor = DsPortUtil.CreateRoot(_modsMask, "ModsAnchor",
             DsPresentation.CONTENT_LAYER, Vector2.zero, Vector2.one);
 
         _tabRow = DsPortUtil.CreateRoot(_frameRoot, "BottomCentredTabRow",
@@ -401,42 +392,6 @@ public sealed class DsPortFrame
         }
     }
 
-    public GameObject CloneModsLabel(Transform parent, string name)
-    {
-        if (!_built || parent == null) return null;
-        for (int i = 0; i < ApprovedPageOrder.Length; i++)
-        {
-            InventoryPane pane = _resident.GetPane(ToPaneType(ApprovedPageOrder[i]));
-            if (pane == null) continue;
-            GameObject label = _resident.ClonePaneName(parent, name);
-            if (label == null) continue;
-            NormalizePageVisual(label);
-            return label;
-        }
-        return null;
-    }
-
-    public GameObject CloneModsOrnament(Transform parent, string name, bool top)
-    {
-        if (!_built || parent == null) return null;
-        GameObject ornament = top
-            ? _resident.CloneSelectedTopFleur(parent)
-            : _resident.CloneSelectedBottomFleur(parent);
-        if (ornament != null)
-        {
-            ornament.name = name;
-            DsPortUtil.NormalizeRenderers(ornament, DsPortLayers.PAGE_RENDER_ORDER + 80);
-        }
-        return ornament;
-    }
-
-    public void SetModsOpen(bool open)
-    {
-        if (_disposed || _modsOpen == open) return;
-        _modsOpen = open;
-        if (_built) SetOnlySelectedPageActive(_selected);
-    }
-
     public RectTransform GetOrCreatePageHost(DsPageRole role)
     {
         RectTransform host;
@@ -558,7 +513,7 @@ public sealed class DsPortFrame
             pair.Value.anchoredPosition = Vector2.zero;
             int hostIndex = Array.IndexOf(ApprovedPageOrder, pair.Key);
             pair.Value.gameObject.SetActive(
-                pair.Key == selected && !_modsOpen && HasTab(pair.Key) &&
+                pair.Key == selected && HasTab(pair.Key) &&
                 DsPortFrameState.IsHostActive(_selectionState, hostIndex));
         }
     }
@@ -682,7 +637,6 @@ public sealed class DsPortFrame
         }
         float statusBottom = Mathf.Clamp01(InnerTop / panelH + 0.5f);
         if (_statusMask != null) _statusMask.anchorMin = new Vector2(0.04f, statusBottom);
-        if (_modsMask != null) _modsMask.anchorMin = new Vector2(0.86f, statusBottom);
         UpdateRendererMasks();
     }
 
@@ -766,9 +720,7 @@ public sealed class DsPortFrame
         if (_frameRoot != null) UnityEngine.Object.Destroy(_frameRoot.gameObject);
         ContentMask = null;
         StatusAnchor = null;
-        ModsAnchor = null;
         _statusMask = null;
-        _modsMask = null;
         _tabRow = null;
         _frameRoot = null;
         _topOrnament = null;

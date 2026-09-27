@@ -295,54 +295,49 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertIn("gameObject.AddComponent<SilksongNativeModsMenu>();", runtime)
         self.assertIn("SilksongNativeModsEntryButton", native_menu)
         self.assertIn("_skinsEntryButton", native_menu)
+        self.assertRegex(
+            native_menu,
+            r"class\s+SilksongNativeModsEntryButton\s*:\s*MonoBehaviour",
+        )
+        self.assertIn("Selectable = source", native_menu)
+        self.assertNotRegex(
+            native_menu,
+            r"class\s+SilksongNative(?:ModsEntry|Mods|Skin)Button\s*:\s*MenuSelectable",
+        )
 
         self.assertIn("new DsShell(_screen.Root)", bootstrap)
         self.assertNotIn("new DsPortRuntime", bootstrap)
         self.assertNotIn("new DsPortMods", bootstrap)
         self.assertNotIn("new DsModsScreen", bootstrap)
 
-    def test_silksong_mods_presenter_encodes_oracle_list_detail_touch_and_resident_entry(self):
-        presenter_path = REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsPortMods.cs"
-        presenter = presenter_path.read_text(encoding="utf-8")
+    def test_lower_display_has_no_silksong_mods_presenter_or_input_owner(self):
+        dualscreen = REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen"
+        self.assertFalse((dualscreen / "DsPortMods.cs").exists())
+        self.assertFalse((REPO_ROOT / "tools" / "shared-patches" / "src" / "Mods" /
+                          "TweakPresenter.cs").exists())
 
+        runtime = (dualscreen / "DsPortRuntime.cs").read_text(encoding="utf-8")
+        frame = (dualscreen / "DsPortFrame.cs").read_text(encoding="utf-8")
         for token in (
-            "TweakPresenterListLayout.LeftFraction",
-            "TweakPresenterListLayout.EntryCount",
-            "TweakPresenterListLayout.EntryAt",
-            "_groupLabels", "_rowValueLabels", "_listScroll",
-            "PlaceLabelLeft", "PlaceLabelRight", "PlaceLabelTopLeft",
-            'selected ? "> " : "  "',
-            "DsGestureType.Drag", "ClampScroll",
-            "_frame.TryConsumeGesture(gesture)",
-            "return true; // Open modal owns every non-tab lower-panel gesture.",
-            "MakeGearTex(48)", "new Texture2D", "SetPixels32",
-            "Sprite.Create", "AddComponent<SpriteRenderer>",
+            "DsPortMods", "_modsGestureConsumer", "SetModsGestureConsumer",
+            "ModsAnchor", "ModsMask", "CloneModsLabel", "CloneModsOrnament",
+            "SetModsOpen",
         ):
-            with self.subTest(oracle_contract=token):
-                self.assertIn(token, presenter)
-        self.assertNotIn('SetLabelText(_gearLabel, "MODS"', presenter)
-        self.assertNotIn('CloneModsLabel(anchor, "DsPortModsNativeEntry")', presenter)
-        for synthetic in (
-            "new Mesh", "new Material", "Shader.Find", "Mathf.Cos", "Mathf.Sin",
-            "DsPortModsGearMesh", "DsPortModsGearMaterial",
-        ):
-            with self.subTest(unrelated_synthetic_entry=synthetic):
-                self.assertNotIn(synthetic, presenter)
-        self.assertNotIn('"<  " + groupName', presenter)
-        self.assertNotIn('"    " + value', presenter)
+            with self.subTest(lower_mods_owner=token):
+                self.assertNotIn(token, runtime + frame)
 
-    def test_silksong_mods_hit_geometry_tracks_live_content_mask_placement(self):
-        presenter = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "dualscreen" / "DsPortMods.cs").read_text(encoding="utf-8")
-
-        self.assertIn("TryGetContentPanelRect", presenter)
-        self.assertIn("GetWorldCorners", presenter)
-        self.assertIn("TryMapModalRectToPanel", presenter)
-        self.assertIn("_frame.ContentMask", presenter)
-        self.assertIn("contentPanel.yMin", presenter)
-        self.assertIn("contentPanel.yMax", presenter)
-        self.assertIn("_modal.rect", presenter)
-        self.assertNotIn("panelH * 0.455f", presenter)
-        self.assertNotIn("PanelH * 0.61f", presenter)
+        route = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" /
+                 "SilksongNativeModsMenu.cs").read_text(encoding="utf-8")
+        api = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" /
+               "SilksongGameTweakApi.cs").read_text(encoding="utf-8")
+        features = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" /
+                    "SilksongGameplayFeatures.cs").read_text(encoding="utf-8")
+        self.assertIn("OpenBenchTeleportRoute", route)
+        self.assertIn("BenchDestinations()", route)
+        self.assertIn("WarpToBench", route)
+        self.assertIn("SilksongNativeModsMenu.OpenBenchTeleportRoute()", api)
+        self.assertNotIn("RequestBenchRoute", api + features)
+        self.assertNotIn("ConsumeBenchRouteRequest", features)
 
     def test_silksong_skin_runtime_is_process_owned_independent_of_direct_display(self):
         runtime = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" / "SilksongModsRuntime.cs").read_text(encoding="utf-8")

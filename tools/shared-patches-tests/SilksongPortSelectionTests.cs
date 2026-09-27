@@ -1041,12 +1041,13 @@ public sealed class SilksongPortSelectionTests
         Assert.Equal(1, native.Displays);
     }
 
-    [Theory] [InlineData(0)] [InlineData(1)] [InlineData(2)] [InlineData(3)]
+    [Theory] [InlineData(0)] [InlineData(1)] [InlineData(2)]
     public void GestureStopsAtFirstConsumer(int winner)
     {
         var calls = new List<int>();
         bool Consume(int id) { calls.Add(id); return id == winner; }
-        Assert.True(DsPortGesturePrecedence.Consume(() => Consume(0), () => Consume(1), () => Consume(2), () => Consume(3)));
+        Assert.True(DsPortGesturePrecedence.Consume(
+            () => Consume(0), () => Consume(1), () => Consume(2)));
         Assert.Equal(Enumerable.Range(0, winner + 1), calls);
     }
 
@@ -1302,10 +1303,11 @@ public sealed class SilksongPortSelectionTests
         Assert.Contains("NEEDS_CONTEXT ungenerated native text: Zone/Label", error.InnerException.Message);
     }
 
-    [Fact] public void AbsentModsConsumerDoesNotBlockPage()
+    [Fact] public void TabMissDoesNotBlockPage()
     {
         int pages = 0;
-        Assert.True(DsPortGesturePrecedence.Consume(() => false, null, () => false, () => { pages++; return true; }));
+        Assert.True(DsPortGesturePrecedence.Consume(
+            () => false, () => false, () => { pages++; return true; }));
         Assert.Equal(1, pages);
     }
 }

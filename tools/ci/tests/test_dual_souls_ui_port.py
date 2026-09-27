@@ -95,18 +95,6 @@ def authored_port_visual_violations(name: str, source: str):
         allocation = "_image = go.AddComponent<UnityEngine.UI.Image>();"
         if fade and all(token in fade for token in required) and allocation in fade:
             source = source.replace(fade, fade.replace(allocation, "", 1), 1)
-    # The original Dual Souls Mods affordance is one procedural cog. Admit its
-    # single validated Sprite.Create call without allowing authored page chrome.
-    if name == "DsPortMods.cs":
-        gear = csharp_method_body(source, r"void\s+BuildGear\s*\(\s*\)")
-        required = (
-            "MakeGearTex(48)",
-            "_gearSprite = Sprite.Create(",
-            'new GameObject("DsPortModsGear")',
-            "_gear.AddComponent<SpriteRenderer>()",
-        )
-        if gear and all(token in gear for token in required):
-            source = source.replace(gear, gear.replace("Sprite.Create(", "", 1), 1)
     rejected = (
         "DsWidgets.Fleur", "DsTheme.White", "DsTheme.Disc",
         "AddComponent<Image>", "AddComponent<UnityEngine.UI.Image>",
@@ -1525,33 +1513,23 @@ static class Program
         ):
             self.assertIn(decision, frame)
 
-    def test_silksong_mods_bounds_detail_above_its_status_band(self):
-        source = read(DUALSCREEN_SOURCES / "DsPortMods.cs")
-        paint = csharp_method_body(source, r"void\s+Paint\s*\(\s*\)")
-        for token in (
-            "float statusBottom = bottom + height * 0.025f;",
-            "float statusHeight = height * 0.16f;",
-            "float detailTop = listTop - rowStep * 1.15f;",
-            "float detailBottom = statusBottom + statusHeight + height * 0.035f;",
-            "Mathf.Max(line, detailTop - detailBottom)",
-            "PlaceLabelBottomLeft(_status",
-            "line * 0.68f, detailWidth, statusHeight",
+    def test_lower_frame_owns_only_hud_status_and_resident_page_geometry(self):
+        source = read(PORT_FRAME)
+        for role in ("ContentMask", "StatusAnchor"):
+            with self.subTest(role=role):
+                self.assertIn(role, source)
+        for forbidden in (
+            "ModsAnchor", "ModsMask", "CloneModsLabel", "CloneModsOrnament",
+            "SetModsOpen", "_modsOpen",
         ):
-            self.assertIn(token, paint)
-        self.assertLess(paint.index("float detailBottom"), paint.index("PlaceLabelTopLeft(_detail"))
-        self.assertLess(paint.index("PlaceLabelTopLeft(_detail"), paint.index("PlaceLabelBottomLeft(_status"))
-        self.assertIn("float maximumHeight", source)
-        self.assertIn("if (bounds.size.y * factor > maximumHeight)", source)
-        self.assertIn("factor = maximumHeight / Mathf.Max(0.001f, bounds.size.y);", source)
-        self.assertIn('_modal = DsPortUtil.CreateRoot(parent, "DsPortModsModal"', source)
-        self.assertIn("RectTransform parent = _frame.ContentMask;", source)
-        self.assertIn("TweakPresenterListLayout.LeftFraction", paint)
+            with self.subTest(lower_mods_owner=forbidden):
+                self.assertNotIn(forbidden, source)
 
     def test_frame_owns_masks_positions_page_cache_and_horizontal_slide_state(self):
         if not PORT_FRAME.is_file():
             self.skipTest("DsPortFrame.cs is introduced by Stage 2")
         source = read(PORT_FRAME)
-        for role in ("ContentMask", "StatusAnchor", "ModsAnchor"):
+        for role in ("ContentMask", "StatusAnchor"):
             with self.subTest(role=role):
                 self.assertIn(role, source)
         self.assertRegex(source, r"Dictionary\s*<\s*DsPageRole\s*,\s*RectTransform\s*>")

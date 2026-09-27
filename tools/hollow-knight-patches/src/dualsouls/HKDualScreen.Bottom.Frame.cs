@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using DualSouls.Mods;
 using UnityEngine;
 
 // [B2] BOTTOM SCREEN — area management: the context-box FRAME (ornaments, tab fleurs, separators), the TAB ROW +
@@ -509,37 +508,6 @@ public partial class HKDualScreen
         if (complete) tabColorCol = -1;
     }
 
-    // Each frame: keep the ornaments pinned at the panel edges + a constant apparent size as the map's
-    // fit (attrCam.orthographicSize) changes per zone.
-    void CacheModsTabHits()
-    {
-        if (tweaksOpen || attrCam == null || frameTabs.Count == 0) return;
-
-        Rect viewport = attrCam.rect;
-        modsTabHits.Clear();
-        foreach (var (tmp, unused, col) in frameTabs)
-        {
-            if (tmp == null) continue;
-            Renderer renderer = (tmp as Component).GetComponent<Renderer>();
-            if (renderer == null || !renderer.enabled) continue;
-            Bounds bounds = renderer.bounds;
-            float padX = bounds.extents.x * 0.5f + 0.15f;
-            Vector3 left = attrCam.WorldToViewportPoint(
-                new Vector3(bounds.min.x - padX, bounds.center.y, bounds.center.z));
-            Vector3 right = attrCam.WorldToViewportPoint(
-                new Vector3(bounds.max.x + padX, bounds.center.y, bounds.center.z));
-            float panelLeft = viewport.x + Mathf.Min(left.x, right.x) * viewport.width;
-            float panelRight = viewport.x + Mathf.Max(left.x, right.x) * viewport.width;
-            modsTabHits.Add((
-                new TweakPresenterRect(
-                    panelLeft,
-                    cfg.compTabBandY,
-                    panelRight - panelLeft,
-                    1f - cfg.compTabBandY),
-                TAB_TO_COL[Mathf.Clamp(col, 0, 2)]));
-        }
-    }
-
     float AnimateTabFleurX(int activeCol, float targetX)
     {
         if (tabFleurMoveCol < 0)
@@ -753,12 +721,10 @@ public partial class HKDualScreen
             }
         }
         PositionMapControls(s, asp, yt, yb, onMap);
-        CacheModsTabHits();
     }
 
     void TeardownFrame()
     {
-        hudFpsHalfMax = 0f;   // fix(1.0.0/B10): stale gear anchor after a rebuild at another ortho size
         if (frameRoot != null) { Destroy(frameRoot); frameRoot = null; }
         DestroyOwnedAssets();   // Materials / Meshes / Textures / Sprites we created for the frame (see Own)
         frameEdge.Clear(); frameBase.Clear(); frameTabs.Clear(); frameTabLabels.Clear(); frameTabLabelsPending = false; frameTabBuildFailed = false;
@@ -775,7 +741,6 @@ public partial class HKDualScreen
         equipRowRoot = null; equipCharmSRs.Clear(); lastEquipStamp = int.MinValue;
         if (battIconSR != null) { Destroy(battIconSR.gameObject); battIconSR = null; } battIconT = null; battIconTex = null; battIconLvl = -2;
         TeardownMapControls();
-        ClearModsFrameReferences();   // gear objects/assets died with frameRoot/DestroyOwnedAssets
         if (battLevelT != null) { Destroy(battLevelT.gameObject); battLevelT = null; } battLevelTmp = null; lastBattLevel = "z";
     }
 
@@ -1131,20 +1096,6 @@ public partial class HKDualScreen
     {
         EnsureCompRoot();
 
-        if (tweaksOpen &&
-            (!HkStageHooks.TweaksAvailable || !HkStageHooks.TweaksMenuVisible))
-            CloseTweaksPane();
-        BeginModsCoveredContentRestore();
-
-        // B8: the Tweaks pane occupies the context box while open (gear icon toggles it). It stows the
-        // normal content pane and owns the camera; tab taps close it (PollTouch). Gated on the hub checkbox.
-        if (HkStageHooks.TweaksAvailable && tweaksOpen && HkStageHooks.TweaksMenuVisible)
-        {
-            TweaksPaneTick(src);   // (Tick's own PollTouch call after UpdateCompanion still runs — no double poll here)
-            return;
-        }
-        if (tweaksRoot != null && tweaksRoot.activeSelf) tweaksRoot.SetActive(false);   // closed -> hidden
-
         // Effective tab: a bottom-panel tab-tap (touch) overrides the config tab. Rebuild on change.
         // HK instantiates gameMap lazily (only on first map-open), so keep retrying the Map build until
         // the clone actually exists — then it persists and stays visible thereafter.
@@ -1220,7 +1171,6 @@ public partial class HKDualScreen
         if (cfg.compFrame == 1) { BuildFrame(); PositionFrame(); }
         else if (frameRoot != null) TeardownFrame();
         ReassertControlPrompt();   // re-pin the control-prompt line at pre-render (beats ActionButtonIcon's Update)
-        CompleteModsCoveredContentRestore();
         if (cfg.debug == 1 && (Time.frameCount % 90) == 0)   // frame-count gate: compFrameTick only advances on the pane tabs, so on the Map tab the old %90 was true EVERY frame -> logcat flood at debug=1
             Debug.Log($"HKDS mapframe attrPos={attrCam.transform.position} ortho={attrCam.orthographicSize:F1} centered={fit.valid} c={fit.center}");
     }
@@ -1449,8 +1399,6 @@ public partial class HKDualScreen
         bool hudCameraWasEnabled = hudCam2 != null && hudCam2.enabled;
         if (attrCam != null) { attrCam.enabled = false; attrCam.cullingMask = 0; }
         if (hudCam2 != null) hudCam2.enabled = false;
-        TeardownModsPresenter();   // role cameras are disabled before covered content is restored
-        bool hudCameraRestoredEnabled = hudCam2 != null && hudCam2.enabled;
         if (attrCam != null) attrCam.cullingMask = 0;
         ReleaseLowerHudFixtureInputLock();
         if (mapClone != null) { Destroy(mapClone); mapClone = null; mapGm = null; mapContentVisible = false; mapAreaBValid = false; mapAreaBFor = null; mapFitIsArea = false; }
@@ -1472,8 +1420,7 @@ public partial class HKDualScreen
         TeardownFrame();
         if (attrCam != null) attrCam.enabled = attrCameraWasEnabled;
         if (hudCam2 != null)
-            hudCam2.enabled = directDisplayActive &&
-                              (hudCameraWasEnabled || hudCameraRestoredEnabled);
+            hudCam2.enabled = directDisplayActive && hudCameraWasEnabled;
         tab.built = -1;
         fit.valid = false;
     }

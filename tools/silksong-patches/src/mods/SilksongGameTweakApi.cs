@@ -120,7 +120,7 @@ namespace DualSouls.Mods.Silksong
         public void SetFastTransitions(bool enabled) { _fastTransitions = enabled; }
         public void SetAutoMap(bool enabled) { _autoMap = enabled; }
         public void SetInnateCompass(bool enabled) { _innateCompass = enabled; SilksongGameplayHooks.InnateCompassEnabled = enabled; }
-        public void OpenBenchTeleport() { SilksongGameplayFeatures.RequestBenchRoute(); }
+        public void OpenBenchTeleport() { SilksongNativeModsMenu.OpenBenchTeleportRoute(); }
         public void SetSecretRadar(bool enabled) { _secretRadar = enabled; }
 
         public void SetNeedleDamageMultiplier(int multiplier)

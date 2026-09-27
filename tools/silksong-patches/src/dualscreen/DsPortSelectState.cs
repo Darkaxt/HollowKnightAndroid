@@ -537,9 +537,9 @@ public sealed class DsPortConsumeVisualLifetime
 
 public static class DsPortGesturePrecedence
 {
-    public static bool Consume(Func<bool> overlay, Func<bool> mods, Func<bool> tabs, Func<bool> page)
+    public static bool Consume(Func<bool> overlay, Func<bool> tabs, Func<bool> page)
     {
-        return (overlay != null && overlay()) || (mods != null && mods()) ||
-               (tabs != null && tabs()) || (page != null && page());
+        return (overlay != null && overlay()) || (tabs != null && tabs()) ||
+               (page != null && page());
     }
 }

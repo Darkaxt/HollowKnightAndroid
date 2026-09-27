@@ -32,7 +32,7 @@ class SilksongNativeModsMenuContractTest(unittest.TestCase):
             "UIManager",
             "optionsMenuScreen",
             "MenuScreen",
-            "MenuSelectable",
+            "MenuButton",
             "ShowMenu(binding.ModsScreen)",
             "HideMenu(binding.OptionsScreen)",
         ):
@@ -40,6 +40,14 @@ class SilksongNativeModsMenuContractTest(unittest.TestCase):
         self.assertNotIn("System.Reflection", source)
         self.assertNotIn("GetField(", source)
         self.assertNotIn("GetMethod(", source)
+
+    def test_retained_native_buttons_clear_cloned_actions_and_cancel_routes(self):
+        source = self.source()
+        prepare = method_body(source, "static void PrepareNativeButton(MenuButton button)")
+        self.assertIn("button.buttonType = MenuButton.MenuButtonType.Activate", prepare)
+        self.assertIn("button.cancelAction = CancelAction.DoNothing", prepare)
+        self.assertIn("button.OnSubmitPressed = new UnityEvent()", prepare)
+        self.assertEqual(3, source.count("PrepareNativeButton(source);"))
 
     def test_native_route_is_paused_gameplay_only_and_event_driven(self):
         source = self.source()

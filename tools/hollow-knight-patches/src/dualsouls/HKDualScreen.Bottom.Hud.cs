@@ -392,21 +392,6 @@ public partial class HKDualScreen
             }
             Renderer refR = hasLvl ? lr : str;
             float cyW = !float.IsNaN(tabMidW) ? tabMidW : (refR != null ? refR.bounds.center.y : fr.y + yRow), czW = 4f;
-            // B8: the Tweaks gear anchors to the fps text (leftmost readout element) — its live bounds
-            // are the only reliable row alignment (raw compTabY*s sits below the visible edge).
-            if (str != null && str.enabled)
-            {
-                var gearB = str.bounds;
-                // fix(180) [user: "gear now not horizontally centered with fps"]: CENTRE it again, but
-                // on a STABLE centre. The label is left-anchored at compFpsX (min.x fixed) while its
-                // width breathes with the digit count ("119 fps" vs "60 fps"), so live centre.x made
-                // the gear drift (the v176 report). Centre on min.x + the WIDEST half-width seen so
-                // far: it converges within a second of gameplay and then never moves again.
-                hudFpsHalfMax = Mathf.Max(hudFpsHalfMax, gearB.extents.x);
-                hudGearAnchor = new Vector3(gearB.min.x + hudFpsHalfMax, cyW, 4f);
-                hudFpsB = gearB;                                        // tapping the readout itself also opens the pane
-                hudGearH = Mathf.Max(0.05f, gearB.size.y); hudGearOk = true;
-            }
             float cH = refR != null ? Mathf.Max(0.05f, refR.bounds.size.y) : 0.5f, gapIL = cH * Mathf.Max(0f, cfg.compBattGap);
             float levelLeft = grpRight - 2f * lHalfW;
             if (battIconSR != null)
@@ -425,14 +410,12 @@ public partial class HKDualScreen
             }
         }
         UpdateNotchRow(s, asp, effectiveTab);      // fix#3(164-fb): Charms tab: notch icons where the area name sits
-        PositionGear(s, asp, cfg.compTabY * s);   // B8: tweaks gear in the corner left of the fps readout
         UpdateEquipCharmRow(s, asp);   // equipped-charm icon row across the top (every tab)
         // fix4: grey "Map not acquired yet" label — centred in the box, shown only on the Map tab when the
         // zone has no map (mutually exclusive with the area name, which requires mapAvailable).
         if (noMapT != null && noMapTmp != null)
         {
-            bool showNoMap = cfg.compNoMapMsg == 1 && effectiveTab == COMP_MAP && !mapAvailable && !creditNow
-                             && !tweaksOpen;   // fix(172): the Mod pane covers the box — no stray label behind it [user]
+            bool showNoMap = cfg.compNoMapMsg == 1 && effectiveTab == COMP_MAP && !mapAvailable && !creditNow;
             // Bench-teleport toast borrows this label (only shows on an AVAILABLE map, so no clash).
             bool toast = benchToastUntil > Time.unscaledTime && effectiveTab == COMP_MAP && !creditNow;
             // fix#2(164-fb): toast = BLACK text on a WHITE PILL (reset-button style) centred on the
@@ -547,8 +530,6 @@ public partial class HKDualScreen
         }
         catch { }
     }
-
-    float hudFpsHalfMax;   // fix(180): converging half-width so the gear centre stops drifting
 
     void UpdateNotchRow(float s, float asp, int effectiveTab)
     {

@@ -385,6 +385,14 @@ public partial class HKDualScreen : MonoBehaviour
         return activeInstance;
     }
     static HKDualScreen activeInstance;
+
+    public static void OpenBenchTeleportRoute()
+    {
+        if (activeInstance == null)
+            throw new InvalidOperationException("The Hollow Knight companion is not ready.");
+        activeInstance.tab.tap = COMP_MAP;
+    }
+
     bool lowerHudFixtureActive;
 
     // Config hot-reload: check the file's mtime a few times a second and only re-parse on change

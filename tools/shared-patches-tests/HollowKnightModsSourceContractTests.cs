@@ -63,17 +63,21 @@ public sealed class HollowKnightModsSourceContractTests
     public void RoutesAndBenchMapSeamsHaveConcreteManagedIntegrations()
     {
         string hooks = Source("HkStageHooks.cs");
-        string presenter = Source("HollowKnightModsPresenter.cs");
+        string companion = Source("HKDualScreen.cs");
+        string nativeMenu = NativeSource("HollowKnightNativeModsMenu.cs");
 
         Assert.Contains("dev.silksong.launcher.skins.ui.SkinsActivity", hooks, StringComparison.Ordinal);
         Assert.Contains("player.SetBenchRespawn", hooks, StringComparison.Ordinal);
         Assert.Contains("game.ReadyForRespawn(false)", hooks, StringComparison.Ordinal);
         Assert.Contains("HKDualScreen.OpenBenchTeleportRoute()", hooks, StringComparison.Ordinal);
-        Assert.Contains("activeInstance.tab.tap = COMP_MAP", presenter, StringComparison.Ordinal);
-        Assert.Contains("menu.ActivateSelected()", presenter, StringComparison.Ordinal);
+        Assert.Contains("activeInstance.tab.tap = COMP_MAP", companion, StringComparison.Ordinal);
+        Assert.Contains("_menu.ActivateSelected()", nativeMenu, StringComparison.Ordinal);
         Assert.DoesNotContain("IsBenchRecorded(string scene) => false", hooks, StringComparison.Ordinal);
         Assert.DoesNotContain("BenchWarp(string scene) { }", hooks, StringComparison.Ordinal);
     }
+
+    static string NativeSource(string name) =>
+        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "native-skin-contracts", name));
 
     static string Source(string name) =>
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "source-contracts", name));

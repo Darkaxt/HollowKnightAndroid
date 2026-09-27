@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using DualSouls.Mods.HollowKnight;
 using UnityEngine;
 
 // [B5] BOTTOM SCREEN — tap-to-select + control prompt (cross-cutting for Inventory + Charms). Touch bridge poll,
@@ -189,39 +188,6 @@ public partial class HKDualScreen
 
     void ResetMapViewAnimated() { resetStartZoom = mapUserZoom; resetStartPan = mapUserPan; resetAnimT = 0f; pinchLastDist = -1f; dragLastValid = false; }   // the RESET button glides back instead of blipping
 
-    bool RejectAndDrainPendingModsInput()
-    {
-        if (!HollowKnightModsPresentationFlow.RejectAllLowerScreenInput(
-                modsLifecycle))
-            return false;
-        return DrainOwnedModsInput();
-    }
-
-    bool DrainOwnedModsInput()
-    {
-        int tapSequence = transport != null ? transport.TapSequence : lastTapSeq;
-        int cleanTapSequence = transport != null
-            ? transport.CleanTapSequence
-            : lastCleanTapSeq;
-        bool drained = HollowKnightModsPresentationFlow.RejectAndDrainLowerScreenInput(
-            modsLifecycle,
-            tapSequence,
-            cleanTapSequence,
-            ref lastTapSeq,
-            ref lastCleanTapSeq,
-            ref pinchLastDist,
-            ref dragLastValid,
-            ref modsDragValid);
-        if (drained)
-            modsInteraction.ResetCleanTap(cleanTapSequence);
-        return drained;
-    }
-
-    void DrainPendingModsInputBeforeRelease()
-    {
-        DrainOwnedModsInput();
-    }
-
     // Convert a bottom-panel normalized touch (top-left origin) to an attrCam world point.
     Vector3 TouchToWorld(float nx, float ny)
     {
@@ -235,9 +201,6 @@ public partial class HKDualScreen
     // a clean tap on the map area resets the view. Runs off HKAux's live multi-pointer bridge.
     void MapPinchTick()
     {
-        if (RejectAndDrainPendingModsInput())
-            return;
-        if (modsLifecycle.OwnsInput) return;
         if (cfg.compMapPinch != 1 || transport == null || attrCam == null) return;
         try
         {
@@ -327,14 +290,8 @@ public partial class HKDualScreen
 
     void PollTouch()
     {
-        // Always consume a changed debug sequence; dispatch only after Mods releases input.
-        bool dispatchDebugSimulation = cfg.debug == 1 &&
-            HollowKnightModsPresentationFlow.TryAcceptDebugSimulation(
-                cfg.compSimTapN,
-                modsLifecycle.OwnsInput,
-                ref lastSimTapN);
-        if (RejectAndDrainPendingModsInput())
-            return;
+        bool dispatchDebugSimulation = cfg.debug == 1 && cfg.compSimTapN != lastSimTapN;
+        if (cfg.debug == 1) lastSimTapN = cfg.compSimTapN;
         // DEBUG sim-tap: fire a synthetic item tap at (compSimTapX, compSimTapY) when compSimTapN changes.
         if (dispatchDebugSimulation)
         {
@@ -350,20 +307,6 @@ public partial class HKDualScreen
             float ny = transport.TouchY;
             Dbg($"HKDS tap nx={nx:F2} ny={ny:F2}");
             if (nx < 0f) return;
-            // B8: the gear (stacked above the fps readout) + the readout itself toggle the pane.
-            // Panel-space test — valid in both touch bands and regardless of where attrCam is parked.
-            if (GearTapN(nx, ny)) { ToggleTweaksPane(); return; }
-            int modsCloseTab;
-            if (HollowKnightModsPresentationFlow.CanCloseFromLowerScreenInput(
-                    modsLifecycle) &&
-                ModsTabTapN(nx, ny, out modsCloseTab))
-            {
-                CloseTweaksPane();
-                tab.tap = modsCloseTab;
-                Dbg($"HKDS Mods tab close -> tab={tab.tap}");
-                return;
-            }
-            if (modsLifecycle.OwnsInput) return;   // cached Mods hits are the only lower-screen authority while open/stowed
             if (ny < cfg.compTabBandY)   // ABOVE the tab row -> an item tap on the Inventory/Charms pane (tab band is only the bottom strip)
             {
                 if (cfg.compTapSelect == 1 && (tab.cur == COMP_INV || tab.cur == COMP_CHARM)) PollItemTap(nx, ny);
@@ -391,8 +334,6 @@ public partial class HKDualScreen
             }
             if (hitTab >= 0)
             {
-                if (HollowKnightModsPresentationFlow.CanCloseFromLowerScreenInput(modsLifecycle))
-                    CloseTweaksPane();
                 tab.tap = hitTab;
                 Dbg($"HKDS tab tapped -> tab={tab.tap}");
             }

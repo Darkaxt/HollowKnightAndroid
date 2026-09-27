@@ -63,10 +63,6 @@ public sealed class CompanionShellLayoutTests
         Assert.True(layout.Battery.Bounds.Bottom <= layout.Navigation.Bottom);
         Assert.True(layout.Status.Bounds.Right < layout.Tabs[0].Bounds.Left);
         Assert.True(layout.Tabs[^1].Bounds.Right < layout.Battery.Bounds.Left);
-        Assert.True(layout.ModsGear.Bounds.Left >= 0);
-        Assert.True(layout.ModsGear.Bounds.Right <= width);
-        Assert.True(layout.ModsGear.Bounds.Top >= 0);
-        Assert.True(layout.ModsGear.Bounds.Bottom <= layout.Status.Bounds.Top);
         for (var index = 0; index < layout.Tabs.Count; index++)
         {
             var tab = layout.Tabs[index];
@@ -94,14 +90,15 @@ public sealed class CompanionShellLayoutTests
     }
 
     [Fact]
-    public void Mods_is_a_separate_gear_above_status_and_never_a_tab()
+    public void Lower_shell_has_no_mods_control_or_hit_target()
     {
         var layout = CompanionShellLayout.Create(1240, 1080, Pages);
 
         Assert.DoesNotContain(layout.Tabs, tab => tab.Id == "mods");
-        Assert.True(layout.ModsGear.Bounds.Bottom <= layout.Status.Bounds.Top);
-        Assert.True(layout.ModsGear.Bounds.Width >= CompanionShellLayout.MinimumTouchTarget);
-        Assert.Equal(CompanionHitTarget.Mods, layout.HitTest(layout.ModsGear.Bounds.CenterX, layout.ModsGear.Bounds.CenterY).Target);
+        Assert.Equal(new[] { CompanionHitTarget.None, CompanionHitTarget.Tab },
+            Enum.GetValues<CompanionHitTarget>());
+        Assert.Equal(CompanionHitTarget.None,
+            layout.HitTest(layout.Status.Bounds.CenterX, layout.Status.Bounds.Top - 40).Target);
     }
 
     [Fact]

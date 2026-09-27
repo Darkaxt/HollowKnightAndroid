@@ -44,7 +44,6 @@ namespace DualSouls.Mods.Silksong
         static bool lastAtBench;
         static int benchProfile = -1;
         static readonly Dictionary<string, BenchRecord> benches = new Dictionary<string, BenchRecord>(StringComparer.Ordinal);
-        static bool benchRouteRequested;
 
         [Serializable]
         sealed class StateEnvelope
@@ -143,7 +142,6 @@ namespace DualSouls.Mods.Silksong
             RemoveCombatOverlays();
             ReleaseVisualResources();
             ResetBossRuntime();
-            benchRouteRequested = false;
             SilksongGameplayHooks.Reset();
         }
 
@@ -694,8 +692,6 @@ namespace DualSouls.Mods.Silksong
             foreach (BenchRecord record in benches.Values) { if (envelope.records.Count == MaximumBenches) break; envelope.records.Add(record); }
             string path = BenchPath(player.profileID); Directory.CreateDirectory(Path.GetDirectoryName(path)); File.WriteAllText(path, JsonUtility.ToJson(envelope));
         }
-        public static void RequestBenchRoute() { benchRouteRequested = true; }
-        public static bool ConsumeBenchRouteRequest() { bool requested = benchRouteRequested; benchRouteRequested = false; return requested; }
         public static List<BenchRecord> BenchDestinations()
         {
             var result = new List<BenchRecord>(benches.Values); result.Sort((a, b) => string.Compare(a.scene, b.scene, StringComparison.Ordinal)); return result;

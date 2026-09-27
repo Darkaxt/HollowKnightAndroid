@@ -61,7 +61,6 @@ namespace DualSouls.DualScreen
     {
         None,
         Tab,
-        Mods,
     }
 
     public readonly struct CompanionHit
@@ -101,7 +100,6 @@ namespace DualSouls.DualScreen
             CompanionRect content,
             CompanionRect bottomOrnament,
             CompanionRect navigation,
-            CompanionControlLayout modsGear,
             CompanionControlLayout status,
             CompanionControlLayout battery,
             List<CompanionTabLayout> tabs)
@@ -111,7 +109,6 @@ namespace DualSouls.DualScreen
             Content = content;
             BottomOrnament = bottomOrnament;
             Navigation = navigation;
-            ModsGear = modsGear;
             Status = status;
             Battery = battery;
             _tabs = tabs;
@@ -122,7 +119,6 @@ namespace DualSouls.DualScreen
         public CompanionRect Content { get; }
         public CompanionRect BottomOrnament { get; }
         public CompanionRect Navigation { get; }
-        public CompanionControlLayout ModsGear { get; }
         public CompanionControlLayout Status { get; }
         public CompanionControlLayout Battery { get; }
         public IReadOnlyList<CompanionTabLayout> Tabs => _tabs;
@@ -169,14 +165,8 @@ namespace DualSouls.DualScreen
                 tabs.Add(new CompanionTabLayout(pageIds[i], new CompanionRect(left, tabTop, right - left, tabH)));
             }
 
-            int gearSize = Math.Max(MinimumTouchTarget, Sx(78));
-            var gear = new CompanionControlLayout(new CompanionRect(status.Bounds.CenterX - gearSize / 2,
-                                                                     status.Bounds.Top - gearSize,
-                                                                     gearSize,
-                                                                     gearSize));
-
             return new CompanionShellLayout(hud, topOrnament, content, bottomOrnament,
-                                            navigation, gear, status, battery, tabs);
+                                            navigation, status, battery, tabs);
         }
 
         public CompanionSelectionLayout SelectionFor(int index)
@@ -193,7 +183,6 @@ namespace DualSouls.DualScreen
 
         public CompanionHit HitTest(float x, float y)
         {
-            if (ModsGear.Bounds.Contains(x, y)) return new CompanionHit(CompanionHitTarget.Mods);
             for (int i = 0; i < _tabs.Count; i++)
                 if (_tabs[i].Bounds.Contains(x, y)) return new CompanionHit(CompanionHitTarget.Tab, i);
             return new CompanionHit(CompanionHitTarget.None);
