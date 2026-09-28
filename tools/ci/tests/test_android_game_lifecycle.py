@@ -39,6 +39,29 @@ class AndroidGameLifecycleTest(unittest.TestCase):
             "Unity must stop before secondary lifecycle bookkeeping",
         )
 
+    def test_secondary_deactivation_fades_without_detaching_surface(self):
+        source = SECONDARY_DISPLAY.read_text(encoding="utf-8")
+        set_enabled = method_body(
+            source, r"\svoid\s+setEnabledOnUiThread\s*\(\s*boolean\s+value\s*\)"
+        )
+        set_visible = method_body(
+            source, r"\svoid\s+setSurfaceVisible\s*\(\s*boolean\s+visible\s*\)"
+        )
+        update_surface = method_body(source, r"\svoid\s+updateSurface\s*\(\s*\)")
+
+        self.assertTrue(set_enabled, "SecondaryDisplay.setEnabledOnUiThread is missing")
+        self.assertTrue(set_visible, "SecondaryDisplay.setSurfaceVisible is missing")
+        self.assertTrue(update_surface, "SecondaryDisplay.updateSurface is missing")
+        self.assertNotIn("View.GONE", source)
+        self.assertNotIn("View.INVISIBLE", source)
+        self.assertIn("setSurfaceVisible(false)", set_enabled)
+        self.assertIn("root.setAlpha", set_visible)
+        self.assertIn("surface.setAlpha", set_visible)
+        self.assertNotIn("setVisibility", set_visible)
+        self.assertNotIn("View.GONE", set_visible)
+        self.assertIn("setSurfaceVisible(visible)", update_surface)
+        self.assertNotIn("View.GONE", update_surface)
+
     def test_secondary_stop_preserves_unity_owned_surface(self):
         source = SECONDARY_DISPLAY.read_text(encoding="utf-8")
         on_stop = method_body(source, r"\svoid\s+onStop\s*\(\s*\)")

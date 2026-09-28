@@ -70,10 +70,10 @@ final class SecondaryDisplay implements SurfaceHolder.Callback
     {
         enabled = value;
         handler.removeCallbacks(monitor);
-        if (value) monitor.run();
+        if (value && started) monitor.run();
         else
         {
-            if (root != null) root.setVisibility(View.GONE);
+            setSurfaceVisible(false);
             touches.setSurface(0, 0, false);
         }
     }
@@ -177,12 +177,20 @@ final class SecondaryDisplay implements SurfaceHolder.Callback
         return null;
     }
 
+    private void setSurfaceVisible(boolean visible)
+    {
+        // SurfaceView owns a separate BufferQueue. Alpha changes compositor
+        // visibility without detaching that queue, unlike GONE or INVISIBLE.
+        float alpha = visible ? 1f : 0f;
+        if (root != null && root.getAlpha() != alpha) root.setAlpha(alpha);
+        if (surface != null && surface.getAlpha() != alpha) surface.setAlpha(alpha);
+    }
+
     private void updateSurface()
     {
         if (root == null || surface == null) return;
         boolean visible = enabled && started;
-        int visibility = visible ? View.VISIBLE : View.GONE;
-        if (root.getVisibility() != visibility) root.setVisibility(visibility);
+        setSurfaceVisible(visible);
         touches.setSurface(surface.getWidth(), surface.getHeight(),
             visible && surface.isAttachedToWindow() && surface.getHolder().getSurface().isValid());
     }
