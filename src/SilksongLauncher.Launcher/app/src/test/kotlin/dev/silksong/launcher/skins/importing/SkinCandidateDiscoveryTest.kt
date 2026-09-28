@@ -66,8 +66,9 @@ class SkinCandidateDiscoveryTest {
     }
 
     @Test
-    fun `does not recurse or infer candidates from unknown files`() {
-        assertCode(listOf("Outer/Pack/Deeper/Knight.png"), SkinImportCode.NO_CANDIDATE)
+    fun `accepts arbitrary wrapper depth but does not infer candidates from unknown files`() {
+        val nested = discover(listOf("Outer/Pack/Deeper/Knight.png"))
+        assertEquals(listOf("Outer/Pack/Deeper" to 2), roots(nested))
         assertCode(listOf("knightish.png", "readme.txt"), SkinImportCode.NO_CANDIDATE)
     }
 

@@ -4,11 +4,13 @@ import dev.silksong.launcher.skins.catalog.CatalogPathSet
 import dev.silksong.launcher.skins.contracts.CandidatePreparationResult
 import dev.silksong.launcher.skins.contracts.DecodeResult
 import dev.silksong.launcher.skins.contracts.QuarantinedArchive
+import dev.silksong.launcher.skins.contracts.SkinArchiveFormat
 import dev.silksong.launcher.skins.contracts.SkinImportCode
 import dev.silksong.launcher.skins.contracts.SkinResult
 import dev.silksong.launcher.skins.documents.CanonicalJson
 import dev.silksong.launcher.skins.documents.SkinIdentity
 import dev.silksong.launcher.skins.fixtures.PinnedCatalogFixture
+import dev.silksong.launcher.skins.fixtures.RawRarFixture
 import dev.silksong.launcher.skins.fixtures.RawZipFixture
 import dev.silksong.launcher.skins.fixtures.TinyPngFixture
 import dev.silksong.launcher.skins.storage.AndroidSkinFileSystem
@@ -21,6 +23,8 @@ import java.io.File
 import java.io.IOException
 import java.io.OutputStream
 import java.nio.file.Files
+import org.apache.commons.compress.archivers.sevenz.SevenZMethod
+import org.apache.commons.compress.archivers.sevenz.SevenZOutputFile
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -75,6 +79,34 @@ class SkinNormalizerTest {
         assertFalse(File(value.stagingRoot, "object.json").exists())
         assertFalse(File(value.stagingRoot, ".complete").exists())
         assertEquals(value.candidateKey, CanonicalJson.parseImportReceipt(value.importReceiptBytes, catalog).candidateKey)
+    }
+
+    @Test
+    fun `normalizes equivalent ZIP 7z and RAR skins through one catalog and safety pipeline`() {
+        val png = TinyPngFixture.rgba()
+        val zip = ownedArchive(
+            RawZipFixture.build(listOf(RawZipFixture.Entry("Pack/Knight.png".toByteArray(), png))).bytes,
+        ) to SkinArchiveFormat.ZIP
+        val sevenZip = sevenZipArchive("Pack/Knight.png", png) to SkinArchiveFormat.SEVEN_Z
+        val rar = ownedArchive(
+            RawRarFixture.build(listOf(RawRarFixture.Entry("Pack/Knight.png", png))),
+        ) to SkinArchiveFormat.RAR
+
+        for ((file, format) in listOf(zip, sevenZip, rar)) {
+            val quarantined = QuarantinedArchive(
+                file = file,
+                archiveSha256 = SkinIdentity.sha256(file),
+                byteCount = file.length(),
+                archiveName = "skin.${format.name.lowercase()}",
+                format = format,
+            )
+            val result = SkinNormalizer(catalog, decoder, fs).prepare(quarantined)
+
+            assertTrue("Expected $format normalization success, got $result", result is SkinResult.Ok)
+            val ready = (result as SkinResult.Ok).value.single() as CandidatePreparationResult.Ready
+            assertEquals(setOf("Knight.png"), ready.candidate.mappings.keys)
+            assertEquals(1, ready.candidate.payloads.size)
+        }
     }
 
     @Test
@@ -318,6 +350,20 @@ class SkinNormalizerTest {
     private fun hasNormalizationResidue(): Boolean =
         paths.quarantine.listFiles().orEmpty().flatMap { it.listFiles().orEmpty().asIterable() }
             .any { it.name.startsWith("normalized-") }
+
+    private fun sevenZipArchive(path: String, bytes: ByteArray): File {
+        val file = ownedArchive(ByteArray(0))
+        val source = File(root, "sevenzip-source-${next++}").apply { writeBytes(bytes) }
+        SevenZOutputFile(file).use { output ->
+            output.setContentCompression(SevenZMethod.COPY)
+            val entry = output.createArchiveEntry(source, path)
+            output.putArchiveEntry(entry)
+            output.write(bytes)
+            output.closeArchiveEntry()
+        }
+        source.delete()
+        return file
+    }
 
     private fun ownedArchive(bytes: ByteArray): File {
         val stage = File(paths.quarantine, "quarantine-${next++}").apply { mkdirs() }

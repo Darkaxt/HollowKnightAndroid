@@ -1,5 +1,6 @@
 package dev.silksong.launcher.skins.importing
 
+import dev.silksong.launcher.skins.contracts.SkinArchiveFormat
 import dev.silksong.launcher.skins.contracts.SkinImportCode
 import dev.silksong.launcher.skins.contracts.SkinLimits
 import dev.silksong.launcher.skins.contracts.SkinResult
@@ -158,6 +159,7 @@ class SkinQuarantineTest {
 
         assertTrue("Expected quarantine success, got $result", result is SkinResult.Ok)
         val archive = (result as SkinResult.Ok).value
+        assertEquals(SkinArchiveFormat.ZIP, archive.format)
         assertEquals(1, opens)
         assertEquals("reserve:${SkinLimits.V1.quarantineBytes}", events.first())
         assertTrue(events.indexOf("open") > events.indexOfFirst { it.startsWith("reserve:") })
@@ -165,6 +167,29 @@ class SkinQuarantineTest {
         assertFalse(reservation.released)
         assertTrue(archive.file.toPath().startsWith(paths.staging.toPath()))
         assertArrayEquals(bytes, archive.file.readBytes())
+    }
+
+    @Test
+    fun `admits ZIP 7z and both RAR signatures into the same bounded quarantine`() {
+        val cases = listOf(
+            byteArrayOf(0x50, 0x4b, 0x03, 0x04) to SkinArchiveFormat.ZIP,
+            byteArrayOf(0x37, 0x7a, 0xbc.toByte(), 0xaf.toByte(), 0x27, 0x1c) to SkinArchiveFormat.SEVEN_Z,
+            byteArrayOf(0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x00) to SkinArchiveFormat.RAR,
+            byteArrayOf(0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x01, 0x00) to SkinArchiveFormat.RAR,
+        )
+        for ((signature, expected) in cases) {
+            val reservation = RecordingReservation(mutableListOf())
+            val result = SkinQuarantine(
+                paths,
+                AndroidSkinFileSystem(),
+                SkinCapacityReserver { SkinResult.Ok(reservation) },
+            ).copy(SkinImportInput.SelectedFile("skin") { ByteArrayInputStream(signature) })
+
+            assertTrue("Expected $expected quarantine success, got $result", result is SkinResult.Ok)
+            assertEquals(expected, (result as SkinResult.Ok).value.format)
+            assertEquals(1, reservation.transfers.size)
+            assertFalse(reservation.released)
+        }
     }
 
     @Test
@@ -229,17 +254,17 @@ class SkinQuarantineTest {
     }
 
     @Test
-    fun `unsupported and invalid magic release reservation and staging`() {
+    fun `invalid magic releases reservation and staging`() {
         val cases = listOf(
-            byteArrayOf(0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x00) to SkinImportCode.UNSUPPORTED_RAR,
-            byteArrayOf(0x50, 0x4b, 0x03, 0x06) to SkinImportCode.INVALID_INPUT,
+            byteArrayOf(0x50, 0x4b, 0x03, 0x06),
+            byteArrayOf(0x37, 0x7a, 0xbc.toByte(), 0xaf.toByte(), 0x27, 0x00),
         )
-        for ((bytes, expected) in cases) {
+        for (bytes in cases) {
             val reservation = RecordingReservation(mutableListOf())
             val result = SkinQuarantine(paths, AndroidSkinFileSystem(), SkinCapacityReserver { SkinResult.Ok(reservation) }).copy(
                 SkinImportInput.ImmediateFolderFile("skin.bin", "doc") { ByteArrayInputStream(bytes) },
             )
-            assertEquals(expected, (result as SkinResult.Error).code)
+            assertEquals(SkinImportCode.INVALID_INPUT, (result as SkinResult.Error).code)
             assertTrue(reservation.released)
             assertNoQuarantineNodes()
         }

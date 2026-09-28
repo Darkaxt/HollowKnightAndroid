@@ -1,10 +1,13 @@
 package dev.silksong.launcher.skins.importing
 
 import dev.silksong.launcher.skins.catalog.CatalogPathSet
+import dev.silksong.launcher.skins.catalog.SkinCatalogPaths
+import dev.silksong.launcher.skins.catalog.SkinCatalogProfiles
 import dev.silksong.launcher.skins.contracts.SkinImportCode
 import dev.silksong.launcher.skins.contracts.SkinResult
 import dev.silksong.launcher.skins.fixtures.PinnedCatalogFixture
 import dev.silksong.launcher.skins.fixtures.RawZipFixture
+import java.io.ByteArrayInputStream
 import java.io.File
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -118,8 +121,13 @@ class SkinCatalogMapperTest {
     }
 
     @Test
-    fun `finite alias near misses remain warnings`() {
-        for (nearMiss in listOf("charm_1.png", "Hud.pngx", "Inventory/Godfinder.png")) {
+    fun `safe catalog suffix matching accepts case but leaves actual near misses as warnings`() {
+        val (caseArchive, caseCandidate) = candidate(listOf("Pack/Knight.png", "Pack/charm_1.png"))
+        val caseMapping = (SkinCatalogMapper(catalog).map(caseCandidate, caseArchive) as SkinResult.Ok).value
+        assertEquals(setOf("Knight.png", "Charms/Charm_1.png"), caseMapping.textures.keys)
+        assertEquals(listOf("CATALOG_SUFFIX"), caseMapping.aliases.map { it.rule })
+
+        for (nearMiss in listOf("Hud.pngx", "Inventory/Godfinder.png")) {
             val (authorized, candidate) = candidate(listOf("Pack/Knight.png", "Pack/$nearMiss"))
             val mapping = (SkinCatalogMapper(catalog).map(candidate, authorized) as SkinResult.Ok).value
             assertEquals(setOf("Knight.png"), mapping.textures.keys)
@@ -163,6 +171,73 @@ class SkinCatalogMapperTest {
     }
 
     @Test
+    fun `matches Hollow Knight through arbitrary wrappers using the shortest unique catalog suffix`() {
+        val (authorized, candidate) = candidate(
+            listOf(
+                "Download/Nexus/Pack/Knight.png",
+                "Download/Nexus/Pack/Inventory/Geo.png",
+                "Download/Nexus/Pack/Geo.png",
+            ),
+        )
+        val result = SkinCatalogMapper(catalog).map(candidate, authorized)
+
+        assertTrue(result is SkinResult.Ok)
+        val mapping = (result as SkinResult.Ok).value
+        assertEquals(setOf("Knight.png", "Inventory/Geo.png", "Geo.png"), mapping.textures.keys)
+        assertTrue(mapping.aliases.isEmpty())
+    }
+
+    @Test
+    fun `matches Silksong collection and filename with case and optional Data suffix normalization`() {
+        val silksong = silksongCatalog()
+        val hornet = "Assets/Collections/Hornet Cln Data/atlas0.png"
+        val hud = "Assets/Collections/HUD Cln Data/atlas0.png"
+        val (authorized, candidate) = candidate(
+            listOf(
+                "HornetKnight/Hornet Cln/ATLAS0.PNG",
+                "HornetKnight/HUD Cln Data/atlas0.png",
+            ),
+            silksong,
+        )
+        val result = SkinCatalogMapper(silksong).map(candidate, authorized)
+
+        assertTrue(result is SkinResult.Ok)
+        val mapping = (result as SkinResult.Ok).value
+        assertEquals(setOf(hornet, hud), mapping.textures.keys)
+        assertEquals(listOf("CATALOG_SUFFIX", "CATALOG_SUFFIX"), mapping.aliases.map { it.rule })
+    }
+
+    @Test
+    fun `bare repeated filename cannot identify a Silksong target`() {
+        val result = candidateResult(listOf("Pack/atlas0.png"), silksongCatalog())
+        assertEquals(SkinImportCode.NO_CANDIDATE, (result as SkinResult.Error).code)
+    }
+
+    @Test
+    fun `catalog suffix matching remains profile isolated`() {
+        val silksongInHollowKnight = candidateResult(listOf("Pack/Hornet Cln/atlas0.png"), catalog)
+        val hollowKnightInSilksong = candidateResult(listOf("Pack/Knight.png"), silksongCatalog())
+
+        assertEquals(SkinImportCode.NO_CANDIDATE, (silksongInHollowKnight as SkinResult.Error).code)
+        assertEquals(SkinImportCode.NO_CANDIDATE, (hollowKnightInSilksong as SkinResult.Error).code)
+    }
+
+    @Test
+    fun `normalized Silksong aliases that resolve to one target collide instead of guessing`() {
+        val silksong = silksongCatalog()
+        val (authorized, candidate) = candidate(
+            listOf(
+                "Pack/Hornet Cln/atlas0.png",
+                "Pack/Hornet Cln Data/atlas0.png",
+            ),
+            silksong,
+        )
+
+        val result = SkinCatalogMapper(silksong).map(candidate, authorized)
+        assertEquals(SkinImportCode.TARGET_COLLISION, (result as SkinResult.Error).code)
+    }
+
+    @Test
     fun `warning priority is deterministic and one per ignored entry`() {
         val (authorized, candidate) = candidate(
             listOf("Pack/Knight.png", "Pack/Swap/archive.zip", "Pack/Cinematics/readme.txt", "outside.json"),
@@ -177,12 +252,32 @@ class SkinCatalogMapperTest {
 
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it.toInt() and 0xff) }
 
-    private fun candidate(names: List<String>): Pair<AuthorizedZip, dev.silksong.launcher.skins.contracts.SkinCandidate> {
+    private fun candidateResult(names: List<String>, authority: CatalogPathSet): SkinResult<dev.silksong.launcher.skins.contracts.CandidateSet> {
         val built = RawZipFixture.build(names.map { RawZipFixture.Entry(it.toByteArray(), byteArrayOf(1)) })
         val file = File(root, "archive-${next++}.zip").apply { writeBytes(built.bytes) }
         val zip = (BoundedZipReader().read(file) as SkinResult.Ok).value
         val authorized = (ZipPathAuthority().validate(zip) as SkinResult.Ok).value
-        val candidates = (SkinCandidateDiscovery(catalog).discover(authorized) as SkinResult.Ok).value
+        return SkinCandidateDiscovery(authority).discover(authorized)
+    }
+
+    private fun candidate(
+        names: List<String>,
+        authority: CatalogPathSet = catalog,
+    ): Pair<AuthorizedZip, dev.silksong.launcher.skins.contracts.SkinCandidate> {
+        val built = RawZipFixture.build(names.map { RawZipFixture.Entry(it.toByteArray(), byteArrayOf(1)) })
+        val file = File(root, "archive-${next++}.zip").apply { writeBytes(built.bytes) }
+        val zip = (BoundedZipReader().read(file) as SkinResult.Ok).value
+        val authorized = (ZipPathAuthority().validate(zip) as SkinResult.Ok).value
+        val candidates = (SkinCandidateDiscovery(authority).discover(authorized) as SkinResult.Ok).value
         return authorized to candidates.candidates.single()
+    }
+
+    private fun silksongCatalog(): CatalogPathSet {
+        val profile = SkinCatalogProfiles.Silksong
+        val bytes = (profile.paths.joinToString("\n") + "\n").toByteArray(Charsets.UTF_8)
+        return when (val result = SkinCatalogPaths.load(profile, ByteArrayInputStream(bytes))) {
+            is SkinResult.Ok -> result.value
+            is SkinResult.Error -> error(result.detail)
+        }
     }
 }
