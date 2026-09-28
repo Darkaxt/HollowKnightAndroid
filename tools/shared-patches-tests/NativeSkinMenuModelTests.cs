@@ -32,6 +32,16 @@ public sealed class NativeSkinMenuModelTests
     }
 
     [Fact]
+    public void RotationModeMakesTheAlwaysIncludedDefaultCandidateVisible()
+    {
+        var model = new NativeSkinMenuModel(Snapshot("ROTATE", "ALL", null, new[] { "p0" },
+            new NativeSkinPackDescriptor("p0", "Pack 0", "A")), 3);
+
+        Assert.Equal("ROTATE + DEFAULT", model.Rows[0].Value);
+        Assert.Equal("ENABLED", model.Rows[2].Value);
+    }
+
+    [Fact]
     public void ModeAndScopeCycleThroughAllExactBridgeValues()
     {
         var model = new NativeSkinMenuModel(Snapshot("OFF", "ALL", null, Array.Empty<string>()), 3);

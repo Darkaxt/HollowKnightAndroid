@@ -87,7 +87,7 @@ namespace DualSouls.Skins.Silksong.Runtime
             }
             return new SkinLibraryRequest { ProfileId = wire.profileId, ConfigSha256 = wire.configSha256,
                 Mode = wire.mode, SpriteScope = wire.spriteScope, PackId = wire.packId, TreeSha256 = wire.treeSha256, Root = wire.root,
-                Textures = textures, RotationRun = wire.rotationRun, LastDeath = wire.lastDeath,
+                Textures = textures, Vanilla = wire.vanilla, RotationRun = wire.rotationRun, LastDeath = wire.lastDeath,
                 PendingOccurrence = wire.pendingOccurrence, RotationDetail = wire.rotationDetail };
         }
 
@@ -100,7 +100,7 @@ namespace DualSouls.Skins.Silksong.Runtime
                 Debug.LogWarning("[Silksong skins library] " + warning);
             lastWarning = warning;
             if (observation.PendingOccurrence > 0 &&
-                (observation.Status == "Applied" || observation.Status == "Unchanged"))
+                (observation.Status == "Applied" || observation.Status == "Unchanged" || observation.Status == "Restored"))
                 return Bridge.CallStatic<bool>("reportRotation", observation.ConfigSha256 ?? "",
                     observation.RotationRun ?? "", observation.PendingOccurrence,
                     observation.ActivePackId ?? "", observation.ActiveTreeSha256 ?? "",
@@ -114,7 +114,7 @@ namespace DualSouls.Skins.Silksong.Runtime
         [Serializable] sealed class WireTexture { public string target, path; }
         [Serializable] sealed class WireRequest
         {
-            public bool ok;
+            public bool ok, vanilla;
             public string code, detail, profileId, configSha256, mode, spriteScope, packId, treeSha256, root,
                 rotationRun, rotationDetail;
             public long lastDeath, pendingOccurrence;
@@ -195,7 +195,7 @@ namespace DualSouls.Skins.Silksong.Runtime
         void ReportCurrent(SkinLibraryObservation observation)
         {
             bool completes = observation.PendingOccurrence > 0 &&
-                (observation.Status == "Applied" || observation.Status == "Unchanged");
+                (observation.Status == "Applied" || observation.Status == "Unchanged" || observation.Status == "Restored");
             string run = observation.RotationRun;
             long occurrence = observation.PendingOccurrence;
             if (report(observation) && completes && run == death.Run && occurrence == death.Occurrence)

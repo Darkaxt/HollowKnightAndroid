@@ -57,6 +57,7 @@ internal data class SkinLibraryViewState(
     val simplifiedAuthority: Boolean = false,
     val runtimeObservation: String? = null,
     val pendingPackId: String? = null,
+    val pendingVanilla: Boolean = false,
 ) {
     val mutationsEnabled: Boolean get() = simplifiedAuthority
 }
@@ -118,7 +119,7 @@ internal class SkinLibraryService(
                     pack.receiptSha256, pack.id == document.selectedPackId, pack.id in document.eligiblePackIds,
                     receipts.read(pack.candidateKey, pack.receiptSha256)) },
                 simplifiedAuthority = true, runtimeObservation = store.lastObservation(document),
-                pendingPackId = document.pendingPackId))
+                pendingPackId = document.pendingPackId, pendingVanilla = document.pendingVanilla))
         }
 
         private fun unsupported() = SkinResult.Error(

@@ -93,6 +93,7 @@
     <string name="skins_notice_error">%1$s · %2$s</string>
     <string name="skins_read_error">Skin library unavailable · %1$s\n%2$s</string>
     <string name="skins_none">None</string>
+    <string name="skins_default">Default</string>
     <string name="skins_yes">Yes</string>
     <string name="skins_no">No</string>
     <string name="skins_choose_source">Choose the exact ready source</string>

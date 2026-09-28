@@ -7,6 +7,7 @@ namespace DualSouls.Skins.Runtime
     {
         public string ProfileId, ConfigSha256, Mode, SpriteScope = SkinSpriteScopes.All, PackId, TreeSha256, Root, RotationRun, RotationDetail;
         public long LastDeath, PendingOccurrence;
+        public bool Vanilla;
         public IDictionary<string, string> Textures;
     }
     public sealed class SkinLibraryObservation
@@ -48,6 +49,7 @@ namespace DualSouls.Skins.Runtime
                 if (request == null) return; // nonblocking Kotlin lock was busy; next poll retries
                 if (request.ProfileId != rules.ProfileId || !Digest(request.ConfigSha256) ||
                     (request.Mode != "OFF" && request.Mode != "ON" && request.Mode != "ROTATE") ||
+                    (request.Vanilla && request.Mode != "ROTATE") ||
                     !SkinSpriteScopes.IsValid(request.SpriteScope))
                     throw new InvalidOperationException("Invalid launched-profile skin configuration.");
                 if (request.PendingOccurrence == 0 || request.PendingOccurrence != preparedOccurrence ||
@@ -59,11 +61,7 @@ namespace DualSouls.Skins.Runtime
                 }
                 SkinApplyResult result;
                 if (request.Mode == "OFF")
-                {
-                    result = restored ? new SkinApplyResult(SkinApplyStatus.Restored) : restore();
-                    if (result.Status == SkinApplyStatus.Restored || result.Status == SkinApplyStatus.Unchanged)
-                    { restored = true; activeId = activeTree = activeMode = activeScope = null; }
-                }
+                    result = RestoreVanilla();
                 else if (request.PendingOccurrence > 0 && !(ready?.Invoke(request) ?? false))
                     result = new SkinApplyResult(SkinApplyStatus.AwaitingTargets, "Frozen successor awaits live stable respawn.");
                 else if (request.PendingOccurrence > 0 && rules.RestoreBeforeRotation && !pendingRestored)
@@ -73,9 +71,10 @@ namespace DualSouls.Skins.Runtime
                     if (result.Status == SkinApplyStatus.Restored || result.Status == SkinApplyStatus.Unchanged)
                     {
                         activeId = activeTree = null;
+                        restored = true;
                         restoreRequired = false;
                         pendingRestored = true;
-                        result = ApplySelected(request);
+                        result = ApplyRequested(request);
                     }
                 }
                 else if (request.PendingOccurrence > 0 && restoreRequired)
@@ -84,11 +83,13 @@ namespace DualSouls.Skins.Runtime
                     result = restore();
                     if (result.Status == SkinApplyStatus.Restored || result.Status == SkinApplyStatus.Unchanged)
                     {
-                        activeId = activeTree = null; restoreRequired = false;
-                        result = new SkinApplyResult(SkinApplyStatus.AwaitingTargets, "Restoration recovered; retry the frozen successor next poll.");
+                        activeId = activeTree = null; restored = true; restoreRequired = false;
+                        result = request.Vanilla
+                            ? new SkinApplyResult(SkinApplyStatus.Restored)
+                            : new SkinApplyResult(SkinApplyStatus.AwaitingTargets, "Restoration recovered; retry the frozen successor next poll.");
                     }
                 }
-                else result = ApplySelected(request);
+                else result = ApplyRequested(request);
                 if (result.Status == SkinApplyStatus.RestoreFailed || result.Status == SkinApplyStatus.Blocked) restoreRequired = true;
                 if (request.Mode == "OFF" && restored) restoreRequired = false;
                 var detail = result.Detail;
@@ -101,6 +102,28 @@ namespace DualSouls.Skins.Runtime
                 Publish(request, "Failed", error.Message);
             }
         }
+        SkinApplyResult ApplyRequested(SkinLibraryRequest request)
+        {
+            if (!request.Vanilla) return ApplySelected(request);
+            if (!string.IsNullOrEmpty(request.PackId) || !string.IsNullOrEmpty(request.TreeSha256) ||
+                !string.IsNullOrEmpty(request.Root) || (request.Textures != null && request.Textures.Count != 0))
+                throw new InvalidOperationException("Default skin request contains imported-pack data.");
+            return RestoreVanilla();
+        }
+
+        SkinApplyResult RestoreVanilla()
+        {
+            if (restored) return new SkinApplyResult(SkinApplyStatus.Restored);
+            restored = false; activeMode = activeScope = null;
+            var result = restore();
+            if (result.Status == SkinApplyStatus.Restored || result.Status == SkinApplyStatus.Unchanged)
+            {
+                restored = true; awaitingApply = false; restoreRequired = false;
+                activeId = activeTree = activeMode = activeScope = null;
+            }
+            return result;
+        }
+
         SkinApplyResult ApplySelected(SkinLibraryRequest request)
         {
             if (string.IsNullOrEmpty(request.PackId) || !Digest(request.TreeSha256) || request.Textures == null ||

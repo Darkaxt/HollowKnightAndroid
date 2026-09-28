@@ -129,6 +129,24 @@ public class HollowKnightSkinLibraryTests
         ready=true;controller.Tick();Assert.Equal("Unchanged",seen.Status);Assert.Equal(1,seen.PendingOccurrence);Assert.Equal(3,attempts);
     }
 
+    [Fact] public void Pending_vanilla_successor_restores_once_and_reports_default_active()
+    {
+        var request = Request(); int applies = 0, restores = 0; SkinLibraryObservation observed = null;
+        var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules, () => request,
+            _ => { applies++; return new SkinApplyResult(SkinApplyStatus.Applied); },
+            () => { restores++; return new SkinApplyResult(SkinApplyStatus.Restored); },
+            value => observed = value, null, _ => true);
+        controller.Tick();
+        request.Mode = "ROTATE"; request.Vanilla = true; request.PackId = null;
+        request.TreeSha256 = null; request.Root = null; request.Textures = null; request.PendingOccurrence = 1;
+
+        controller.Tick(); controller.Tick();
+
+        Assert.Equal(1, applies); Assert.Equal(1, restores);
+        Assert.Equal("Restored", observed.Status); Assert.Null(observed.ActivePackId);
+        Assert.Null(observed.ActiveTreeSha256); Assert.Equal(1, observed.PendingOccurrence);
+    }
+
     [Fact] public void BusyAndReadFailureKeepWorkingVisualAndRetry()
     {
         var request = Request(); int reads = 0, applies = 0, restores = 0;
@@ -348,6 +366,32 @@ public class HollowKnightSkinLibraryTests
         library.Tick(5);Assert.Equal(2,reports);Assert.Equal(0,request.PendingOccurrence);Assert.Equal(2,applies);
         library.Tick(6);Assert.Equal(0,death.Occurrence);Assert.Equal(2,confirms);
     }
+    [Fact] public void Pending_default_restore_is_committed_as_a_rotation_completion()
+    {
+        var request=Request();request.Mode="ROTATE";request.RotationRun=new string('d',32);
+        var frame=LiveFrame();var death=new HollowKnightSkinDeathAdapter(()=>frame);
+        int commits=0,restores=0;
+        using var library=new HollowKnightSkinLibrary(()=>request,_=>new SkinApplyResult(SkinApplyStatus.Applied),
+            ()=>{restores++;return new SkinApplyResult(SkinApplyStatus.Restored);},observation=>{
+                if(observation.PendingOccurrence>0&&observation.Status=="Restored"){
+                    Assert.Null(observation.ActivePackId);Assert.Null(observation.ActiveTreeSha256);
+                    commits++;request.PendingOccurrence=0;return true;
+                }
+                return true;
+            },()=>new SkinApplyResult(SkinApplyStatus.Unchanged),death,(run,occurrence)=>{
+                request.LastDeath=occurrence;request.PendingOccurrence=occurrence;request.Vanilla=true;
+                request.PackId=null;request.TreeSha256=null;request.Root=null;request.Textures=null;return true;
+            },_=>true);
+        library.Tick(0);death.OnDeath(frame.Hero,frame.Manager);frame.Dead=true;frame.Frame++;library.Tick(.1f);
+        library.Tick(1);frame.Dead=false;death.HeroInPosition(frame.Hero,frame.Manager);
+        death.SceneCompleted(frame.Hero,frame.Manager);frame.Frame++;library.Tick(1.1f);frame.Frame++;library.Tick(1.2f);
+
+        library.Tick(2);
+
+        Assert.Equal(1,commits);Assert.Equal(1,restores);Assert.Equal(0,death.Occurrence);
+        Assert.True(library.CanRefresh);
+    }
+
     [Fact] public void Production_poll_retries_cancel_but_consumes_manual_and_OFF_changes()
     {
         var request=Request();request.Mode="ROTATE";request.RotationRun="first";
@@ -384,15 +428,15 @@ public class HollowKnightSkinLibraryTests
         Assert.Equal(2,r.Commits);Assert.Equal(0,r.Death.Occurrence);Assert.Equal(0,r.Request.PendingOccurrence);
         Assert.False(r.Death.Ready);Assert.True(r.Library.CanRefresh);Assert.Equal(3,r.Applies);
     }
-    [Theory]
-    [InlineData(0)]
-    [InlineData(1)]
-    public void Matching_zero_or_one_noop_completes_without_respawn_or_extra_poll(int eligibleCount)
+    [Fact]
+    public void Matching_default_only_noop_completes_without_respawn_or_extra_poll()
     {
         using var r=new AcknowledgementRig();r.NoOp=true;
-        r.Request.RotationDetail=eligibleCount==0?"No eligible skins":"Only selected skin is eligible";
+        r.Request.Vanilla=true;r.Request.PackId=null;r.Request.TreeSha256=null;
+        r.Request.Root=null;r.Request.Textures=null;
+        r.Request.RotationDetail="Only the default skin is eligible; unchanged";
         r.FirstDeath();Assert.Equal(1,r.Request.LastDeath);Assert.Equal(0,r.Request.PendingOccurrence);
-        Assert.Equal(0,r.Death.Occurrence);Assert.False(r.Death.Ready);Assert.Equal(1,r.Applies);
+        Assert.Equal(0,r.Death.Occurrence);Assert.False(r.Death.Ready);Assert.Equal(0,r.Applies);
         r.Death.OnDeath(r.Frame.Hero,r.Frame.Manager);r.Tick(1.1f); // duplicate callback while still dead
         Assert.Equal(0,r.Death.Occurrence);Assert.Equal(1,r.Confirms);
         r.Frame.Dead=false;r.Death.OnDeath(r.Frame.Hero,r.Frame.Manager);r.Frame.Dead=true;r.Tick(1.2f);

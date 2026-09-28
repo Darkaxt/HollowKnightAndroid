@@ -189,10 +189,12 @@ class SkinsActivity : Activity() {
             return
         }
         val library = SkinPresentationMapper.library(state)
+        val selectedName = library.selectedPackName ?: if (state.mode == "ROTATE" && state.selectedPackId == null)
+            getString(R.string.skins_default) else getString(R.string.skins_none)
         findViewById<TextView>(R.id.skins_requested).text = getString(
             R.string.skins_requested,
             library.requestedMode,
-            library.selectedPackName ?: getString(R.string.skins_none),
+            selectedName,
         )
         findViewById<TextView>(R.id.skins_runtime).text = when (library.runtime.kind) {
             SkinRuntimeKind.NONE -> getString(R.string.skins_runtime_none)
@@ -286,6 +288,7 @@ class SkinsActivity : Activity() {
         if (!acceptsCallback()) return
         val state = screen.library
         val none = getString(R.string.skins_none)
+        val defaultSkin = getString(R.string.skins_default)
         val recovery = getString(if (session.canRecover) R.string.skins_recovery_required else R.string.skins_recovery_clear)
         val message = (if (state == null) {
             getString(
@@ -297,9 +300,10 @@ class SkinsActivity : Activity() {
             getString(
                 R.string.skins_library_details,
                 state.mode,
-                state.selectedPackId ?: none,
-                state.pendingPackId ?: none,
-                state.rotationOrder.joinToString(" → ").ifEmpty { none },
+                state.selectedPackId ?: if (state.mode == "ROTATE") defaultSkin else none,
+                if (state.pendingVanilla) defaultSkin else state.pendingPackId ?: none,
+                (state.rotationOrder + if (state.simplifiedAuthority) listOf(defaultSkin) else emptyList())
+                    .joinToString(" → ").ifEmpty { none },
                 state.runtimeObservation ?: none,
                 state.interlock,
                 state.originalFailure ?: none,

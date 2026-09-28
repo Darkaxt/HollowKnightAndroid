@@ -52,6 +52,30 @@ class SkinLibraryDocumentTest {
         }
     }
 
+    @Test fun `vanilla pending state round trips and old documents default it off`() {
+        val pendingVanilla = SkinLibraryDocument(
+            mode = LibraryMode.ROTATE,
+            selectedPackId = "a",
+            packs = listOf(a, b),
+            eligiblePackIds = listOf("a", "b"),
+            rotationRun = "e".repeat(32),
+            lastDeath = 7,
+            pendingVanilla = true,
+        )
+        assertEquals(pendingVanilla, SkinLibraryCodec.decode(SkinLibraryCodec.encode(pendingVanilla)))
+
+        val old = com.google.gson.JsonParser.parseString(SkinLibraryCodec.encode(pendingVanilla).toString(Charsets.UTF_8))
+            .asJsonObject.apply {
+                remove("pendingVanilla")
+                add("pendingPackId", com.google.gson.JsonNull.INSTANCE)
+                addProperty("lastDeath", 0)
+            }
+        assertFalse(SkinLibraryCodec.decode(old.toString().toByteArray()).pendingVanilla)
+        assertThrows(IllegalArgumentException::class.java) {
+            SkinLibraryCodec.encode(pendingVanilla.copy(pendingPackId = "b"))
+        }
+    }
+
     @Test fun `legacy sprite scope defaults use profile authority and mode`() {
         fun legacy(mode: LibraryMode, profileId: String): SkinLibraryDocument {
             val selected = if (mode == LibraryMode.OFF) null else "a"

@@ -190,22 +190,97 @@ class SkinLibraryStoreTest {
         assertEquals(before, store.read().required())
     }
 
-    @Test fun `ordered zero one outside ring and wrap behavior is explicit`() {
-        for ((ring, selected, expected) in listOf(Triple(emptyList(),"a",null), Triple(listOf("a"),"a",null),
-            Triple(listOf("b"),"a","b"), Triple(listOf("c","b"),"a","c"), Triple(listOf("c","b"),"b","c"))) {
-            val store = rotationStore(ring, selected); val run = requireNotNull(store.startRuntime().required().rotationRun)
+    @Test fun `default skin is a durable rotation candidate including one pack alternation`() {
+        val store = rotationStore(listOf("a"))
+        val run = requireNotNull(store.startRuntime().required().rotationRun)
+
+        val toDefault = store.confirmDeath(run, 1).required()
+        assertNull(toDefault.pendingPackId)
+        assertTrue(toDefault.pendingVanilla)
+        assertTrue(store.finishRotation(store.configurationIdentity(toDefault), run, 1, "", ""))
+        val defaultActive = store.read().required()
+        assertNull(defaultActive.selectedPackId)
+        assertFalse(defaultActive.pendingVanilla)
+
+        val toPack = store.confirmDeath(run, 2).required()
+        assertEquals("a", toPack.pendingPackId)
+        assertFalse(toPack.pendingVanilla)
+        assertTrue(store.finishRotation(
+            store.configurationIdentity(toPack), run, 2, "a", toPack.packs.single { it.id == "a" }.treeSha256,
+        ))
+        assertEquals("a", store.read().required().selectedPackId)
+    }
+
+    @Test fun `queued death after default successor promotes the first imported pack`() {
+        val store = rotationStore(listOf("a"))
+        val run = requireNotNull(store.startRuntime().required().rotationRun)
+        val pendingDefault = store.confirmDeath(run, 1).required()
+        val queued = store.confirmDeath(run, 2).required()
+        assertTrue(queued.pendingVanilla)
+        assertEquals(listOf(2L), queued.queuedDeathOccurrences)
+
+        assertTrue(store.finishRotation(store.configurationIdentity(queued), run, 1, "", ""))
+
+        val promoted = store.read().required()
+        assertNull(promoted.selectedPackId)
+        assertFalse(promoted.pendingVanilla)
+        assertEquals("a", promoted.pendingPackId)
+        assertEquals(2L, promoted.lastDeath)
+        assertTrue(promoted.queuedDeathOccurrences.isEmpty())
+        assertEquals(pendingDefault.packs, promoted.packs)
+    }
+
+    @Test fun `multiple packs rotate through default before wrapping`() {
+        val store = rotationStore(listOf("a", "b"))
+        val run = requireNotNull(store.startRuntime().required().rotationRun)
+        val toB = store.confirmDeath(run, 1).required()
+        assertTrue(store.finishRotation(
+            store.configurationIdentity(toB), run, 1, "b", toB.packs.single { it.id == "b" }.treeSha256,
+        ))
+        val toDefault = store.confirmDeath(run, 2).required()
+        assertTrue(toDefault.pendingVanilla)
+        assertTrue(store.finishRotation(store.configurationIdentity(toDefault), run, 2, "", ""))
+        assertEquals("a", store.confirmDeath(run, 3).required().pendingPackId)
+    }
+
+    @Test fun `ordered packs include default after the last eligible member`() {
+        data class Case(val ring: List<String>, val selected: String, val nextPack: String?, val nextVanilla: Boolean)
+        for (case in listOf(
+            Case(emptyList(), "a", null, true),
+            Case(listOf("a"), "a", null, true),
+            Case(listOf("b"), "a", "b", false),
+            Case(listOf("c", "b"), "a", "c", false),
+            Case(listOf("c", "b"), "b", null, true),
+        )) {
+            val store = rotationStore(case.ring, case.selected)
+            val run = requireNotNull(store.startRuntime().required().rotationRun)
             val next = store.confirmDeath(run, 1).required()
-            assertEquals(expected, next.pendingPackId); assertEquals(selected,next.selectedPackId); assertEquals(1L,next.lastDeath)
-            assertEquals(next,store.confirmDeath(run,1).required())
+            assertEquals(case.nextPack, next.pendingPackId)
+            assertEquals(case.nextVanilla, next.pendingVanilla)
+            assertEquals(case.selected, next.selectedPackId)
+            assertEquals(1L, next.lastDeath)
+            assertEquals(next, store.confirmDeath(run, 1).required())
         }
     }
+    @Test fun `default only rotation consumes death without creating pending work`() {
+        val store = rotationStore(emptyList(), selected = null)
+        val run = requireNotNull(store.startRuntime().required().rotationRun)
+
+        val unchanged = store.confirmDeath(run, 1).required()
+
+        assertNull(unchanged.selectedPackId)
+        assertNull(unchanged.pendingPackId)
+        assertFalse(unchanged.pendingVanilla)
+        assertEquals(1L, unchanged.lastDeath)
+    }
+
     @Test fun `OFF cancellation fresh process and stale run never resurrect pending`() {
         val store = rotationStore(listOf("a","b")); val run = requireNotNull(store.startRuntime().required().rotationRun)
         store.confirmDeath(run,1).required(); val restarted = store.startRuntime().required()
-        assertNotEquals(run,restarted.rotationRun); assertNull(restarted.pendingPackId); assertEquals(0L,restarted.lastDeath)
+        assertNotEquals(run,restarted.rotationRun); assertNull(restarted.pendingPackId); assertFalse(restarted.pendingVanilla); assertEquals(0L,restarted.lastDeath)
         assertTrue(store.confirmDeath(run,1) is SkinResult.Error)
         val current = requireNotNull(restarted.rotationRun); store.confirmDeath(current,1).required()
-        val cancelled = store.cancelRotation(current).required(); assertNull(cancelled.pendingPackId); assertNotEquals(current,cancelled.rotationRun)
+        val cancelled = store.cancelRotation(current).required(); assertNull(cancelled.pendingPackId); assertFalse(cancelled.pendingVanilla); assertNotEquals(current,cancelled.rotationRun)
         store.recoverOff().required(); val off = store.read().required(); assertEquals(LibraryMode.OFF,off.mode); assertNull(off.rotationRun)
         assertEquals("a",off.selectedPackId); assertEquals(3,off.packs.size)
     }
@@ -216,7 +291,7 @@ class SkinLibraryStoreTest {
         }
         assertEquals(0L,store.read().required().lastDeath); assertEquals("b",store.confirmDeath(run,1).required().pendingPackId)
     }
-    private fun rotationStore(ring: List<String>, selected: String = "a"): SkinLibraryStore {
+    private fun rotationStore(ring: List<String>, selected: String? = "a"): SkinLibraryStore {
         val store = store(); store.read().required()
         val packs = listOf("a","b","c").map { LibraryPack(it,it,"Unknown",it.repeat(64),it.repeat(64),it.repeat(64)) }
         File(store.paths.root,"library.json").writeBytes(SkinLibraryCodec.encode(SkinLibraryDocument(LibraryMode.ROTATE,selected,packs,ring)))

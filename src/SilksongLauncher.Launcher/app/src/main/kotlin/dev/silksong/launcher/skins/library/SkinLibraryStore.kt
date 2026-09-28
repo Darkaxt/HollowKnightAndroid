@@ -32,7 +32,7 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
     internal fun startRuntime(): SkinResult<SkinLibraryDocument> = changeRotation { renewRotation(it) }
     private fun renewRotation(value: SkinLibraryDocument) = value.copy(
         rotationRun = if (value.mode == LibraryMode.ROTATE) UUID.randomUUID().toString().replace("-", "") else null,
-        lastDeath = 0, pendingPackId = null, queuedDeathOccurrences = emptyList())
+        lastDeath = 0, pendingPackId = null, pendingVanilla = false, queuedDeathOccurrences = emptyList())
     private fun changeRotation(action: (SkinLibraryDocument) -> SkinLibraryDocument): SkinResult<SkinLibraryDocument> = locked(nonblocking = true) {
         val old = readLocked(); val next = action(old); SkinLibraryCodec.validate(next)
         if (old != next) commit(next)
@@ -41,26 +41,32 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
     internal fun confirmDeath(run: String, occurrence: Long): SkinResult<SkinLibraryDocument> = changeRotation { value ->
         require(value.mode == LibraryMode.ROTATE && value.rotationRun == run && occurrence > 0) { "Death belongs to a retired rotation run" }
         if (occurrence <= value.lastDeath || occurrence in value.queuedDeathOccurrences) value
-        else if (value.pendingPackId != null) {
+        else if (hasPendingSuccessor(value)) {
             require(value.queuedDeathOccurrences.size < SkinLibraryCodec.MAX_QUEUED_DEATHS) { "Death rotation backlog is full" }
             require(occurrence > (value.queuedDeathOccurrences.lastOrNull() ?: value.lastDeath)) { "Death occurrence order changed" }
             value.copy(queuedDeathOccurrences = value.queuedDeathOccurrences + occurrence)
         } else activateOccurrence(value, occurrence)
     }
     private fun activateOccurrence(value: SkinLibraryDocument, occurrence: Long): SkinLibraryDocument {
-        val ring = value.eligiblePackIds
-        val index = ring.indexOf(value.selectedPackId)
-        val next = if (ring.isEmpty()) null else ring[if (index < 0) 0 else (index + 1) % ring.size]
-        return value.copy(lastDeath = occurrence, pendingPackId = next.takeUnless { it == value.selectedPackId })
+        val currentIndex = value.eligiblePackIds.indexOf(value.selectedPackId)
+        val nextPackId = when {
+            value.selectedPackId == null -> value.eligiblePackIds.firstOrNull()
+            currentIndex < 0 -> value.eligiblePackIds.firstOrNull()
+            currentIndex + 1 < value.eligiblePackIds.size -> value.eligiblePackIds[currentIndex + 1]
+            else -> null
+        }
+        val nextIsVanilla = nextPackId == null && value.selectedPackId != null
+        return value.copy(lastDeath = occurrence, pendingPackId = nextPackId, pendingVanilla = nextIsVanilla)
     }
+    private fun hasPendingSuccessor(value: SkinLibraryDocument) = value.pendingPackId != null || value.pendingVanilla
     internal fun cancelDeath(run: String, occurrence: Long): SkinResult<SkinLibraryDocument> = changeRotation { value ->
         require(value.mode == LibraryMode.ROTATE && value.rotationRun == run && occurrence > 0) { "Death belongs to a retired rotation run" }
         when {
             occurrence < value.lastDeath -> value
             occurrence in value.queuedDeathOccurrences ->
                 value.copy(queuedDeathOccurrences = value.queuedDeathOccurrences - occurrence)
-            occurrence == value.lastDeath && value.pendingPackId != null -> {
-                val cancelled = value.copy(pendingPackId = null)
+            occurrence == value.lastDeath && hasPendingSuccessor(value) -> {
+                val cancelled = value.copy(pendingPackId = null, pendingVanilla = false)
                 val next = cancelled.queuedDeathOccurrences.firstOrNull()
                 if (next == null) cancelled
                 else activateOccurrence(cancelled.copy(queuedDeathOccurrences = cancelled.queuedDeathOccurrences.drop(1)), next)
@@ -73,9 +79,20 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
     }
     internal fun finishRotation(config: String, run: String, occurrence: Long, id: String, tree: String): Boolean =
         changeRotation { value ->
-            require(configurationIdentity(value) == config && value.rotationRun == run && value.lastDeath == occurrence &&
-                value.pendingPackId == id && value.packs.single { it.id == id }.treeSha256 == tree) { "Applied successor belongs to retired configuration" }
-            val completed = value.copy(selectedPackId = id, pendingPackId = null)
+            require(configurationIdentity(value) == config && value.rotationRun == run && value.lastDeath == occurrence) {
+                "Applied successor belongs to retired configuration"
+            }
+            val selected = if (value.pendingVanilla) {
+                require(id.isEmpty() && tree.isEmpty()) { "Default successor report contains a pack identity" }
+                null
+            } else {
+                require(value.pendingPackId == id && value.packs.single { it.id == id }.treeSha256 == tree) {
+                    "Applied successor belongs to retired configuration"
+                }
+                id
+            }
+            require(hasPendingSuccessor(value)) { "Rotation has no frozen successor" }
+            val completed = value.copy(selectedPackId = selected, pendingPackId = null, pendingVanilla = false)
             val nextOccurrence = completed.queuedDeathOccurrences.firstOrNull()
             if (nextOccurrence == null) completed
             else activateOccurrence(completed.copy(queuedDeathOccurrences = completed.queuedDeathOccurrences.drop(1)), nextOccurrence)
@@ -85,11 +102,15 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
     fun setMode(expectedConfiguration: String, mode: LibraryMode): SkinResult<Unit> = mutateExpected(expectedConfiguration) { value ->
         if (value.mode == mode) value
         else {
-            if (mode != LibraryMode.OFF) {
+            if (mode == LibraryMode.ON) {
                 val pack = requireNotNull(value.packs.singleOrNull { it.id == value.selectedPackId }) {
                     "Select a pack before turning skins ON"
                 }
                 requireVerified(pack)
+            } else if (mode == LibraryMode.ROTATE) {
+                value.selectedPackId?.let { selected ->
+                    requireVerified(value.packs.single { it.id == selected })
+                }
             }
             renewRotation(value.copy(mode = mode))
         }
@@ -97,11 +118,15 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
     fun setSpriteScope(expectedConfiguration: String, scope: SpriteScope): SkinResult<Unit> = mutateExpected(expectedConfiguration) { value ->
         if (value.spriteScope == scope) value
         else {
-            if (value.mode != LibraryMode.OFF) {
+            if (value.mode == LibraryMode.ON) {
                 val pack = requireNotNull(value.packs.singleOrNull { it.id == value.selectedPackId }) {
                     "Selected pack was removed; refresh and retry"
                 }
                 requireVerified(pack)
+            } else if (value.mode == LibraryMode.ROTATE) {
+                value.selectedPackId?.let { selected ->
+                    requireVerified(value.packs.single { it.id == selected })
+                }
             }
             renewRotation(value.copy(spriteScope = scope))
         }
@@ -141,7 +166,7 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
     }
     fun advanceMode(): SkinResult<Unit> = mutate { value ->
         val mode = when (value.mode) { LibraryMode.OFF -> LibraryMode.ON; LibraryMode.ON -> LibraryMode.ROTATE; LibraryMode.ROTATE -> LibraryMode.OFF }
-        if (mode != LibraryMode.OFF) {
+        if (mode == LibraryMode.ON) {
             require(value.packs.any { it.id == value.selectedPackId }) { "Select a pack before turning skins ON" }
         }
         renewRotation(value.copy(mode = mode))

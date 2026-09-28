@@ -59,6 +59,60 @@ public sealed class SilksongSkinLibraryTests
     }
 
     [Fact]
+    public void Default_successor_restore_completes_the_exact_bridge_occurrence()
+    {
+        var frame = Frame();
+        var death = new SilksongSkinDeathAdapter(() => frame);
+        var request = Request("a");
+        var restores = 0;
+        var commits = 0;
+        using var library = new SilksongSkinLibrary(() => request,
+            _ => new SkinApplyResult(SkinApplyStatus.Applied),
+            () => { restores++; return new SkinApplyResult(SkinApplyStatus.Restored); },
+            observation => {
+                if (observation.PendingOccurrence > 0 && observation.Status == "Restored")
+                {
+                    Assert.Null(observation.ActivePackId);
+                    Assert.Null(observation.ActiveTreeSha256);
+                    commits++;
+                    request.PendingOccurrence = 0;
+                }
+                return true;
+            }, () => new SkinApplyResult(SkinApplyStatus.Unchanged), death,
+            (_, occurrence) => {
+                request.LastDeath = occurrence;
+                request.PendingOccurrence = occurrence;
+                request.Vanilla = true;
+                request.PackId = null;
+                request.TreeSha256 = null;
+                request.Root = null;
+                request.Textures = null;
+                return true;
+            }, (_, __) => true, _ => true);
+
+        library.Tick(0);
+        frame.BridgeOccurrence = 1;
+        frame.BridgeOccurrences = new[] { new SilksongDeathOccurrence(1, frame.Hero, frame.Manager) };
+        frame.Dead = true;
+        frame.Frame++;
+        library.Tick(1);
+        frame.Dead = false;
+        frame.HeroInPosition = true;
+        frame.SceneComplete = true;
+        frame.Frame++;
+        library.Tick(1.1f);
+        frame.Frame++;
+        library.Tick(1.2f);
+
+        library.Tick(2);
+
+        Assert.Equal(1, restores);
+        Assert.Equal(1, commits);
+        Assert.Equal(0, death.Occurrence);
+        Assert.True(library.CanRefresh);
+    }
+
+    [Fact]
     public void On_mode_never_confirms_a_bridge_occurrence()
     {
         var frame = Frame();

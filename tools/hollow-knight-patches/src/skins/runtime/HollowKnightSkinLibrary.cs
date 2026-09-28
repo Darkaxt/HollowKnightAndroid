@@ -71,13 +71,15 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         void RetryCancellation() { if (death.CancellationRun != null) cancel(death.CancellationRun); }
         void ReportCurrent(SkinLibraryObservation observation)
         {
-            if (observation.PendingOccurrence > 0 && (observation.Status == "Applied" || observation.Status == "Unchanged") &&
+            if (observation.PendingOccurrence > 0 &&
+                (observation.Status == "Applied" || observation.Status == "Unchanged" || observation.Status == "Restored") &&
                 !Ready(observation.RotationRun, observation.PendingOccurrence))
             {
                 observation.Status = "AwaitingTargets";
                 observation.Detail = "Frozen successor awaits live stable respawn.";
             }
-            bool completes = observation.PendingOccurrence > 0 && (observation.Status == "Applied" || observation.Status == "Unchanged");
+            bool completes = observation.PendingOccurrence > 0 &&
+                (observation.Status == "Applied" || observation.Status == "Unchanged" || observation.Status == "Restored");
             string run = observation.RotationRun; long occurrence = observation.PendingOccurrence;
             // Consume only the matching accepted rotation commit, not ordinary status/reportResult success.
             // Clear now so a real death before the next poll is not masked; false/busy stays frozen.
@@ -149,7 +151,8 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             }
             return new SkinLibraryRequest { ProfileId = wire.profileId, ConfigSha256 = wire.configSha256, Mode = wire.mode,
                 SpriteScope = wire.spriteScope, PackId = wire.packId, TreeSha256 = wire.treeSha256, Root = wire.root, Textures = textures,
-                RotationRun = wire.rotationRun, LastDeath = wire.lastDeath, PendingOccurrence = wire.pendingOccurrence, RotationDetail = wire.rotationDetail };
+                Vanilla = wire.vanilla, RotationRun = wire.rotationRun, LastDeath = wire.lastDeath,
+                PendingOccurrence = wire.pendingOccurrence, RotationDetail = wire.rotationDetail };
         }
         bool ReportManaged(SkinLibraryObservation observation)
         {
@@ -158,7 +161,8 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             string warning = failed ? observation.Status + ": " + observation.Detail : null;
             if (warning != null && warning != lastWarning) Debug.LogWarning("[HK skins library] " + warning);
             lastWarning = warning;
-            if (observation.PendingOccurrence > 0 && (observation.Status == "Applied" || observation.Status == "Unchanged"))
+            if (observation.PendingOccurrence > 0 &&
+                (observation.Status == "Applied" || observation.Status == "Unchanged" || observation.Status == "Restored"))
                 return Bridge.CallStatic<bool>("reportRotation", observation.ConfigSha256 ?? "", observation.RotationRun ?? "",
                     observation.PendingOccurrence, observation.ActivePackId ?? "", observation.ActiveTreeSha256 ?? "", observation.Status, observation.Detail ?? "");
             return Bridge.CallStatic<bool>("reportResult", observation.ConfigSha256 ?? "", observation.ActivePackId ?? "",
@@ -169,7 +173,7 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         [Serializable] sealed class WireTexture { public string target, path; }
         [Serializable] sealed class WireRequest
         {
-            public bool ok;
+            public bool ok, vanilla;
             public string code, detail, profileId, configSha256, mode, spriteScope, packId, treeSha256, root, rotationRun, rotationDetail;
             public long lastDeath, pendingOccurrence;
             public WireTexture[] textures;

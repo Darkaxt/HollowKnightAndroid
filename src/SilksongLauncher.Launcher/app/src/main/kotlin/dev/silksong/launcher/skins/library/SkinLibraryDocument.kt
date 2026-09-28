@@ -20,7 +20,8 @@ data class LibraryPack(val id: String, val name: String, val author: String, val
 data class SkinLibraryDocument(val mode: LibraryMode = LibraryMode.OFF, val selectedPackId: String? = null,
     val packs: List<LibraryPack> = emptyList(), val eligiblePackIds: List<String> = emptyList(),
     val rotationRun: String? = null, val lastDeath: Long = 0, val pendingPackId: String? = null,
-    val queuedDeathOccurrences: List<Long> = emptyList(), val spriteScope: SpriteScope = SpriteScope.ALL)
+    val pendingVanilla: Boolean = false, val queuedDeathOccurrences: List<Long> = emptyList(),
+    val spriteScope: SpriteScope = SpriteScope.ALL)
 
 /** The only durable configuration document. Eligibility order is explicit, never inferred from display sorting. */
 object SkinLibraryCodec {
@@ -43,16 +44,17 @@ object SkinLibraryCodec {
             require(listOf(pack.name, pack.author).all { it.isNotBlank() && it.length <= 160 && it.none(Char::isISOControl) }) { "Invalid pack display text" }
         }
         require(value.selectedPackId == null || value.selectedPackId in ids) { "Selected pack is absent" }
-        require(value.mode == LibraryMode.OFF || value.selectedPackId != null) { "Select a pack before turning skins ON" }
+        require(value.mode != LibraryMode.ON || value.selectedPackId != null) { "Select a pack before turning skins ON" }
         require(value.eligiblePackIds.distinct().size == value.eligiblePackIds.size && value.eligiblePackIds.all { it in ids }) { "Invalid eligibility order" }
         require(value.lastDeath >= 0 && (value.rotationRun == null || value.rotationRun.matches(Regex("[0-9a-f]{32}")))) { "Invalid rotation occurrence/run" }
-        require(value.rotationRun != null || (value.lastDeath == 0L && value.pendingPackId == null && value.queuedDeathOccurrences.isEmpty())) { "Rotation work requires a run" }
+        require(value.rotationRun != null || (value.lastDeath == 0L && value.pendingPackId == null && !value.pendingVanilla && value.queuedDeathOccurrences.isEmpty())) { "Rotation work requires a run" }
         require(value.mode == LibraryMode.ROTATE || value.rotationRun == null) { "Rotation work requires ROTATE" }
         require(value.pendingPackId == null || (value.pendingPackId in ids && value.pendingPackId != value.selectedPackId && value.lastDeath > 0)) { "Invalid pending successor" }
+        require(!value.pendingVanilla || (value.pendingPackId == null && value.selectedPackId != null && value.lastDeath > 0)) { "Invalid pending default successor" }
         require(value.queuedDeathOccurrences.size <= MAX_QUEUED_DEATHS &&
             value.queuedDeathOccurrences.zipWithNext().all { (left, right) -> left < right } &&
             value.queuedDeathOccurrences.all { it > value.lastDeath }) { "Invalid queued death occurrences" }
-        require(value.queuedDeathOccurrences.isEmpty() || value.pendingPackId != null) { "Queued deaths require an active successor" }
+        require(value.queuedDeathOccurrences.isEmpty() || value.pendingPackId != null || value.pendingVanilla) { "Queued deaths require an active successor" }
     }
     fun encode(value: SkinLibraryDocument, profileId: String = PROFILE): ByteArray {
         val owner = requireProfile(profileId)
@@ -69,6 +71,7 @@ object SkinLibraryCodec {
             add("rotationRun", value.rotationRun?.let(::JsonPrimitive) ?: JsonNull.INSTANCE)
             addProperty("lastDeath", value.lastDeath)
             add("pendingPackId", value.pendingPackId?.let(::JsonPrimitive) ?: JsonNull.INSTANCE)
+            addProperty("pendingVanilla", value.pendingVanilla)
             add("queuedDeathOccurrences", JsonArray().apply { value.queuedDeathOccurrences.forEach { add(it) } })
         }
         return gson.toJson(root).toByteArray(Charsets.UTF_8).also { require(it.size <= MAX_BYTES) { "Library document exceeds byte bound" } }
@@ -82,6 +85,7 @@ object SkinLibraryCodec {
             baseKeys += listOf("rotationRun", "lastDeath", "pendingPackId", "queuedDeathOccurrences")
         else if (root.has("rotationRun") || root.has("lastDeath") || root.has("pendingPackId"))
             baseKeys += listOf("rotationRun", "lastDeath", "pendingPackId")
+        if (root.has("pendingVanilla")) baseKeys += "pendingVanilla"
         keys(root, *baseKeys.toTypedArray())
         require(root["schemaVersion"].toString() == "1" && text(root["profileId"]) == owner) { "Unsupported library profile/schema" }
         val mode = LibraryMode.valueOf(text(root["mode"]))
@@ -95,11 +99,18 @@ object SkinLibraryCodec {
                 element.toString().matches(Regex("0|[1-9][0-9]{0,18}")))
             return element.toString().toLong()
         }
-        SkinLibraryDocument(mode, root["selectedPackId"].takeUnless { it.isJsonNull }?.let(::text),
-            packs, root["eligiblePackIds"].asJsonArray.map(::text), root["rotationRun"]?.takeUnless { it.isJsonNull }?.let(::text),
-            root["lastDeath"]?.let(::occurrence) ?: 0,
-            root["pendingPackId"]?.takeUnless { it.isJsonNull }?.let(::text),
-            root["queuedDeathOccurrences"]?.asJsonArray?.map(::occurrence) ?: emptyList(), spriteScope).also(::validate)
+        SkinLibraryDocument(
+            mode = mode,
+            selectedPackId = root["selectedPackId"].takeUnless { it.isJsonNull }?.let(::text),
+            packs = packs,
+            eligiblePackIds = root["eligiblePackIds"].asJsonArray.map(::text),
+            rotationRun = root["rotationRun"]?.takeUnless { it.isJsonNull }?.let(::text),
+            lastDeath = root["lastDeath"]?.let(::occurrence) ?: 0,
+            pendingPackId = root["pendingPackId"]?.takeUnless { it.isJsonNull }?.let(::text),
+            pendingVanilla = root["pendingVanilla"]?.let(::boolean) ?: false,
+            queuedDeathOccurrences = root["queuedDeathOccurrences"]?.asJsonArray?.map(::occurrence) ?: emptyList(),
+            spriteScope = spriteScope,
+        ).also(::validate)
     } catch (error: Exception) { throw IllegalArgumentException("Invalid skin library: ${error.message}", error) }
 
     internal fun legacySpriteScope(mode: LibraryMode, profileId: String): SpriteScope {
@@ -134,4 +145,5 @@ object SkinLibraryCodec {
     }
     private fun keys(value: JsonObject, vararg keys: String) { require(value.keySet() == keys.toSet()) { "Invalid library fields" } }
     private fun text(value: JsonElement): String { require(value.isJsonPrimitive && value.asJsonPrimitive.isString) { "Expected string" }; return value.asString }
+    private fun boolean(value: JsonElement): Boolean { require(value.isJsonPrimitive && value.asJsonPrimitive.isBoolean) { "Expected boolean" }; return value.asBoolean }
 }

@@ -89,6 +89,39 @@ class SkinLibraryRuntimeBridgeTest {
         assertTrue(access.reportRotation(config,run,1,id,tree,"Applied","")); assertEquals(id,store.read().required().selectedPackId)
         assertNull(store.confirmDeath(run,1).required().pendingPackId)
     }
+    @Test fun `pending vanilla wire restores and commits default as the active rotation member`() {
+        val store = importedStore()
+        val access = SkinLibraryRuntimeAccess(store)
+        val first = JsonParser.parseString(access.readConfiguration()).asJsonObject
+        val run = first["rotationRun"].asString
+        val current = store.read().required()
+        val selected = requireNotNull(current.selectedPackId)
+        val other = current.packs.single { it.id != selected }
+        val toOther = store.confirmDeath(run, 1).required()
+        assertEquals(other.id, toOther.pendingPackId)
+        assertTrue(store.finishRotation(
+            store.configurationIdentity(toOther), run, 1, other.id, other.treeSha256,
+        ))
+
+        val pending = store.confirmDeath(run, 2).required()
+        assertTrue(pending.pendingVanilla)
+        val wire = JsonParser.parseString(access.readConfiguration()).asJsonObject
+        assertTrue(wire["vanilla"].asBoolean)
+        assertEquals(2L, wire["pendingOccurrence"].asLong)
+        assertFalse(wire.has("packId"))
+        assertFalse(wire.has("textures"))
+
+        assertTrue(access.reportRotation(
+            wire["configSha256"].asString, run, 2, "", "", "Restored", "",
+        ))
+        val defaultActive = store.read().required()
+        assertNull(defaultActive.selectedPackId)
+        assertFalse(defaultActive.pendingVanilla)
+        val stable = JsonParser.parseString(access.readConfiguration()).asJsonObject
+        assertTrue(stable["vanilla"].asBoolean)
+        assertEquals(0L, stable["pendingOccurrence"].asLong)
+    }
+
     @Test fun `exact JNI death cancellation preserves and promotes newer occurrence`() {
         val store = importedStore()
         val access = SkinLibraryRuntimeAccess(store)

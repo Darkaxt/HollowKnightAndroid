@@ -212,7 +212,8 @@ namespace DualSouls.Skins
         {
             var result = new List<NativeSkinMenuRow>(value.Packs.Count + 3)
             {
-                new NativeSkinMenuRow(NativeSkinMenuRowKind.Mode, "mode", "MODE", value.Mode, null, true),
+                new NativeSkinMenuRow(NativeSkinMenuRowKind.Mode, "mode", "MODE",
+                    value.Mode == "ROTATE" ? "ROTATE + DEFAULT" : value.Mode, null, true),
                 new NativeSkinMenuRow(NativeSkinMenuRowKind.Sprites, "sprites", "SPRITES",
                     ScopeLabel(value.SpriteScope), null, true)
             };

@@ -106,6 +106,7 @@ internal class SkinLibraryRuntimeAccess(private val store: SkinLibraryStore) {
                 add("rotationRun", document.rotationRun?.let(::JsonPrimitive) ?: JsonNull.INSTANCE)
                 addProperty("lastDeath", document.lastDeath)
                 add("pendingPackId", document.pendingPackId?.let(::JsonPrimitive) ?: JsonNull.INSTANCE)
+                addProperty("pendingVanilla", document.pendingVanilla)
                 add("queuedDeathOccurrences", JsonArray().apply { document.queuedDeathOccurrences.forEach(::add) })
                 add("packs", JsonArray().apply { packs.forEach { pack ->
                     add(JsonObject().apply {
@@ -135,16 +136,19 @@ internal class SkinLibraryRuntimeAccess(private val store: SkinLibraryStore) {
     fun readConfiguration(): String {
         val result = store.locked(nonblocking = true) {
             val document = if (!initialized) store.startRuntime().required().also { initialized = true } else store.readLocked()
+            val vanilla = document.mode != LibraryMode.OFF && (document.pendingVanilla ||
+                (document.pendingPackId == null && document.selectedPackId == null))
             val wire = JsonObject().apply {
                 addProperty("ok", true); addProperty("profileId", store.profileId)
                 addProperty("configSha256", store.configurationIdentity(document)); addProperty("mode", document.mode.name)
                 addProperty("spriteScope", document.spriteScope.name)
                 addProperty("rotationRun", document.rotationRun.orEmpty()); addProperty("lastDeath", document.lastDeath)
-                addProperty("pendingOccurrence", if (document.pendingPackId == null) 0 else document.lastDeath)
-                addProperty("rotationDetail", if (document.eligiblePackIds.isEmpty()) "No eligible skins; death rotation is a no-op" else
-                    if (document.eligiblePackIds.size == 1 && document.eligiblePackIds[0] == document.selectedPackId) "Only selected skin is eligible; unchanged" else "")
+                addProperty("pendingOccurrence", if (document.pendingPackId == null && !document.pendingVanilla) 0 else document.lastDeath)
+                addProperty("vanilla", vanilla)
+                addProperty("rotationDetail", if (document.eligiblePackIds.isEmpty() && document.selectedPackId == null)
+                    "Only the default skin is eligible; unchanged" else "")
             }
-            if (document.mode != LibraryMode.OFF) {
+            if (document.mode != LibraryMode.OFF && !vanilla) {
                 val pack = document.packs.single { it.id == (document.pendingPackId ?: document.selectedPackId) }
                 if (verifiedPack != pack) {
                     verifiedManifest = store.requireVerified(pack); verifiedPack = pack
@@ -169,9 +173,12 @@ internal class SkinLibraryRuntimeAccess(private val store: SkinLibraryStore) {
     fun reportRotation(config: String, run: String, occurrence: Long, id: String, tree: String, status: String, detail: String): Boolean =
         store.locked(nonblocking = true) {
             val value = store.readLocked()
-            require(initialized && value.rotationRun == run && value.lastDeath == occurrence && value.pendingPackId == id)
+            require(initialized && value.rotationRun == run && value.lastDeath == occurrence)
+            require(if (value.pendingVanilla) id.isEmpty() && tree.isEmpty() else value.pendingPackId == id)
             check(store.recordObservation(config, id, tree, status, detail)) { "Rotation report is busy or stale; retry same successor" }
-            if (status == "Applied" || status == "Unchanged")
+            val completes = if (value.pendingVanilla) status == "Restored" || status == "Unchanged"
+                else status == "Applied" || status == "Unchanged"
+            if (completes)
                 check(store.finishRotation(config, run, occurrence, id, tree)) { "Successor publication failed; retry same successor" }
             SkinResult.Ok(Unit)
         } is SkinResult.Ok
