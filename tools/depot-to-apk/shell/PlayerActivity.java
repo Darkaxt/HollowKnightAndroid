@@ -72,9 +72,12 @@ public class PlayerActivity extends Activity implements IUnityPlayerLifecycleEve
 
     @Override protected void onStop()
     {
-        if (secondaryDisplay != null) secondaryDisplay.onStop();
         super.onStop();
+        // Unity owns the secondary Presentation and its SurfaceView. Quiesce
+        // the graphics worker before hiding that view; hiding it first abandons
+        // the native window while Vulkan still has the producer connected.
         if (mUnityPlayer != null) mUnityPlayer.onStop();
+        if (secondaryDisplay != null) secondaryDisplay.onStop();
     }
 
     // Called by the dual-screen patch through JNI, from Unity's thread.
