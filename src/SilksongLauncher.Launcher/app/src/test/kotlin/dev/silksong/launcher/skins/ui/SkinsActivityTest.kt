@@ -427,6 +427,13 @@ class SkinsActivityTest {
         assertFalse(context.getString(R.string.skins_read_error, "ERROR", "refresh failed").contains("No changes were made"))
     }
 
+    @Test fun `terminal import notice does not claim a refresh is still running`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val notice = context.getString(R.string.skins_notice_import_complete, 1)
+        assertTrue(notice, notice.contains("Import finished for 1 candidate(s)."))
+        assertFalse(notice, notice.contains("Refreshing", ignoreCase = true))
+    }
+
     private fun openArchivePicker(activity: SkinsActivity) {
         activity.findViewById<Button>(R.id.skins_import).performClick()
         val dialog = ShadowAlertDialog.getLatestAlertDialog()

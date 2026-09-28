@@ -84,7 +84,7 @@
     <string name="skins_notice_preparing">Preparing %1$d of %2$d…</string>
     <string name="skins_notice_prepared">%1$d candidate(s) ready for review.</string>
     <string name="skins_notice_no_files">No importable files were found in that folder.</string>
-    <string name="skins_notice_import_complete">Import finished for %1$d candidate(s). Refreshing the library.</string>
+    <string name="skins_notice_import_complete">Import finished for %1$d candidate(s).</string>
     <string name="skins_notice_recovered">Skins are requested OFF. The game will restore on its next poll.</string>
     <string name="skins_notice_mutation_unavailable">Changes are unavailable while the game session is active or unknown.</string>
     <string name="skins_notice_operation_complete">Requested configuration saved. Current visuals are reported separately.</string>
