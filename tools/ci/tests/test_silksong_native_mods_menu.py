@@ -49,6 +49,24 @@ class SilksongNativeModsMenuContractTest(unittest.TestCase):
         self.assertIn("button.OnSubmitPressed = new UnityEvent()", prepare)
         self.assertEqual(3, source.count("PrepareNativeButton(source);"))
 
+    def test_route_entry_is_owned_and_hidden_before_fallible_configuration(self):
+        build = method_body(self.source(), "void BuildRouteEntry(")
+        instantiate = build.index("GameObject root = Instantiate(")
+        hide = build.index("root.SetActive(false);", instantiate)
+        own_mods = build.index("_entryRoot = root;", instantiate)
+        own_skins = build.index("_skinsEntryRoot = root;", instantiate)
+        configure = build.index("PrepareNativeButton(source);", instantiate)
+        label = build.index("SetButtonText(root, label);", instantiate)
+        self.assertLess(hide, configure)
+        self.assertLess(own_mods, configure)
+        self.assertLess(own_skins, configure)
+        self.assertLess(configure, label)
+
+    def test_button_text_searches_inside_named_wrapper(self):
+        text = method_body(self.source(), "static TmpText SetButtonText(")
+        self.assertIn("named.GetComponentInChildren<TmpText>(true)", text)
+        self.assertNotIn("named.GetComponent<TmpText>()", text)
+
     def test_native_route_is_paused_gameplay_only_and_event_driven(self):
         source = self.source()
         self.assertIn("binding.Ui.uiState == UIState.PAUSED", source)

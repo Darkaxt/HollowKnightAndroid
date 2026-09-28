@@ -281,6 +281,11 @@ namespace DualSouls.Mods.Silksong
         {
             GameObject root = Instantiate(template, content, false);
             root.name = label;
+            root.SetActive(false);
+            if (route == NativeMenuRoute.Mods)
+                _entryRoot = root;
+            else
+                _skinsEntryRoot = root;
             RectTransform wrapper = root.transform as RectTransform;
             wrapper.anchoredPosition = new Vector2(wrapper.anchoredPosition.x, y);
 
@@ -294,16 +299,13 @@ namespace DualSouls.Mods.Silksong
             button.Route = (int)route;
             DisableForeignDrivers(root);
             SetButtonText(root, label);
-            root.SetActive(false);
             if (route == NativeMenuRoute.Mods)
             {
-                _entryRoot = root;
                 _entryButton = button;
                 _entrySelectable = source;
             }
             else
             {
-                _skinsEntryRoot = root;
                 _skinsEntryButton = button;
                 _skinsEntrySelectable = source;
             }
@@ -495,8 +497,10 @@ namespace DualSouls.Mods.Silksong
         static TmpText SetButtonText(GameObject root, string value)
         {
             Transform named = FindDescendant(root.transform, "Menu Button Text");
-            TmpText text = named != null ? named.GetComponent<TmpText>() :
-                root.GetComponentInChildren<TmpText>(true);
+            TmpText text = named != null
+                ? named.GetComponentInChildren<TmpText>(true)
+                : null;
+            if (text == null) text = root.GetComponentInChildren<TmpText>(true);
             if (text == null)
                 throw new InvalidOperationException("Native button text is unavailable.");
             text.text = value;
