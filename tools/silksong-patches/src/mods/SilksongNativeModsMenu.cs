@@ -9,7 +9,9 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
-using TmpText = TMProOld.TextMeshProUGUI;
+// Silksong's native Options prefab uses UnityEngine.UI.Text. The lower HUD uses
+// TMProOld, but cloned menu rows must keep the native component type.
+using UiText = UnityEngine.UI.Text;
 using UnityObject = UnityEngine.Object;
 
 namespace DualSouls.Mods.Silksong
@@ -29,8 +31,8 @@ namespace DualSouls.Mods.Silksong
         const float RowStep = 78f;
         const float ButtonTextHorizontalInset = 80f;
         const float DescriptionHorizontalInset = 220f;
-        const float DescriptionMinimumFontSize = 16f;
-        const float DescriptionFontSize = 24f;
+        const int DescriptionMinimumFontSize = 16;
+        const int DescriptionFontSize = 24;
         const float ResetVisualIndex = 8.35f;
         const float BackVisualIndex = 9.45f;
 
@@ -69,12 +71,12 @@ namespace DualSouls.Mods.Silksong
         readonly List<SilksongNativeModsButton> _buttons =
             new List<SilksongNativeModsButton>();
         readonly List<GameObject> _buttonRoots = new List<GameObject>();
-        readonly List<TmpText> _labels = new List<TmpText>();
-        readonly List<TmpText> _valueLabels = new List<TmpText>();
+        readonly List<UiText> _labels = new List<UiText>();
+        readonly List<UiText> _valueLabels = new List<UiText>();
         readonly List<SilksongNativeSkinButton> _skinButtons =
             new List<SilksongNativeSkinButton>();
         readonly List<GameObject> _skinButtonRoots = new List<GameObject>();
-        readonly List<TmpText> _skinLabels = new List<TmpText>();
+        readonly List<UiText> _skinLabels = new List<UiText>();
         readonly List<SilksongGameplayFeatures.BenchRecord> _benchRows =
             new List<SilksongGameplayFeatures.BenchRecord>();
         readonly SilksongNativeMenuLifecycle<NativeMenuBinding> _lifecycle =
@@ -93,10 +95,10 @@ namespace DualSouls.Mods.Silksong
         SilksongNativeModsEntryButton _skinsEntryButton;
         MenuButton _entrySelectable;
         MenuButton _skinsEntrySelectable;
-        TmpText _title;
-        TmpText _description;
-        TmpText _skinsTitle;
-        TmpText _skinsDescription;
+        UiText _title;
+        UiText _description;
+        UiText _skinsTitle;
+        UiText _skinsDescription;
         GameObject _descriptionRoot;
         GameObject _skinsDescriptionRoot;
         string _skinError = "";
@@ -325,7 +327,7 @@ namespace DualSouls.Mods.Silksong
             _modsScreen.backButton = null;
 
             Transform title = root.transform.Find("Title");
-            _title = title != null ? title.GetComponentInChildren<TmpText>(true) : null;
+            _title = title != null ? title.GetComponentInChildren<UiText>(true) : null;
             if (_title == null) throw new InvalidOperationException("Options title text is unavailable.");
 
             Transform controls = root.transform.Find("Controls");
@@ -367,7 +369,7 @@ namespace DualSouls.Mods.Silksong
             if (oldList != null) oldList.enabled = false;
             _skinsScreen.backButton = null;
             Transform title = root.transform.Find("Title");
-            _skinsTitle = title != null ? title.GetComponentInChildren<TmpText>(true) : null;
+            _skinsTitle = title != null ? title.GetComponentInChildren<UiText>(true) : null;
             if (_skinsTitle == null)
                 throw new InvalidOperationException("Skins title text is unavailable.");
             Transform controls = root.transform.Find("Controls");
@@ -428,7 +430,7 @@ namespace DualSouls.Mods.Silksong
         }
 
         static GameObject CreateDescriptionRow(Transform parent, GameObject template, string name,
-                                               int visualIndex, out TmpText label)
+                                               int visualIndex, out UiText label)
         {
             GameObject wrapper = Instantiate(template, parent, false);
             wrapper.name = name;
@@ -471,8 +473,8 @@ namespace DualSouls.Mods.Silksong
             if (buttonRect != null)
                 buttonRect.sizeDelta = new Vector2(buttonRect.sizeDelta.x, 70f);
             DisableForeignDrivers(wrapper);
-            TmpText label = SetButtonText(wrapper, initialText);
-            TmpText valueLabel = null;
+            UiText label = SetButtonText(wrapper, initialText);
+            UiText valueLabel = null;
             if (role == ButtonRole.Group || role == ButtonRole.Master ||
                 role == ButtonRole.Row)
             {
@@ -494,50 +496,50 @@ namespace DualSouls.Mods.Silksong
             button.OnSubmitPressed = new UnityEvent();
         }
 
-        static TmpText SetButtonText(GameObject root, string value)
+        static UiText SetButtonText(GameObject root, string value)
         {
             Transform named = FindDescendant(root.transform, "Menu Button Text");
-            TmpText text = named != null
-                ? named.GetComponentInChildren<TmpText>(true)
+            UiText text = named != null
+                ? named.GetComponentInChildren<UiText>(true)
                 : null;
-            if (text == null) text = root.GetComponentInChildren<TmpText>(true);
+            if (text == null) text = root.GetComponentInChildren<UiText>(true);
             if (text == null)
                 throw new InvalidOperationException("Native button text is unavailable.");
             text.text = value;
             return text;
         }
 
-        static TmpText CloneColumnText(TmpText source, string name)
+        static UiText CloneColumnText(UiText source, string name)
         {
             GameObject clone = Instantiate(source.gameObject, source.transform.parent, false);
             clone.name = name;
-            TmpText text = clone.GetComponent<TmpText>();
+            UiText text = clone.GetComponent<UiText>();
             if (text == null)
                 throw new InvalidOperationException("Cloned native text is unavailable.");
             return text;
         }
 
-        static void ConfigureColumn(TmpText text, bool rightAligned)
+        static void ConfigureColumn(UiText text, bool rightAligned)
         {
             RectTransform rect = text.transform as RectTransform;
             if (rect != null)
                 rect.sizeDelta = new Vector2(-ButtonTextHorizontalInset, rect.sizeDelta.y);
             text.alignment = rightAligned
-                ? TMProOld.TextAlignmentOptions.Right
-                : TMProOld.TextAlignmentOptions.Left;
-            text.enableWordWrapping = false;
+                ? TextAnchor.MiddleRight
+                : TextAnchor.MiddleLeft;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
         }
 
-        static void ConfigureDescription(TmpText text)
+        static void ConfigureDescription(UiText text)
         {
             RectTransform rect = text.transform as RectTransform;
             if (rect != null)
                 rect.sizeDelta = new Vector2(-DescriptionHorizontalInset, rect.sizeDelta.y);
-            text.alignment = TMProOld.TextAlignmentOptions.Center;
-            text.enableWordWrapping = false;
-            text.enableAutoSizing = true;
-            text.fontSizeMin = DescriptionMinimumFontSize;
-            text.fontSizeMax = DescriptionFontSize;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = DescriptionMinimumFontSize;
+            text.resizeTextMaxSize = DescriptionFontSize;
             text.fontSize = Mathf.Min(text.fontSize, DescriptionFontSize);
         }
 

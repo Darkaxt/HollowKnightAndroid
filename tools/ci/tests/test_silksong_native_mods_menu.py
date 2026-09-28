@@ -62,10 +62,14 @@ class SilksongNativeModsMenuContractTest(unittest.TestCase):
         self.assertLess(own_skins, configure)
         self.assertLess(configure, label)
 
-    def test_button_text_searches_inside_named_wrapper(self):
-        text = method_body(self.source(), "static TmpText SetButtonText(")
-        self.assertIn("named.GetComponentInChildren<TmpText>(true)", text)
-        self.assertNotIn("named.GetComponent<TmpText>()", text)
+    def test_button_text_uses_the_native_ui_text_component(self):
+        source = self.source()
+        text = method_body(source, "static UiText SetButtonText(")
+        self.assertIn("using UiText = UnityEngine.UI.Text;", source)
+        self.assertNotIn("using UiText = TMProOld", source)
+        self.assertNotIn("TmpText", source)
+        self.assertIn("named.GetComponentInChildren<UiText>(true)", text)
+        self.assertIn("root.GetComponentInChildren<UiText>(true)", text)
 
     def test_native_route_is_paused_gameplay_only_and_event_driven(self):
         source = self.source()
@@ -171,10 +175,11 @@ class SilksongNativeModsMenuContractTest(unittest.TestCase):
 
     def test_description_uses_a_bounded_single_line_above_separate_commands(self):
         source = self.source()
-        configure = method_body(source, "static void ConfigureDescription(TmpText text)")
-        self.assertIn("text.enableWordWrapping = false", configure)
-        self.assertIn("text.enableAutoSizing = true", configure)
-        self.assertIn("text.fontSizeMin = DescriptionMinimumFontSize", configure)
+        configure = method_body(source, "static void ConfigureDescription(UiText text)")
+        self.assertIn("text.horizontalOverflow = HorizontalWrapMode.Overflow", configure)
+        self.assertIn("text.resizeTextForBestFit = true", configure)
+        self.assertIn("text.resizeTextMinSize = DescriptionMinimumFontSize", configure)
+        self.assertIn("text.resizeTextMaxSize = DescriptionFontSize", configure)
         self.assertIn("text.fontSize = Mathf.Min(text.fontSize, DescriptionFontSize)", configure)
         self.assertIn("-DescriptionHorizontalInset", configure)
         create = method_body(source, "static GameObject CreateDescriptionRow(")
