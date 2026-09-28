@@ -21,66 +21,58 @@ class SkinCandidateDiscovery(
 
     fun discover(archive: AuthorizedZip): SkinResult<CandidateSet> {
         val regular = archive.archive.entries.filterNot { it.directory }
-        val fullPrefixes = linkedMapOf<String, ByteArray>()
+        val prefixes = linkedMapOf<String, Prefix>()
         for (entry in regular) {
             val components = archive.canonicalPaths.getValue(entry.centralIndex)
-            for (start in 0..components.size - FULL_SUFFIX.size - 1) {
-                if (FULL_SUFFIX.indices.all { offset -> components[start + offset].isAscii(FULL_SUFFIX[offset]) }) {
-                    val prefixCount = start + FULL_SUFFIX.size + 1
-                    val relative = relative(entry, components, prefixCount)
-                    if (relative != null && mapper.canMap(relative)) {
-                        val prefix = joinRaw(components.take(prefixCount))
-                        fullPrefixes.putIfAbsent(prefix.toHex(), prefix)
-                    }
-                }
+            val prefixCount = (0 until components.size).firstOrNull { count ->
+                relative(entry, components, count)?.let(mapper::canMap) == true
+            } ?: continue
+            val rawPrefix = joinRaw(components.take(prefixCount))
+            prefixes.putIfAbsent(rawPrefix.toHex(), Prefix(rawPrefix, layoutCode(components.take(prefixCount))))
+        }
+        if (prefixes.isEmpty()) {
+            return SkinResult.Error(SkinImportCode.NO_CANDIDATE, "No catalog-backed skin candidate was found")
+        }
+        val recognized = prefixes.values.toList()
+        if (recognized.size > 1 && recognized.any { it.bytes.isEmpty() }) {
+            return SkinResult.Error(SkinImportCode.AMBIGUOUS_LAYOUT, "Root and wrapped skin layouts are both present")
+        }
+        val outermost = recognized.filterNot { candidate ->
+            val candidateComponents = splitRaw(candidate.bytes)
+            recognized.any { possibleParent ->
+                possibleParent.bytes.isNotEmpty() && possibleParent !== candidate &&
+                    hasPrefix(candidateComponents, splitRaw(possibleParent.bytes))
             }
         }
-        if (fullPrefixes.isNotEmpty()) {
-            val prefixes = fullPrefixes.values.toList()
-            val outsideMapping = regular.any { entry ->
-                val components = archive.canonicalPaths.getValue(entry.centralIndex)
-                prefixes.none { prefix -> hasPrefix(components, splitRaw(prefix)) } &&
-                    sequenceOf(0, 1, 2).mapNotNull { count -> relative(entry, components, count) }.any(mapper::canMap)
-            }
-            if (outsideMapping) return SkinResult.Error(SkinImportCode.AMBIGUOUS_LAYOUT, "Mapped assets exist outside full-install candidates")
-            return finish(archive, prefixes.map { Prefix(it, 3) })
+        if (outermost.size > 1 && ambiguousPrefixes(outermost)) {
+            return SkinResult.Error(SkinImportCode.AMBIGUOUS_LAYOUT, "Candidate roots do not form one unambiguous skin collection")
         }
-
-        val rootMapped = regular.any { entry ->
-            val components = archive.canonicalPaths.getValue(entry.centralIndex)
-            relative(entry, components, 0)?.let(mapper::canMap) == true
-        }
-        val wrappers = linkedMapOf<String, WrapperRecognition>()
-        for (entry in regular) {
-            val components = archive.canonicalPaths.getValue(entry.centralIndex)
-            if (components.isEmpty()) continue
-            val keyBytes = components.first()
-            val key = keyBytes.toHex()
-            val recognition = wrappers.getOrPut(key) { WrapperRecognition(keyBytes.copyOf()) }
-            if (relative(entry, components, 1)?.let(mapper::canMap) == true) recognition.direct = true
-            if (relative(entry, components, 2)?.let(mapper::canMap) == true) {
-                val child = joinRaw(components.take(2))
-                recognition.children.putIfAbsent(child.toHex(), child)
-            }
-        }
-        val recognizedWrappers = wrappers.values.filter { it.direct || it.children.isNotEmpty() }
-        if (rootMapped) {
-            if (recognizedWrappers.isNotEmpty()) {
-                return SkinResult.Error(SkinImportCode.AMBIGUOUS_LAYOUT, "Root and wrapper layouts are both recognized")
-            }
-            return finish(archive, listOf(Prefix(ByteArray(0), 0)))
-        }
-        if (recognizedWrappers.isEmpty()) return SkinResult.Error(SkinImportCode.NO_CANDIDATE, "No finite skin candidate layout was found")
-        if (recognizedWrappers.size != 1) {
-            return SkinResult.Error(SkinImportCode.AMBIGUOUS_LAYOUT, "More than one first-level wrapper is recognized")
-        }
-        val wrapper = recognizedWrappers.single()
-        return if (wrapper.direct) {
-            finish(archive, listOf(Prefix(wrapper.rawPrefix, 1)))
-        } else {
-            finish(archive, wrapper.children.values.map { Prefix(it, 2) })
-        }
+        return finish(archive, outermost)
     }
+
+    private fun ambiguousPrefixes(prefixes: List<Prefix>): Boolean {
+        val components = prefixes.map { splitRaw(it.bytes) }
+        if (components.any { it.isEmpty() }) return true
+        for (left in components.indices) {
+            for (right in components.indices) {
+                if (left != right && hasPrefix(components[right], components[left])) return true
+            }
+        }
+        val parents = components.map { joinRaw(it.dropLast(1)).toHex() }.toSet()
+        return parents.size != 1 || parents.single().isEmpty()
+    }
+
+    private fun layoutCode(prefix: List<ByteArray>): Int = when {
+        containsFullInstallSuffix(prefix) -> 3
+        prefix.isEmpty() -> 0
+        prefix.size == 1 -> 1
+        else -> 2
+    }
+
+    private fun containsFullInstallSuffix(prefix: List<ByteArray>): Boolean =
+        (0..prefix.size - FULL_SUFFIX.size).any { start ->
+            FULL_SUFFIX.indices.all { offset -> prefix[start + offset].isAscii(FULL_SUFFIX[offset]) }
+        }
 
     private fun finish(archive: AuthorizedZip, rawPrefixes: List<Prefix>): SkinResult<CandidateSet> {
         val sorted = rawPrefixes.distinctBy { it.bytes.toHex() }
@@ -165,11 +157,6 @@ class SkinCandidateDiscovery(
         dev.silksong.launcher.skins.documents.SkinIdentity.unsignedBytesCompare(left, right)
 
     private data class Prefix(val bytes: ByteArray, val layout: Int)
-    private data class WrapperRecognition(
-        val rawPrefix: ByteArray,
-        var direct: Boolean = false,
-        val children: LinkedHashMap<String, ByteArray> = linkedMapOf(),
-    )
 
     companion object {
         fun discover(paths: AuthorizedZip): SkinResult<CandidateSet> =

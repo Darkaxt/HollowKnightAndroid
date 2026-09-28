@@ -10,7 +10,7 @@ import dev.silksong.launcher.skins.ui.*
 import java.io.File
 import java.util.UUID
 
-/** Existing bounded ZIP/PNG pipeline, immutable publication, then one Kotlin metadata update. */
+/** Bounded archive/PNG pipeline, immutable publication, then one Kotlin metadata update. */
 internal class SkinLibraryImporter(private val store: SkinLibraryStore, decoder: PngDecoder) : SkinImportService {
     override val available = true
     private val fs = store.fs

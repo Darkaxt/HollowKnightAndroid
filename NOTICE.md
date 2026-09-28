@@ -44,6 +44,15 @@ Stated first because it is the point of the whole design:
 A copy of the Apache License 2.0 is at
 <https://www.apache.org/licenses/LICENSE-2.0>.
 
+### UnRAR License
+
+* **Junrar** — Copyright (c) Alexander Roshal and Junrar contributors. Junrar is
+  used only to read RAR/RAR5 archives; it is not used to create RAR-compatible
+  archives and must not be used to recreate the RAR compression algorithm. The
+  UnRAR License permits free redistribution, including as part of another
+  software package. Its full terms are at
+  <https://github.com/junrar/junrar/blob/v8.1.1/LICENSE>.
+
 ### MIT License
 
 * **.NET** — Copyright (c) .NET Foundation and Contributors. The Mono build of

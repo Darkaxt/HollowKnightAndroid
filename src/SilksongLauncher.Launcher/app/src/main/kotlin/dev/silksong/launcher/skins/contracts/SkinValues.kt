@@ -2,11 +2,14 @@ package dev.silksong.launcher.skins.contracts
 
 import java.io.File
 
+enum class SkinArchiveFormat { ZIP, SEVEN_Z, RAR }
+
 data class QuarantinedArchive(
     val file: File,
     val archiveSha256: String,
     val byteCount: Long,
     val archiveName: String,
+    val format: SkinArchiveFormat = SkinArchiveFormat.ZIP,
 )
 
 data class StagedPayload(
@@ -31,6 +34,7 @@ data class ZipArchive(
     val file: File,
     val entries: List<RawZipEntry>,
     val ignoredExtraMetadata: Boolean = false,
+    val format: SkinArchiveFormat = SkinArchiveFormat.ZIP,
 )
 
 data class RawZipEntry(

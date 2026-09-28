@@ -7,6 +7,7 @@ import dev.silksong.launcher.skins.contracts.PngInfo
 import dev.silksong.launcher.skins.contracts.PreparedSkinCandidate
 import dev.silksong.launcher.skins.contracts.QuarantinedArchive
 import dev.silksong.launcher.skins.contracts.RawZipEntry
+import dev.silksong.launcher.skins.contracts.SkinArchiveFormat
 import dev.silksong.launcher.skins.contracts.SkinImportCode
 import dev.silksong.launcher.skins.contracts.SkinLimits
 import dev.silksong.launcher.skins.contracts.SkinNodeIdentity
@@ -93,9 +94,15 @@ class SkinNormalizer(
         if (!archiveUnchanged(quarantined, stagingOwner)) {
             return SkinResult.Error(SkinImportCode.ZIP_CORRUPT, "Quarantined archive identity changed")
         }
-        val zip = when (val read = BoundedZipReader(limits, fs).read(quarantined.file)) {
-            is SkinResult.Error -> return read
-            is SkinResult.Ok -> read.value
+        val zip = when (quarantined.format) {
+            SkinArchiveFormat.ZIP -> BoundedZipReader(limits, fs).read(quarantined.file)
+            SkinArchiveFormat.SEVEN_Z,
+            SkinArchiveFormat.RAR -> PortableArchiveReader(limits, fs).read(quarantined.file, quarantined.format)
+        }.let { read ->
+            when (read) {
+                is SkinResult.Error -> return read
+                is SkinResult.Ok -> read.value
+            }
         }
         val authorized = when (val paths = ZipPathAuthority(limits).validate(zip)) {
             is SkinResult.Error -> return paths
@@ -204,81 +211,74 @@ class SkinNormalizer(
         if (fs.identity(archive.archive.file) != archiveIdentity) {
             abort(SkinImportCode.ZIP_CORRUPT, "Archive identity changed before extraction")
         }
-        fs.openSeekableNoFollow(archive.archive.file).use { zip ->
-            if (zip.size() != archiveIdentity.size || fs.identity(archive.archive.file) != archiveIdentity) {
-                abort(SkinImportCode.ZIP_CORRUPT, "Archive identity changed before extraction")
+        val extractions = extractSources(archive, archiveIdentity, sourceEntries, stagingRoot, stagingOwner)
+        for (entry in sourceEntries) {
+            if (entry.uncompressedSize > limits.textureBytes) reject(SkinImportCode.LIMIT_EXCEEDED, "Texture exceeds byte bound")
+            val temporary = File(stagingRoot, ".source-${entry.centralIndex}.tmp")
+            fs.requireContained(temporary, stagingOwner)
+            val (length, sha256) = extractions.getValue(entry.centralIndex)
+            if (length != entry.uncompressedSize || length > limits.textureBytes) {
+                cleanupFile(temporary, stagingOwner)
+                reject(SkinImportCode.LIMIT_EXCEEDED, "Extracted texture exceeds declared or bounded size")
             }
-            for (entry in sourceEntries) {
-                if (entry.uncompressedSize > limits.textureBytes) reject(SkinImportCode.LIMIT_EXCEEDED, "Texture exceeds byte bound")
-                val temporary = File(stagingRoot, ".source-${entry.centralIndex}.tmp")
-                fs.requireContained(temporary, stagingOwner, allowMissingLeaf = true)
-                val (length, sha256) = extract(zip, entry, temporary, stagingOwner)
-                if (length != entry.uncompressedSize || length > limits.textureBytes) {
-                    cleanupFile(temporary, stagingOwner)
-                    reject(SkinImportCode.LIMIT_EXCEEDED, "Extracted texture exceeds declared or bounded size")
+            val inspected = inspect(temporary, length)
+            val dimensionMismatch = mapping.textures.asSequence()
+                .filter { (_, source) -> source.centralIndex == entry.centralIndex }
+                .mapNotNull { (target, _) ->
+                    catalog.profile.textureDimensions[target]?.takeUnless { dimensions ->
+                        inspected.width == dimensions.width && inspected.height == dimensions.height
+                    }?.let { dimensions -> target to dimensions }
                 }
-                val inspected = inspect(temporary, length)
-                val dimensionMismatch = mapping.textures.asSequence()
-                    .filter { (_, source) -> source.centralIndex == entry.centralIndex }
-                    .mapNotNull { (target, _) ->
-                        catalog.profile.textureDimensions[target]?.takeUnless { dimensions ->
-                            inspected.width == dimensions.width && inspected.height == dimensions.height
-                        }?.let { dimensions -> target to dimensions }
-                    }
-                    .firstOrNull()
-                if (dimensionMismatch != null) {
-                    cleanupFile(temporary, stagingOwner)
-                    val (target, dimensions) = dimensionMismatch
-                    reject(
-                        SkinImportCode.PNG_INVALID,
-                        "Texture dimensions for $target must be ${dimensions.width}x${dimensions.height}",
-                    )
-                }
-                val decoded = when (val result = decoder.decodeAndRelease(temporary, inspected)) {
-                    is SkinResult.Error -> {
-                        cleanupFile(temporary, stagingOwner)
-                        if (result.code !in PNG_REJECTION_CODES) abort(result.code, result.detail)
-                        reject(result.code, result.detail)
-                    }
-                    is SkinResult.Ok -> result.value
-                }
-                val decodedPixels = decoded.width.toLong() * decoded.height.toLong()
-                if (decoded.width != inspected.width || decoded.height != inspected.height ||
-                    decoded.pixelCount != decodedPixels || decodedPixels > limits.decodedPixels
-                ) {
-                    cleanupFile(temporary, stagingOwner)
-                    reject(SkinImportCode.PNG_INVALID, "Android decode differs from validated PNG structure")
-                }
-                val name = SkinIdentity.base32DigestHex(sha256)
-                val relative = "assets/$name"
-                val destination = File(stagingRoot, relative)
-                val destinationParent = destination.parentFile
-                    ?: abort(SkinImportCode.DOCUMENT_INVALID, "Payload destination has no parent")
-                if (!fs.exists(destinationParent)) createDirectory(destinationParent, stagingOwner)
-                val existing = payloadByPath[relative]
-                if (existing == null) {
-                    payloadBytes = checkedAdd(payloadBytes, length)
-                    if (payloadBytes > limits.payloadBytes) {
-                        cleanupFile(temporary, stagingOwner)
-                        reject(SkinImportCode.LIMIT_EXCEEDED, "Candidate payload bytes exceed bound")
-                    }
-                    fs.requireContained(temporary, stagingOwner)
-                    fs.requireContained(destination, stagingOwner, allowMissingLeaf = true)
-                    fs.atomicMove(temporary, destination)
-                    fs.requireContained(destination, stagingOwner)
-                    payloadByPath[relative] = StagedPayload(relative, sha256, length, destination)
-                } else {
-                    if (existing.length != length || !filesEqual(existing.file, temporary, stagingOwner)) {
-                        cleanupFile(temporary, stagingOwner)
-                        reject(SkinImportCode.TARGET_COLLISION, "Digest destination does not contain identical bytes")
-                    }
-                    cleanupFile(temporary, stagingOwner)
-                }
-                sourceNames[entry.centralIndex] = name
+                .firstOrNull()
+            if (dimensionMismatch != null) {
+                cleanupFile(temporary, stagingOwner)
+                val (target, dimensions) = dimensionMismatch
+                reject(
+                    SkinImportCode.PNG_INVALID,
+                    "Texture dimensions for $target must be ${dimensions.width}x${dimensions.height}",
+                )
             }
-            if (zip.size() != archiveIdentity.size || fs.identity(archive.archive.file) != archiveIdentity) {
-                abort(SkinImportCode.ZIP_CORRUPT, "Archive identity changed during extraction")
+            val decoded = when (val result = decoder.decodeAndRelease(temporary, inspected)) {
+                is SkinResult.Error -> {
+                    cleanupFile(temporary, stagingOwner)
+                    if (result.code !in PNG_REJECTION_CODES) abort(result.code, result.detail)
+                    reject(result.code, result.detail)
+                }
+                is SkinResult.Ok -> result.value
             }
+            val decodedPixels = decoded.width.toLong() * decoded.height.toLong()
+            if (decoded.width != inspected.width || decoded.height != inspected.height ||
+                decoded.pixelCount != decodedPixels || decodedPixels > limits.decodedPixels
+            ) {
+                cleanupFile(temporary, stagingOwner)
+                reject(SkinImportCode.PNG_INVALID, "Android decode differs from validated PNG structure")
+            }
+            val name = SkinIdentity.base32DigestHex(sha256)
+            val relative = "assets/$name"
+            val destination = File(stagingRoot, relative)
+            val destinationParent = destination.parentFile
+                ?: abort(SkinImportCode.DOCUMENT_INVALID, "Payload destination has no parent")
+            if (!fs.exists(destinationParent)) createDirectory(destinationParent, stagingOwner)
+            val existing = payloadByPath[relative]
+            if (existing == null) {
+                payloadBytes = checkedAdd(payloadBytes, length)
+                if (payloadBytes > limits.payloadBytes) {
+                    cleanupFile(temporary, stagingOwner)
+                    reject(SkinImportCode.LIMIT_EXCEEDED, "Candidate payload bytes exceed bound")
+                }
+                fs.requireContained(temporary, stagingOwner)
+                fs.requireContained(destination, stagingOwner, allowMissingLeaf = true)
+                fs.atomicMove(temporary, destination)
+                fs.requireContained(destination, stagingOwner)
+                payloadByPath[relative] = StagedPayload(relative, sha256, length, destination)
+            } else {
+                if (existing.length != length || !filesEqual(existing.file, temporary, stagingOwner)) {
+                    cleanupFile(temporary, stagingOwner)
+                    reject(SkinImportCode.TARGET_COLLISION, "Digest destination does not contain identical bytes")
+                }
+                cleanupFile(temporary, stagingOwner)
+            }
+            sourceNames[entry.centralIndex] = name
         }
         if (fs.identity(archive.archive.file) != archiveIdentity) {
             abort(SkinImportCode.ZIP_CORRUPT, "Archive identity changed during extraction")
@@ -348,6 +348,59 @@ class SkinNormalizer(
                 reject(result.code, result.detail)
             }
             is SkinResult.Ok -> result.value
+        }
+    }
+
+    private fun extractSources(
+        archive: AuthorizedZip,
+        archiveIdentity: SkinNodeIdentity,
+        entries: List<RawZipEntry>,
+        stagingRoot: File,
+        stagingOwner: File,
+    ): Map<Int, Pair<Long, String>> {
+        val destinations = entries.associate { entry ->
+            if (entry.uncompressedSize > limits.textureBytes) {
+                reject(SkinImportCode.LIMIT_EXCEEDED, "Texture exceeds byte bound")
+            }
+            val destination = File(stagingRoot, ".source-${entry.centralIndex}.tmp")
+            fs.requireContained(destination, stagingOwner, allowMissingLeaf = true)
+            entry.centralIndex to destination
+        }
+        return when (archive.archive.format) {
+            SkinArchiveFormat.ZIP -> {
+                val output = linkedMapOf<Int, Pair<Long, String>>()
+                fs.openSeekableNoFollow(archive.archive.file).use { zip ->
+                    if (zip.size() != archiveIdentity.size || fs.identity(archive.archive.file) != archiveIdentity) {
+                        abort(SkinImportCode.ZIP_CORRUPT, "Archive identity changed before extraction")
+                    }
+                    entries.forEach { entry ->
+                        output[entry.centralIndex] = extract(
+                            zip,
+                            entry,
+                            destinations.getValue(entry.centralIndex),
+                            stagingOwner,
+                        )
+                    }
+                    if (zip.size() != archiveIdentity.size || fs.identity(archive.archive.file) != archiveIdentity) {
+                        abort(SkinImportCode.ZIP_CORRUPT, "Archive identity changed during extraction")
+                    }
+                }
+                output
+            }
+            SkinArchiveFormat.SEVEN_Z,
+            SkinArchiveFormat.RAR -> when (
+                val extracted = PortableArchiveReader(limits, fs).extract(
+                    archive.archive,
+                    destinations,
+                    stagingOwner,
+                )
+            ) {
+                is SkinResult.Ok -> extracted.value.mapValues { (_, value) -> value.length to value.sha256 }
+                is SkinResult.Error -> {
+                    if (extracted.code == SkinImportCode.LIMIT_EXCEEDED) reject(extracted.code, extracted.detail)
+                    abort(extracted.code, extracted.detail)
+                }
+            }
         }
     }
 

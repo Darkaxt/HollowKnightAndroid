@@ -1,6 +1,7 @@
 package dev.silksong.launcher.skins.importing
 
 import dev.silksong.launcher.skins.contracts.QuarantinedArchive
+import dev.silksong.launcher.skins.contracts.SkinArchiveFormat
 import dev.silksong.launcher.skins.contracts.SkinImportCode
 import dev.silksong.launcher.skins.contracts.SkinLimits
 import dev.silksong.launcher.skins.contracts.SkinResult
@@ -115,23 +116,18 @@ class SkinQuarantine(
             fileSystem.syncDirectory(stagingRoot)
 
             val digestHex = digest.digest().toHex()
+            val format = detectFormat(prefix, prefixCount)
+                ?: return SkinResult.Error(SkinImportCode.INVALID_INPUT, "Input magic is not ZIP, 7z, or RAR")
             val archive = QuarantinedArchive(
                 file = archiveFile,
                 archiveSha256 = digestHex,
                 byteCount = copiedBytes,
                 archiveName = input.displayName ?: "archive-${digestHex.take(12)}",
+                format = format,
             )
-            when {
-                isZip(prefix, prefixCount) -> {
-                    reservation.transfer(archiveFile, copiedBytes)
-                    transferred = true
-                    return SkinResult.Ok(archive)
-                }
-                isRar(prefix, prefixCount) -> {
-                    return SkinResult.Error(SkinImportCode.UNSUPPORTED_RAR, "RAR archives are not supported")
-                }
-                else -> return SkinResult.Error(SkinImportCode.INVALID_INPUT, "Input magic is neither ZIP nor RAR")
-            }
+            reservation.transfer(archiveFile, copiedBytes)
+            transferred = true
+            return SkinResult.Ok(archive)
         } catch (_: LimitException) {
             return SkinResult.Error(SkinImportCode.LIMIT_EXCEEDED, "Quarantine exceeds ${limits.quarantineBytes} bytes")
         } catch (error: Exception) {
@@ -225,10 +221,22 @@ class SkinQuarantine(
         fileSystem.requireContained(directory, owner)
     }
 
+    private fun detectFormat(prefix: ByteArray, count: Int): SkinArchiveFormat? = when {
+        isZip(prefix, count) -> SkinArchiveFormat.ZIP
+        isSevenZip(prefix, count) -> SkinArchiveFormat.SEVEN_Z
+        isRar(prefix, count) -> SkinArchiveFormat.RAR
+        else -> null
+    }
+
     private fun isZip(prefix: ByteArray, count: Int): Boolean {
         if (count < 4 || prefix[0] != 0x50.toByte() || prefix[1] != 0x4b.toByte()) return false
         val signature = (prefix[2].toInt() and 0xff) shl 8 or (prefix[3].toInt() and 0xff)
         return signature in setOf(0x0304, 0x0506, 0x0708)
+    }
+
+    private fun isSevenZip(prefix: ByteArray, count: Int): Boolean {
+        val signature = byteArrayOf(0x37, 0x7a, 0xbc.toByte(), 0xaf.toByte(), 0x27, 0x1c)
+        return count >= signature.size && prefix.copyOfRange(0, signature.size).contentEquals(signature)
     }
 
     private fun isRar(prefix: ByteArray, count: Int): Boolean {

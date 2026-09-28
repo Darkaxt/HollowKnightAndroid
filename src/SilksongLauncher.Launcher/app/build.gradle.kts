@@ -75,10 +75,12 @@ android {
 dependencies {
     implementation("com.google.code.gson:gson:2.11.0")
 
-    // Apache Commons Compress: TarArchiveInputStream we wrap around
-    // the decompressed LZ4 stream during bundle extraction.
-    implementation("org.apache.commons:commons-compress:1.27.1")
-
+    // Commons still provides TarArchiveInputStream for bundle extraction and
+    // now also bounded 7z decoding. Junrar handles RAR/RAR5 in pure Java, so
+    // the APK does not ship an obsolete native p7zip engine. Under the UnRAR
+    // License, Junrar must not be used to recreate RAR compression.
+    implementation("org.apache.commons:commons-compress:1.28.0")
+    implementation("com.github.junrar:junrar:8.1.1")
 
     // Coroutines for background extraction with progress flow + the
     // Steam auth/cloud-sync async pipelines.
