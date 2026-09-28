@@ -82,6 +82,17 @@ class SkinNormalizerTest {
     }
 
     @Test
+    fun `catalog suffix mappings produce canonical import receipts`() {
+        val prepared = prepare(
+            listOf(RawZipFixture.Entry("Pack/charm_1.png".toByteArray(), TinyPngFixture.rgba())),
+        ).single() as CandidatePreparationResult.Ready
+
+        val receipt = CanonicalJson.parseImportReceipt(prepared.candidate.importReceiptBytes, catalog)
+        assertEquals(listOf("CATALOG_SUFFIX"), receipt.aliases.map { it.rule })
+        assertEquals("Charms/Charm_1.png", receipt.aliases.single().target)
+    }
+
+    @Test
     fun `normalizes equivalent ZIP 7z and RAR skins through one catalog and safety pipeline`() {
         val png = TinyPngFixture.rgba()
         val zip = ownedArchive(

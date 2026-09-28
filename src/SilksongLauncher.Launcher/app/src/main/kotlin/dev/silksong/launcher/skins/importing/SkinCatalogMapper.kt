@@ -1,6 +1,7 @@
 package dev.silksong.launcher.skins.importing
 
 import dev.silksong.launcher.skins.catalog.CatalogPathSet
+import dev.silksong.launcher.skins.catalog.CatalogSuffixAuthority
 import dev.silksong.launcher.skins.contracts.CatalogMapping
 import dev.silksong.launcher.skins.contracts.RawZipEntry
 import dev.silksong.launcher.skins.contracts.SkinAlias
@@ -18,7 +19,7 @@ class SkinCatalogMapper(
     private val catalog: CatalogPathSet,
     private val limits: SkinLimits = SkinLimits.V1,
 ) {
-    private val catalogSuffixes = shortestUniqueCatalogSuffixes(catalog.paths)
+    private val catalogSuffixes = CatalogSuffixAuthority.shortestUnique(catalog.paths)
 
     fun map(candidate: SkinCandidate, archive: AuthorizedZip): SkinResult<CatalogMapping> {
         try {
@@ -111,43 +112,11 @@ class SkinCatalogMapper(
         }.filter { it.first in catalog.pathSet }
         aliases.singleOrNull()?.let { return Resolution(it.first, it.second) }
 
-        catalogSuffixes[normalizedCatalogPath(path)]?.let { target ->
+        catalogSuffixes[CatalogSuffixAuthority.normalizedPath(path)]?.let { target ->
             return Resolution(target, "CATALOG_SUFFIX")
         }
         return null
     }
-
-    private fun shortestUniqueCatalogSuffixes(paths: List<String>): Map<String, String> {
-        val normalized = paths.associateWith { normalizedCatalogComponents(it) }
-        val suffixes = linkedMapOf<String, String>()
-        paths.forEach { target ->
-            val components = normalized.getValue(target)
-            for (length in 1..components.size) {
-                val suffix = components.takeLast(length)
-                if (normalized.values.count { it.endsWith(suffix) } == 1) {
-                    suffixes[suffix.joinToString("/")] = target
-                    break
-                }
-            }
-        }
-        return suffixes
-    }
-
-    private fun normalizedCatalogPath(path: String): String =
-        normalizedCatalogComponents(path).joinToString("/")
-
-    private fun normalizedCatalogComponents(path: String): List<String> =
-        path.split('/').mapIndexed { index, component ->
-            val folded = asciiFold(component)
-            if (index < path.count { it == '/' } && folded.endsWith(" data")) {
-                folded.removeSuffix(" data")
-            } else {
-                folded
-            }
-        }
-
-    private fun List<String>.endsWith(suffix: List<String>): Boolean =
-        size >= suffix.size && suffix.indices.all { index -> this[size - suffix.size + index] == suffix[index] }
 
     private fun warningCode(entry: RawZipEntry, rawComponents: List<ByteArray>, relative: String?): String {
         val display = relative ?: normalizedDisplay(entry, rawComponents).orEmpty()

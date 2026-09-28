@@ -1,6 +1,7 @@
 package dev.silksong.launcher.skins.documents
 
 import dev.silksong.launcher.skins.catalog.CatalogPathSet
+import dev.silksong.launcher.skins.catalog.CatalogSuffixAuthority
 import dev.silksong.launcher.skins.contracts.SkinAlias
 import dev.silksong.launcher.skins.contracts.SkinImportCode
 import dev.silksong.launcher.skins.contracts.SkinResult
@@ -20,7 +21,7 @@ object CanonicalJson {
     private val HEX = Regex("(?:[0-9a-f]{2}){0,512}")
     private val ALIAS_RULES = setOf(
         "ASCII_CASE_FOLD", "ROOT_CHARM", "HUD", "DREAM_NAIL", "VOID_SPELLS", "DEATH_PT",
-        "GOD_FINDER", "ELEGENT_KEY",
+        "GOD_FINDER", "ELEGENT_KEY", "CATALOG_SUFFIX",
     )
     private val WARNING_CODES = listOf(
         "IGNORED_NESTED_ARCHIVE", "IGNORED_SWAP", "IGNORED_CINEMATICS", "IGNORED_REPLACE_AUDIO",
@@ -342,10 +343,12 @@ object CanonicalJson {
         val aliasSources = HashSet<String>()
         val aliasTargets = HashSet<String>()
         val candidatePrefix = document.candidateRawPathHex.hexBytes()
+        val catalogSuffixes = if (document.aliases.any { it.rule == "CATALOG_SUFFIX" })
+            CatalogSuffixAuthority.shortestUnique(authority.paths) else emptyMap()
         document.aliases.forEach {
             require(HEX.matches(it.sourceRawPathHex) && it.sourceRawPathHex.isNotEmpty())
             require(it.target in authority.pathSet && it.rule in ALIAS_RULES)
-            requireFiniteAlias(candidatePrefix, it)
+            requireFiniteAlias(candidatePrefix, it, catalogSuffixes)
             require(aliasSources.add(it.sourceRawPathHex) && aliasTargets.add(it.target))
         }
         val entryWarningCount = document.warnings.count { it.sourceRawPathHex.isNotEmpty() }
@@ -368,7 +371,7 @@ object CanonicalJson {
         }
     }
 
-    private fun requireFiniteAlias(candidatePrefix: ByteArray, alias: SkinAlias) {
+    private fun requireFiniteAlias(candidatePrefix: ByteArray, alias: SkinAlias, catalogSuffixes: Map<String, String>) {
         val source = alias.sourceRawPathHex.hexBytes()
         val relativeBytes = if (candidatePrefix.isEmpty()) {
             source
@@ -389,6 +392,9 @@ object CanonicalJson {
             "GOD_FINDER" -> relative.takeIf { it.startsWith("Inventory/Godfinder_") }
                 ?.replaceFirst("Inventory/Godfinder_", "Inventory/GodFinder_")
             "ELEGENT_KEY" -> "Inventory/ElegentKey.png".takeIf { relative == "Inventory/ElegantKey.png" }
+            "CATALOG_SUFFIX" -> alias.target.takeIf {
+                catalogSuffixes[CatalogSuffixAuthority.normalizedPath(relative)] == alias.target
+            }
             else -> null
         }
         require(expected == alias.target) { "Receipt alias is not a finite catalog transformation" }
