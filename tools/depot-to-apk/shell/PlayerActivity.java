@@ -73,9 +73,9 @@ public class PlayerActivity extends Activity implements IUnityPlayerLifecycleEve
     @Override protected void onStop()
     {
         super.onStop();
-        // Unity owns the secondary Presentation and its SurfaceView. Quiesce
-        // the graphics worker before hiding that view; hiding it first abandons
-        // the native window while Vulkan still has the producer connected.
+        // Unity owns the secondary Presentation and its SurfaceView. Stop the
+        // player first, then suspend only our monitor and touch bookkeeping;
+        // the SurfaceView must stay attached across the lifecycle transition.
         if (mUnityPlayer != null) mUnityPlayer.onStop();
         if (secondaryDisplay != null) secondaryDisplay.onStop();
     }

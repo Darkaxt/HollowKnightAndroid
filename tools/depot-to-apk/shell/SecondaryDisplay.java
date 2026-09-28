@@ -87,11 +87,11 @@ final class SecondaryDisplay implements SurfaceHolder.Callback
     void onStop()
     {
         started = false;
-        // Do not use focus loss: touching a different display can change focus
-        // while the game is still visible. onStop means it really was hidden.
-        if (root != null) root.setVisibility(View.GONE);
-        touches.reset();
-        updateSurface();
+        handler.removeCallbacks(monitor);
+        // Keep Unity's SurfaceView attached. GONE destroys its BufferQueue, but
+        // Unity retains that native window across stop/start and cannot safely
+        // reconnect it on resume. Android hides the owning window for us.
+        touches.setSurface(0, 0, false);
     }
 
     void onDestroy()

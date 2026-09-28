@@ -4,7 +4,9 @@ import unittest
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
-PLAYER_ACTIVITY = REPO_ROOT / "tools" / "depot-to-apk" / "shell" / "PlayerActivity.java"
+SHELL_ROOT = REPO_ROOT / "tools" / "depot-to-apk" / "shell"
+PLAYER_ACTIVITY = SHELL_ROOT / "PlayerActivity.java"
+SECONDARY_DISPLAY = SHELL_ROOT / "SecondaryDisplay.java"
 
 
 def method_body(source: str, signature: str) -> str:
@@ -24,7 +26,7 @@ def method_body(source: str, signature: str) -> str:
 
 
 class AndroidGameLifecycleTest(unittest.TestCase):
-    def test_unity_stops_before_secondary_surface_is_hidden(self):
+    def test_unity_stops_before_secondary_lifecycle(self):
         source = PLAYER_ACTIVITY.read_text(encoding="utf-8")
         on_stop = method_body(source, r"@Override\s+protected\s+void\s+onStop\s*\(\s*\)")
 
@@ -34,8 +36,19 @@ class AndroidGameLifecycleTest(unittest.TestCase):
         self.assertLess(
             player_stop,
             secondary_stop,
-            "Unity must stop rendering before the owned secondary SurfaceView is hidden",
+            "Unity must stop before secondary lifecycle bookkeeping",
         )
+
+    def test_secondary_stop_preserves_unity_owned_surface(self):
+        source = SECONDARY_DISPLAY.read_text(encoding="utf-8")
+        on_stop = method_body(source, r"\svoid\s+onStop\s*\(\s*\)")
+
+        self.assertTrue(on_stop, "SecondaryDisplay.onStop is missing")
+        self.assertIn("started = false", on_stop)
+        self.assertIn("handler.removeCallbacks(monitor)", on_stop)
+        self.assertIn("touches.setSurface(0, 0, false)", on_stop)
+        self.assertNotIn("root.setVisibility", on_stop)
+        self.assertNotIn("updateSurface()", on_stop)
 
 
 if __name__ == "__main__":
