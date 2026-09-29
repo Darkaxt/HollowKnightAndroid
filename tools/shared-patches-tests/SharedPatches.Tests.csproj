@@ -30,6 +30,8 @@
     <Content Include="../silksong-patches/src/mods/SilksongNativeModsMenu.cs" Link="native-skin-contracts/SilksongNativeModsMenu.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/mods/HollowKnightModsRuntime.cs" Link="native-skin-contracts/HollowKnightModsRuntime.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../silksong-patches/src/mods/SilksongModsRuntime.cs" Link="native-skin-contracts/SilksongModsRuntime.cs" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../hollow-knight-patches/src/skins/runtime/HollowKnightSkinLibrary.cs" Link="native-skin-contracts/HollowKnightSkinLibrary.cs" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../silksong-patches/src/skins/runtime/SilksongSkinLibrary.cs" Link="native-skin-contracts/SilksongSkinLibrary.cs" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="..\shared-patches\src\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="../silksong-patches/src/dualscreen/DsPortHudState.cs" Link="Silksong/DsPortHudState.cs" />
     <Compile Include="../silksong-patches/src/dualscreen/DsPortSelectState.cs" Link="Silksong/DsPortSelectState.cs" />

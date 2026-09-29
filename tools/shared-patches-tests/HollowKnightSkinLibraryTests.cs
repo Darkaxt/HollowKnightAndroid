@@ -208,6 +208,49 @@ public class HollowKnightSkinLibraryTests
             () => throw new Exception("must not restore"), _ => { if (++reports == 1) throw new Exception("report busy"); });
         controller.Tick(); controller.Tick(); Assert.Equal(2,reports); Assert.Equal(1,applies);
     }
+    [Fact] public void Accepted_identical_noncompletion_evidence_is_not_republished_on_idle_polls()
+    {
+        var request = Request();
+        var death = new HollowKnightSkinDeathAdapter(LiveFrame);
+        int reads = 0, attempts = 0, reports = 0;
+        string detail = "same failure";
+        using var library = new HollowKnightSkinLibrary(
+            () => { reads++; return request; },
+            _ => { attempts++; return new SkinApplyResult(SkinApplyStatus.Failed, detail); },
+            () => throw new Exception("must not restore"),
+            _ => { reports++; return true; },
+            () => new SkinApplyResult(SkinApplyStatus.Failed, detail),
+            death,
+            (_, __) => true,
+            _ => true);
+
+        library.Tick(0);
+        library.Tick(1);
+        library.Tick(2);
+
+        Assert.Equal(3, reads);
+        Assert.Equal(3, attempts);
+        Assert.Equal(1, reports);
+        library.Invalidate(); library.Tick(3);
+        Assert.Equal(2, reports); // explicit execution edge, even for identical evidence
+        request.ConfigSha256 = new string('e', 64); library.Tick(4);
+        Assert.Equal(3, reports);
+        detail = "changed failure"; library.Tick(5); library.Tick(6);
+        Assert.Equal(4, reports);
+    }
+
+    [Fact] public void Unaccepted_identical_noncompletion_evidence_remains_retryable()
+    {
+        var death = new HollowKnightSkinDeathAdapter(LiveFrame);
+        int reports = 0;
+        using var library = new HollowKnightSkinLibrary(Request,
+            _ => new SkinApplyResult(SkinApplyStatus.Failed, "same failure"),
+            () => throw new Exception("must not restore"), _ => ++reports > 1, null, death,
+            (_, __) => true, _ => true);
+        library.Tick(0); library.Tick(1); library.Tick(2);
+        Assert.Equal(2, reports);
+    }
+
     [Theory]
     [InlineData("ON")]
     [InlineData("ROTATE")]
@@ -474,6 +517,54 @@ public class HollowKnightSkinLibraryTests
         r.FirstRespawn();Assert.Equal(1,r.Commits);Assert.Equal("new-run",r.Death.Run);
         Assert.Equal(1,r.Death.Occurrence);Assert.False(r.Death.Recorded);Assert.False(r.Library.CanRefresh);
     }
+    [Theory]
+    [InlineData("recover")]
+    [InlineData("retire")]
+    [InlineData("cancel")]
+    [InlineData("stale")]
+    [InlineData("cancelled-selection")]
+    public void Owner_tick_retries_executed_rotation_evidence_after_selection_commits_or_releases_retired_authority(string edge)
+    {
+        using var r = new AcknowledgementRig(); r.FailEvidenceAfterCommit = true; r.FirstRespawn();
+        Assert.Equal(1, r.Commits); Assert.Equal(0, r.Request.PendingOccurrence);
+        Assert.Equal(1, r.Death.Occurrence); Assert.Null(r.CompletedEvidence);
+        int applies = r.Applies;
+        if (edge == "retire")
+        {
+            r.Request.Mode = "OFF"; r.Request.RotationRun = null; r.Request.LastDeath = 0;
+            r.Library.Invalidate();
+        }
+        else if (edge == "cancel")
+        {
+            r.Frame.SaveId++;
+            r.Request.RotationRun = "replacement-run"; r.Request.LastDeath = 0;
+        }
+        else if (edge == "stale")
+        {
+            r.Request.PendingOccurrence = 1; // same run/occurrence, different request (e.g. queued death)
+            r.FailEvidenceAfterCommit = false;
+        }
+        else if (edge == "cancelled-selection")
+            r.Request.PackId = "a"; // same-run cancellation retained the previous selected skin
+        r.Tick(3);
+        if (edge == "recover")
+        {
+            Assert.Equal(1, r.RetriedEvidence);
+            Assert.Equal(new string('a', 64), r.CompletedEvidence.ConfigSha256);
+            Assert.Equal(1, r.CompletedEvidence.PendingOccurrence);
+            Assert.Equal("Applied", r.CompletedEvidence.Status);
+            Assert.Equal("b", r.CompletedEvidence.ActivePackId);
+            Assert.Equal(0, r.Death.Occurrence);
+            r.Tick(4); Assert.Equal(1, r.RetriedEvidence); Assert.Equal(applies, r.Applies);
+        }
+        else
+        {
+            Assert.Equal(0, r.RetriedEvidence);
+            Assert.Equal(0, r.Death.Occurrence);
+            r.Tick(4); Assert.Equal(0, r.RetriedEvidence);
+        }
+    }
+
     sealed class AcknowledgementRig : IDisposable
     {
         public readonly SkinLibraryRequest Request=HollowKnightSkinLibraryTests.Request();
@@ -481,7 +572,10 @@ public class HollowKnightSkinLibraryTests
         public readonly HollowKnightSkinDeathAdapter Death;
         public readonly HollowKnightSkinLibrary Library;
         public int Confirms,Commits,Applies;
-        public bool NoOp,ConfirmAccepted=true;
+        public bool NoOp,ConfirmAccepted=true,FailEvidenceAfterCommit;
+        public int RetriedEvidence;
+        public SkinLibraryObservation CompletedEvidence;
+        SkinLibraryObservation committedReport;
         public string Outcome="accepted";
         public Action AfterAccepted;
         string selected="a";
@@ -498,13 +592,24 @@ public class HollowKnightSkinLibraryTests
                 }
                 return new SkinApplyResult(SkinApplyStatus.Applied);
             },()=>new SkinApplyResult(SkinApplyStatus.Restored),observation=>{
+                if (committedReport != null && observation.PendingOccurrence == committedReport.PendingOccurrence &&
+                    observation.ConfigSha256 == committedReport.ConfigSha256 && observation.RotationRun == Request.RotationRun)
+                {
+                    RetriedEvidence++; CompletedEvidence = observation; return true;
+                }
                 if(observation.PendingOccurrence==0 || (observation.Status!="Applied"&&observation.Status!="Unchanged"))return true;
                 if(Outcome=="busy")throw new InvalidOperationException("report transport busy");
                 if(Outcome=="rejected")return false;
                 if(Outcome=="stale")Request.ConfigSha256=new string('e',64);
                 if(observation.ConfigSha256!=Request.ConfigSha256 || observation.RotationRun!=Request.RotationRun ||
                     observation.PendingOccurrence!=Request.PendingOccurrence || observation.ActivePackId!=Request.PackId)return false;
-                Commits++;selected=observation.ActivePackId;Request.PendingOccurrence=0;AfterAccepted?.Invoke();return true;
+                Commits++;selected=observation.ActivePackId;Request.PendingOccurrence=0;AfterAccepted?.Invoke();
+                if (FailEvidenceAfterCommit)
+                {
+                    committedReport = observation; Request.ConfigSha256 = new string('f', 64);
+                    return false; // durable selection changed, bounded evidence write failed
+                }
+                return true;
             },()=>new SkinApplyResult(SkinApplyStatus.Unchanged),Death,(run,occurrence)=>{
                 if(!ConfirmAccepted)return false;
                 Confirms++;Request.LastDeath=occurrence;

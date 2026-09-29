@@ -14,11 +14,13 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         readonly HollowKnightSkinDeathAdapter death;
         readonly Func<SkinLibraryRequest> read;
         readonly Func<SkinLibraryObservation, bool> report;
+        readonly Func<SkinApplyResult> observe;
         readonly Func<string, long, bool> confirm;
         readonly Func<string, bool> cancel;
         readonly Func<bool> readyToPoll;
         float nextPoll;
         bool pending, settled, disposed;
+        SkinLibraryObservation acceptedObservation, retryRotation;
         public bool CanRefresh => !disposed && (!pending || death.Ready);
 
         public HollowKnightSkinLibrary(Func<SkinLibraryRequest> read, Func<SkinPack, SkinApplyResult> apply,
@@ -26,7 +28,7 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             HollowKnightSkinDeathAdapter death, Func<string, long, bool> confirm, Func<string, bool> cancel,
             Func<bool> readyToPoll = null)
         {
-            this.read = read; this.report = report; this.death = death; this.confirm = confirm; this.cancel = cancel;
+            this.read = read; this.report = report; this.observe = observe; this.death = death; this.confirm = confirm; this.cancel = cancel;
             this.readyToPoll = readyToPoll ?? (() => true);
             controller = CreateController(apply, restore, observe);
         }
@@ -48,6 +50,24 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         SkinLibraryRequest ReadCurrent()
         {
             var request = read();
+            // Keep one executed completion until Kotlin accepts its evidence, even if selection
+            // already committed. Retired/cancelled authority must not block new configuration.
+            if (retryRotation != null && request != null)
+            {
+                var retry = retryRotation;
+                bool current = request.ProfileId == "hollow-knight" && request.Mode == "ROTATE" &&
+                    request.RotationRun == retry.RotationRun && death.Run == retry.RotationRun &&
+                    death.Occurrence == retry.PendingOccurrence && death.CancellationRun == null &&
+                    (request.ConfigSha256 == retry.ConfigSha256 ||
+                     (request.LastDeath == retry.PendingOccurrence && request.PendingOccurrence == 0 &&
+                      request.PackId == retry.ActivePackId && request.TreeSha256 == retry.ActiveTreeSha256));
+                if (!current || !RuntimeStillComplete(retry)) retryRotation = null;
+                else
+                {
+                    if (Ready(retry.RotationRun, retry.PendingOccurrence)) ReportCurrent(retry);
+                    return null; // accepted settles locally; false/throw remains retryable next tick
+                }
+            }
             if (!Consume(request)) return request != null && request.ProfileId != "hollow-knight" ? request : null;
             if (death.Occurrence > 0 && !death.Recorded)
             {
@@ -83,7 +103,13 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             string run = observation.RotationRun; long occurrence = observation.PendingOccurrence;
             // Consume only the matching accepted rotation commit, not ordinary status/reportResult success.
             // Clear now so a real death before the next poll is not masked; false/busy stays frozen.
-            bool accepted = report(observation);
+            if (completes) retryRotation = observation;
+            bool accepted = SameObservation(acceptedObservation, observation) || report(observation);
+            if (accepted)
+            {
+                acceptedObservation = observation;
+                if (completes) retryRotation = null;
+            }
             if (accepted && completes && run == death.Run && occurrence == death.Occurrence)
             {
                 death.Configure("ROTATE", run, occurrence, 0);
@@ -95,9 +121,21 @@ namespace DualSouls.Skins.HollowKnight.Runtime
                       observation.Status == "Restored"))
                 settled = true;
         }
+        bool RuntimeStillComplete(SkinLibraryObservation observation)
+        {
+            var current = observe?.Invoke();
+            return current == null || current.Status == SkinApplyStatus.Unchanged ||
+                current.Status == (string.IsNullOrEmpty(observation.ActivePackId)
+                    ? SkinApplyStatus.Restored : SkinApplyStatus.Applied);
+        }
+        static bool SameObservation(SkinLibraryObservation left, SkinLibraryObservation right) => left != null &&
+            left.ConfigSha256 == right.ConfigSha256 && left.RotationRun == right.RotationRun &&
+            left.PendingOccurrence == right.PendingOccurrence && left.ActivePackId == right.ActivePackId &&
+            left.ActiveTreeSha256 == right.ActiveTreeSha256 && left.Status == right.Status && left.Detail == right.Detail;
         public void Invalidate()
         {
             if (disposed) return;
+            acceptedObservation = null;
             settled = false;
             nextPoll = 0f;
         }
@@ -123,7 +161,7 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             this.runtime = runtime;
             readyToPoll = () => runtime.TargetsReady;
             death = new HollowKnightSkinDeathAdapter(runtime);
-            read = ReadManaged; report = ReportManaged;
+            read = ReadManaged; report = ReportManaged; observe = () => runtime.LastResult;
             confirm = (run, occurrence) => Bridge.CallStatic<bool>("confirmDeath", run, occurrence);
             cancel = run => Bridge.CallStatic<bool>("cancelRotation", run);
             controller = CreateController(pack => runtime.TryApply(pack), runtime.TryRestore, () => runtime.LastResult);
@@ -158,11 +196,10 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         {
             bool failed = observation.Status == "Failed" || observation.Status == "Rejected" ||
                 observation.Status == "RestoreFailed" || observation.Status == "Blocked";
-            string warning = failed ? observation.Status + ": " + observation.Detail : null;
+            string warning = failed ? observation.Status : null; // Detail is redacted only by the Kotlin evidence writer.
             if (warning != null && warning != lastWarning) Debug.LogWarning("[HK skins library] " + warning);
             lastWarning = warning;
-            if (observation.PendingOccurrence > 0 &&
-                (observation.Status == "Applied" || observation.Status == "Unchanged" || observation.Status == "Restored"))
+            if (observation.PendingOccurrence > 0)
                 return Bridge.CallStatic<bool>("reportRotation", observation.ConfigSha256 ?? "", observation.RotationRun ?? "",
                     observation.PendingOccurrence, observation.ActivePackId ?? "", observation.ActiveTreeSha256 ?? "", observation.Status, observation.Detail ?? "");
             return Bridge.CallStatic<bool>("reportResult", observation.ConfigSha256 ?? "", observation.ActivePackId ?? "",

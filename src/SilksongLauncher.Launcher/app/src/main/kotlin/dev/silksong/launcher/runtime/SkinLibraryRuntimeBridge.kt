@@ -95,10 +95,17 @@ internal class SkinLibraryRuntimeAccess(private val store: SkinLibraryStore) {
             val packs = document.packs.onEach { pack ->
                 require(store.requireVerified(pack).games.containsKey(store.profileId)) { "Installed skin is incompatible with this profile" }
             }
+            val evidence = store.menuEvidence(document)
             val wire = JsonObject().apply {
                 addProperty("ok", true)
                 addProperty("profileId", store.profileId)
                 addProperty("configSha256", store.configurationIdentity(document))
+                addProperty("operationId", evidence.operation.id)
+                addProperty("operationGeneration", evidence.operation.generation)
+                addProperty("operationKind", evidence.operation.kind)
+                addProperty("featureId", evidence.operation.featureId)
+                addProperty("evidenceState", evidence.state)
+                add("observation", evidence.observation ?: JsonNull.INSTANCE)
                 addProperty("mode", document.mode.name)
                 addProperty("spriteScope", document.spriteScope.name)
                 add("selectedPackId", document.selectedPackId?.let(::JsonPrimitive) ?: JsonNull.INSTANCE)
@@ -170,19 +177,12 @@ internal class SkinLibraryRuntimeAccess(private val store: SkinLibraryStore) {
     fun confirmDeath(run: String, occurrence: Long) = initialized && store.confirmDeath(run, occurrence) is SkinResult.Ok
     fun cancelDeath(run: String, occurrence: Long) = initialized && store.cancelDeath(run, occurrence) is SkinResult.Ok
     fun cancelRotation(run: String) = initialized && store.cancelRotation(run) is SkinResult.Ok
-    fun reportRotation(config: String, run: String, occurrence: Long, id: String, tree: String, status: String, detail: String): Boolean =
-        store.locked(nonblocking = true) {
-            val value = store.readLocked()
-            require(initialized && value.rotationRun == run && value.lastDeath == occurrence)
-            require(if (value.pendingVanilla) id.isEmpty() && tree.isEmpty() else value.pendingPackId == id)
-            check(store.recordObservation(config, id, tree, status, detail)) { "Rotation report is busy or stale; retry same successor" }
-            val completes = if (value.pendingVanilla) status == "Restored" || status == "Unchanged"
-                else status == "Applied" || status == "Unchanged"
-            if (completes)
-                check(store.finishRotation(config, run, occurrence, id, tree)) { "Successor publication failed; retry same successor" }
-            SkinResult.Ok(Unit)
-        } is SkinResult.Ok
-    fun report(config: String, id: String, tree: String, status: String, detail: String) = store.recordObservation(config, id, tree, status, detail)
+    fun reportRotation(config: String, run: String, occurrence: Long, id: String, tree: String,
+        status: String, detail: String): Boolean = initialized && store.recordRotationObservation(
+            config, run, occurrence, id, tree, status, detail,
+        )
+    fun report(config: String, id: String, tree: String, status: String, detail: String) =
+        initialized && store.recordObservation(config, id, tree, status, detail)
 
     companion object { const val MAX_MENU_SNAPSHOT_BYTES = SkinLibraryCodec.MAX_BYTES }
 }

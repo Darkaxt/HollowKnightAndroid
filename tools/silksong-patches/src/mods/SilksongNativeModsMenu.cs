@@ -661,6 +661,7 @@ namespace DualSouls.Mods.Silksong
             }
             else
             {
+                _skinError = "";
                 RefreshSkinMenu();
                 PaintSkins();
             }
@@ -1249,14 +1250,41 @@ namespace DualSouls.Mods.Silksong
                     wire.eligiblePackIds ?? Array.Empty<string>(), packs);
                 if (_skinMenu == null) _skinMenu = new NativeSkinMenuModel(snapshot, VisibleRows);
                 else _skinMenu.Replace(snapshot);
-                if (_skinError.StartsWith("SKINS UNAVAILABLE", StringComparison.Ordinal))
-                    _skinError = "";
+                bool preserveMutationError =
+                    _skinError.StartsWith("CHANGE FAILED", StringComparison.Ordinal) ||
+                    _skinError.StartsWith("CHANGE NOT APPLIED", StringComparison.Ordinal);
+                if (!preserveMutationError)
+                    _skinError = FormatSkinEvidence(wire);
             }
             catch (Exception error)
             {
                 _skinError = "SKINS UNAVAILABLE · " + error.GetBaseException().Message;
                 Debug.LogWarning("[Silksong Skins] " + _skinError);
             }
+        }
+
+        static string FormatSkinEvidence(WireSkinSnapshot wire)
+        {
+            string correlation = (wire.featureId ?? "") + " · " +
+                (wire.operationId ?? "") + "/" + wire.operationGeneration;
+            if (string.Equals(wire.evidenceState, "TERMINAL", StringComparison.Ordinal) &&
+                wire.observation != null)
+            {
+                string terminalCorrelation = (wire.observation.featureId ?? "") + " · " +
+                    (wire.observation.operationId ?? "") + "/" + wire.observation.operationGeneration;
+                string value = wire.observation.status + " · " + terminalCorrelation;
+                if (!string.IsNullOrEmpty(wire.observation.detail))
+                    value += " · " + wire.observation.detail;
+                return value;
+            }
+            if (string.Equals(wire.evidenceState, "STALE", StringComparison.Ordinal))
+                return "PENDING · " + correlation + " · PRIOR EVIDENCE STALE";
+            if (string.Equals(wire.evidenceState, "UNREADABLE", StringComparison.Ordinal))
+                return "PENDING · " + correlation + " · EVIDENCE UNREADABLE";
+            string pending = "PENDING · " + correlation;
+            if (wire.observation != null && !string.IsNullOrEmpty(wire.observation.status))
+                pending += " · " + wire.observation.status;
+            return pending;
         }
 
         void PaintSkins()
@@ -1311,12 +1339,23 @@ namespace DualSouls.Mods.Silksong
 
 #pragma warning disable CS0649
         [Serializable] sealed class WireSkinPack { public string id, name, author; }
+        [Serializable] sealed class WireSkinObservation
+        {
+            public long operationGeneration;
+            public string profileId, featureId, operationId, operationKind, rotationRun,
+                requestConfigSha256, resultingConfigSha256, resolvedKind, resolvedPackId,
+                resolvedTreeSha256, resolvedReceiptSha256, activeKind, activePackId,
+                activeTreeSha256, activeReceiptSha256, status, detail;
+        }
         [Serializable] sealed class WireSkinSnapshot
         {
             public bool ok;
-            public string code, detail, profileId, configSha256, mode, spriteScope, selectedPackId;
+            public long operationGeneration;
+            public string code, detail, profileId, configSha256, mode, spriteScope, selectedPackId,
+                operationId, featureId, operationKind, evidenceState;
             public string[] eligiblePackIds;
             public WireSkinPack[] packs;
+            public WireSkinObservation observation;
         }
 #pragma warning restore CS0649
 

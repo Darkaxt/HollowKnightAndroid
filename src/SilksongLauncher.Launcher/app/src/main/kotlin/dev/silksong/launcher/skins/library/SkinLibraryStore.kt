@@ -1,5 +1,6 @@
 package dev.silksong.launcher.skins.library
 
+import com.google.gson.JsonObject
 import dev.silksong.launcher.skins.catalog.CatalogPathSet
 import dev.silksong.launcher.skins.contracts.SkinImportCode
 import dev.silksong.launcher.skins.contracts.SkinResult
@@ -78,25 +79,27 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
         if (value.rotationRun == run) renewRotation(value) else value
     }
     internal fun finishRotation(config: String, run: String, occurrence: Long, id: String, tree: String): Boolean =
-        changeRotation { value ->
-            require(configurationIdentity(value) == config && value.rotationRun == run && value.lastDeath == occurrence) {
+        changeRotation { value -> finishRotationDocument(value, config, run, occurrence, id, tree) } is SkinResult.Ok
+    private fun finishRotationDocument(value: SkinLibraryDocument, config: String, run: String,
+        occurrence: Long, id: String, tree: String): SkinLibraryDocument {
+        require(configurationIdentity(value) == config && value.rotationRun == run && value.lastDeath == occurrence) {
+            "Applied successor belongs to retired configuration"
+        }
+        val selected = if (value.pendingVanilla) {
+            require(id.isEmpty() && tree.isEmpty()) { "Default successor report contains a pack identity" }
+            null
+        } else {
+            require(value.pendingPackId == id && value.packs.single { it.id == id }.treeSha256 == tree) {
                 "Applied successor belongs to retired configuration"
             }
-            val selected = if (value.pendingVanilla) {
-                require(id.isEmpty() && tree.isEmpty()) { "Default successor report contains a pack identity" }
-                null
-            } else {
-                require(value.pendingPackId == id && value.packs.single { it.id == id }.treeSha256 == tree) {
-                    "Applied successor belongs to retired configuration"
-                }
-                id
-            }
-            require(hasPendingSuccessor(value)) { "Rotation has no frozen successor" }
-            val completed = value.copy(selectedPackId = selected, pendingPackId = null, pendingVanilla = false)
-            val nextOccurrence = completed.queuedDeathOccurrences.firstOrNull()
-            if (nextOccurrence == null) completed
-            else activateOccurrence(completed.copy(queuedDeathOccurrences = completed.queuedDeathOccurrences.drop(1)), nextOccurrence)
-        } is SkinResult.Ok
+            id
+        }
+        require(hasPendingSuccessor(value)) { "Rotation has no frozen successor" }
+        val completed = value.copy(selectedPackId = selected, pendingPackId = null, pendingVanilla = false)
+        val nextOccurrence = completed.queuedDeathOccurrences.firstOrNull()
+        return if (nextOccurrence == null) completed
+        else activateOccurrence(completed.copy(queuedDeathOccurrences = completed.queuedDeathOccurrences.drop(1)), nextOccurrence)
+    }
 
     fun read(nonblocking: Boolean = false): SkinResult<SkinLibraryDocument> = locked(nonblocking) { SkinResult.Ok(readLocked()) }
     fun setMode(expectedConfiguration: String, mode: LibraryMode): SkinResult<Unit> = mutateExpected(expectedConfiguration) { value ->
@@ -326,32 +329,315 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
         if (!fs.exists(file)) { fs.createDirectory(file); fs.syncDirectory(file); fs.syncDirectory(requireNotNull(file.parentFile)) }
         fs.requireContained(file, owner); require(fs.isDirectory(file)) { "Expected a skin directory" }
     }
-    internal fun recordObservation(config: String, activeId: String, activeTree: String, status: String, detail: String): Boolean =
+    internal fun recordObservation(config: String, activeId: String, activeTree: String,
+        status: String, detail: String): Boolean = locked(nonblocking = true) {
+        val document = readLocked()
+        require(config == configurationIdentity(document)) { "Observation belongs to an older configuration" }
+        val operation = operationContext(document, config)
+        require(operation.generation == 0L) { "Rotation observation requires run and occurrence correlation" }
+        val active = resolveActive(document, activeId, activeTree)
+        validateOutcome(operation, active, status)
+        publishObservation(operation, active, status, detail, config)
+        SkinResult.Ok(Unit)
+    } is SkinResult.Ok
+
+    internal fun recordRotationObservation(config: String, run: String, occurrence: Long,
+        activeId: String, activeTree: String, status: String, detail: String): Boolean =
         locked(nonblocking = true) {
-            require(config == configurationIdentity(readLocked())) { "Observation belongs to an older configuration" }
-            require(status in OBSERVATION_STATUSES && activeId.length <= 64 && activeId.matches(Regex("[a-z0-9._-]*")))
-            require((activeId.isEmpty() && activeTree.isEmpty()) || (activeId.isNotEmpty() && SkinLibraryCodec.digest(activeTree)))
-            val observation = com.google.gson.JsonObject().apply {
-                addProperty("configSha256", config); addProperty("activePackId", activeId); addProperty("activeTreeSha256", activeTree)
-                addProperty("status", status); addProperty("detail", detail.take(1024)); addProperty("observedAtMillis", System.currentTimeMillis())
+            val current = readLocked()
+            val direct = config == configurationIdentity(current) && current.rotationRun == run &&
+                current.lastDeath == occurrence && occurrence > 0 && hasPendingSuccessor(current)
+            val requested = if (direct) current else {
+                require(fs.exists(backup)) { "Rotation report belongs to retired work" }
+                val previous = SkinLibraryCodec.decode(boundedRead(backup, SkinLibraryCodec.MAX_BYTES), profileId)
+                require(config == configurationIdentity(previous) && previous.rotationRun == run &&
+                    previous.lastDeath == occurrence && occurrence > 0 && hasPendingSuccessor(previous)) {
+                    "Rotation report belongs to retired work"
+                }
+                previous
             }
-            writeAtomic(File(paths.root, "library.observation.json"), observation.toString().toByteArray(Charsets.UTF_8))
+            val operation = operationContext(requested, config)
+            require(operation.generation == occurrence && operation.rotationRun == run) {
+                "Rotation report belongs to retired work"
+            }
+            val active = resolveActive(requested, activeId, activeTree)
+            validateOutcome(operation, active, status)
+            val completes = rotationCompletes(operation, status)
+            val completed = if (completes) {
+                finishRotationDocument(requested, config, run, occurrence,
+                    operation.pack?.id.orEmpty(), operation.pack?.treeSha256.orEmpty()).also(SkinLibraryCodec::validate)
+            } else requested
+            val resulting = when {
+                direct && completes -> completed.also { commit(it) }
+                direct -> requested
+                else -> {
+                    require(completes && completed == current) { "Rotation report belongs to retired work" }
+                    current
+                }
+            }
+            publishObservation(operation, active, status, detail, configurationIdentity(resulting))
             SkinResult.Ok(Unit)
         } is SkinResult.Ok
-    internal fun lastObservation(document: SkinLibraryDocument): String {
-        val file = File(paths.root, "library.observation.json")
-        if (!fs.exists(file)) return "No game-process report yet; launch ${if (profileId == "silksong") "Silksong" else "Hollow Knight"}, then refresh"
+
+    internal fun menuEvidence(document: SkinLibraryDocument): SkinMenuEvidence {
+        val config = configurationIdentity(document)
+        val operation = operationContext(document, config)
+        val file = File(paths.root, OBSERVATION_FILE)
+        if (!fs.exists(file)) return SkinMenuEvidence("PENDING", operation, null)
         return try {
-            val value = SkinLibraryCodec.strictJson(boundedRead(file, 16384), 16384).asJsonObject
-            val status = value["status"].asString; require(status in OBSERVATION_STATUSES)
-            val stale = value["configSha256"].asString != configurationIdentity(document)
-            "Last game report${if (stale) " (older configuration)" else ""}: $status · ${value["activePackId"].asString.take(64)} · ${value["detail"].asString.take(1024)} · ${value["observedAtMillis"].asLong} ms UTC; refresh to retry status"
-        } catch (error: Exception) { "Last game report unreadable: ${error.message?.take(256)}" }
+            val observation = readObservationFile(file)
+            val requestMatches = currentObservationMatches(document, operation, config, observation)
+            val completedRotationMatches = completedRotationObservationMatches(document, config, observation)
+            val matches = requestMatches || completedRotationMatches
+            val state = when {
+                !matches -> "STALE"
+                observation["status"].asString == "AwaitingTargets" -> "PENDING"
+                else -> "TERMINAL"
+            }
+            SkinMenuEvidence(state, operation, observation)
+        } catch (_: Exception) {
+            SkinMenuEvidence("UNREADABLE", operation, null)
+        }
     }
+
+    private fun currentObservationMatches(document: SkinLibraryDocument, operation: SkinOperationContext,
+        config: String, observation: JsonObject): Boolean {
+        val correlates = observation["profileId"].asString == profileId &&
+            observation["operationId"].asString == operation.id &&
+            observation["operationGeneration"].asLong == operation.generation &&
+            observation["operationKind"].asString == operation.kind &&
+            observation["featureId"].asString == operation.featureId &&
+            observation["rotationRun"].asString == operation.rotationRun
+        if (!correlates) return false
+        require(observation["resultingConfigSha256"].asString == config) {
+            "Matching observation has another resulting configuration"
+        }
+        requireObservationIdentities(document, operation, observation)
+        return true
+    }
+
+    private fun completedRotationObservationMatches(document: SkinLibraryDocument, config: String,
+        observation: JsonObject): Boolean {
+        val generation = observation["operationGeneration"].asLong
+        if (hasPendingSuccessor(document) || observation["featureId"].asString != FEATURE_DEATH_ROTATION ||
+            observation["resultingConfigSha256"].asString != config ||
+            observation["rotationRun"].asString != document.rotationRun.orEmpty() ||
+            generation <= 0 || generation != document.lastDeath || !fs.exists(backup)) return false
+        val previous = runCatching {
+            SkinLibraryCodec.decode(boundedRead(backup, SkinLibraryCodec.MAX_BYTES), profileId)
+        }.getOrNull() ?: return false
+        val previousConfig = configurationIdentity(previous)
+        val operation = runCatching { operationContext(previous, previousConfig) }.getOrNull() ?: return false
+        if (observation["operationId"].asString != previousConfig ||
+            observation["operationGeneration"].asLong != operation.generation ||
+            observation["operationKind"].asString != operation.kind ||
+            observation["featureId"].asString != operation.featureId ||
+            observation["rotationRun"].asString != operation.rotationRun ||
+            !rotationCompletes(operation, observation["status"].asString)) return false
+        requireObservationIdentities(previous, operation, observation)
+        val completed = finishRotationDocument(previous, previousConfig, operation.rotationRun,
+            operation.generation, operation.pack?.id.orEmpty(), operation.pack?.treeSha256.orEmpty())
+        return completed == document
+    }
+
+    internal fun lastObservation(document: SkinLibraryDocument): String {
+        val evidence = menuEvidence(document)
+        val observation = evidence.observation
+        if (observation == null) return if (evidence.state == "UNREADABLE")
+            "Last game report unreadable; refresh after the next runtime outcome"
+        else "No game-process report yet; launch ${if (profileId == "silksong") "Silksong" else "Hollow Knight"}, then refresh"
+        val stale = evidence.state == "STALE"
+        return "Last game report${if (stale) " (older configuration)" else ""}: " +
+            "${observation["status"].asString} · ${observation["activePackId"].asString.take(64)} · " +
+            "${observation["detail"].asString.take(1024)} · ${observation["observedAtMillis"].asLong} ms UTC; refresh to retry status"
+    }
+
+    private fun operationContext(document: SkinLibraryDocument, config: String): SkinOperationContext {
+        val rotating = hasPendingSuccessor(document)
+        val pack = when {
+            document.pendingPackId != null -> document.packs.single { it.id == document.pendingPackId }
+            rotating -> null
+            document.mode == LibraryMode.OFF -> null
+            document.selectedPackId != null -> document.packs.single { it.id == document.selectedPackId }
+            else -> null
+        }
+        pack?.let(::requireVerified)
+        val feature = if (rotating) FEATURE_DEATH_ROTATION
+            else if (pack == null) FEATURE_LIVE_DEFAULT else FEATURE_LIVE_IMPORTED
+        val kind = if (rotating) {
+            if (pack == null) "ROTATE_DEFAULT" else "ROTATE_IMPORTED"
+        } else if (pack == null) "RESTORE_DEFAULT" else "APPLY_IMPORTED"
+        return SkinOperationContext(
+            id = config,
+            generation = if (rotating) document.lastDeath else 0,
+            kind = kind,
+            featureId = feature,
+            rotationRun = if (rotating) requireNotNull(document.rotationRun) else "",
+            pack = pack,
+        )
+    }
+
+    private fun resolveActive(document: SkinLibraryDocument, id: String, tree: String): SkinActiveIdentity {
+        require((id.isEmpty() && tree.isEmpty()) ||
+            (id.matches(Regex("[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?")) && SkinLibraryCodec.digest(tree))) {
+            "Active skin identity is invalid"
+        }
+        if (id.isEmpty()) return SkinActiveIdentity(null)
+        val pack = document.packs.singleOrNull { it.id == id && it.treeSha256 == tree }
+            ?: error("Active imported skin is absent from the reported configuration")
+        requireVerified(pack)
+        return SkinActiveIdentity(pack)
+    }
+
+    private fun requireObservationIdentities(document: SkinLibraryDocument,
+        operation: SkinOperationContext, observation: JsonObject) {
+        val resolved = persistedIdentity(document, observation, "resolved")
+        require(resolved.pack == operation.pack) { "Observation resolved identity differs from its operation" }
+        val active = persistedIdentity(document, observation, "active")
+        validateOutcome(operation, active, observation["status"].asString)
+    }
+
+    private fun persistedIdentity(document: SkinLibraryDocument, observation: JsonObject,
+        prefix: String): SkinActiveIdentity {
+        if (observation["${prefix}Kind"].asString == "DEFAULT") return SkinActiveIdentity(null)
+        val pack = document.packs.singleOrNull {
+            it.id == observation["${prefix}PackId"].asString &&
+                it.treeSha256 == observation["${prefix}TreeSha256"].asString &&
+                it.receiptSha256 == observation["${prefix}ReceiptSha256"].asString
+        } ?: error("Observation imported identity is absent from its configuration")
+        requireVerified(pack)
+        return SkinActiveIdentity(pack)
+    }
+
+    private fun validateOutcome(operation: SkinOperationContext, active: SkinActiveIdentity, status: String) {
+        require(status in OBSERVATION_STATUSES) { "Unknown skin outcome" }
+        val successful = when (operation.kind) {
+            "APPLY_IMPORTED", "ROTATE_IMPORTED" -> status == "Applied" || status == "Unchanged"
+            "RESTORE_DEFAULT", "ROTATE_DEFAULT" -> status == "Restored" || status == "Unchanged"
+            else -> false
+        }
+        if (successful) require(active.pack == operation.pack) { "Successful outcome does not match the resolved target" }
+        if (operation.kind.endsWith("_DEFAULT"))
+            require(status != "Applied") { "Default restoration cannot report an imported apply" }
+        else require(status != "Restored") { "Imported apply cannot report a default restoration" }
+    }
+
+    private fun rotationCompletes(operation: SkinOperationContext, status: String) =
+        when (operation.kind) {
+            "ROTATE_IMPORTED" -> status == "Applied" || status == "Unchanged"
+            "ROTATE_DEFAULT" -> status == "Restored" || status == "Unchanged"
+            else -> false
+        }
+
+    private fun publishObservation(operation: SkinOperationContext, active: SkinActiveIdentity,
+        status: String, detail: String, resultingConfig: String) {
+        val target = operation.pack
+        val activePack = active.pack
+        val observation = JsonObject().apply {
+            addProperty("schemaVersion", 1)
+            addProperty("profileId", profileId)
+            addProperty("featureId", operation.featureId)
+            addProperty("operationId", operation.id)
+            addProperty("operationGeneration", operation.generation)
+            addProperty("operationKind", operation.kind)
+            addProperty("rotationRun", operation.rotationRun)
+            addProperty("requestConfigSha256", operation.id)
+            addProperty("resultingConfigSha256", resultingConfig)
+            addProperty("resolvedKind", if (target == null) "DEFAULT" else "IMPORTED")
+            addProperty("resolvedPackId", target?.id.orEmpty())
+            addProperty("resolvedTreeSha256", target?.treeSha256.orEmpty())
+            addProperty("resolvedReceiptSha256", target?.receiptSha256.orEmpty())
+            addProperty("activeKind", if (activePack == null) "DEFAULT" else "IMPORTED")
+            addProperty("activePackId", activePack?.id.orEmpty())
+            addProperty("activeTreeSha256", activePack?.treeSha256.orEmpty())
+            addProperty("activeReceiptSha256", activePack?.receiptSha256.orEmpty())
+            addProperty("status", status)
+            addProperty("detail", redactDetail(detail))
+            addProperty("observedAtMillis", System.currentTimeMillis())
+        }
+        val file = File(paths.root, OBSERVATION_FILE)
+        val previous = if (fs.exists(file)) runCatching { readObservationFile(file) }.getOrNull() else null
+        if (previous != null && OBSERVATION_PAYLOAD_FIELDS.all { previous[it] == observation[it] }) {
+            // A previous rename may have succeeded before its durability barrier failed.
+            fs.syncFile(file); fs.syncDirectory(paths.root)
+            return
+        }
+        val bytes = observation.toString().toByteArray(Charsets.UTF_8)
+        require(bytes.size <= MAX_OBSERVATION_BYTES) { "Skin observation exceeds byte bound" }
+        writeAtomic(file, bytes)
+    }
+
+    private fun readObservationFile(file: File): JsonObject {
+        val value = SkinLibraryCodec.strictJson(boundedRead(file, MAX_OBSERVATION_BYTES), MAX_OBSERVATION_BYTES).asJsonObject
+        require(value.keySet() == OBSERVATION_FIELDS) { "Invalid skin observation fields" }
+        require(OBSERVATION_STRING_FIELDS.all {
+            value[it].isJsonPrimitive && value[it].asJsonPrimitive.isString
+        }) { "Invalid skin observation string fields" }
+        require(value["schemaVersion"].toString() == "1" && value["profileId"].asString == profileId)
+        require(value["featureId"].asString in OBSERVATION_FEATURES)
+        require(SkinLibraryCodec.digest(value["operationId"].asString) &&
+            value["requestConfigSha256"].asString == value["operationId"].asString &&
+            SkinLibraryCodec.digest(value["resultingConfigSha256"].asString))
+        val generationText = value["operationGeneration"].toString()
+        require(generationText.matches(Regex("0|[1-9][0-9]{0,18}")))
+        val generation = generationText.toLong()
+        val feature = value["featureId"].asString
+        val kind = value["operationKind"].asString
+        val run = value["rotationRun"].asString
+        if (feature == FEATURE_DEATH_ROTATION) {
+            require(generation > 0 && kind in setOf("ROTATE_IMPORTED", "ROTATE_DEFAULT") &&
+                run.matches(Regex("[0-9a-f]{32}")))
+        } else {
+            require(generation == 0L && run.isEmpty() &&
+                ((feature == FEATURE_LIVE_IMPORTED && kind == "APPLY_IMPORTED") ||
+                    (feature == FEATURE_LIVE_DEFAULT && kind == "RESTORE_DEFAULT")))
+        }
+        validatePersistedIdentity(value, "resolved")
+        validatePersistedIdentity(value, "active")
+        require(value["resolvedKind"].asString == if (kind.endsWith("_DEFAULT")) "DEFAULT" else "IMPORTED")
+        require(value["status"].asString in OBSERVATION_STATUSES && value["detail"].asString.length <= 1024)
+        val observedAt = value["observedAtMillis"].toString()
+        require(observedAt.matches(Regex("[1-9][0-9]{0,18}")))
+        return value
+    }
+
+    private fun validatePersistedIdentity(value: JsonObject, prefix: String) {
+        val title = prefix.replaceFirstChar(Char::uppercaseChar)
+        val kind = value["${prefix}Kind"].asString
+        val id = value["${prefix}PackId"].asString
+        val tree = value["${prefix}TreeSha256"].asString
+        val receipt = value["${prefix}ReceiptSha256"].asString
+        if (kind == "DEFAULT") require(id.isEmpty() && tree.isEmpty() && receipt.isEmpty())
+        else require(kind == "IMPORTED" &&
+            id.matches(Regex("[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?")) &&
+            SkinLibraryCodec.digest(tree) && SkinLibraryCodec.digest(receipt)) {
+            "$title skin identity is invalid"
+        }
+    }
+
+    private fun redactDetail(detail: String): String = PATH_IN_DETAIL
+        .replace(detail.take(4096), "[REDACTED_PATH]")
+        .take(1024)
     private fun busy() = SkinResult.Error(SkinImportCode.LIFECYCLE_BLOCKED, "Skin library is busy; retry at the next poll")
     companion object {
         private val locks = ConcurrentHashMap<String, ReentrantLock>()
+        private const val OBSERVATION_FILE = "library.observation.json"
+        private const val MAX_OBSERVATION_BYTES = 16 * 1024
+        private const val FEATURE_LIVE_IMPORTED = "SKIN-LIVE-IMPORTED"
+        private const val FEATURE_LIVE_DEFAULT = "SKIN-LIVE-DEFAULT"
+        private const val FEATURE_DEATH_ROTATION = "SKIN-DEATH-ROTATION"
+        private val OBSERVATION_FEATURES = setOf(FEATURE_LIVE_IMPORTED, FEATURE_LIVE_DEFAULT, FEATURE_DEATH_ROTATION)
         private val OBSERVATION_STATUSES = setOf("Applied", "Restored", "Unchanged", "AwaitingTargets", "Cancelled", "Rejected", "Failed", "RestoreFailed", "Blocked")
+        private val OBSERVATION_FIELDS = setOf(
+            "schemaVersion", "profileId", "featureId", "operationId", "operationGeneration",
+            "operationKind", "rotationRun", "requestConfigSha256", "resultingConfigSha256",
+            "resolvedKind", "resolvedPackId", "resolvedTreeSha256", "resolvedReceiptSha256",
+            "activeKind", "activePackId", "activeTreeSha256", "activeReceiptSha256",
+            "status", "detail", "observedAtMillis",
+        )
+        private val OBSERVATION_STRING_FIELDS = OBSERVATION_FIELDS - setOf("schemaVersion", "operationGeneration", "observedAtMillis")
+        private val OBSERVATION_PAYLOAD_FIELDS = OBSERVATION_FIELDS - "observedAtMillis"
+        private val PATH_IN_DETAIL = Regex("""(?im)(?<![A-Za-z0-9])(?:[A-Za-z]:[\\/]|\\\\|//|/)[^\r\n]*""")
         internal fun production(context: android.content.Context, profile: dev.silksong.launcher.profiles.GameProfile): SkinLibraryStore {
             val skinProfile = dev.silksong.launcher.skins.catalog.SkinCatalogProfiles.require(profile)
             // Load the exact packaged per-game asset before constructing any catalog-dependent builder/repository.
@@ -366,6 +652,22 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
         }
     }
 }
+
+internal data class SkinOperationContext(
+    val id: String,
+    val generation: Long,
+    val kind: String,
+    val featureId: String,
+    val rotationRun: String,
+    val pack: LibraryPack?,
+)
+internal data class SkinActiveIdentity(val pack: LibraryPack?)
+internal data class SkinMenuEvidence(
+    val state: String,
+    val operation: SkinOperationContext,
+    val observation: JsonObject?,
+)
+
 internal fun <T> SkinResult<T>.required(): T = when (this) {
     is SkinResult.Ok -> value
     is SkinResult.Error -> throw LibraryOperationFailure(this)

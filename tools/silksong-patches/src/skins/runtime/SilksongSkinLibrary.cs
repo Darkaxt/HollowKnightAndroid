@@ -15,11 +15,13 @@ namespace DualSouls.Skins.Silksong.Runtime
         readonly SilksongSkinDeathAdapter death;
         readonly Func<SkinLibraryRequest> read;
         readonly Func<SkinLibraryObservation, bool> report;
+        readonly Func<SkinApplyResult> observe;
         readonly Func<string, long, bool> confirm;
         readonly Func<string, long, bool> cancelOccurrence;
         readonly Func<string, bool> cancel;
         float nextPoll;
-        bool pending, disposed;
+        bool pending, settled, disposed;
+        SkinLibraryObservation acceptedObservation, retryRotation;
 #if UNITY_ANDROID && !UNITY_EDITOR
         readonly SilksongSkinRuntime runtime;
         AndroidJavaClass bridge;
@@ -36,6 +38,7 @@ namespace DualSouls.Skins.Silksong.Runtime
         {
             this.read = read ?? throw new ArgumentNullException(nameof(read));
             this.report = report ?? throw new ArgumentNullException(nameof(report));
+            this.observe = observe;
             this.death = death ?? throw new ArgumentNullException(nameof(death));
             this.confirm = confirm ?? throw new ArgumentNullException(nameof(confirm));
             this.cancelOccurrence = cancelOccurrence ?? throw new ArgumentNullException(nameof(cancelOccurrence));
@@ -52,6 +55,7 @@ namespace DualSouls.Skins.Silksong.Runtime
             death = new SilksongSkinDeathAdapter(runtime);
             read = ReadManaged;
             report = ReportManaged;
+            observe = () => runtime.LastResult;
             confirm = (run, occurrence) => Bridge.CallStatic<bool>("confirmDeath", run, occurrence);
             cancelOccurrence = (run, occurrence) => Bridge.CallStatic<bool>("cancelDeath", run, occurrence);
             cancel = run => Bridge.CallStatic<bool>("cancelRotation", run);
@@ -95,12 +99,11 @@ namespace DualSouls.Skins.Silksong.Runtime
         {
             bool failed = observation.Status == "Failed" || observation.Status == "Rejected" ||
                 observation.Status == "RestoreFailed" || observation.Status == "Blocked";
-            string warning = failed ? observation.Status + ": " + observation.Detail : null;
+            string warning = failed ? observation.Status : null; // Detail is redacted only by the Kotlin evidence writer.
             if (warning != null && warning != lastWarning)
                 Debug.LogWarning("[Silksong skins library] " + warning);
             lastWarning = warning;
-            if (observation.PendingOccurrence > 0 &&
-                (observation.Status == "Applied" || observation.Status == "Unchanged" || observation.Status == "Restored"))
+            if (observation.PendingOccurrence > 0)
                 return Bridge.CallStatic<bool>("reportRotation", observation.ConfigSha256 ?? "",
                     observation.RotationRun ?? "", observation.PendingOccurrence,
                     observation.ActivePackId ?? "", observation.ActiveTreeSha256 ?? "",
@@ -136,10 +139,12 @@ namespace DualSouls.Skins.Silksong.Runtime
                 if (run != null && cancel(run))
                 {
                     death.Configure("OFF", null);
-                    pending = false;
+                    pending = settled = false;
+                    acceptedObservation = retryRotation = null;
                 }
                 return;
             }
+            if (settled && death.Occurrence == 0 && death.PendingCancellations.Count == 0) return;
             if (now < nextPoll) return;
             nextPoll = now + 1f;
             controller.Tick();
@@ -148,6 +153,30 @@ namespace DualSouls.Skins.Silksong.Runtime
         SkinLibraryRequest ReadCurrent()
         {
             var request = read();
+            // Replay only the latest executed completion before consuming a possibly committed
+            // successor. Retired/cancelled authority releases it so new work cannot wedge.
+            if (retryRotation != null && request != null)
+            {
+                var retry = retryRotation;
+                bool current = request.ProfileId == SilksongSkinTargets.RuntimeRules.ProfileId && request.Mode == "ROTATE" &&
+                    request.RotationRun == retry.RotationRun && death.Run == retry.RotationRun &&
+                    death.Occurrence == retry.PendingOccurrence && death.PendingCancellations.Count == 0 &&
+                    (request.ConfigSha256 == retry.ConfigSha256 ||
+                     (request.LastDeath == retry.PendingOccurrence && request.PendingOccurrence == 0 &&
+                      request.PackId == retry.ActivePackId && request.TreeSha256 == retry.ActiveTreeSha256) ||
+                     request.PendingOccurrence > retry.PendingOccurrence);
+                if (!current || !RuntimeStillComplete(retry)) retryRotation = null;
+                else
+                {
+                    if (!Ready(retry.RotationRun, retry.PendingOccurrence)) return null;
+                    ReportCurrent(retry);
+                    if (retryRotation == null || request.PendingOccurrence <= retry.PendingOccurrence) return null;
+                    // New pending authority supersedes a rejected old completion. Consume the
+                    // retired local occurrence before admitting the newer owner-bound one.
+                    retryRotation = null;
+                    death.Configure("ROTATE", retry.RotationRun, retry.PendingOccurrence, 0);
+                }
+            }
             if (request == null || request.ProfileId != SilksongSkinTargets.RuntimeRules.ProfileId) return request;
             bool changed = false;
             var cancellations = death.PendingCancellations;
@@ -198,16 +227,41 @@ namespace DualSouls.Skins.Silksong.Runtime
                 (observation.Status == "Applied" || observation.Status == "Unchanged" || observation.Status == "Restored");
             string run = observation.RotationRun;
             long occurrence = observation.PendingOccurrence;
-            if (report(observation) && completes && run == death.Run && occurrence == death.Occurrence)
+            if (completes) retryRotation = observation;
+            bool accepted = SameObservation(acceptedObservation, observation) || report(observation);
+            if (accepted)
+            {
+                acceptedObservation = observation;
+                if (completes) retryRotation = null;
+            }
+            if (accepted && completes && run == death.Run && occurrence == death.Occurrence)
             {
                 death.Configure("ROTATE", run, occurrence, 0);
                 pending = false;
+                settled = true;
             }
+            else if (accepted && observation.PendingOccurrence == 0 &&
+                     (observation.Status == "Applied" || observation.Status == "Unchanged" || observation.Status == "Restored"))
+                settled = true;
         }
 
+        bool RuntimeStillComplete(SkinLibraryObservation observation)
+        {
+            var current = observe?.Invoke();
+            return current == null || current.Status == SkinApplyStatus.Unchanged ||
+                current.Status == (string.IsNullOrEmpty(observation.ActivePackId)
+                    ? SkinApplyStatus.Restored : SkinApplyStatus.Applied);
+        }
+        static bool SameObservation(SkinLibraryObservation left, SkinLibraryObservation right) => left != null &&
+            left.ConfigSha256 == right.ConfigSha256 && left.RotationRun == right.RotationRun &&
+            left.PendingOccurrence == right.PendingOccurrence && left.ActivePackId == right.ActivePackId &&
+            left.ActiveTreeSha256 == right.ActiveTreeSha256 && left.Status == right.Status && left.Detail == right.Detail;
         public void Invalidate()
         {
-            if (!disposed) nextPoll = 0f;
+            if (disposed) return;
+            acceptedObservation = null;
+            settled = false;
+            nextPoll = 0f;
         }
 
         public void Dispose()

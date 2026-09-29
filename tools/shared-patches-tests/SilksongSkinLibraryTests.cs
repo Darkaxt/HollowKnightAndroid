@@ -296,6 +296,186 @@ public sealed class SilksongSkinLibraryTests
     }
 
     [Fact]
+    public void Stable_apply_stops_idle_configuration_and_evidence_polling()
+    {
+        var frame = Frame();
+        var death = new SilksongSkinDeathAdapter(() => frame);
+        var request = Request("a");
+        int reads = 0, applies = 0, reports = 0;
+        using var library = new SilksongSkinLibrary(
+            () => { reads++; return request; },
+            _ => { applies++; return new SkinApplyResult(SkinApplyStatus.Unchanged); },
+            () => new SkinApplyResult(SkinApplyStatus.Restored),
+            _ => { reports++; return true; },
+            () => new SkinApplyResult(SkinApplyStatus.Unchanged),
+            death,
+            (_, __) => true, (_, __) => true, _ => true);
+
+        library.Tick(0);
+        library.Tick(1);
+        library.Tick(10);
+
+        Assert.Equal(1, reads);
+        Assert.Equal(1, applies);
+        Assert.Equal(1, reports);
+
+        library.Invalidate();
+        library.Tick(10);
+        Assert.Equal(2, reads);
+        Assert.Equal(2, reports);
+    }
+
+    [Fact]
+    public void Accepted_identical_noncompletion_evidence_is_not_republished_on_idle_polls()
+    {
+        var frame = Frame();
+        var death = new SilksongSkinDeathAdapter(() => frame);
+        var request = Request("a");
+        int reads = 0, attempts = 0, reports = 0;
+        using var library = new SilksongSkinLibrary(
+            () => { reads++; return request; },
+            _ => { attempts++; return new SkinApplyResult(SkinApplyStatus.Failed, "same failure"); },
+            () => throw new Exception("must not restore"),
+            _ => { reports++; return true; },
+            () => new SkinApplyResult(SkinApplyStatus.Failed, "same failure"),
+            death,
+            (_, __) => true, (_, __) => true, _ => true);
+
+        library.Tick(0);
+        library.Tick(1);
+        library.Tick(2);
+
+        Assert.Equal(3, reads);
+        Assert.Equal(3, attempts);
+        Assert.Equal(1, reports);
+        library.Invalidate(); library.Tick(3);
+        Assert.Equal(2, reports); // explicit execution edge, even for identical evidence
+        request.ConfigSha256 = new string('e', 64); library.Tick(4);
+        Assert.Equal(3, reports);
+    }
+
+    [Fact]
+    public void Unaccepted_identical_noncompletion_evidence_remains_retryable()
+    {
+        var frame = Frame(); var death = new SilksongSkinDeathAdapter(() => frame);
+        int reports = 0;
+        using var library = new SilksongSkinLibrary(() => Request("a"),
+            _ => new SkinApplyResult(SkinApplyStatus.Failed, "same failure"),
+            () => throw new Exception("must not restore"), _ => ++reports > 1, null, death,
+            (_, __) => true, (_, __) => true, _ => true);
+        library.Tick(0); library.Tick(1); library.Tick(2);
+        Assert.Equal(2, reports);
+    }
+
+    [Theory]
+    [InlineData("recover")]
+    [InlineData("retire")]
+    [InlineData("cancel")]
+    [InlineData("stale")]
+    [InlineData("cancelled-selection")]
+    [InlineData("supersede")]
+    public void Owner_tick_retries_executed_rotation_evidence_after_selection_commits_or_releases_retired_authority(string edge)
+    {
+        var frame = Frame(); var death = new SilksongSkinDeathAdapter(() => frame); var request = Request("a");
+        SkinLibraryObservation executed = null, accepted = null;
+        int reports = 0, commits = 0, applies = 0, restores = 0;
+        using var library = new SilksongSkinLibrary(() => request,
+            _ => { applies++; return new SkinApplyResult(SkinApplyStatus.Applied); },
+            () => { restores++; return new SkinApplyResult(SkinApplyStatus.Restored); }, observation => {
+                if (observation.PendingOccurrence == 0 || observation.Status != "Applied") return true;
+                if (edge == "supersede" && observation.PendingOccurrence == 2)
+                {
+                    accepted = observation; request.PendingOccurrence = 0; commits++; return true;
+                }
+                reports++;
+                if (executed == null)
+                {
+                    executed = observation; commits++; request.PendingOccurrence = 0;
+                    request.ConfigSha256 = new string('f', 64);
+                    return false; // durable selection changed, bounded evidence write failed
+                }
+                Assert.Equal(executed.ConfigSha256, observation.ConfigSha256);
+                Assert.Equal(executed.RotationRun, observation.RotationRun);
+                Assert.Equal(executed.PendingOccurrence, observation.PendingOccurrence);
+                Assert.Equal(executed.Status, observation.Status);
+                Assert.Equal(executed.Detail, observation.Detail);
+                Assert.Equal(executed.ActiveTreeSha256, observation.ActiveTreeSha256);
+                if (reports == 2) return false;
+                accepted = observation; return true;
+            }, () => new SkinApplyResult(SkinApplyStatus.Unchanged), death,
+            (_, occurrence) => {
+                request.LastDeath = request.PendingOccurrence = occurrence;
+                request.PackId = "b"; request.TreeSha256 = new string('c', 64); return true;
+            }, (_, __) => true, _ => true);
+        void Tick(float time) { frame.Frame++; library.Tick(time); }
+        Tick(0);
+        frame.BridgeOccurrence = 1;
+        frame.BridgeOccurrences = new[] { new SilksongDeathOccurrence(1, frame.Hero, frame.Manager) };
+        frame.Dead = true; Tick(1);
+        frame.Dead = false; frame.HeroInPosition = frame.SceneComplete = true; Tick(1.1f); Tick(1.2f); Tick(2);
+        Assert.Equal(1, commits); Assert.Equal(0, request.PendingOccurrence);
+        Assert.Equal(1, death.Occurrence); Assert.Null(accepted);
+        if (edge == "retire")
+        {
+            request.Mode = "OFF"; request.RotationRun = null; request.LastDeath = 0;
+            library.Invalidate();
+        }
+        else if (edge == "cancel")
+        {
+            frame.Hero = new object(); // cancellation alone, without a durable run-change escape hatch
+        }
+        else if (edge == "stale")
+            request.PendingOccurrence = 1; // updated pending configuration must be reported with fresh correlation
+        else if (edge == "cancelled-selection")
+        {
+            request.PackId = "a"; request.TreeSha256 = new string('b', 64);
+        }
+        else if (edge == "supersede")
+        {
+            frame.BridgeOccurrence = 2;
+            frame.BridgeOccurrences = new[] { new SilksongDeathOccurrence(2, frame.Hero, frame.Manager) };
+            request.LastDeath = request.PendingOccurrence = 2;
+            request.PackId = "c"; request.TreeSha256 = new string('d', 64);
+        }
+        Tick(3); Tick(4); Tick(5);
+        if (edge == "recover")
+        {
+            Assert.Equal(3, reports); Assert.NotNull(accepted);
+            Assert.Equal("b", accepted.ActivePackId); Assert.Equal(0, death.Occurrence);
+            Assert.Equal(2, applies); Assert.Equal(1, restores);
+        }
+        else if (edge == "supersede")
+        {
+            Assert.Equal(2, reports); // one bounded replay, then newer authority proceeds
+            Assert.Equal(2, commits); Assert.Equal(2, accepted.PendingOccurrence);
+            Assert.Equal("c", accepted.ActivePackId); Assert.Equal(0, death.Occurrence);
+        }
+        else
+        {
+            Assert.Equal(1, reports); Assert.Null(accepted); Assert.Equal(0, death.Occurrence);
+        }
+    }
+
+    [Fact]
+    public void Settled_owner_resumes_configuration_polling_after_backlog_cancellation()
+    {
+        var frame = Frame(); var death = new SilksongSkinDeathAdapter(() => frame); var request = Request("a");
+        int reads = 0, cancellations = 0;
+        using var library = new SilksongSkinLibrary(() => { reads++; return request; },
+            _ => new SkinApplyResult(SkinApplyStatus.Applied), () => new SkinApplyResult(SkinApplyStatus.Restored),
+            _ => true, () => new SkinApplyResult(SkinApplyStatus.Unchanged), death,
+            (_, __) => true, (_, __) => true, _ => {
+                cancellations++; request.RotationRun = "renewed-run"; return true;
+            });
+        library.Tick(0);
+        frame.BridgeOccurrence = SilksongSkinDeathAdapter.MaxPendingOccurrences + 1;
+        frame.Frame++; library.Tick(.1f); // missing/overflowed bridge evidence cancels the run
+        Assert.Equal(1, cancellations);
+        library.Tick(1);
+        Assert.Equal(2, reads); Assert.Equal("renewed-run", death.Run);
+    }
+
+    [Fact]
     public void Native_menu_invalidation_exposes_an_immediate_runtime_poll()
     {
         var frame = Frame(); var death = new SilksongSkinDeathAdapter(() => frame); var request = Request("a");

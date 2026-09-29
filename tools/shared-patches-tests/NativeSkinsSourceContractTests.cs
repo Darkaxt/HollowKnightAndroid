@@ -63,6 +63,65 @@ public sealed class NativeSkinsSourceContractTests
     }
 
     [Theory]
+    [InlineData("HollowKnightNativeModsMenu.cs")]
+    [InlineData("SilksongNativeModsMenu.cs")]
+    public void SkinsRouteReadsOnlyTheBoundedLatestObservationAndPresentsEvidenceState(string file)
+    {
+        string source = Source(file);
+
+        Assert.Equal(1, Count(source, "readMenuSnapshot"));
+        Assert.Contains("WireSkinObservation", source, StringComparison.Ordinal);
+        Assert.Contains("evidenceState", source, StringComparison.Ordinal);
+        Assert.Contains("TERMINAL", source, StringComparison.Ordinal);
+        Assert.Contains("PENDING", source, StringComparison.Ordinal);
+        Assert.Contains("STALE", source, StringComparison.Ordinal);
+        Assert.Contains("operationGeneration", source, StringComparison.Ordinal);
+        Assert.Contains("resultingConfigSha256", source, StringComparison.Ordinal);
+        Assert.Contains("string terminalCorrelation = (wire.observation.featureId ?? \"\")", source,
+            StringComparison.Ordinal);
+        Assert.Contains("wire.observation.operationId", source, StringComparison.Ordinal);
+        Assert.Contains("wire.observation.operationGeneration", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("outcomes", source, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SkinOperationJournal", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdateSkin", source, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("HollowKnightSkinLibrary.cs")]
+    [InlineData("SilksongSkinLibrary.cs")]
+    public void EveryPendingRotationOutcomeUsesTheCorrelatedRotationReport(string file)
+    {
+        string source = Source(file);
+
+        int start = source.IndexOf("bool ReportManaged", StringComparison.Ordinal);
+        int end = source.IndexOf("#pragma warning disable CS0649", start, StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start);
+        string transport = source.Substring(start, end - start);
+        Assert.Contains("if (observation.PendingOccurrence > 0)\n", transport, StringComparison.Ordinal);
+        Assert.DoesNotContain("observation.PendingOccurrence > 0 &&", transport, StringComparison.Ordinal);
+        Assert.Contains("CallStatic<bool>(\"reportRotation\"", transport, StringComparison.Ordinal);
+        int warningStart = transport.IndexOf("string warning", StringComparison.Ordinal);
+        int warningEnd = transport.IndexOf("lastWarning = warning;", warningStart, StringComparison.Ordinal);
+        Assert.True(warningStart >= 0 && warningEnd > warningStart);
+        Assert.DoesNotContain("observation.Detail", transport.Substring(warningStart, warningEnd - warningStart), StringComparison.Ordinal);
+        Assert.Contains("string warning = failed ? observation.Status : null;", transport, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("HollowKnightSkinLibrary.cs")]
+    [InlineData("SilksongSkinLibrary.cs")]
+    public void EvidenceWarningsDoNotLogUnredactedRuntimeDetail(string file)
+    {
+        string source = Source(file);
+        int start = source.IndexOf("bool ReportManaged", StringComparison.Ordinal);
+        int transport = source.IndexOf("if (observation.PendingOccurrence > 0)", start, StringComparison.Ordinal);
+        string warning = source.Substring(start, transport - start);
+        Assert.Contains("failed ? observation.Status : null", warning, StringComparison.Ordinal);
+        Assert.DoesNotContain("observation.Detail", warning, StringComparison.Ordinal);
+        Assert.Contains("Debug.LogWarning", warning, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData("HollowKnightModsRuntime.cs")]
     [InlineData("SilksongModsRuntime.cs")]
     public void RuntimeExposesOnlyInvalidationNotSkinPersistence(string file)
@@ -72,6 +131,16 @@ public sealed class NativeSkinsSourceContractTests
         Assert.Contains("internal void InvalidateSkinLibrary()", source, StringComparison.Ordinal);
         Assert.Contains("skinLibrary.Invalidate()", source, StringComparison.Ordinal);
         Assert.DoesNotContain("library.json", source, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("HollowKnightModsRuntime.cs")]
+    [InlineData("SilksongModsRuntime.cs")]
+    public void ResumeInvalidatesSettledSkinAuthorityWithoutPolling(string file)
+    {
+        string source = Source(file);
+        Assert.Contains("void OnApplicationPause(bool paused)", source, StringComparison.Ordinal);
+        Assert.Contains("if (!paused) InvalidateSkinLibrary();", source, StringComparison.Ordinal);
     }
 
     static int Count(string value, string token)
