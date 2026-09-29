@@ -7,7 +7,7 @@ using Xunit;
 public sealed class SilksongSkinLibraryTests
 {
     [Fact]
-    public void Exact_bridge_occurrence_freezes_one_successor_then_restores_and_applies_after_stable_respawn()
+    public void Exact_bridge_occurrence_freezes_one_successor_then_applies_atomically_after_stable_respawn()
     {
         var frame = Frame();
         var death = new SilksongSkinDeathAdapter(() => frame);
@@ -53,7 +53,7 @@ public sealed class SilksongSkinLibraryTests
         library.Tick(1.2f);
         Assert.True(library.CanRefresh);
         library.Tick(2);
-        Assert.Equal(new[] { "apply:a", "restore", "apply:b" }, actions);
+        Assert.Equal(new[] { "apply:a", "apply:b" }, actions);
         Assert.Equal(0, request.PendingOccurrence);
         Assert.Equal(1, confirms);
     }
@@ -442,7 +442,7 @@ public sealed class SilksongSkinLibraryTests
         {
             Assert.Equal(3, reports); Assert.NotNull(accepted);
             Assert.Equal("b", accepted.ActivePackId); Assert.Equal(0, death.Occurrence);
-            Assert.Equal(2, applies); Assert.Equal(1, restores);
+            Assert.Equal(2, applies); Assert.Equal(0, restores);
         }
         else if (edge == "supersede")
         {

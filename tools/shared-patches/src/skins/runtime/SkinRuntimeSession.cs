@@ -14,15 +14,13 @@ namespace DualSouls.Skins.Runtime
         readonly Func<string, string, bool> allows;
         public string ProfileId { get; }
         public int MappingLimit { get; }
-        public bool RestoreBeforeRotation { get; }
         public SkinRuntimeRules(string profileId, int mappingLimit, Func<string, bool> isSupported,
-            Func<string, string, bool> allows, bool restoreBeforeRotation = false)
+            Func<string, string, bool> allows)
         {
             if (string.IsNullOrWhiteSpace(profileId)) throw new ArgumentException("Profile ID is required.", nameof(profileId));
             if (mappingLimit < 1 || mappingLimit > 4096) throw new ArgumentOutOfRangeException(nameof(mappingLimit));
             ProfileId = profileId;
             MappingLimit = mappingLimit;
-            RestoreBeforeRotation = restoreBeforeRotation;
             this.isSupported = isSupported ?? throw new ArgumentNullException(nameof(isSupported));
             this.allows = allows ?? throw new ArgumentNullException(nameof(allows));
         }
@@ -201,7 +199,7 @@ namespace DualSouls.Skins.Runtime
         readonly List<SkinTexture> preparing = new List<SkinTexture>();
         long encodedAdmission, scratchBytes;
         bool blocked, disposed;
-        string retirementError = "", mode = "ON", spriteScope = SkinSpriteScopes.All;
+        string retirementError = "", spriteScope = SkinSpriteScopes.All;
         public SkinPack CurrentPack { get; private set; }
         public int SkinStamp { get; private set; }
         public bool TeardownComplete => disposed;
@@ -248,7 +246,7 @@ namespace DualSouls.Skins.Runtime
                 return WithRetirement(new SkinApplyResult(SkinApplyStatus.AwaitingTargets,
                     "Prior skin resources are still retiring; successor allocation is deferred.",
                     previousVisualsRestored: CurrentPack == null));
-            if (ReferenceEquals(pack, CurrentPack) && pack.Mode == mode && pack.SpriteScope == spriteScope) return Refresh();
+            if (ReferenceEquals(pack, CurrentPack) && pack.SpriteScope == spriteScope) return Refresh();
             var unsupported = pack.Textures.Keys.Where(x => !rules.IsSupported(x)).ToList();
             var candidate = new Dictionary<string, SkinTexture>(StringComparer.OrdinalIgnoreCase);
             if (SameContent(pack, CurrentPack))
@@ -312,7 +310,7 @@ namespace DualSouls.Skins.Runtime
                     result.Status == SkinApplyStatus.AwaitingTargets && CurrentPack != null)
                 {
                     var previous = current.Values.Except(candidate.Values).Distinct().ToList(); current = candidate; CurrentPack = pack;
-                    mode = pack.Mode; spriteScope = pack.SpriteScope;
+                    spriteScope = pack.SpriteScope;
                     Retire(previous); return WithRetirement(result);
                 }
                 var created = candidate.Values.Except(current.Values).Distinct();

@@ -55,7 +55,7 @@ namespace DualSouls.Skins.Silksong.Runtime
             IsSupported, (spriteScope, path) => TryGetByPath(path, out var target) &&
                 (spriteScope == SkinSpriteScopes.All ||
                  spriteScope == SkinSpriteScopes.CharacterHud ||
-                 spriteScope == SkinSpriteScopes.Character && !target.IsHud), restoreBeforeRotation: true);
+                 spriteScope == SkinSpriteScopes.Character && !target.IsHud));
 
         public static bool IsSupported(string path) => path != null && byPath.ContainsKey(path);
         public static bool TryGetByPath(string path, out SilksongSkinTarget target) =>

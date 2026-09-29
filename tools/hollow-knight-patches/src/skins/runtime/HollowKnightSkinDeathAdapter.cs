@@ -24,7 +24,8 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         object hero, manager, stableHero, stableManager, stableHud, armedHero, armedManager;
         long sampledFrame = -1, armedFrame, sequence;
         int saveId, stableFrames;
-        bool armed, positioned, completed, cancelled, disposed;
+        bool armed, positioned, completed, cancelled, disposed, samplingDeath;
+        internal bool DetailedSampleRequired => samplingDeath || armed || Occurrence != 0;
         public string Run { get; private set; }
         public string CancellationRun { get; private set; }
         public long Occurrence { get; private set; }
@@ -38,6 +39,13 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             }
         }
         public HollowKnightSkinDeathAdapter(Func<SkinDeathFrame> sample) { this.sample = sample ?? throw new ArgumentNullException(nameof(sample)); }
+        public HollowKnightSkinDeathAdapter(Action<SkinDeathFrame> capture) : this(ReusableSample(capture)) { }
+        static Func<SkinDeathFrame> ReusableSample(Action<SkinDeathFrame> capture)
+        {
+            if (capture == null) throw new ArgumentNullException(nameof(capture));
+            var frame = new SkinDeathFrame();
+            return () => { capture(frame); return frame; };
+        }
         public void Configure(string mode, string run, long lastDeath = 0, long pendingOccurrence = 0)
         {
             if (disposed) return;
@@ -58,7 +66,10 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         public void OnDeath(object owner, object game)
         {
             if (disposed || cancelled || Run == null || Occurrence != 0 || armed) return;
-            var f = sample();
+            SkinDeathFrame f;
+            samplingDeath = true;
+            try { f = sample(); }
+            finally { samplingDeath = false; }
             if (!Owners(f, owner, game) || f.Dead || !Normal(f)) return;
             // Actual OnDeath precedes the game's duplicate-dead guard. Arm only, never advance here.
             armed = true; armedHero = owner; armedManager = game; armedFrame = f.Frame;
@@ -128,8 +139,9 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         HeroController.HeroDeathEvent deathHandler;
         HeroController.HeroInPosition positionHandler;
         GameManager.EnterSceneEvent completionHandler;
-        public HollowKnightSkinDeathAdapter(HollowKnightSkinRuntime runtime) : this(() => CaptureManaged(runtime))
+        public HollowKnightSkinDeathAdapter(HollowKnightSkinRuntime runtime)
         {
+            sample = ReusableSample(frame => CaptureManaged(runtime, frame, DetailedSampleRequired));
             managed = true; UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
         }
         void OnSceneLoaded(Scene scene, LoadSceneMode mode) { if (Run != null && !cancelled) BindManaged(); }
@@ -151,21 +163,25 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             if (!ReferenceEquals(boundManager, null)) boundManager.OnFinishedEnteringScene -= completionHandler;
             boundHero = null; boundManager = null;
         }
-        static SkinDeathFrame CaptureManaged(HollowKnightSkinRuntime runtime)
+        static void CaptureManaged(HollowKnightSkinRuntime runtime, SkinDeathFrame f, bool detailed)
         {
             var h = HeroController.UnsafeInstance; var m = GameManager.UnsafeInstance;
             var cameras = m != null ? GameCameras.instance : null;
             var hud = cameras != null ? cameras.hudCanvas : null;
-            var f = new SkinDeathFrame { Frame = Time.frameCount, Hero = h != null ? h : null, Manager = m != null ? m : null,
-                Hud = hud != null ? hud : null, SaveId = m != null ? m.profileID : 0 };
-            if (h == null || m == null || h.cState == null || h.playerData == null) return f;
+            f.Frame = Time.frameCount; f.Hero = h != null ? h : null; f.Manager = m != null ? m : null;
+            f.Hud = hud != null ? hud : null; f.SaveId = m != null ? m.profileID : 0;
+            f.Permadeath = 0; f.MapZone = null;
+            f.Gameplay = f.Playing = f.Paused = f.InPosition = f.WaitingToTransition = f.Dead = f.Hazard =
+                f.Transitioning = f.AcceptingInput = f.ControlRelinquished = f.TargetsAvailable = false;
+            // GetCurrentMapZone calls enum.ToString; IsGameplayScene refreshes a scene-name string.
+            // Only the typed death arm/active respawn needs these values, never a healthy idle tick.
+            if (!detailed || h == null || m == null || h.cState == null || h.playerData == null) return;
             f.Permadeath = h.playerData.permadeathMode; f.MapZone = m.GetCurrentMapZone();
             f.Gameplay = m.IsGameplayScene(); f.Playing = m.gameState == GameState.PLAYING; f.Paused = m.isPaused;
             f.InPosition = h.isHeroInPosition; f.WaitingToTransition = h.transitionState == HeroTransitionState.WAITING_TO_TRANSITION;
             f.Dead = h.cState.dead; f.Hazard = h.cState.hazardDeath || h.cState.hazardRespawning; f.Transitioning = h.cState.transitioning;
             f.AcceptingInput = h.CanInput(); f.ControlRelinquished = h.controlReqlinquished;
             f.TargetsAvailable = runtime.DeathTargetsAvailable(h, hud);
-            return f;
         }
 #endif
     }

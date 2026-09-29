@@ -30,15 +30,15 @@ public class HollowKnightSkinLibraryTests
         Assert.Equal("Failed", observed.Status);
     }
 
-    [Fact] public void Silksong_pending_rotation_restores_before_frozen_successor_and_retries_failed_restore()
+    [Fact] public void Silksong_blocked_successor_retries_required_restore_not_rotation_policy()
     {
-        var rules = new SkinRuntimeRules("silksong", 11, _ => true, (_, __) => true,
-            restoreBeforeRotation: true);
+        var rules = new SkinRuntimeRules("silksong", 11, _ => true, (_, __) => true);
         var request = Request(); request.ProfileId = "silksong";
         var actions = new List<string>();
         var failRestore = true;
         var controller = new SkinLibraryRuntimeController(rules, () => request,
-            pack => { actions.Add("apply:" + pack.Id); return new SkinApplyResult(SkinApplyStatus.Applied); },
+            pack => { actions.Add("apply:" + pack.Id); return new SkinApplyResult(
+                pack.Id == "b" && failRestore ? SkinApplyStatus.Blocked : SkinApplyStatus.Applied); },
             () => {
                 actions.Add("restore");
                 if (failRestore) return new SkinApplyResult(SkinApplyStatus.RestoreFailed);
@@ -50,14 +50,17 @@ public class HollowKnightSkinLibraryTests
         request.TreeSha256 = new string('c', 64);
         request.PendingOccurrence = 1;
         controller.Tick();
-        Assert.Equal(new[] { "apply:a", "restore" }, actions);
+        Assert.Equal(new[] { "apply:a", "apply:b" }, actions);
+        controller.Tick();
+        Assert.Equal(new[] { "apply:a", "apply:b", "restore" }, actions);
 
         failRestore = false;
         controller.Tick();
-        Assert.Equal(new[] { "apply:a", "restore", "restore", "apply:b" }, actions);
+        controller.Tick();
+        Assert.Equal(new[] { "apply:a", "apply:b", "restore", "restore", "apply:b" }, actions);
     }
 
-    [Fact] public void Same_pack_and_mode_scope_change_has_distinct_cache_identity_and_reapplies()
+    [Fact] public void Same_pack_scope_change_reapplies_but_mode_change_reuses_cache()
     {
         var request = Request(); var applied = new List<SkinPack>();
         var controller = new SkinLibraryRuntimeController(HollowKnightSkinPolicy.RuntimeRules, () => request,
@@ -68,11 +71,9 @@ public class HollowKnightSkinLibraryTests
         request.SpriteScope = "CHARACTER"; request.ConfigSha256 = new string('c', 64); controller.Tick();
         request.Mode = "ROTATE"; request.ConfigSha256 = new string('d', 64); controller.Tick();
 
-        Assert.Equal(3, applied.Count);
-        Assert.Equal(new[] { "ALL", "CHARACTER", "CHARACTER" }, applied.ConvertAll(x => x.SpriteScope));
-        Assert.Equal(new[] { "ON", "ON", "ROTATE" }, applied.ConvertAll(x => x.Mode));
+        Assert.Equal(2, applied.Count);
+        Assert.Equal(new[] { "ALL", "CHARACTER" }, applied.ConvertAll(x => x.SpriteScope));
         Assert.NotSame(applied[0], applied[1]);
-        Assert.NotSame(applied[1], applied[2]);
     }
 
     [Fact] public void Off_validates_and_transports_scope_but_only_restores_baseline()
@@ -104,11 +105,11 @@ public class HollowKnightSkinLibraryTests
             pack => { applied.Add(pack); return new SkinApplyResult(SkinApplyStatus.Applied); },
             () => { restores++; return new SkinApplyResult(SkinApplyStatus.Restored); }, _ => { });
         controller.Tick(); controller.Tick(); request.Mode = "ROTATE"; request.ConfigSha256 = new string('c', 64); controller.Tick();
-        Assert.Equal(2, applied.Count); // identical identity still needs a new mode policy
+        Assert.Single(applied); // rotation selects only; ordinary loader identity is unchanged
         request.Mode = "OFF"; controller.Tick(); controller.Tick();
         Assert.Equal(1, restores);
         request.Mode = "ON"; controller.Tick();
-        Assert.Equal(3, applied.Count); Assert.Same(applied[0], applied[2]);
+        Assert.Equal(2, applied.Count); Assert.Same(applied[0], applied[1]);
     }
     [Fact] public void Pending_successor_requires_live_readiness_and_failed_busy_report_retries_same_pack()
     {

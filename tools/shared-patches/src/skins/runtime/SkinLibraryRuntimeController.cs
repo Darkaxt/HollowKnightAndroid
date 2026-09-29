@@ -26,10 +26,9 @@ namespace DualSouls.Skins.Runtime
         readonly Action<SkinLibraryObservation> report;
         readonly Func<SkinApplyResult> observe;
         readonly Func<SkinLibraryRequest, bool> ready;
-        SkinPack cached, cachedRotation;
-        string cachedTree, cachedScope, activeId, activeTree, activeMode, activeScope, preparedRun;
-        long preparedOccurrence;
-        bool restored, restoreRequired, pendingRestored, awaitingApply;
+        SkinPack cached;
+        string cachedTree, cachedScope, activeId, activeTree, activeScope;
+        bool restored, restoreRequired, awaitingApply;
         public SkinLibraryRuntimeController(SkinRuntimeRules rules, Func<SkinLibraryRequest> read,
             Func<SkinPack, SkinApplyResult> apply, Func<SkinApplyResult> restore,
             Action<SkinLibraryObservation> report, Func<SkinApplyResult> observe = null,
@@ -52,34 +51,14 @@ namespace DualSouls.Skins.Runtime
                     (request.Vanilla && request.Mode != "ROTATE") ||
                     !SkinSpriteScopes.IsValid(request.SpriteScope))
                     throw new InvalidOperationException("Invalid launched-profile skin configuration.");
-                if (request.PendingOccurrence == 0 || request.PendingOccurrence != preparedOccurrence ||
-                    !string.Equals(request.RotationRun, preparedRun, StringComparison.Ordinal))
-                {
-                    pendingRestored = false;
-                    preparedRun = request.RotationRun;
-                    preparedOccurrence = request.PendingOccurrence;
-                }
                 SkinApplyResult result;
                 if (request.Mode == "OFF")
                     result = RestoreVanilla();
                 else if (request.PendingOccurrence > 0 && !(ready?.Invoke(request) ?? false))
                     result = new SkinApplyResult(SkinApplyStatus.AwaitingTargets, "Frozen successor awaits live stable respawn.");
-                else if (request.PendingOccurrence > 0 && rules.RestoreBeforeRotation && !pendingRestored)
-                {
-                    restored = false; activeMode = activeScope = null;
-                    result = restore();
-                    if (result.Status == SkinApplyStatus.Restored || result.Status == SkinApplyStatus.Unchanged)
-                    {
-                        activeId = activeTree = null;
-                        restored = true;
-                        restoreRequired = false;
-                        pendingRestored = true;
-                        result = ApplyRequested(request);
-                    }
-                }
                 else if (request.PendingOccurrence > 0 && restoreRequired)
                 {
-                    restored = false; activeMode = activeScope = null;
+                    restored = false; activeScope = null;
                     result = restore();
                     if (result.Status == SkinApplyStatus.Restored || result.Status == SkinApplyStatus.Unchanged)
                     {
@@ -114,12 +93,12 @@ namespace DualSouls.Skins.Runtime
         SkinApplyResult RestoreVanilla()
         {
             if (restored) return new SkinApplyResult(SkinApplyStatus.Restored);
-            restored = false; activeMode = activeScope = null;
+            restored = false; activeScope = null;
             var result = restore();
             if (result.Status == SkinApplyStatus.Restored || result.Status == SkinApplyStatus.Unchanged)
             {
                 restored = true; awaitingApply = false; restoreRequired = false;
-                activeId = activeTree = activeMode = activeScope = null;
+                activeId = activeTree = activeScope = null;
             }
             return result;
         }
@@ -133,30 +112,28 @@ namespace DualSouls.Skins.Runtime
                 cached.Root != request.Root || cachedScope != request.SpriteScope)
             {
                 cached = new SkinPack(request.PackId, request.Root, request.Textures, "ON", request.SpriteScope);
-                cachedRotation = null; cachedTree = request.TreeSha256; cachedScope = request.SpriteScope;
+                cachedTree = request.TreeSha256; cachedScope = request.SpriteScope;
             }
-            if (request.Mode == "ROTATE" && cachedRotation == null)
-                cachedRotation = new SkinPack(request.PackId, request.Root, request.Textures, "ROTATE", request.SpriteScope);
             SkinApplyResult result;
             bool directApply = !(activeId == request.PackId && activeTree == request.TreeSha256 &&
-                activeMode == request.Mode && activeScope == request.SpriteScope && !restored && !awaitingApply);
+                activeScope == request.SpriteScope && !restored && !awaitingApply);
             if (!directApply)
                 result = observe?.Invoke() ?? new SkinApplyResult(SkinApplyStatus.Unchanged);
             else
             {
                 // Apply may disturb originals even if it fails or throws before returning.
-                restored = false; activeMode = null;
-                result = apply(request.Mode == "ROTATE" ? cachedRotation : cached);
+                restored = false; activeScope = null;
+                result = apply(cached);
             }
             if (result.PreviousVisualsRestored)
             {
-                activeId = activeTree = activeMode = activeScope = null;
+                activeId = activeTree = activeScope = null;
             }
             if (directApply) awaitingApply = result.Status == SkinApplyStatus.AwaitingTargets;
             if (result.Status == SkinApplyStatus.Applied || result.Status == SkinApplyStatus.Unchanged)
             {
                 awaitingApply = false; restored = false; activeId = request.PackId; activeTree = request.TreeSha256;
-                activeMode = request.Mode; activeScope = request.SpriteScope; }
+                activeScope = request.SpriteScope; }
             return result;
         }
 

@@ -31,6 +31,40 @@ namespace DualSouls.Skins.Silksong.Runtime
             Transitioning, Loading, AcceptingInput, ControlRelinquished, TargetsAvailable;
     }
 
+    // The injected ring is published on the same managed game thread. Its newest token is the
+    // scalar occurrence without FieldInfo.GetValue boxing a long on every healthy frame.
+    internal sealed class SilksongDeathRingSample
+    {
+        long current;
+        IReadOnlyList<SilksongDeathOccurrence> occurrences = Array.Empty<SilksongDeathOccurrence>();
+        public SilksongDeathRingSample(long initialOccurrence) { current = initialOccurrence; }
+        public void Capture(SilksongDeathFrame frame, object[] heroes, object[] managers, long[] tokens)
+        {
+            long newest = current;
+            bool valid = heroes != null && managers != null && tokens != null &&
+                heroes.Length == SilksongSkinDeathAdapter.MaxPendingOccurrences &&
+                managers.Length == heroes.Length && tokens.Length == heroes.Length;
+            if (valid)
+                for (int index = 0; index < tokens.Length; index++) newest = Math.Max(newest, tokens[index]);
+            if (newest != current)
+            {
+                var next = new List<SilksongDeathOccurrence>();
+                long first = Math.Max(1, newest - SilksongSkinDeathAdapter.MaxPendingOccurrences + 1);
+                for (int offset = 0; offset <= newest - first; offset++)
+                {
+                    long occurrence = first + offset;
+                    int index = (int)((occurrence - 1) % tokens.Length);
+                    if (tokens[index] == occurrence && heroes[index] != null && managers[index] != null)
+                        next.Add(new SilksongDeathOccurrence(occurrence, heroes[index], managers[index]));
+                }
+                current = newest;
+                occurrences = next;
+            }
+            frame.BridgeOccurrence = current;
+            frame.BridgeOccurrences = occurrences;
+        }
+    }
+
     // The injected managed bridge classifies Die. This state machine only admits its exact
     // owner occurrence and waits for a separately sampled, stable respawn.
     public sealed class SilksongSkinDeathAdapter : IDisposable
@@ -52,11 +86,13 @@ namespace DualSouls.Skins.Silksong.Runtime
         object deathHero, deathManager, stableHero, stableManager, stableHud;
         bool disposed;
 
+        internal bool DetailedSampleRequired(long bridgeOccurrence) => Occurrence != 0 || bridgeOccurrence > observedBridge;
         public string Run { get; private set; }
         public long Occurrence { get; private set; }
         public bool Recorded { get; private set; }
         public int PendingOccurrences => backlog.Count;
         public bool BacklogFaulted { get; private set; }
+        public int PendingCancellationCount => cancellations.Count;
         public IReadOnlyList<long> PendingCancellations =>
             new List<long>(cancellations).AsReadOnly();
         public IReadOnlyList<long> PendingBridgeOccurrences
@@ -84,6 +120,13 @@ namespace DualSouls.Skins.Silksong.Runtime
         public SilksongSkinDeathAdapter(Func<SilksongDeathFrame> sample)
         {
             this.sample = sample ?? throw new ArgumentNullException(nameof(sample));
+        }
+        public SilksongSkinDeathAdapter(Action<SilksongDeathFrame> capture) : this(ReusableSample(capture)) { }
+        static Func<SilksongDeathFrame> ReusableSample(Action<SilksongDeathFrame> capture)
+        {
+            if (capture == null) throw new ArgumentNullException(nameof(capture));
+            var frame = new SilksongDeathFrame();
+            return () => { capture(frame); return frame; };
         }
 
         public void Configure(string mode, string run, long lastDeath = 0, long pendingOccurrence = 0)
@@ -166,8 +209,9 @@ namespace DualSouls.Skins.Silksong.Runtime
                     owners.Add(item.Occurrence, item);
                 }
             }
-            for (long occurrence = observedBridge + 1; occurrence <= frame.BridgeOccurrence; occurrence++)
+            for (int offset = 1; offset <= delta; offset++)
             {
+                long occurrence = observedBridge + offset;
                 if (!owners.TryGetValue(occurrence, out var item) || item.Hero == null || item.Manager == null)
                 {
                     FailBacklog();
@@ -259,40 +303,26 @@ namespace DualSouls.Skins.Silksong.Runtime
         static readonly FieldInfo TokensField = typeof(GameManager).GetField(TokensFieldName,
             BindingFlags.Public | BindingFlags.Static);
 
-        public SilksongSkinDeathAdapter(SilksongSkinRuntime runtime) : this(() => CaptureManaged(runtime)) { }
+        public SilksongSkinDeathAdapter(SilksongSkinRuntime runtime)
+        {
+            var ring = new SilksongDeathRingSample(OccurrenceField == null ? 0 : (long)OccurrenceField.GetValue(null));
+            sample = ReusableSample(frame => CaptureManaged(runtime, ring, frame));
+        }
 
-        static SilksongDeathFrame CaptureManaged(SilksongSkinRuntime runtime)
+        void CaptureManaged(SilksongSkinRuntime runtime, SilksongDeathRingSample ring, SilksongDeathFrame frame)
         {
             var hero = HeroController.SilentInstance;
             var manager = GameManager.SilentInstance;
-            var frame = new SilksongDeathFrame {
-                Frame = Time.frameCount,
-                Hero = hero != null ? hero : null,
-                Manager = manager != null ? manager : null,
-                HudOwners = runtime != null ? runtime.HudOwnerIdentity : null,
-            };
-            if (OccurrenceField != null && HeroesField != null && ManagersField != null && TokensField != null)
-            {
-                frame.BridgeOccurrence = (long)OccurrenceField.GetValue(null);
-                var heroes = HeroesField.GetValue(null) as HeroController[];
-                var managers = ManagersField.GetValue(null) as GameManager[];
-                var tokens = TokensField.GetValue(null) as long[];
-                var occurrences = new List<SilksongDeathOccurrence>();
-                if (heroes != null && managers != null && tokens != null &&
-                    heroes.Length == MaxPendingOccurrences && managers.Length == MaxPendingOccurrences &&
-                    tokens.Length == MaxPendingOccurrences)
-                {
-                    long first = Math.Max(1, frame.BridgeOccurrence - MaxPendingOccurrences + 1);
-                    for (long occurrence = first; occurrence <= frame.BridgeOccurrence; occurrence++)
-                    {
-                        int index = (int)((occurrence - 1) % MaxPendingOccurrences);
-                        if (tokens[index] != occurrence || heroes[index] == null || managers[index] == null) continue;
-                        occurrences.Add(new SilksongDeathOccurrence(occurrence, heroes[index], managers[index]));
-                    }
-                }
-                frame.BridgeOccurrences = occurrences.AsReadOnly();
-            }
-            if (hero == null || manager == null || hero.cState == null) return frame;
+            frame.Frame = Time.frameCount;
+            frame.Hero = hero != null ? hero : null;
+            frame.Manager = manager != null ? manager : null;
+            frame.HudOwners = runtime != null ? runtime.HudOwnerIdentity : null;
+            ring.Capture(frame, HeroesField?.GetValue(null) as HeroController[],
+                ManagersField?.GetValue(null) as GameManager[], TokensField?.GetValue(null) as long[]);
+            frame.Gameplay = frame.Playing = frame.Paused = frame.HeroInPosition = frame.SceneComplete =
+                frame.Dead = frame.Hazard = frame.Transitioning = frame.Loading = frame.AcceptingInput =
+                frame.ControlRelinquished = frame.TargetsAvailable = false;
+            if (!DetailedSampleRequired(frame.BridgeOccurrence) || hero == null || manager == null || hero.cState == null) return;
             frame.Gameplay = manager.IsGameplayScene();
             frame.Playing = manager.GameState == GameState.PLAYING;
             frame.Paused = manager.isPaused;
@@ -305,7 +335,6 @@ namespace DualSouls.Skins.Silksong.Runtime
             frame.AcceptingInput = hero.CanInput();
             frame.ControlRelinquished = hero.controlReqlinquished;
             frame.TargetsAvailable = runtime != null && runtime.DeathTargetsAvailable(hero, manager);
-            return frame;
         }
 #endif
     }

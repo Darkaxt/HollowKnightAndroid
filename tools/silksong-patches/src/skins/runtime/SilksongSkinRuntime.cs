@@ -73,6 +73,7 @@ namespace DualSouls.Skins.Silksong.Runtime
         readonly SkinRuntimeSession session;
         readonly SilksongOwnerRefreshState ownerRefresh = new SilksongOwnerRefreshState(1f);
         readonly List<string> omissions = new List<string>();
+        readonly List<object> ownerIdentities = new List<object>(32);
         HeroOwners heroOwners;
         HudOwners hudOwners;
         GameManager ownerManager;
@@ -81,7 +82,7 @@ namespace DualSouls.Skins.Silksong.Runtime
         bool disposed;
 
         public static SilksongSkinRuntime Current { get; private set; }
-        public SkinApplyResult LastResult { get; private set; } = new SkinApplyResult(SkinApplyStatus.Unchanged);
+        public SkinApplyResult LastResult => ownerRefresh.LastResult;
         public bool TeardownComplete => disposed;
         public string LastError { get; private set; } = "";
         public Func<bool> RefreshAllowed { get; set; }
@@ -122,7 +123,7 @@ namespace DualSouls.Skins.Silksong.Runtime
 
         SkinApplyResult Publish(SkinApplyResult result)
         {
-            LastResult = Publish(result, omissions);
+            ownerRefresh.Publish(Publish(result, omissions));
             if (LastResult.Status == SkinApplyStatus.Failed || LastResult.Status == SkinApplyStatus.RestoreFailed ||
                 LastResult.Status == SkinApplyStatus.Blocked)
                 Debug.LogWarning("[Silksong skins] " + LastResult.Status + ": " + LastResult.Detail);
@@ -174,8 +175,6 @@ namespace DualSouls.Skins.Silksong.Runtime
                 foreach (var instance in admitted)
                     slots.AddRange(slotByCollection[instance.CollectionIdentity]);
             }
-            if (ownerRefresh.HasCurrentIdentity) ownerRefresh.MarkVisualRefresh();
-            else ownerRefresh.InvalidateVisuals();
             return slots;
         }
 
@@ -283,27 +282,33 @@ namespace DualSouls.Skins.Silksong.Runtime
             hudOwners = CaptureHudOwners(hudOwners);
             ownerManager = GameManager.instance;
             if (heroOwners == null || hudOwners == null || ownerManager == null)
-                return ownerRefresh.Update(null);
-            var identities = new List<object> { heroOwners.Hero, heroOwners.Renderer, heroOwners.Animator,
-                heroOwners.Sprite, heroOwners.Animation, ownerManager, hudOwners.Cameras, hudOwners.Camera,
-                hudOwners.HudCamera, hudOwners.GameplayChild, hudOwners.SlideOut, hudOwners.Spool, hudOwners.Canvas };
-            foreach (var identity in new object[] { heroOwners.DefaultLibrary, heroOwners.CurrentLibrary,
-                heroOwners.WindyLibrary, heroOwners.Config, heroOwners.CrestLibrary, heroOwners.SpriteCollection })
-                if (identity != null) identities.Add(identity);
+                return ownerRefresh.UpdateOwners(null);
+            var identities = ownerIdentities;
+            identities.Clear();
+            identities.Add(heroOwners.Hero); identities.Add(heroOwners.Renderer); identities.Add(heroOwners.Animator);
+            identities.Add(heroOwners.Sprite); identities.Add(heroOwners.Animation); identities.Add(ownerManager);
+            identities.Add(hudOwners.Cameras); identities.Add(hudOwners.Camera); identities.Add(hudOwners.HudCamera);
+            identities.Add(hudOwners.GameplayChild); identities.Add(hudOwners.SlideOut); identities.Add(hudOwners.Spool);
+            identities.Add(hudOwners.Canvas);
+            AddIdentity(heroOwners.DefaultLibrary); AddIdentity(heroOwners.CurrentLibrary);
+            AddIdentity(heroOwners.WindyLibrary); AddIdentity(heroOwners.Config);
+            AddIdentity(heroOwners.CrestLibrary); AddIdentity(heroOwners.SpriteCollection);
             foreach (var animator in hudOwners.Animators)
             {
-                if (animator == null) return ownerRefresh.Update(null);
+                if (animator == null) return ownerRefresh.UpdateOwners(null);
                 identities.Add(animator);
                 if (animator.Library != null) identities.Add(animator.Library);
             }
             foreach (var sprite in hudOwners.Sprites)
             {
-                if (sprite == null) return ownerRefresh.Update(null);
+                if (sprite == null) return ownerRefresh.UpdateOwners(null);
                 identities.Add(sprite);
                 if (sprite.Collection != null && sprite.Collection.inst != null) identities.Add(sprite.Collection.inst);
             }
-            return ownerRefresh.Update(new SilksongOwnerIdentityStamp(identities));
+            return ownerRefresh.UpdateOwners(identities);
         }
+
+        void AddIdentity(UObject identity) { if (identity != null) ownerIdentities.Add(identity); }
 
         static HeroOwners CaptureHeroOwners(HeroOwners existing)
         {
@@ -345,8 +350,7 @@ namespace DualSouls.Skins.Silksong.Runtime
             if (existing != null && ReferenceEquals(existing.Cameras, cameras) && ReferenceEquals(existing.Camera, camera) &&
                 ReferenceEquals(existing.HudCamera, hudCamera) && ReferenceEquals(existing.GameplayChild, gameplay) &&
                 ReferenceEquals(existing.SlideOut, slide) && ReferenceEquals(existing.Spool, spool) &&
-                existing.Canvas != null && existing.Animators != null && existing.Animators.All(x => x != null) &&
-                existing.Sprites != null && existing.Sprites.All(x => x != null))
+                existing.Canvas != null && OwnersAlive(existing.Animators) && OwnersAlive(existing.Sprites))
                 return existing;
             var canvases = gameplay.GetComponentsInChildren<HudCanvas>(true);
             if (canvases.Length != 1) return null;
@@ -356,6 +360,13 @@ namespace DualSouls.Skins.Silksong.Runtime
             var canvas = canvases[0];
             return new HudOwners { Cameras = cameras, Camera = camera, HudCamera = hudCamera, GameplayChild = gameplay,
                 SlideOut = slide, Spool = spool, Canvas = canvas, Animators = animators, Sprites = sprites };
+        }
+
+        static bool OwnersAlive<T>(T[] owners) where T : UObject
+        {
+            if (owners == null) return false;
+            for (int index = 0; index < owners.Length; index++) if (owners[index] == null) return false;
+            return true;
         }
 
         static T RequireLive<T>(object value) where T : UObject

@@ -144,7 +144,7 @@ namespace DualSouls.Skins.Silksong.Runtime
                 }
                 return;
             }
-            if (settled && death.Occurrence == 0 && death.PendingCancellations.Count == 0) return;
+            if (settled && death.Occurrence == 0 && death.PendingCancellationCount == 0) return;
             if (now < nextPoll) return;
             nextPoll = now + 1f;
             controller.Tick();
@@ -160,7 +160,7 @@ namespace DualSouls.Skins.Silksong.Runtime
                 var retry = retryRotation;
                 bool current = request.ProfileId == SilksongSkinTargets.RuntimeRules.ProfileId && request.Mode == "ROTATE" &&
                     request.RotationRun == retry.RotationRun && death.Run == retry.RotationRun &&
-                    death.Occurrence == retry.PendingOccurrence && death.PendingCancellations.Count == 0 &&
+                    death.Occurrence == retry.PendingOccurrence && death.PendingCancellationCount == 0 &&
                     (request.ConfigSha256 == retry.ConfigSha256 ||
                      (request.LastDeath == retry.PendingOccurrence && request.PendingOccurrence == 0 &&
                       request.PackId == retry.ActivePackId && request.TreeSha256 == retry.ActiveTreeSha256) ||
@@ -248,9 +248,9 @@ namespace DualSouls.Skins.Silksong.Runtime
         bool RuntimeStillComplete(SkinLibraryObservation observation)
         {
             var current = observe?.Invoke();
-            return current == null || current.Status == SkinApplyStatus.Unchanged ||
+            return current != null && (current.Status == SkinApplyStatus.Unchanged ||
                 current.Status == (string.IsNullOrEmpty(observation.ActivePackId)
-                    ? SkinApplyStatus.Restored : SkinApplyStatus.Applied);
+                    ? SkinApplyStatus.Restored : SkinApplyStatus.Applied));
         }
         static bool SameObservation(SkinLibraryObservation left, SkinLibraryObservation right) => left != null &&
             left.ConfigSha256 == right.ConfigSha256 && left.RotationRun == right.RotationRun &&

@@ -124,9 +124,9 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         bool RuntimeStillComplete(SkinLibraryObservation observation)
         {
             var current = observe?.Invoke();
-            return current == null || current.Status == SkinApplyStatus.Unchanged ||
+            return current != null && (current.Status == SkinApplyStatus.Unchanged ||
                 current.Status == (string.IsNullOrEmpty(observation.ActivePackId)
-                    ? SkinApplyStatus.Restored : SkinApplyStatus.Applied);
+                    ? SkinApplyStatus.Restored : SkinApplyStatus.Applied));
         }
         static bool SameObservation(SkinLibraryObservation left, SkinLibraryObservation right) => left != null &&
             left.ConfigSha256 == right.ConfigSha256 && left.RotationRun == right.RotationRun &&

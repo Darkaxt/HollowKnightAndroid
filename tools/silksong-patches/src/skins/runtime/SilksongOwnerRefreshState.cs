@@ -1,3 +1,4 @@
+using DualSouls.Skins.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,11 +19,13 @@ namespace DualSouls.Skins.Silksong.Runtime
             this.identities = copy.AsReadOnly();
         }
 
-        public bool Equals(SilksongOwnerIdentityStamp other)
+        public bool Equals(SilksongOwnerIdentityStamp other) => other != null && Matches(other.identities);
+
+        internal bool Matches(IReadOnlyList<object> owners)
         {
-            if (other == null || identities.Count != other.identities.Count) return false;
+            if (owners == null || identities.Count != owners.Count) return false;
             for (int index = 0; index < identities.Count; index++)
-                if (!ReferenceEquals(identities[index], other.identities[index])) return false;
+                if (!ReferenceEquals(identities[index], owners[index])) return false;
             return true;
         }
 
@@ -46,6 +49,7 @@ namespace DualSouls.Skins.Silksong.Runtime
         SilksongOwnerIdentityStamp current;
         SilksongOwnerIdentityStamp visual;
 
+        public SkinApplyResult LastResult { get; private set; } = new SkinApplyResult(SkinApplyStatus.Unchanged);
         public int IdentityPollCount { get; private set; }
         public int VisualRefreshCount { get; private set; }
         public bool HasCurrentIdentity => current != null;
@@ -71,11 +75,20 @@ namespace DualSouls.Skins.Silksong.Runtime
         {
             bool changed = identity == null ? current != null : !identity.Equals(current);
             current = identity;
+            if (changed) InvalidateObservation();
             return changed;
         }
 
-        public bool VisualRefreshRequired(bool normalRefreshAllowed) =>
-            current != null && (normalRefreshAllowed || !VisualCurrent);
+        public bool UpdateOwners(IReadOnlyList<object> owners)
+        {
+            if (owners == null) return Update(null);
+            if (current != null && current.Matches(owners)) return false;
+            return Update(new SilksongOwnerIdentityStamp(owners));
+        }
+
+        // Permission alone is not work. Replacement/invalidation still bootstraps targets while
+        // the death gate is closed, otherwise stable-respawn admission would wait on itself.
+        public bool VisualRefreshRequired(bool normalRefreshAllowed) => current != null && !VisualCurrent;
 
         public void MarkVisualRefresh()
         {
@@ -84,9 +97,26 @@ namespace DualSouls.Skins.Silksong.Runtime
             VisualRefreshCount++;
         }
 
+        public SkinApplyResult Publish(SkinApplyResult result)
+        {
+            LastResult = result;
+            if (HasCurrentIdentity && !result.Detail.Contains("Resource retirement pending") &&
+                (result.Status == SkinApplyStatus.Applied || result.Status == SkinApplyStatus.Unchanged ||
+                 result.Status == SkinApplyStatus.Restored)) MarkVisualRefresh();
+            else RequireVisualRefresh();
+            return result;
+        }
+        void InvalidateObservation()
+        {
+            if (LastResult.Status == SkinApplyStatus.Applied || LastResult.Status == SkinApplyStatus.Unchanged ||
+                LastResult.Status == SkinApplyStatus.Restored)
+                LastResult = new SkinApplyResult(SkinApplyStatus.AwaitingTargets, "Scene targets changed; current visual refresh pending.");
+        }
+        public void RequireVisualRefresh() { visual = null; }
         public void InvalidateVisuals()
         {
-            visual = null;
+            RequireVisualRefresh();
+            InvalidateObservation();
             nextPoll = float.NegativeInfinity;
         }
     }

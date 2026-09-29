@@ -141,8 +141,7 @@ public sealed class HollowKnightSkinRuntimeTests
     {
         var targets = Enumerable.Range(0, 11).Select(index => "T" + index + ".png").ToArray();
         var rules = new SkinRuntimeRules("silksong", 11, targets.Contains,
-            (scope, target) => scope == "ALL" || scope == "CHARACTER" && Array.IndexOf(targets, target) < 9,
-            restoreBeforeRotation: true);
+            (scope, target) => scope == "ALL" || scope == "CHARACTER" && Array.IndexOf(targets, target) < 9);
         var rig = new Rig(2300, rules);
         foreach (var target in targets) rig.Add(target);
         var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGNQSlv1HxkzkC4AAJHIIxEb9L/kAAAAAElFTkSuQmCC");
@@ -174,8 +173,7 @@ public sealed class HollowKnightSkinRuntimeTests
     {
         var targets = Enumerable.Range(0, 11).Select(index => "T" + index + ".png").ToArray();
         var rules = new SkinRuntimeRules("silksong", 11, targets.Contains,
-            (scope, target) => scope == "ALL" || scope == "CHARACTER" && Array.IndexOf(targets, target) < 9,
-            restoreBeforeRotation: true);
+            (scope, target) => scope == "ALL" || scope == "CHARACTER" && Array.IndexOf(targets, target) < 9);
         var rig = new Rig(2300, rules);
         foreach (var target in targets) rig.Add(target);
         var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGNQSlv1HxkzkC4AAJHIIxEb9L/kAAAAAElFTkSuQmCC");
@@ -228,8 +226,7 @@ public sealed class HollowKnightSkinRuntimeTests
     {
         var targets = Enumerable.Range(0, 11).Select(index => "T" + index + ".png").ToArray();
         var rules = new SkinRuntimeRules("silksong", 11, targets.Contains,
-            (scope, target) => scope == "ALL" || scope == "CHARACTER" && Array.IndexOf(targets, target) < 9,
-            restoreBeforeRotation: true);
+            (scope, target) => scope == "ALL" || scope == "CHARACTER" && Array.IndexOf(targets, target) < 9);
         var rig = new Rig(2300, rules);
         foreach (var target in targets) rig.Add(target);
         var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGNQSlv1HxkzkC4AAJHIIxEb9L/kAAAAAElFTkSuQmCC");
@@ -284,8 +281,7 @@ public sealed class HollowKnightSkinRuntimeTests
     {
         var targets = Enumerable.Range(0, 11).Select(index => "T" + index + ".png").ToArray();
         var rules = new SkinRuntimeRules("silksong", 11, targets.Contains,
-            (scope, target) => scope == "ALL" || scope == "CHARACTER" && Array.IndexOf(targets, target) < 9,
-            restoreBeforeRotation: true);
+            (scope, target) => scope == "ALL" || scope == "CHARACTER" && Array.IndexOf(targets, target) < 9);
         var rig = new Rig(2300, rules);
         foreach (var target in targets) rig.Add(target);
         var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGNQSlv1HxkzkC4AAJHIIxEb9L/kAAAAAElFTkSuQmCC");
