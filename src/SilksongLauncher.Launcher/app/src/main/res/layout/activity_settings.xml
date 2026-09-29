@@ -195,7 +195,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="10dp"
-            android:text="@string/action_mods"
+            android:text="@string/action_plugins"
             android:textSize="15sp"
             android:textColor="@color/text_on_control"
             android:backgroundTint="@color/surface_control"

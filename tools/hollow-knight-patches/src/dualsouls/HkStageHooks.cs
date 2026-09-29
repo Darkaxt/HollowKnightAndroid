@@ -15,6 +15,7 @@ static class HkStageHooks
     static HollowKnightFlashMode? _legacyFlashMode;
     static float? _legacyFlashAlpha;
     static bool benchLoaded;
+    static Action<DualSouls.Mods.TweakActionResult> pendingBenchCompletion;
     static bool lastAtBench;
     static readonly Dictionary<string, BenchRecord> benches =
         new Dictionary<string, BenchRecord>(StringComparer.Ordinal);
@@ -134,9 +135,28 @@ static class HkStageHooks
         }
     }
 
-    internal static void OpenBenchTeleport()
+    internal static void OpenBenchTeleport(
+        Action<DualSouls.Mods.TweakActionResult> completed)
     {
-        HKDualScreen.OpenBenchTeleportRoute();
+        if (completed == null) throw new ArgumentNullException(nameof(completed));
+        if (pendingBenchCompletion != null)
+            throw new InvalidOperationException(
+                "Hollow Knight Bench Teleport already has a pending operation.");
+        pendingBenchCompletion = completed;
+        try
+        {
+            HKDualScreen.OpenBenchTeleportRoute();
+        }
+        catch
+        {
+            pendingBenchCompletion = null;
+            throw;
+        }
+    }
+
+    internal static void CancelBenchTeleport()
+    {
+        pendingBenchCompletion = null;
     }
 
     internal static bool IsBenchRecorded(string scene)
@@ -147,15 +167,34 @@ static class HkStageHooks
 
     internal static void BenchWarp(string scene)
     {
-        EnsureBenchesLoaded();
-        if (string.IsNullOrEmpty(scene) || !benches.TryGetValue(scene, out BenchRecord record))
-            throw new InvalidOperationException("That bench has not been recorded.");
-        GameManager game = GameManager.UnsafeInstance;
-        PlayerData player = game != null ? game.playerData : null;
-        if (game == null || player == null)
-            throw new InvalidOperationException("Hollow Knight is not ready to travel.");
-        player.SetBenchRespawn(record.marker, record.scene, record.type, record.facingRight);
-        game.ReadyForRespawn(false);
+        try
+        {
+            EnsureBenchesLoaded();
+            if (string.IsNullOrEmpty(scene) || !benches.TryGetValue(scene, out BenchRecord record))
+                throw new InvalidOperationException("That bench has not been recorded.");
+            GameManager game = GameManager.UnsafeInstance;
+            PlayerData player = game != null ? game.playerData : null;
+            if (game == null || player == null)
+                throw new InvalidOperationException("Hollow Knight is not ready to travel.");
+            player.SetBenchRespawn(record.marker, record.scene, record.type, record.facingRight);
+            game.ReadyForRespawn(false);
+            CompleteBenchOperation(DualSouls.Mods.TweakActionResult.Ok(
+                DualSouls.Mods.TweakReadback.Text(scene)));
+        }
+        catch (Exception error)
+        {
+            CompleteBenchOperation(DualSouls.Mods.TweakActionResult.Fail(
+                error.GetBaseException().Message));
+            throw;
+        }
+    }
+
+    static void CompleteBenchOperation(DualSouls.Mods.TweakActionResult result)
+    {
+        Action<DualSouls.Mods.TweakActionResult> completed =
+            pendingBenchCompletion;
+        pendingBenchCompletion = null;
+        completed?.Invoke(result);
     }
 
     static void RecordBench()

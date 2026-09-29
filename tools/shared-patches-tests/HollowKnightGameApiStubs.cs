@@ -8,7 +8,8 @@ internal static class HkStageHooks
     internal static void SetBackdropOverride(bool black) { }
     internal static void SetFlashOverride(HollowKnightFlashMode mode) { }
     internal static void OpenSkins() { }
-    internal static void OpenBenchTeleport() { }
+    internal static void OpenBenchTeleport(Action<DualSouls.Mods.TweakActionResult> completed) { }
+    internal static void CancelBenchTeleport() { }
 }
 
 public sealed class PlayerData

@@ -1,3 +1,4 @@
+using DualSouls.Mods;
 using DualSouls.Mods.HollowKnight;
 using Xunit;
 
@@ -15,6 +16,27 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
     public HollowKnightGameplayBehaviorTests()
     {
         ResetGame();
+    }
+
+    [Fact]
+    public void BenchRouteOwnerPublishesCorrelatedTimeoutInsteadOfRemainingPending()
+    {
+        var api = new HollowKnightGameTweakApi();
+        UnityEngine.Time.unscaledTime = 10f;
+        api.OpenBenchTeleport(71);
+
+        UnityEngine.Time.unscaledTime = 129.99f;
+        api.TickGameplay();
+        Assert.Empty(api.DrainCompletedOperations());
+
+        UnityEngine.Time.unscaledTime = 130f;
+        api.TickGameplay();
+        TweakAdapterCompletion completion = Assert.Single(
+            api.DrainCompletedOperations());
+        Assert.Equal("bench_teleport", completion.RowId);
+        Assert.Equal(71, completion.OperationToken);
+        Assert.False(completion.Result.Success);
+        Assert.Contains("timed out", completion.Result.Error, System.StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

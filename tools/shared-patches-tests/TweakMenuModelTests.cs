@@ -146,7 +146,6 @@ public sealed class TweakMenuModelTests
     public void SetSelectedForwardsTheExactValue()
     {
         var fixture = MenuFixture.Create(visibleRows: 2);
-        Assert.True(fixture.Model.ToggleMaster().Success);
 
         var result = fixture.Model.SetSelected("invincible");
 
@@ -159,7 +158,6 @@ public sealed class TweakMenuModelTests
     public void RowNavigationClearsErrorOnlyWhenSelectionChanges()
     {
         var fixture = MenuFixture.Create(visibleRows: 2);
-        Assert.True(fixture.Controller.SetMaster(true).Success);
         fixture.Adapter.FailId = "one_hit_kills";
         fixture.Model.MoveRow(2);
         Assert.False(fixture.Model.CycleSelected().Success);
@@ -180,7 +178,7 @@ public sealed class TweakMenuModelTests
     public void GroupNavigationClearsSuccessOnlyWhenSelectionChanges()
     {
         var fixture = MenuFixture.Create(visibleRows: 2);
-        Assert.True(fixture.Model.ToggleMaster().Success);
+        Assert.True(fixture.Model.CycleSelected().Success);
         string message = fixture.Model.Message;
 
         fixture.Model.MoveGroup(2);
@@ -198,16 +196,29 @@ public sealed class TweakMenuModelTests
     public void CycleSelectedForwardsAvailableSelectionAndReportsSuccess()
     {
         var fixture = MenuFixture.Create(visibleRows: 2);
-        Assert.True(fixture.Model.ToggleMaster().Success);
         fixture.Model.MoveRow(1);
 
         var result = fixture.Model.CycleSelected();
 
         Assert.True(result.Success);
-        Assert.Equal("Value saved.", fixture.Model.Message);
+        Assert.Equal("UNLIMITED SOUL completed; runtime readback unavailable.", fixture.Model.Message);
         Assert.False(fixture.Model.MessageIsError);
         Assert.Equal("on", fixture.Controller.Value("unlimited_soul"));
         Assert.Equal(new[] { ("unlimited_soul", "on") }, fixture.Adapter.Applied);
+    }
+
+    [Fact]
+    public void CompletionMessageUsesCatalogTitleInsteadOfPersistenceId()
+    {
+        var controller = new TweakController(
+            new AliasTitleAdapter(), new MemoryStore());
+        Assert.True(controller.Initialize().Success);
+        var model = new TweakMenuModel(controller, visibleRows: 1);
+
+        TweakActionResult result = model.SetSelected("on");
+
+        Assert.True(result.Success);
+        Assert.Equal("USER-FACING TITLE: ON.", model.Message);
     }
 
     [Fact]
@@ -217,7 +228,6 @@ public sealed class TweakMenuModelTests
         var controller = new TweakController(adapter, new MemoryStore());
         Assert.True(controller.Initialize().Success);
         var menu = new TweakMenuModel(controller, visibleRows: 2);
-        Assert.True(menu.ToggleMaster().Success);
 
         Assert.True(menu.ActivateSelected().Success);
         Assert.Equal(("choice", "on"), adapter.Applied[^1]);
@@ -229,58 +239,35 @@ public sealed class TweakMenuModelTests
         menu.MoveRow(1);
         Assert.True(menu.ActivateSelected().Success);
         Assert.Equal(("command", "run"), adapter.Applied[^1]);
-        Assert.Equal("Action completed.", menu.Message);
+        Assert.Equal("COMMAND completed; runtime readback unavailable.", menu.Message);
     }
 
     [Fact]
-    public void ToggleMasterForwardsBothStatesAndReportsSuccess()
+    public void DirectChoiceFailurePreservesControllerError()
     {
         var fixture = MenuFixture.Create(visibleRows: 2);
-
-        var enabled = fixture.Model.ToggleMaster();
-        Assert.True(enabled.Success);
-        Assert.True(fixture.Controller.MasterEnabled);
-        Assert.Equal("Mods enabled.", fixture.Model.Message);
-        Assert.False(fixture.Model.MessageIsError);
-
-        var disabled = fixture.Model.ToggleMaster();
-        Assert.True(disabled.Success);
-        Assert.False(fixture.Controller.MasterEnabled);
-        Assert.Equal("Mods disabled; game baseline restored.", fixture.Model.Message);
-        Assert.False(fixture.Model.MessageIsError);
-        Assert.Equal(1, fixture.Adapter.RestoreCount);
-    }
-
-    [Fact]
-    public void ToggleMasterPreservesControllerError()
-    {
-        var fixture = MenuFixture.Create(
-            visibleRows: 2,
-            configureStore: store =>
-                store["dualsouls.mods.menu-test.value.damage_received"] = "invincible");
         fixture.Adapter.FailId = "damage_received";
 
-        var result = fixture.Model.ToggleMaster();
+        var result = fixture.Model.ActivateSelected();
 
         Assert.False(result.Success);
         Assert.Equal(result.Error, fixture.Model.Message);
         Assert.Contains("adapter rejected damage_received", fixture.Model.Message);
         Assert.True(fixture.Model.MessageIsError);
-        Assert.False(fixture.Controller.MasterEnabled);
+        Assert.False(fixture.Controller.MutationsAvailable);
     }
 
     [Fact]
     public void ResetForwardsAndReportsSuccess()
     {
         var fixture = MenuFixture.Create(visibleRows: 2);
-        Assert.True(fixture.Model.ToggleMaster().Success);
         fixture.Model.MoveRow(1);
         Assert.True(fixture.Model.CycleSelected().Success);
 
         var result = fixture.Model.Reset();
 
         Assert.True(result.Success);
-        Assert.Equal("All values reset.", fixture.Model.Message);
+        Assert.Equal("ONE-HIT KILLS completed; runtime readback unavailable.", fixture.Model.Message);
         Assert.False(fixture.Model.MessageIsError);
         Assert.Equal("off", fixture.Controller.Value("unlimited_soul"));
         Assert.Equal(1, fixture.Adapter.RestoreCount);
@@ -298,6 +285,23 @@ public sealed class TweakMenuModelTests
         Assert.Equal(result.Error, fixture.Model.Message);
         Assert.Contains("Could not restore the game baseline", fixture.Model.Message);
         Assert.True(fixture.Model.MessageIsError);
+    }
+
+    [Fact]
+    public void ResetFailureCannotBeOverwrittenByALaterSuccessfulRowReadback()
+    {
+        var controller = new TweakController(
+            new MixedResetReadbackAdapter(), new MemoryStore());
+        Assert.True(controller.Initialize().Success);
+        var model = new TweakMenuModel(controller, visibleRows: 2);
+
+        TweakActionResult result = model.Reset();
+
+        Assert.False(result.Success);
+        Assert.Equal(result.Error, model.Message);
+        Assert.Contains("first owner readback failed", model.Message);
+        Assert.True(model.MessageIsError);
+        Assert.False(controller.MutationsAvailable);
     }
 
     static void AssertSelectionIsVisible(TweakMenuModel model)
@@ -392,6 +396,48 @@ public sealed class TweakMenuModelTests
         }
 
         public void Tick() { }
+    }
+
+    sealed class AliasTitleAdapter : ITweakAdapter
+    {
+        public string GameId => "alias-title";
+        public IReadOnlyList<TweakDescriptor> Descriptors { get; } = new[]
+        {
+            new TweakDescriptor(
+                "cross_profile_id", "WORLD", "USER-FACING TITLE", "Alias row.",
+                "off", new[] { "off", "on" }),
+        };
+
+        public void CaptureBaseline() { }
+        public TweakActionResult Apply(string id, string value) =>
+            TweakActionResult.Ok(TweakReadback.Choice(value));
+        public void RestoreBaseline() { }
+        public void Tick() { }
+    }
+
+    sealed class MixedResetReadbackAdapter : ITweakAdapter, ITweakOperationAdapter
+    {
+        public string GameId => "mixed-reset-readback";
+        public IReadOnlyList<TweakDescriptor> Descriptors { get; } = new[]
+        {
+            new TweakDescriptor(
+                "first", "WORLD", "FIRST OWNER", "First owner.",
+                "off", new[] { "off", "on" }),
+            new TweakDescriptor(
+                "second", "WORLD", "SECOND OWNER", "Second owner.",
+                "off", new[] { "off", "on" }),
+        };
+
+        public void CaptureBaseline() { }
+        public TweakActionResult Apply(string id, string value) =>
+            TweakActionResult.Ok(TweakReadback.Choice(value));
+        public void RestoreBaseline() { }
+        public void Tick() { }
+        public IReadOnlyList<TweakAdapterCompletion> TickWithOutcomes() =>
+            Array.Empty<TweakAdapterCompletion>();
+        public TweakActionResult Readback(string id) => id == "first"
+            ? TweakActionResult.Fail("first owner readback failed")
+            : TweakActionResult.Ok(TweakReadback.Choice("off"));
     }
 
     sealed class MemoryStore : Dictionary<string, string>, ITweakStore

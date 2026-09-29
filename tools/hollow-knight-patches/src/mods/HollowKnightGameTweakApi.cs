@@ -1,4 +1,6 @@
 #if (UNITY_ANDROID && !UNITY_EDITOR) || HOLLOW_KNIGHT_GAMEPLAY_TESTS
+using DualSouls.Mods;
+
 namespace DualSouls.Mods.HollowKnight
 {
     public sealed class HollowKnightGameTweakApi : IHollowKnightTweakApi
@@ -32,7 +34,17 @@ namespace DualSouls.Mods.HollowKnight
         bool _geoMagnet;
         bool _keepGeoOnDeath;
         bool _journalOneKill;
+        bool _companionBackdropBlack;
+        bool _oneHitKills;
+        int _geoMultiplier = 1;
+        HollowKnightFlashMode _lifebloodFlash = HollowKnightFlashMode.Vanilla;
         int _stateSlot = 1;
+        readonly TweakDeferredOperation _benchOperation =
+            new TweakDeferredOperation("bench_teleport", 120f);
+        readonly TweakDeferredOperation _stateLoadOperation =
+            new TweakDeferredOperation("load_from_slot", 30f);
+        readonly System.Collections.Generic.Queue<TweakAdapterCompletion> _completedOperations =
+            new System.Collections.Generic.Queue<TweakAdapterCompletion>();
 
         public bool IsReady => true;
 
@@ -65,6 +77,17 @@ namespace DualSouls.Mods.HollowKnight
             _geoMagnet = false;
             _keepGeoOnDeath = false;
             _journalOneKill = false;
+            _companionBackdropBlack = false;
+            _oneHitKills = false;
+            _geoMultiplier = 1;
+            _lifebloodFlash = HollowKnightFlashMode.Vanilla;
+            _stateSlot = 1;
+            _completedOperations.Clear();
+            Enqueue(_benchOperation.Cancel(
+                "Hollow Knight Bench Teleport was canceled by baseline restoration."));
+            global::HkStageHooks.CancelBenchTeleport();
+            Enqueue(_stateLoadOperation.Cancel(
+                "Hollow Knight save-state load was canceled by baseline restoration."));
             HollowKnightGameplayHooks.Reset();
 #if UNITY_ANDROID && !UNITY_EDITOR
             HollowKnightGameplayFeatures.RestoreAll();
@@ -80,11 +103,13 @@ namespace DualSouls.Mods.HollowKnight
 
         public void SetCompanionBackdropBlack(bool black)
         {
+            _companionBackdropBlack = black;
             global::HkStageHooks.SetBackdropOverride(black);
         }
 
         public void SetLifebloodFlash(HollowKnightFlashMode mode)
         {
+            _lifebloodFlash = mode;
             global::HkStageHooks.SetFlashOverride(mode);
         }
 
@@ -116,11 +141,13 @@ namespace DualSouls.Mods.HollowKnight
 
         public void SetOneHitKills(bool enabled)
         {
+            _oneHitKills = enabled;
             HollowKnightOneHitDamagePatch.SetEnabled(enabled);
         }
 
         public void RestoreOneHitKills()
         {
+            _oneHitKills = false;
             HollowKnightOneHitDamagePatch.SetEnabled(false);
         }
 
@@ -152,7 +179,23 @@ namespace DualSouls.Mods.HollowKnight
         public void SetFastTransitions(bool enabled) { _fastTransitions = enabled; }
         public void SetAutoMap(bool enabled) { _autoMap = enabled; }
         public void SetInnateCompass(bool enabled) { _innateCompass = enabled; }
-        public void OpenBenchTeleport() { global::HkStageHooks.OpenBenchTeleport(); }
+        public void OpenBenchTeleport(long operationToken)
+        {
+            _benchOperation.Begin(operationToken, UnityEngine.Time.unscaledTime);
+            try
+            {
+                global::HkStageHooks.OpenBenchTeleport(
+                    result => Enqueue(_benchOperation.Complete(
+                        operationToken,
+                        result)));
+            }
+            catch
+            {
+                _benchOperation.Cancel(
+                    "Hollow Knight Bench Teleport failed before it was accepted.");
+                throw;
+            }
+        }
         public void SetSecretRadar(bool enabled) { _secretRadar = enabled; }
         public void SetDamageCap(bool enabled) { HollowKnightGameplayHooks.DamageCapEnabled = enabled; }
         public void SetEnemyHealthBars(bool enabled) { _healthBars = enabled; }
@@ -181,14 +224,32 @@ namespace DualSouls.Mods.HollowKnight
             throw new System.InvalidOperationException("Save states require the Hollow Knight runtime.");
 #endif
         }
-        public void LoadState()
+        public void LoadState(long operationToken)
         {
+            _stateLoadOperation.Begin(operationToken, UnityEngine.Time.unscaledTime);
+            try
+            {
 #if UNITY_ANDROID && !UNITY_EDITOR
-            EnsureStateTransferPreparation();
-            HollowKnightGameplayFeatures.LoadState(_stateSlot);
+                EnsureStateTransferPreparation();
+                int slot = _stateSlot;
+                HollowKnightGameplayFeatures.LoadState(
+                    slot,
+                    scene => Enqueue(_stateLoadOperation.Complete(
+                        operationToken,
+                        TweakActionResult.Ok(TweakReadback.Text(
+                            "slot " + slot + " loaded in " +
+                            (scene ?? "unknown scene"))))));
 #else
-            throw new System.InvalidOperationException("Save states require the Hollow Knight runtime.");
+                throw new System.InvalidOperationException(
+                    "Save states require the Hollow Knight runtime.");
 #endif
+            }
+            catch
+            {
+                _stateLoadOperation.Cancel(
+                    "Hollow Knight save-state load failed before it was accepted.");
+                throw;
+            }
         }
         public void DeleteState()
         {
@@ -214,11 +275,109 @@ namespace DualSouls.Mods.HollowKnight
         {
             if (multiplier != 1 && multiplier != 2 && multiplier != 3 && multiplier != 5)
                 throw new System.ArgumentOutOfRangeException(nameof(multiplier));
+            _geoMultiplier = multiplier;
             HollowKnightGameplayHooks.GeoMultiplier = multiplier;
         }
 
+        public TweakActionResult Readback(string id)
+        {
+            switch (id)
+            {
+                case "companion_backdrop":
+                    return Choice(_companionBackdropBlack ? "black" : "dimmed");
+                case "run_speed":
+                    return Choice(_runSpeedMultiplier == 1.5f ? "plus_50" :
+                                  _runSpeedMultiplier == 1.25f ? "plus_25" : "vanilla");
+                case "fast_transitions": return OnOff(_fastTransitions);
+                case "auto_map": return OnOff(_autoMap);
+                case "innate_compass": return OnOff(_innateCompass);
+                case "secret_radar": return OnOff(_secretRadar);
+                case "nail_damage": return Choice(MultiplierChoice(_nailMultiplier));
+                case "damage_received":
+                    return Choice(!_damageMode.HasValue ? "vanilla" :
+                        _damageMode.Value == HollowKnightDamageMode.NoMaskLoss
+                            ? "no_mask_loss"
+                            : "invincible");
+                case "damage_cap": return OnOff(HollowKnightGameplayHooks.DamageCapEnabled);
+                case "one_hit_kills": return OnOff(_oneHitKills);
+                case "unlimited_soul": return OnOff(_unlimitedSoul);
+                case "health_bars": return OnOff(_healthBars);
+                case "damage_numbers": return OnOff(_damageNumbers);
+                case "boss_retry": return OnOff(_bossRetry);
+                case "equip_anywhere": return OnOff(_equipAnywhere);
+                case "charm_costs": return Choice(_charmCostsFree ? "free" : "vanilla");
+                case "unlimited_notches": return OnOff(_unlimitedNotches);
+                case "state_slot":
+                    return Choice(_stateSlot.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture));
+                case "geo_magnet": return OnOff(_geoMagnet);
+                case "keep_geo_on_death": return OnOff(_keepGeoOnDeath);
+                case "journal_one_kill": return OnOff(_journalOneKill);
+                case "geo_multiplier": return Choice(MultiplierChoice(_geoMultiplier));
+                case "lifeblood_flash":
+                    return Choice(_lifebloodFlash == HollowKnightFlashMode.Soft ? "soft" :
+                                  _lifebloodFlash == HollowKnightFlashMode.Off ? "off" : "vanilla");
+                case "save_to_slot":
+#if UNITY_ANDROID && !UNITY_EDITOR
+                    return TweakActionResult.Ok(TweakReadback.Boolean(
+                        HollowKnightGameplayFeatures.StateExists(_stateSlot)));
+#else
+                    return TweakActionResult.Ok(TweakReadback.Integer(_stateSlot));
+#endif
+                case "delete_slot":
+#if UNITY_ANDROID && !UNITY_EDITOR
+                    return TweakActionResult.Ok(TweakReadback.Boolean(
+                        !HollowKnightGameplayFeatures.StateExists(_stateSlot)));
+#else
+                    return TweakActionResult.Ok(TweakReadback.Integer(_stateSlot));
+#endif
+                default:
+                    return TweakActionResult.Fail(
+                        "No safe Hollow Knight runtime readback exists for " + id + ".");
+            }
+        }
+
+        TweakAdapterCompletion? PollBenchOperation()
+        {
+            TweakAdapterCompletion? completion = _benchOperation.Poll(
+                UnityEngine.Time.unscaledTime,
+                "Hollow Knight Bench Teleport timed out before a destination completed.");
+            if (completion.HasValue)
+                global::HkStageHooks.CancelBenchTeleport();
+            return completion;
+        }
+
+        void Enqueue(TweakAdapterCompletion? completion)
+        {
+            if (completion.HasValue)
+                _completedOperations.Enqueue(completion.Value);
+        }
+
+        public System.Collections.Generic.IReadOnlyList<TweakAdapterCompletion>
+            DrainCompletedOperations()
+        {
+            if (_completedOperations.Count == 0)
+                return System.Array.Empty<TweakAdapterCompletion>();
+            var completed = new TweakAdapterCompletion[_completedOperations.Count];
+            for (int index = 0; index < completed.Length; index++)
+                completed[index] = _completedOperations.Dequeue();
+            return completed;
+        }
+
+        static TweakActionResult Choice(string value) =>
+            TweakActionResult.Ok(TweakReadback.Choice(value));
+        static TweakActionResult OnOff(bool enabled) =>
+            Choice(enabled ? "on" : "off");
+        static string MultiplierChoice(int multiplier) =>
+            multiplier == 2 ? "x2" : multiplier == 3 ? "x3" :
+            multiplier == 5 ? "x5" : "x1";
+
         public void TickGameplay()
         {
+            Enqueue(PollBenchOperation());
+            Enqueue(_stateLoadOperation.Poll(
+                UnityEngine.Time.unscaledTime,
+                "Hollow Knight save-state load timed out before scene completion."));
             MaintainDamageMode();
             MaintainNailDamage();
             MaintainRunSpeed();

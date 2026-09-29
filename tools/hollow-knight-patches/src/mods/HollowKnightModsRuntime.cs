@@ -74,13 +74,13 @@ namespace DualSouls.Mods.HollowKnight
             if (policy == null) return;
 
             bool sessionReady = session != null && session.IsReady;
-            bool masterEnabled = sessionReady && session.Controller.MasterEnabled;
-            string controllerValue = masterEnabled
+            bool mutationsAvailable = sessionReady && session.Controller.MutationsAvailable;
+            string controllerValue = mutationsAvailable
                 ? session.Controller.Value("lifeblood_flash")
                 : null;
             HollowKnightFlashDecision decision = HollowKnightFlashDecisionResolver.Resolve(
                 sessionReady,
-                masterEnabled,
+                mutationsAvailable,
                 controllerValue,
                 global::HkStageHooks.LegacyFlashMode,
                 global::HkStageHooks.LegacyFlashAlpha);

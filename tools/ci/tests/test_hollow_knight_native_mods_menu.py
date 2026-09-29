@@ -57,7 +57,6 @@ class HollowKnightNativeModsMenuContractTest(unittest.TestCase):
             ".Close()",
             ".MoveGroup(",
             ".MoveRow(",
-            ".ToggleMaster()",
             ".ActivateSelected()",
             ".SetSelected(",
             ".Reset()",
@@ -187,16 +186,52 @@ class HollowKnightNativeModsMenuContractTest(unittest.TestCase):
         create = method_body(source, "void CreateButton(")
         self.assertIn("SetButtonText(wrapper, initialText, fullRow: true)", create)
 
-    def test_description_uses_a_bounded_single_line_above_separate_commands(self):
+    def test_mods_menu_has_no_master_role_row_or_index_assumptions(self):
         source = self.source()
-        configure = method_body(source, "void ConfigureDescription()")
-        self.assertIn("ConfigureSingleLine(DescriptionHorizontalInset)", configure)
-        self.assertIn('TrySetProperty("enableWordWrapping", false)', configure)
+        for forbidden in (
+            "ButtonRole.Master",
+            "ToggleMaster",
+            "MasterEnabled",
+            "MASTER MODS",
+        ):
+            self.assertNotIn(forbidden, source)
+        build = method_body(source, "void BuildModsScreen(")
+        self.assertIn("ButtonRole.Row,\n                             TweakMenuPresenterLayout.FirstRowButtonIndex + i", build)
+        self.assertIn("TweakMenuFocusGraph", source)
+        self.assertIn("TweakMenuPresenterLayout", source)
+        self.assertIn("DataIndexForRowButton", source)
+        self.assertIn("_labels.Count != TweakMenuPresenterLayout.ButtonCount", source)
+
+    def test_presenter_executes_shared_window_layout_and_game_b_contract(self):
+        source = self.source()
+        self.assertIn("const int VisibleRows = TweakMenuPresenterLayout.VisibleRows;", source)
+        self.assertIn("TweakMenuPresenterLayout.DataIndexForRowButton(", source)
+        self.assertIn("TweakMenuPresenterLayout.ButtonIndex(", source)
+        self.assertIn("TweakMenuPresenterLayout.DescriptionVisualIndex", source)
+        self.assertIn("TweakMenuPresenterLayout.DescriptionHeight", source)
+        cancel = method_body(source, "internal void Cancel()")
+        self.assertIn("TweakMenuPresenterLayout.CancelTarget(nestedRouteOpen: false)", cancel)
+        on_cancel = method_body(source, "void ICancelHandler.OnCancel(BaseEventData eventData)")
+        self.assertIn("Owner.Cancel();", on_cancel)
+
+    def test_description_uses_readable_multiline_bounded_autosizing(self):
+        source = self.source()
+        configure = method_body(source, "void ConfigureDescription(float height)")
+        self.assertIn("rect.sizeDelta = new Vector2(-DescriptionHorizontalInset, height)", configure)
+        self.assertIn("uiText.horizontalOverflow = HorizontalWrapMode.Wrap", configure)
+        self.assertIn("uiText.verticalOverflow = VerticalWrapMode.Truncate", configure)
+        self.assertIn("uiText.resizeTextForBestFit = true", configure)
+        self.assertIn("uiText.resizeTextMinSize = (int)DescriptionMinimumFontSize", configure)
+        self.assertIn("uiText.resizeTextMaxSize = (int)DescriptionFontSize", configure)
+        self.assertIn("uiText.fontSize = (int)DescriptionFontSize", configure)
+        self.assertIn('TrySetProperty("enableWordWrapping", true)', configure)
         self.assertIn('TrySetProperty("enableAutoSizing", true)', configure)
         self.assertIn('TrySetProperty("fontSizeMin", DescriptionMinimumFontSize)', configure)
-        self.assertIn('TrySetProperty("fontSize", DescriptionFontSize)', configure)
+        self.assertIn('TrySetProperty("fontSizeMax", DescriptionFontSize)', configure)
+        self.assertIn('TrySetEnumProperty("overflowMode", "Truncate")', configure)
+        self.assertIn("DescriptionMinimumFontSize", source)
         create = method_body(source, "static GameObject CreateDescriptionRow(")
-        self.assertIn("label.ConfigureDescription();", create)
+        self.assertIn("label.ConfigureDescription(DescriptionHeight);", create)
         build = method_body(source, "void BuildModsScreen(")
         self.assertIn("ResetVisualIndex", build)
         self.assertIn("BackVisualIndex", build)
@@ -217,18 +252,21 @@ class HollowKnightNativeModsMenuContractTest(unittest.TestCase):
         self.assertIn("_valueLabels.Add", create)
         self.assertIn("CloneSibling", create)
         self.assertIn("ConfigureColumn", create)
-        self.assertIn("_valueLabels[0].Text", paint)
-        self.assertIn("_valueLabels[1].Text", paint)
-        self.assertIn("_valueLabels[slot + 2].Text", paint)
+        self.assertIn("_valueLabels[TweakMenuPresenterLayout.GroupButtonIndex].Text", paint)
+        self.assertIn("_valueLabels[buttonIndex].Text", paint)
+        self.assertNotIn("_valueLabels[TweakMenuPresenterLayout.FirstRowButtonIndex].Text", paint)
         self.assertNotIn('"GROUP', paint)
 
-    def test_mods_description_tracks_focus_and_only_errors_override_it(self):
+    def test_mods_description_surfaces_operation_outcomes_without_status_row(self):
         source = self.source()
         paint = method_body(source, "void Paint()")
         self.assertIn("string FocusDescription()", source)
         describe = method_body(source, "string FocusDescription()")
+        focus = method_body(source, "void Focus(TweakMenuFocusTarget target)")
         self.assertIn("_description.Text =", paint)
-        self.assertIn("_menu.MessageIsError", paint)
+        self.assertIn("_menu.RefreshOperationMessage();", paint)
+        self.assertIn("_menu.DismissMessage();", focus)
+        self.assertIn("string.IsNullOrEmpty(_menu.Message)", paint)
         self.assertIn("descriptor.Description", describe)
         self.assertIn("descriptor.UnavailableReason", describe)
         self.assertNotIn('"STATUS', source)

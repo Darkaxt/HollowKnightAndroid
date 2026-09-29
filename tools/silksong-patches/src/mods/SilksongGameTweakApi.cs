@@ -1,5 +1,7 @@
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System;
+using System.Collections.Generic;
+using DualSouls.Mods;
 using UnityEngine;
 
 namespace DualSouls.Mods.Silksong
@@ -42,6 +44,12 @@ namespace DualSouls.Mods.Silksong
         bool _rosaryMagnet;
         bool _keepRosaries;
         int _stateSlot = 1;
+        readonly SilksongAppliedChoiceState _appliedChoices =
+            new SilksongAppliedChoiceState();
+        readonly TweakDeferredOperation _stateLoadOperation =
+            new TweakDeferredOperation("load_from_slot", 30f);
+        readonly Queue<TweakAdapterCompletion> _completedOperations =
+            new Queue<TweakAdapterCompletion>();
 
         public bool IsReady
         {
@@ -88,6 +96,10 @@ namespace DualSouls.Mods.Silksong
             _fastTransitions = _autoMap = _innateCompass = _secretRadar = false;
             _healthBars = _damageNumbers = _bossRetry = _unlimitedToolSlots = false;
             _rosaryMagnet = _keepRosaries = _unlimitedSilk = false;
+            _stateSlot = 1;
+            _completedOperations.Clear();
+            Enqueue(_stateLoadOperation.Cancel(
+                "Silksong save-state load was canceled by baseline restoration."));
             DsPortSceneryState.BlackBackground = false;
             SilksongGameplayHooks.Reset();
             SilksongGameplayFeatures.RestoreAll();
@@ -120,7 +132,10 @@ namespace DualSouls.Mods.Silksong
         public void SetFastTransitions(bool enabled) { _fastTransitions = enabled; }
         public void SetAutoMap(bool enabled) { _autoMap = enabled; }
         public void SetInnateCompass(bool enabled) { _innateCompass = enabled; SilksongGameplayHooks.InnateCompassEnabled = enabled; }
-        public void OpenBenchTeleport() { SilksongNativeModsMenu.OpenBenchTeleportRoute(); }
+        public void OpenBenchTeleport(long operationToken)
+        {
+            SilksongNativeModsMenu.OpenBenchTeleportRoute(operationToken);
+        }
         public void SetSecretRadar(bool enabled) { _secretRadar = enabled; }
 
         public void SetNeedleDamageMultiplier(int multiplier)
@@ -136,15 +151,27 @@ namespace DualSouls.Mods.Silksong
             CheatManager.Invincibility = mode == SilksongDamageMode.PreventDeath
                 ? CheatManager.InvincibilityStates.PreventDeath
                 : CheatManager.InvincibilityStates.FullInvincible;
+            _appliedChoices.SetDamageMode(mode);
         }
-        public void RestoreDamageMode() { EnsureCaptured(); CheatManager.Invincibility = _invincibility; }
+        public void RestoreDamageMode()
+        {
+            EnsureCaptured();
+            CheatManager.Invincibility = _invincibility;
+            _appliedChoices.RestoreDamageMode();
+        }
         public void SetDamageCap(bool enabled) { SilksongGameplayHooks.DamageCapEnabled = enabled; }
         public void SetOneHitKills(bool enabled)
         {
             EnsureCaptured();
             CheatManager.NailDamage = enabled ? CheatManager.NailDamageStates.InstaKill : _nailDamage;
+            _appliedChoices.SetOneHitKills(enabled);
         }
-        public void RestoreOneHitKills() { EnsureCaptured(); CheatManager.NailDamage = _nailDamage; }
+        public void RestoreOneHitKills()
+        {
+            EnsureCaptured();
+            CheatManager.NailDamage = _nailDamage;
+            _appliedChoices.SetOneHitKills(false);
+        }
 
         public void SetUnlimitedSilk(bool enabled)
         {
@@ -173,8 +200,14 @@ namespace DualSouls.Mods.Silksong
         {
             EnsureCaptured();
             CheatManager.CanChangeEquipsAnywhere = enabled ? true : _equipAnywhere;
+            _appliedChoices.SetEquipAnywhere(enabled);
         }
-        public void RestoreEquipAnywhere() { EnsureCaptured(); CheatManager.CanChangeEquipsAnywhere = _equipAnywhere; }
+        public void RestoreEquipAnywhere()
+        {
+            EnsureCaptured();
+            CheatManager.CanChangeEquipsAnywhere = _equipAnywhere;
+            _appliedChoices.SetEquipAnywhere(false);
+        }
         public void SetToolCostsFree(bool enabled) { SilksongGameplayHooks.ToolCostsFreeEnabled = enabled; }
         public void SetUnlimitedToolSlots(bool enabled) { _unlimitedToolSlots = enabled; }
 
@@ -184,7 +217,28 @@ namespace DualSouls.Mods.Silksong
             _stateSlot = slot;
         }
         public void SaveState() { SilksongGameplayFeatures.SetStateTransferPreparation(PrepareForStateTransfer); SilksongGameplayFeatures.SaveState(_stateSlot); }
-        public void LoadState() { SilksongGameplayFeatures.SetStateTransferPreparation(PrepareForStateTransfer); SilksongGameplayFeatures.LoadState(_stateSlot); }
+        public void LoadState(long operationToken)
+        {
+            _stateLoadOperation.Begin(operationToken, Time.unscaledTime);
+            try
+            {
+                SilksongGameplayFeatures.SetStateTransferPreparation(PrepareForStateTransfer);
+                int slot = _stateSlot;
+                SilksongGameplayFeatures.LoadState(
+                    slot,
+                    scene => Enqueue(_stateLoadOperation.Complete(
+                        operationToken,
+                        TweakActionResult.Ok(TweakReadback.Text(
+                            "slot " + slot + " loaded in " +
+                            (scene ?? "unknown scene"))))));
+            }
+            catch
+            {
+                _stateLoadOperation.Cancel(
+                    "Silksong save-state load failed before it was accepted.");
+                throw;
+            }
+        }
         public void DeleteState() { SilksongGameplayFeatures.DeleteState(_stateSlot); }
         public void SetRosaryMagnet(bool enabled) { _rosaryMagnet = enabled; }
         public void SetKeepRosariesOnDeath(bool enabled)
@@ -202,22 +256,120 @@ namespace DualSouls.Mods.Silksong
 
         public void SetInstantDialogue(bool enabled)
         {
-            EnsureCaptured(); CheatManager.IsTextPrintSkipEnabled = enabled ? true : _instantDialogue;
+            EnsureCaptured();
+            CheatManager.IsTextPrintSkipEnabled = enabled ? true : _instantDialogue;
+            _appliedChoices.SetInstantDialogue(enabled);
         }
-        public void RestoreInstantDialogue() { EnsureCaptured(); CheatManager.IsTextPrintSkipEnabled = _instantDialogue; }
+        public void RestoreInstantDialogue()
+        {
+            EnsureCaptured();
+            CheatManager.IsTextPrintSkipEnabled = _instantDialogue;
+            _appliedChoices.SetInstantDialogue(false);
+        }
         public void SetWorldRumbleDisabled(bool enabled)
         {
-            EnsureCaptured(); CheatManager.IsWorldRumbleDisabled = enabled ? true : _worldRumbleDisabled;
+            EnsureCaptured();
+            CheatManager.IsWorldRumbleDisabled = enabled ? true : _worldRumbleDisabled;
+            _appliedChoices.SetWorldRumbleDisabled(enabled);
         }
-        public void RestoreWorldRumbleDisabled() { EnsureCaptured(); CheatManager.IsWorldRumbleDisabled = _worldRumbleDisabled; }
+        public void RestoreWorldRumbleDisabled()
+        {
+            EnsureCaptured();
+            CheatManager.IsWorldRumbleDisabled = _worldRumbleDisabled;
+            _appliedChoices.SetWorldRumbleDisabled(false);
+        }
         public void SetFrostDisabled(bool enabled)
         {
-            EnsureCaptured(); CheatManager.IsFrostDisabled = enabled ? true : _frostDisabled;
+            EnsureCaptured();
+            CheatManager.IsFrostDisabled = enabled ? true : _frostDisabled;
+            _appliedChoices.SetFrostDisabled(enabled);
         }
-        public void RestoreFrostDisabled() { EnsureCaptured(); CheatManager.IsFrostDisabled = _frostDisabled; }
+        public void RestoreFrostDisabled()
+        {
+            EnsureCaptured();
+            CheatManager.IsFrostDisabled = _frostDisabled;
+            _appliedChoices.SetFrostDisabled(false);
+        }
+
+        public TweakActionResult Readback(string id)
+        {
+            switch (id)
+            {
+                case "black_background": return OnOff(DsPortSceneryState.BlackBackground);
+                case "run_speed":
+                    return Choice(_runSpeedMultiplier == 1.5f ? "plus_50" :
+                                  _runSpeedMultiplier == 1.25f ? "plus_25" : "vanilla");
+                case "fast_transitions": return OnOff(_fastTransitions);
+                case "auto_map": return OnOff(_autoMap);
+                case "innate_compass": return OnOff(_innateCompass);
+                case "secret_radar": return OnOff(_secretRadar);
+                case "nail_damage":
+                    return Choice(MultiplierChoice(SilksongGameplayHooks.NeedleMultiplier));
+                case "damage_received":
+                case "one_hit_kills":
+                case "equip_anywhere":
+                case "instant_dialogue":
+                case "disable_world_rumble":
+                case "ignore_frost_slowdown":
+                    return _appliedChoices.Readback(id);
+                case "damage_cap": return OnOff(SilksongGameplayHooks.DamageCapEnabled);
+                case "unlimited_silk": return OnOff(_unlimitedSilk);
+                case "health_bars": return OnOff(_healthBars);
+                case "damage_numbers": return OnOff(_damageNumbers);
+                case "boss_retry": return OnOff(_bossRetry);
+                case "charm_costs":
+                    return Choice(SilksongGameplayHooks.ToolCostsFreeEnabled ? "free" : "vanilla");
+                case "unlimited_notches": return OnOff(_unlimitedToolSlots);
+                case "state_slot":
+                    return Choice(_stateSlot.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture));
+                case "geo_magnet": return OnOff(_rosaryMagnet);
+                case "keep_geo_on_death": return OnOff(_keepRosaries);
+                case "journal_one_kill":
+                    return OnOff(SilksongGameplayHooks.JournalOneKillEnabled);
+                case "geo_multiplier":
+                    return Choice(MultiplierChoice(SilksongGameplayHooks.RosaryMultiplier));
+                case "save_to_slot":
+                    return TweakActionResult.Ok(TweakReadback.Boolean(
+                        SilksongGameplayFeatures.StateExists(_stateSlot)));
+                case "delete_slot":
+                    return TweakActionResult.Ok(TweakReadback.Boolean(
+                        !SilksongGameplayFeatures.StateExists(_stateSlot)));
+                default:
+                    return TweakActionResult.Fail(
+                        "No safe Silksong runtime readback exists for " + id + ".");
+            }
+        }
+
+        void Enqueue(TweakAdapterCompletion? completion)
+        {
+            if (completion.HasValue)
+                _completedOperations.Enqueue(completion.Value);
+        }
+
+        public IReadOnlyList<TweakAdapterCompletion> DrainCompletedOperations()
+        {
+            if (_completedOperations.Count == 0)
+                return Array.Empty<TweakAdapterCompletion>();
+            var completed = new TweakAdapterCompletion[_completedOperations.Count];
+            for (int index = 0; index < completed.Length; index++)
+                completed[index] = _completedOperations.Dequeue();
+            return completed;
+        }
+
+        static TweakActionResult Choice(string value) =>
+            TweakActionResult.Ok(TweakReadback.Choice(value));
+        static TweakActionResult OnOff(bool enabled) =>
+            Choice(enabled ? "on" : "off");
+        static string MultiplierChoice(int multiplier) =>
+            multiplier == 2 ? "x2" : multiplier == 3 ? "x3" :
+            multiplier == 5 ? "x5" : "x1";
 
         public void TickGameplay()
         {
+            Enqueue(_stateLoadOperation.Poll(
+                Time.unscaledTime,
+                "Silksong save-state load timed out before scene completion."));
             MaintainRunSpeed();
             MaintainUnlimitedSilk();
             SilksongGameplayFeatures.Tick(_fastTransitions, _autoMap, _innateCompass,

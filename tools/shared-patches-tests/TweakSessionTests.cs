@@ -10,7 +10,7 @@ public sealed class TweakSessionTests
     private const string Prefix = "dualsouls.mods.silksong.";
 
     [Fact]
-    public void ReadinessGatesInitializationAndFirstRunMasterDefaultsOff()
+    public void ReadinessGatesInitializationAndDirectMutationsStartAvailable()
     {
         bool ready = false;
         var store = new RecordingStore();
@@ -27,16 +27,16 @@ public sealed class TweakSessionTests
         session.Tick();
 
         Assert.True(session.IsReady);
-        Assert.False(session.Controller.MasterEnabled);
-        Assert.Equal("0", store[Prefix + "master"]);
+        Assert.True(session.Controller.MutationsAvailable);
         Assert.Single(adapters);
         Assert.Equal(1, adapters[0].CaptureCount);
+        Assert.Empty(store);
     }
 
     [Fact]
     public void InitialCaptureFailureRetriesWithoutAttemptingInvalidRestoration()
     {
-        var store = EnabledStore();
+        var store = ConfiguredStore();
         var adapters = new List<RecordingAdapter>();
         int owner = 0;
         using var session = new TweakSession(
@@ -71,48 +71,14 @@ public sealed class TweakSessionTests
         Assert.True(session.IsReady);
         Assert.Equal(2, adapters.Count);
         Assert.Equal(1, adapters[1].CaptureCount);
-        Assert.Equal(0, adapters[1].RestoreCount);
-        Assert.True(session.Controller.MasterEnabled);
+        Assert.Equal(1, adapters[1].ApplyCount);
+        Assert.True(session.Controller.MutationsAvailable);
     }
 
     [Fact]
-    public void PersistedApplyFailureRetriesAfterSixtyReadyTicksAsDisabledOwner()
+    public void PersistedApplyFailureRetainsExactOwnerForUserResetRecovery()
     {
-        var store = EnabledStore();
-        var adapters = new List<RecordingAdapter>();
-        int owner = 0;
-        using var session = new TweakSession(
-            () => true,
-            () =>
-            {
-                var adapter = new RecordingAdapter { FailApply = owner++ == 0 };
-                adapters.Add(adapter);
-                return adapter;
-            },
-            store,
-            visibleRows: 5);
-
-        session.Tick();
-        Assert.False(session.IsReady);
-        Assert.Single(adapters);
-        Assert.Equal(2, adapters[0].RestoreCount);
-
-        for (int i = 0; i < 59; i++) session.Tick();
-        Assert.Single(adapters);
-
-        session.Tick();
-
-        Assert.True(session.IsReady);
-        Assert.Equal(2, adapters.Count);
-        Assert.False(session.Controller.MasterEnabled);
-        Assert.Equal("0", store[Prefix + "master"]);
-        Assert.Equal(0, adapters[1].ApplyCount);
-    }
-
-    [Fact]
-    public void PermanentPersistedApplyFailureCommitsDisabledStateAndAllowsResetRecovery()
-    {
-        var store = EnabledStore();
+        var store = ConfiguredStore();
         var adapters = new List<RecordingAdapter>();
         using var session = new TweakSession(
             () => true,
@@ -127,31 +93,26 @@ public sealed class TweakSessionTests
 
         session.Tick();
 
-        Assert.False(session.IsReady);
-        Assert.Equal("0", store[Prefix + "master"]);
-        Assert.Single(adapters);
-
-        for (int i = 0; i < 60; i++) session.Tick();
-
         Assert.True(session.IsReady);
-        Assert.False(session.Controller.MasterEnabled);
-        Assert.Equal(2, adapters.Count);
-        Assert.Equal(0, adapters[1].ApplyCount);
+        Assert.Single(adapters);
+        Assert.False(session.Controller.MutationsAvailable);
+        Assert.Equal(1, adapters[0].RestoreCount);
+        Assert.Equal("on", store[Prefix + "value.proven"]);
 
+        adapters[0].FailApply = false;
         TweakActionResult reset = session.Menu.Reset();
-        TweakActionResult enable = session.Menu.ToggleMaster();
 
         Assert.True(reset.Success);
-        Assert.True(enable.Success);
+        Assert.True(session.Controller.MutationsAvailable);
+        Assert.Single(adapters);
+        Assert.Equal(2, adapters[0].RestoreCount);
         Assert.Equal("off", store[Prefix + "value.proven"]);
-        Assert.Equal("1", store[Prefix + "master"]);
-        Assert.True(session.Controller.MasterEnabled);
     }
 
     [Fact]
-    public void SustainedRestorationFailureKeepsBoundedDiagnosticAndEventuallyRecovers()
+    public void FailedApplyRestorationRetriesOnExactOwnerBeforeResetCanRecover()
     {
-        var store = EnabledStore();
+        var store = ConfiguredStore();
         var adapters = new List<RecordingAdapter>();
         using var session = new TweakSession(
             () => true,
@@ -170,42 +131,45 @@ public sealed class TweakSessionTests
 
         session.Tick();
         string boundedError = session.LastError;
-        Assert.True(session.RestorationPending);
+
+        Assert.True(session.IsReady);
+        Assert.True(session.Controller.RestorationPending);
+        Assert.False(session.Controller.MutationsAvailable);
         Assert.Contains("apply failed", boundedError);
-        Assert.Contains("failed pipeline restore failed: restore failed", boundedError);
+        Assert.Contains("baseline restore failed: restore failed", boundedError);
 
         for (int i = 0; i < 500; i++) session.Tick();
 
         Assert.Equal(boundedError, session.LastError);
         Assert.True(session.LastError.Length < 256);
-        Assert.True(session.RestorationPending);
-        Assert.Equal("1", store[Prefix + "master"]);
+        Assert.True(session.Controller.RestorationPending);
         Assert.Single(adapters);
 
         adapters[0].RestoreFailuresRemaining = 0;
+        adapters[0].FailApply = false;
         session.Tick();
 
-        Assert.False(session.RestorationPending);
-        Assert.Equal("0", store[Prefix + "master"]);
-        for (int i = 0; i < 60; i++) session.Tick();
-        Assert.True(session.IsReady);
-        Assert.False(session.Controller.MasterEnabled);
+        Assert.False(session.Controller.RestorationPending);
+        Assert.False(session.Controller.MutationsAvailable);
+        Assert.Single(adapters);
+        Assert.True(session.Menu.Reset().Success);
+        Assert.True(session.Controller.MutationsAvailable);
+        Assert.Equal("off", store[Prefix + "value.proven"]);
     }
 
     [Fact]
-    public void FailedRestorationBlocksOwnerReplacementUntilARetrySucceeds()
+    public void FailedRestorationBlocksOwnerReplacement()
     {
-        var store = EnabledStore();
+        var store = ConfiguredStore();
         var adapters = new List<RecordingAdapter>();
-        int owner = 0;
         using var session = new TweakSession(
             () => true,
             () =>
             {
                 var adapter = new RecordingAdapter
                 {
-                    FailApply = owner == 0,
-                    RestoreFailuresRemaining = owner++ == 0 ? 2 : 0,
+                    FailApply = true,
+                    RestoreFailuresRemaining = 2,
                 };
                 adapters.Add(adapter);
                 return adapter;
@@ -214,25 +178,23 @@ public sealed class TweakSessionTests
             visibleRows: 5);
 
         session.Tick();
-        Assert.False(session.IsReady);
+        Assert.True(session.Controller.RestorationPending);
         Assert.Single(adapters);
-        Assert.True(session.RestorationPending);
 
         session.Tick();
+        Assert.True(session.Controller.RestorationPending);
         Assert.Single(adapters);
-        Assert.False(session.RestorationPending);
 
-        for (int i = 0; i < 60; i++) session.Tick();
-
-        Assert.True(session.IsReady);
-        Assert.Equal(2, adapters.Count);
+        session.Tick();
+        Assert.False(session.Controller.RestorationPending);
+        Assert.Single(adapters);
         Assert.Equal(3, adapters[0].RestoreCount);
     }
 
     [Fact]
     public void TeardownFailureRetainsRestoreOwnerAndRejectsActionsUntilRetryCompletes()
     {
-        var store = EnabledStore();
+        var store = ConfiguredStore();
         var adapters = new List<RecordingAdapter>();
         var session = NewSession(() => true, store, adapters);
         session.Tick();
@@ -244,7 +206,7 @@ public sealed class TweakSessionTests
         Assert.True(session.TeardownRequested);
         Assert.False(session.TeardownComplete);
         Assert.True(session.RestorationPending);
-        session.Menu.ToggleMaster();
+        session.Menu.CycleSelected();
         session.Menu.Reset();
         Assert.Equal(writes, store.WriteCount);
         Assert.Equal(1, adapters[0].RestoreCount);
@@ -260,7 +222,7 @@ public sealed class TweakSessionTests
     [Fact]
     public void PresentationAttachDetachDoesNotDisposeSessionOrCloseMenu()
     {
-        var store = EnabledStore();
+        var store = ConfiguredStore();
         var adapters = new List<RecordingAdapter>();
         using var session = NewSession(() => true, store, adapters);
         session.Tick();
@@ -273,7 +235,7 @@ public sealed class TweakSessionTests
 
         Assert.True(session.IsReady);
         Assert.True(session.Menu.IsOpen);
-        Assert.True(session.Controller.MasterEnabled);
+        Assert.True(session.Controller.MutationsAvailable);
         Assert.Equal(restores, adapters[0].RestoreCount);
     }
 
@@ -290,7 +252,7 @@ public sealed class TweakSessionTests
 
         session.Tick();
 
-        Assert.False(session.Controller.MasterEnabled);
+        Assert.True(session.Controller.MutationsAvailable);
         Assert.All(store.ReadKeys, key => Assert.StartsWith(Prefix, key));
         Assert.All(store.WriteKeys, key => Assert.StartsWith(Prefix, key));
         Assert.Equal("1", store["dualsouls.mods.hollow-knight.master"]);
@@ -314,9 +276,8 @@ public sealed class TweakSessionTests
             visibleRows: 5);
     }
 
-    private static RecordingStore EnabledStore() => new()
+    private static RecordingStore ConfiguredStore() => new()
     {
-        [Prefix + "master"] = "1",
         [Prefix + "value.proven"] = "on",
     };
 

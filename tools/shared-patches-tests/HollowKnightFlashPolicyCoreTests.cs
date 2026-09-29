@@ -13,7 +13,7 @@ public sealed class HollowKnightFlashPolicyCoreTests
 
         HollowKnightFlashTransition peak = tracker.Apply(
             nativePeak,
-            Master(HollowKnightFlashMode.Soft));
+            ControllerDecision(HollowKnightFlashMode.Soft));
         HollowKnightFlashSample softened = Apply(nativePeak, peak);
 
         Assert.False(peak.WriteEnabled);
@@ -23,7 +23,7 @@ public sealed class HollowKnightFlashPolicyCoreTests
         HollowKnightFlashSample nativeFade = Sample(true, 0.20f);
         HollowKnightFlashTransition faded = tracker.Apply(
             nativeFade,
-            Master(HollowKnightFlashMode.Soft));
+            ControllerDecision(HollowKnightFlashMode.Soft));
 
         Assert.False(faded.HasWrites);
         Assert.Equal(0.20f, faded.Sample.Color.A);
@@ -36,11 +36,11 @@ public sealed class HollowKnightFlashPolicyCoreTests
         var tracker = new HollowKnightFlashStateTracker(native);
         HollowKnightFlashSample softened = Apply(
             native,
-            tracker.Apply(native, Master(HollowKnightFlashMode.Soft)));
+            tracker.Apply(native, ControllerDecision(HollowKnightFlashMode.Soft)));
 
         HollowKnightFlashTransition restore = tracker.Apply(
             softened,
-            Master(HollowKnightFlashMode.Vanilla));
+            ControllerDecision(HollowKnightFlashMode.Vanilla));
         HollowKnightFlashSample vanilla = Apply(softened, restore);
 
         Assert.False(restore.WriteEnabled);
@@ -49,7 +49,7 @@ public sealed class HollowKnightFlashPolicyCoreTests
 
         HollowKnightFlashTransition steady = tracker.Apply(
             vanilla,
-            Master(HollowKnightFlashMode.Vanilla));
+            ControllerDecision(HollowKnightFlashMode.Vanilla));
         Assert.False(steady.HasWrites);
     }
 
@@ -61,7 +61,7 @@ public sealed class HollowKnightFlashPolicyCoreTests
 
         HollowKnightFlashTransition off = tracker.Apply(
             native,
-            Master(HollowKnightFlashMode.Off));
+            ControllerDecision(HollowKnightFlashMode.Off));
         HollowKnightFlashSample disabled = Apply(native, off);
 
         Assert.True(off.WriteEnabled);
@@ -71,7 +71,7 @@ public sealed class HollowKnightFlashPolicyCoreTests
         HollowKnightFlashSample nativeColorUpdate = Sample(false, 0.40f, 0.8f);
         HollowKnightFlashTransition maintained = tracker.Apply(
             nativeColorUpdate,
-            Master(HollowKnightFlashMode.Off));
+            ControllerDecision(HollowKnightFlashMode.Off));
         Assert.False(maintained.HasWrites);
 
         HollowKnightFlashTransition release = tracker.Release(nativeColorUpdate);
@@ -89,13 +89,13 @@ public sealed class HollowKnightFlashPolicyCoreTests
         var tracker = new HollowKnightFlashStateTracker(native);
         HollowKnightFlashSample disabled = Apply(
             native,
-            tracker.Apply(native, Master(HollowKnightFlashMode.Off)));
+            tracker.Apply(native, ControllerDecision(HollowKnightFlashMode.Off)));
         HollowKnightFlashSample nativeFade = Sample(disabled.Enabled, 0.20f, 0.8f);
-        tracker.Apply(nativeFade, Master(HollowKnightFlashMode.Off));
+        tracker.Apply(nativeFade, ControllerDecision(HollowKnightFlashMode.Off));
 
         HollowKnightFlashTransition soft = tracker.Apply(
             nativeFade,
-            Master(HollowKnightFlashMode.Soft));
+            ControllerDecision(HollowKnightFlashMode.Soft));
         HollowKnightFlashSample restored = Apply(nativeFade, soft);
 
         Assert.True(soft.WriteEnabled);
@@ -114,7 +114,7 @@ public sealed class HollowKnightFlashPolicyCoreTests
         var tracker = new HollowKnightFlashStateTracker(native);
         HollowKnightFlashSample policyOutput = Apply(
             native,
-            tracker.Apply(native, Master(mode)));
+            tracker.Apply(native, ControllerDecision(mode)));
 
         HollowKnightFlashTransition release = tracker.Apply(
             policyOutput,
@@ -137,7 +137,7 @@ public sealed class HollowKnightFlashPolicyCoreTests
         var tracker = new HollowKnightFlashStateTracker(native);
         HollowKnightFlashSample softened = Apply(
             native,
-            tracker.Apply(native, Master(HollowKnightFlashMode.Soft)));
+            tracker.Apply(native, ControllerDecision(HollowKnightFlashMode.Soft)));
 
         bool enabled = updateKind == 0 ? softened.Enabled : false;
         HollowKnightFlashRgba color = updateKind == 1
@@ -168,20 +168,20 @@ public sealed class HollowKnightFlashPolicyCoreTests
         var oldTracker = new HollowKnightFlashStateTracker(oldNative);
         HollowKnightFlashSample oldDisabled = Apply(
             oldNative,
-            oldTracker.Apply(oldNative, Master(HollowKnightFlashMode.Off)));
+            oldTracker.Apply(oldNative, ControllerDecision(HollowKnightFlashMode.Off)));
         Assert.False(oldDisabled.Enabled);
 
         HollowKnightFlashSample replacementNative = Sample(false, 0.10f, 0.9f);
         var replacementTracker = new HollowKnightFlashStateTracker(replacementNative);
         HollowKnightFlashTransition replacement = replacementTracker.Apply(
             replacementNative,
-            Master(HollowKnightFlashMode.Soft));
+            ControllerDecision(HollowKnightFlashMode.Soft));
 
         Assert.False(replacement.HasWrites);
         Assert.Equal(replacementNative, replacement.Sample);
     }
 
-    private static HollowKnightFlashDecision Master(HollowKnightFlashMode mode)
+    private static HollowKnightFlashDecision ControllerDecision(HollowKnightFlashMode mode)
     {
         string value = mode == HollowKnightFlashMode.Soft
             ? "soft"

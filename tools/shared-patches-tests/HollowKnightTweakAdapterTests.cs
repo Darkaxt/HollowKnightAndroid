@@ -128,6 +128,41 @@ public sealed class HollowKnightTweakAdapterTests
     }
 
     [Fact]
+    public void BenchTeleportRouteCompletesOnlyAfterTheFinalWarpAndCanThenReopen()
+    {
+        var api = new RecordingApi();
+        var controller = new TweakController(
+            new HollowKnightTweakAdapter(api), new MemoryStore());
+        Assert.True(controller.Initialize().Success);
+        controller.ClearOperationEvidence();
+        api.Calls.Clear();
+
+        TweakActionResult first = controller.Set("bench_teleport", "open");
+        TweakActionResult overlapping = controller.Set("bench_teleport", "open");
+
+        Assert.True(first.Pending);
+        Assert.False(overlapping.Success);
+        Assert.Equal(new[] { "bench-teleport:open" }, api.Calls);
+        Assert.DoesNotContain(controller.OperationEvidence, evidence => evidence.Success);
+
+        Assert.True(controller.CompletePending(
+            "bench_teleport",
+            first.OperationToken,
+            TweakActionResult.Ok(TweakReadback.Text("Crossroads_47"))).Success);
+        TweakActionResult reopened = controller.Set("bench_teleport", "open");
+
+        Assert.True(reopened.Pending);
+        Assert.NotEqual(first.OperationToken, reopened.OperationToken);
+        Assert.Equal(
+            new[] { "bench-teleport:open", "bench-teleport:open" },
+            api.Calls);
+        TweakOperationEvidence completed = Assert.Single(
+            controller.OperationEvidence,
+            evidence => evidence.Success);
+        Assert.Equal("Crossroads_47", completed.Readback.Value);
+    }
+
+    [Fact]
     public void CatalogRejectsMutationThroughListInterfaceAndKeepsOrder()
     {
         var adapter = new HollowKnightTweakAdapter(new RecordingApi());
@@ -202,6 +237,41 @@ public sealed class HollowKnightTweakAdapterTests
         }
     }
 
+    [Fact]
+    public void EveryChoiceValueMutatesAndPersistsWithoutGlobalGate()
+    {
+        var catalog = new HollowKnightTweakAdapter(new RecordingApi());
+        foreach (TweakDescriptor row in catalog.Descriptors.Where(
+                     row => row.IsAvailable && row.ControlKind == TweakControlKind.Choice))
+        {
+            foreach (string value in row.Values)
+            {
+                var store = new MemoryStore();
+                var controller = new TweakController(
+                    new HollowKnightTweakAdapter(new RecordingApi()), store);
+                Assert.True(controller.Initialize().Success);
+
+                TweakActionResult result = controller.Set(row.Id, value);
+
+                Assert.True(result.Success, row.Id + "=" + value + ": " + result.Error);
+                Assert.True(result.Pending, row.Id + " must await runtime-owner readback");
+                Assert.True(controller.MutationsAvailable);
+                Assert.Equal(value, controller.Value(row.Id));
+                Assert.False(store.ContainsKey(
+                    "dualsouls.mods.hollow-knight.value." + row.Id));
+
+                controller.Tick();
+
+                Assert.Equal(value, store["dualsouls.mods.hollow-knight.value." + row.Id]);
+                TweakOperationEvidence evidence = Assert.Single(controller.OperationEvidence);
+                Assert.Equal(row.Id, evidence.RowId);
+                Assert.Equal(TweakOperationKind.Deferred, evidence.Operation);
+                Assert.Equal(TweakReadbackKind.Choice, evidence.Readback.Kind);
+                Assert.Equal(value, evidence.Readback.Value);
+            }
+        }
+    }
+
     [Theory]
     [InlineData("dimmed", false)]
     [InlineData("black", true)]
@@ -232,7 +302,7 @@ public sealed class HollowKnightTweakAdapterTests
     }
 
     [Fact]
-    public void MasterDefaultSoftIgnoresLegacyAlphaAcrossDisplayLoss()
+    public void ControllerDefaultSoftIgnoresLegacyAlphaAcrossDisplayLoss()
     {
         HollowKnightFlashDecision withDisplay = HollowKnightFlashDecisionResolver.Resolve(
             true,
@@ -247,8 +317,8 @@ public sealed class HollowKnightTweakAdapterTests
             null,
             null);
 
-        AssertMasterDecision(withDisplay, HollowKnightFlashMode.Soft);
-        AssertMasterDecision(afterDisplayLoss, HollowKnightFlashMode.Soft);
+        AssertControllerDecision(withDisplay, HollowKnightFlashMode.Soft);
+        AssertControllerDecision(afterDisplayLoss, HollowKnightFlashMode.Soft);
         Assert.Equal(HollowKnightFlashDecision.DefaultSoftAlpha, withDisplay.SoftAlpha);
         Assert.Equal(withDisplay.SoftAlpha, afterDisplayLoss.SoftAlpha);
     }
@@ -257,7 +327,7 @@ public sealed class HollowKnightTweakAdapterTests
     [InlineData("soft", HollowKnightFlashMode.Soft)]
     [InlineData("vanilla", HollowKnightFlashMode.Vanilla)]
     [InlineData("off", HollowKnightFlashMode.Off)]
-    public void ReadyEnabledMasterMapsEveryControllerValue(
+    public void ReadyAvailableControllerMapsEveryValue(
         string value,
         HollowKnightFlashMode expected)
     {
@@ -268,12 +338,12 @@ public sealed class HollowKnightTweakAdapterTests
             HollowKnightFlashMode.Soft,
             0.17f);
 
-        AssertMasterDecision(resolved, expected);
+        AssertControllerDecision(resolved, expected);
         Assert.Equal(HollowKnightFlashDecision.DefaultSoftAlpha, resolved.SoftAlpha);
     }
 
     [Fact]
-    public void MasterOffUsesLiveLegacyModeAndAlpha()
+    public void UnavailableControllerUsesLiveLegacyModeAndAlpha()
     {
         HollowKnightFlashDecision resolved = HollowKnightFlashDecisionResolver.Resolve(
             true,
@@ -304,7 +374,7 @@ public sealed class HollowKnightTweakAdapterTests
     }
 
     [Fact]
-    public void NoMasterAndNoLiveReferenceReleasesOwnership()
+    public void NoControllerAndNoLiveReferenceReleasesOwnership()
     {
         HollowKnightFlashDecision resolved = HollowKnightFlashDecisionResolver.Resolve(
             true,
@@ -318,7 +388,7 @@ public sealed class HollowKnightTweakAdapterTests
     }
 
     [Fact]
-    public void MasterEnabledOffRemainsOwnedWithoutLegacyReference()
+    public void ControllerOffValueRemainsOwnedWithoutLegacyReference()
     {
         HollowKnightFlashDecision resolved = HollowKnightFlashDecisionResolver.Resolve(
             true,
@@ -327,11 +397,11 @@ public sealed class HollowKnightTweakAdapterTests
             null,
             null);
 
-        AssertMasterDecision(resolved, HollowKnightFlashMode.Off);
+        AssertControllerDecision(resolved, HollowKnightFlashMode.Off);
     }
 
     [Fact]
-    public void InvalidMasterValueFailsClosedToVanilla()
+    public void InvalidControllerValueFailsClosedToVanilla()
     {
         HollowKnightFlashDecision resolved = HollowKnightFlashDecisionResolver.Resolve(
             true,
@@ -340,7 +410,7 @@ public sealed class HollowKnightTweakAdapterTests
             HollowKnightFlashMode.Soft,
             0.17f);
 
-        AssertMasterDecision(resolved, HollowKnightFlashMode.Vanilla);
+        AssertControllerDecision(resolved, HollowKnightFlashMode.Vanilla);
     }
 
     [Theory]
@@ -385,20 +455,17 @@ public sealed class HollowKnightTweakAdapterTests
     [InlineData("one_hit_kills")]
     [InlineData("run_speed")]
     [InlineData("unlimited_soul")]
-    public void GameplayFeatureMasterOffRestoresCapturedBaseline(string id)
+    public void GameplayFeatureChoiceMutatesWithoutGlobalEnableStep(string id)
     {
         var api = new RecordingApi();
         var controller = new TweakController(
             new HollowKnightTweakAdapter(api), new MemoryStore());
         Assert.True(controller.Initialize().Success);
-        Assert.True(controller.SetMaster(true).Success);
+
         Assert.True(controller.Cycle(id).Success);
+
+        Assert.True(controller.MutationsAvailable);
         Assert.Contains(id, api.ActiveGameplay);
-
-        Assert.True(controller.SetMaster(false).Success);
-
-        Assert.Empty(api.ActiveGameplay);
-        Assert.Equal("restore", api.Calls.Last());
     }
 
     [Theory]
@@ -413,7 +480,6 @@ public sealed class HollowKnightTweakAdapterTests
         var controller = new TweakController(
             new HollowKnightTweakAdapter(api), new MemoryStore());
         Assert.True(controller.Initialize().Success);
-        Assert.True(controller.SetMaster(true).Success);
         Assert.True(controller.Cycle(id).Success);
         Assert.Contains(id, api.ActiveGameplay);
 
@@ -437,7 +503,6 @@ public sealed class HollowKnightTweakAdapterTests
         var api = new RecordingApi();
         var session = new HollowKnightModsSession(api, new MemoryStore(), visibleRows: 5);
         session.Tick();
-        Assert.True(session.Controller.SetMaster(true).Success);
         Assert.True(session.Controller.Cycle(id).Success);
         Assert.Contains(id, api.ActiveGameplay);
 
@@ -449,7 +514,7 @@ public sealed class HollowKnightTweakAdapterTests
     }
 
     [Fact]
-    public void EveryPersistedChoiceIsReleasedByMasterOff()
+    public void EveryPersistedChoiceIsReleasedByReset()
     {
         var catalog = new HollowKnightTweakAdapter(new RecordingApi());
         foreach (TweakDescriptor row in catalog.Descriptors.Where(row => row.ControlKind == TweakControlKind.Choice))
@@ -457,12 +522,12 @@ public sealed class HollowKnightTweakAdapterTests
             var api = new RecordingApi();
             var controller = new TweakController(new HollowKnightTweakAdapter(api), new MemoryStore());
             Assert.True(controller.Initialize().Success);
-            Assert.True(controller.SetMaster(true).Success);
             Assert.True(controller.Set(row.Id, row.Values.First(value => value != row.DefaultValue)).Success);
             Assert.Contains(row.Id, api.ActiveGameplay);
 
-            Assert.True(controller.SetMaster(false).Success);
+            Assert.True(controller.Reset().Success);
             Assert.Empty(api.ActiveGameplay);
+            Assert.Equal(row.DefaultValue, controller.Value(row.Id));
         }
     }
 
@@ -552,6 +617,18 @@ public sealed class HollowKnightTweakAdapterTests
     }
 
     [Fact]
+    public void IdleTickWithOutcomesReturnsTheSharedEmptyCollection()
+    {
+        var adapter = new HollowKnightTweakAdapter(new RecordingApi());
+
+        IReadOnlyList<TweakAdapterCompletion> first = adapter.TickWithOutcomes();
+        IReadOnlyList<TweakAdapterCompletion> second = adapter.TickWithOutcomes();
+
+        Assert.Empty(first);
+        Assert.Same(first, second);
+    }
+
+    [Fact]
     public void ConstructorRejectsNullApi()
     {
         Assert.Throws<ArgumentNullException>(() => new HollowKnightTweakAdapter(null!));
@@ -566,12 +643,12 @@ public sealed class HollowKnightTweakAdapterTests
     private static Dictionary<string, string> Map(params (string Value, string Call)[] entries) =>
         entries.ToDictionary(entry => entry.Value, entry => entry.Call, StringComparer.Ordinal);
 
-    private static void AssertMasterDecision(
+    private static void AssertControllerDecision(
         HollowKnightFlashDecision decision,
         HollowKnightFlashMode expectedMode)
     {
         Assert.True(decision.HasOwner);
-        Assert.Equal(HollowKnightFlashAuthority.Master, decision.Authority);
+        Assert.Equal(HollowKnightFlashAuthority.Controller, decision.Authority);
         Assert.Equal(expectedMode, decision.Mode);
     }
 
@@ -581,6 +658,7 @@ public sealed class HollowKnightTweakAdapterTests
         public bool ThrowOnMutation { get; set; }
         public List<string> Calls { get; } = new();
         public HashSet<string> ActiveGameplay { get; } = new();
+        readonly Dictionary<string, string> _actual = DefaultValues();
 
         public void CaptureBaseline() => Calls.Add("capture");
 
@@ -588,6 +666,9 @@ public sealed class HollowKnightTweakAdapterTests
         {
             Calls.Add("restore");
             ActiveGameplay.Clear();
+            _actual.Clear();
+            foreach (KeyValuePair<string, string> pair in DefaultValues())
+                _actual[pair.Key] = pair.Value;
         }
 
         public void SetCompanionBackdropBlack(bool black)
@@ -664,7 +745,7 @@ public sealed class HollowKnightTweakAdapterTests
         public void SetFastTransitions(bool enabled) => SetActive("fast_transitions", enabled, $"fast-transitions:{enabled}");
         public void SetAutoMap(bool enabled) => SetActive("auto_map", enabled, $"auto-map:{enabled}");
         public void SetInnateCompass(bool enabled) => SetActive("innate_compass", enabled, $"compass:{enabled}");
-        public void OpenBenchTeleport() => Record("bench-teleport:open");
+        public void OpenBenchTeleport(long operationToken) => Record("bench-teleport:open");
         public void SetSecretRadar(bool enabled) => SetActive("secret_radar", enabled, $"secret-radar:{enabled}");
         public void SetDamageCap(bool enabled) => SetActive("damage_cap", enabled, $"damage-cap:{enabled}");
         public void SetEnemyHealthBars(bool enabled) => SetActive("health_bars", enabled, $"health-bars:{enabled}");
@@ -675,12 +756,78 @@ public sealed class HollowKnightTweakAdapterTests
         public void SetUnlimitedNotches(bool enabled) => SetActive("unlimited_notches", enabled, $"unlimited-notches:{enabled}");
         public void SetStateSlot(int slot) => SetActive("state_slot", slot != 1, $"state-slot:{slot}");
         public void SaveState() => Record("state:save");
-        public void LoadState() => Record("state:load");
+        public void LoadState(long operationToken) => Record("state:load");
         public void DeleteState() => Record("state:delete");
         public void SetGeoMagnet(bool enabled) => SetActive("geo_magnet", enabled, $"geo-magnet:{enabled}");
         public void SetKeepGeoOnDeath(bool enabled) => SetActive("keep_geo_on_death", enabled, $"keep-geo:{enabled}");
         public void SetJournalOneKill(bool enabled) => SetActive("journal_one_kill", enabled, $"journal-one-kill:{enabled}");
         public void SetGeoMultiplier(int multiplier) => SetActive("geo_multiplier", multiplier != 1, $"geo-multiplier:{multiplier}");
+
+        public TweakActionResult Readback(string id)
+        {
+            return _actual.TryGetValue(id, out string value)
+                ? TweakActionResult.Ok(TweakReadback.Choice(value))
+                : TweakActionResult.Ok(TweakReadback.Integer(1));
+        }
+
+        public IReadOnlyList<TweakAdapterCompletion> DrainCompletedOperations() =>
+            Array.Empty<TweakAdapterCompletion>();
+
+        static Dictionary<string, string> DefaultValues() => new()
+        {
+            ["companion_backdrop"] = "dimmed",
+            ["run_speed"] = "vanilla",
+            ["fast_transitions"] = "off",
+            ["auto_map"] = "off",
+            ["innate_compass"] = "off",
+            ["secret_radar"] = "off",
+            ["nail_damage"] = "x1",
+            ["damage_received"] = "vanilla",
+            ["damage_cap"] = "off",
+            ["one_hit_kills"] = "off",
+            ["unlimited_soul"] = "off",
+            ["health_bars"] = "off",
+            ["damage_numbers"] = "off",
+            ["boss_retry"] = "off",
+            ["equip_anywhere"] = "off",
+            ["charm_costs"] = "vanilla",
+            ["unlimited_notches"] = "off",
+            ["state_slot"] = "1",
+            ["geo_magnet"] = "off",
+            ["keep_geo_on_death"] = "off",
+            ["journal_one_kill"] = "off",
+            ["geo_multiplier"] = "x1",
+            ["lifeblood_flash"] = "vanilla",
+        };
+
+        void Track(string call)
+        {
+            string BoolValue(string prefix) =>
+                call == prefix + ":True" ? "on" : "off";
+            if (call.StartsWith("backdrop:", StringComparison.Ordinal)) _actual["companion_backdrop"] = call == "backdrop:True" ? "black" : "dimmed";
+            else if (call.StartsWith("run:", StringComparison.Ordinal)) _actual["run_speed"] = call == "run:1.25" ? "plus_25" : call == "run:1.5" ? "plus_50" : "vanilla";
+            else if (call.StartsWith("fast-transitions:", StringComparison.Ordinal)) _actual["fast_transitions"] = BoolValue("fast-transitions");
+            else if (call.StartsWith("auto-map:", StringComparison.Ordinal)) _actual["auto_map"] = BoolValue("auto-map");
+            else if (call.StartsWith("compass:", StringComparison.Ordinal)) _actual["innate_compass"] = BoolValue("compass");
+            else if (call.StartsWith("secret-radar:", StringComparison.Ordinal)) _actual["secret_radar"] = BoolValue("secret-radar");
+            else if (call.StartsWith("nail:", StringComparison.Ordinal)) _actual["nail_damage"] = call == "nail:2" ? "x2" : call == "nail:3" ? "x3" : call == "nail:5" ? "x5" : "x1";
+            else if (call.StartsWith("damage:", StringComparison.Ordinal)) _actual["damage_received"] = call == "damage:NoMaskLoss" ? "no_mask_loss" : call == "damage:Invincible" ? "invincible" : "vanilla";
+            else if (call.StartsWith("damage-cap:", StringComparison.Ordinal)) _actual["damage_cap"] = BoolValue("damage-cap");
+            else if (call.StartsWith("one-hit:", StringComparison.Ordinal)) _actual["one_hit_kills"] = call == "one-hit:True" ? "on" : "off";
+            else if (call.StartsWith("soul:", StringComparison.Ordinal)) _actual["unlimited_soul"] = call == "soul:True" ? "on" : "off";
+            else if (call.StartsWith("health-bars:", StringComparison.Ordinal)) _actual["health_bars"] = BoolValue("health-bars");
+            else if (call.StartsWith("damage-numbers:", StringComparison.Ordinal)) _actual["damage_numbers"] = BoolValue("damage-numbers");
+            else if (call.StartsWith("boss-retry:", StringComparison.Ordinal)) _actual["boss_retry"] = BoolValue("boss-retry");
+            else if (call.StartsWith("equip-anywhere:", StringComparison.Ordinal)) _actual["equip_anywhere"] = BoolValue("equip-anywhere");
+            else if (call.StartsWith("charm-costs-free:", StringComparison.Ordinal)) _actual["charm_costs"] = call == "charm-costs-free:True" ? "free" : "vanilla";
+            else if (call.StartsWith("unlimited-notches:", StringComparison.Ordinal)) _actual["unlimited_notches"] = BoolValue("unlimited-notches");
+            else if (call.StartsWith("state-slot:", StringComparison.Ordinal)) _actual["state_slot"] = call.Substring("state-slot:".Length);
+            else if (call.StartsWith("geo-magnet:", StringComparison.Ordinal)) _actual["geo_magnet"] = BoolValue("geo-magnet");
+            else if (call.StartsWith("keep-geo:", StringComparison.Ordinal)) _actual["keep_geo_on_death"] = BoolValue("keep-geo");
+            else if (call.StartsWith("journal-one-kill:", StringComparison.Ordinal)) _actual["journal_one_kill"] = BoolValue("journal-one-kill");
+            else if (call.StartsWith("geo-multiplier:", StringComparison.Ordinal)) _actual["geo_multiplier"] = "x" + call.Substring("geo-multiplier:".Length);
+            else if (call.StartsWith("flash:", StringComparison.Ordinal)) _actual["lifeblood_flash"] = call == "flash:Soft" ? "soft" : call == "flash:Off" ? "off" : "vanilla";
+        }
 
         public void TickGameplay()
         {
@@ -696,6 +843,7 @@ public sealed class HollowKnightTweakAdapterTests
         private void Record(string call)
         {
             Calls.Add(call);
+            Track(call);
             if (ThrowOnMutation) throw new InvalidOperationException("game rejected presentation change");
         }
     }

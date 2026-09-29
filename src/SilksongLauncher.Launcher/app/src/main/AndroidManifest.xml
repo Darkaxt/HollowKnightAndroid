@@ -68,9 +68,8 @@
           instead of returning to the launcher.
 
           Both processes still share the same package (and therefore
-          the same app data dir + external profile roots). Cross-process
-          built-in Mods state uses an atomic profile file; live in-memory
-          state is deliberately not shared.
+          the same app data dir + external profile roots). Profile-scoped
+          package and skin management remain in the launcher process.
         -->
         <activity
             android:name="dev.silksong.launcher.LauncherActivity"
@@ -101,12 +100,6 @@
             android:name="dev.silksong.launcher.skins.ui.SkinsActivity"
             android:exported="false"
             android:label="@string/action_skins"
-            android:process=":launcher"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
-        <activity
-            android:name="dev.silksong.launcher.BuiltInModsActivity"
-            android:exported="false"
-            android:label="@string/action_mods"
             android:process=":launcher"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
         <activity

@@ -335,7 +335,7 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertIn("OpenBenchTeleportRoute", route)
         self.assertIn("BenchDestinations()", route)
         self.assertIn("WarpToBench", route)
-        self.assertIn("SilksongNativeModsMenu.OpenBenchTeleportRoute()", api)
+        self.assertIn("SilksongNativeModsMenu.OpenBenchTeleportRoute(operationToken)", api)
         self.assertNotIn("RequestBenchRoute", api + features)
         self.assertNotIn("ConsumeBenchRouteRequest", features)
 
@@ -450,6 +450,41 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertIn("partial prior weave", weaver)
         self.assertIn("throw new InvalidOperationException", weaver)
 
+    def test_silksong_readback_tracks_applied_choices_not_baseline_differences(self):
+        api = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" /
+               "SilksongGameTweakApi.cs").read_text(encoding="utf-8")
+        readback = api[api.index("public TweakActionResult Readback(string id)"):
+                       api.index("public IReadOnlyList<TweakAdapterCompletion> DrainCompletedOperations()")]
+
+        self.assertIn("SilksongAppliedChoiceState _appliedChoices", api)
+        for mutation in (
+            "_appliedChoices.SetDamageMode(mode)",
+            "_appliedChoices.RestoreDamageMode()",
+            "_appliedChoices.SetOneHitKills(enabled)",
+            "_appliedChoices.SetEquipAnywhere(enabled)",
+            "_appliedChoices.SetInstantDialogue(enabled)",
+            "_appliedChoices.SetWorldRumbleDisabled(enabled)",
+            "_appliedChoices.SetFrostDisabled(enabled)",
+        ):
+            with self.subTest(applied_choice_mutation=mutation):
+                self.assertIn(mutation, api)
+        for row_id in (
+            "damage_received", "one_hit_kills", "equip_anywhere",
+            "instant_dialogue", "disable_world_rumble", "ignore_frost_slowdown",
+        ):
+            with self.subTest(applied_choice_readback=row_id):
+                self.assertIn(f'case "{row_id}"', readback)
+        self.assertIn("return _appliedChoices.Readback(id);", readback)
+        for baseline_comparison in (
+            "CheatManager.Invincibility == _invincibility",
+            "CheatManager.NailDamage != _nailDamage",
+            "CheatManager.CanChangeEquipsAnywhere != _equipAnywhere",
+            "CheatManager.IsTextPrintSkipEnabled != _instantDialogue",
+            "CheatManager.IsWorldRumbleDisabled != _worldRumbleDisabled",
+            "CheatManager.IsFrostDisabled != _frostDisabled",
+        ):
+            self.assertNotIn(baseline_comparison, readback)
+
     def test_silksong_owned_progression_and_silk_rebase_authoritative_grants(self):
         features = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" / "SilksongGameplayFeatures.cs").read_text(encoding="utf-8")
         api = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" / "SilksongGameTweakApi.cs").read_text(encoding="utf-8")
@@ -481,12 +516,14 @@ class ProfileModPipelineContractTest(unittest.TestCase):
         self.assertIn("bossProfile", features)
         self.assertIn("PrepareForStateTransfer", api)
 
-    def test_master_defaults_off_and_persistence_is_game_qualified(self):
+    def test_mutation_health_is_internal_and_persistence_is_game_qualified(self):
         source = (REPO_ROOT / "tools" / "shared-patches" / "src" / "Mods" / "TweakController.cs").read_text(encoding="utf-8")
 
         self.assertIn('"dualsouls.mods." + adapter.GameId + "."', source)
-        self.assertIn("MasterEnabled = false", source)
-        self.assertNotIn("MasterEnabled = true;\n        public", source)
+        self.assertIn("TweakMutationAvailability MutationAvailability", source)
+        self.assertIn("public bool MutationsAvailable", source)
+        self.assertNotIn("MasterEnabled", source)
+        self.assertNotIn('ValueKey("master")', source)
 
 
 if __name__ == "__main__":

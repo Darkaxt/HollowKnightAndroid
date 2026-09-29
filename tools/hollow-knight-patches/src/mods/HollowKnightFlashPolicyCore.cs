@@ -5,7 +5,7 @@ namespace DualSouls.Mods.HollowKnight
     internal enum HollowKnightFlashAuthority
     {
         None,
-        Master,
+        Controller,
         Legacy,
     }
 
@@ -39,12 +39,12 @@ namespace DualSouls.Mods.HollowKnight
     {
         internal static HollowKnightFlashDecision Resolve(
             bool sessionReady,
-            bool masterEnabled,
+            bool mutationsAvailable,
             string controllerValue,
             HollowKnightFlashMode? legacyMode,
             float? legacySoftAlpha)
         {
-            if (sessionReady && masterEnabled)
+            if (sessionReady && mutationsAvailable)
             {
                 HollowKnightFlashMode mode;
                 switch (controllerValue)
@@ -61,7 +61,7 @@ namespace DualSouls.Mods.HollowKnight
                         break;
                 }
                 return new HollowKnightFlashDecision(
-                    HollowKnightFlashAuthority.Master,
+                    HollowKnightFlashAuthority.Controller,
                     mode,
                     HollowKnightFlashDecision.DefaultSoftAlpha);
             }

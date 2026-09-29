@@ -2,7 +2,7 @@
 // been built. GameActivity is a regular non-launchable Activity, invoked only
 // via the Intent in launchGame().
 //
-// One panel: profile-scoped built-in Mods, Skins and Settings actions beside a
+// One panel: profile-scoped mod packages, Skins and Settings actions beside a
 // live mirror of LauncherLog, plus account/cloud controls and game launch.
 
 package dev.silksong.launcher
@@ -188,7 +188,7 @@ class LauncherActivity : Activity() {
         btnPull.setOnClickListener { onPullClicked() }
         btnPush.setOnClickListener { onPushClicked() }
         btnMods.setOnClickListener {
-            startActivity(Intent(this, BuiltInModsActivity::class.java))
+            startActivity(Intent(this, ModsActivity::class.java))
         }
         btnSkins.setOnClickListener {
             startActivity(Intent(this, SkinsActivity::class.java))

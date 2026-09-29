@@ -85,6 +85,12 @@ namespace DualSouls.Mods
             if (!result.Success)
             {
                 SetPrimaryError(result.Error);
+                if (pipeline.InitializationRecoverable)
+                {
+                    IsReady = true;
+                    return;
+                }
+
                 IsReady = false;
                 pipeline.BlockMutations();
                 if (TryRestore(pipeline, out string restoreError))
@@ -225,7 +231,10 @@ namespace DualSouls.Mods
 
             internal Pipeline(ITweakAdapter adapter, ITweakStore store, int visibleRows)
             {
-                _adapter = new SessionTweakAdapter(adapter);
+                ITweakOperationAdapter operationAdapter = adapter as ITweakOperationAdapter;
+                _adapter = operationAdapter == null
+                    ? new SessionTweakAdapter(adapter)
+                    : new SessionOperationTweakAdapter(adapter, operationAdapter);
                 _store = new SessionTweakStore(store);
                 Controller = new TweakController(_adapter, _store);
                 Menu = new TweakMenuModel(Controller, visibleRows);
@@ -233,14 +242,27 @@ namespace DualSouls.Mods
 
             internal TweakController Controller { get; }
             internal TweakMenuModel Menu { get; }
+            internal bool InitializationRecoverable { get; private set; }
 
             internal TweakActionResult Initialize()
             {
+                InitializationRecoverable = false;
                 TweakActionResult result = Controller.Initialize();
                 if (!result.Success)
                 {
-                    if (_adapter.BaselineCaptured) Controller.StageDisabledMaster();
-                    return result;
+                    if (!Controller.HasCapturedBaseline) return result;
+                    try
+                    {
+                        _store.Commit();
+                        InitializationRecoverable = true;
+                        return result;
+                    }
+                    catch (Exception error)
+                    {
+                        Controller.MarkSessionUnavailable();
+                        return TweakActionResult.Fail(
+                            "Could not commit recoverable Mods settings: " + error.Message);
+                    }
                 }
 
                 try
@@ -250,7 +272,7 @@ namespace DualSouls.Mods
                 }
                 catch (Exception error)
                 {
-                    Controller.StageDisabledMaster();
+                    Controller.MarkSessionUnavailable();
                     return TweakActionResult.Fail(
                         "Could not commit initialized Mods settings: " + error.Message);
                 }
@@ -274,7 +296,7 @@ namespace DualSouls.Mods
             }
         }
 
-        sealed class SessionTweakAdapter : ITweakAdapter
+        class SessionTweakAdapter : ITweakAdapter
         {
             readonly ITweakAdapter _inner;
             bool _mutationsAllowed = true;
@@ -313,6 +335,8 @@ namespace DualSouls.Mods
                 if (_mutationsAllowed) _inner.Tick();
             }
 
+            protected bool MutationsAllowed => _mutationsAllowed;
+
             internal void RestoreForSession()
             {
                 if (_restorationAllowed) _inner.RestoreBaseline();
@@ -326,6 +350,34 @@ namespace DualSouls.Mods
             internal void DisableRestoration()
             {
                 _restorationAllowed = false;
+            }
+        }
+
+        sealed class SessionOperationTweakAdapter :
+            SessionTweakAdapter, ITweakOperationAdapter
+        {
+            readonly ITweakOperationAdapter _operationAdapter;
+
+            internal SessionOperationTweakAdapter(
+                ITweakAdapter adapter,
+                ITweakOperationAdapter operationAdapter)
+                : base(adapter)
+            {
+                _operationAdapter = operationAdapter;
+            }
+
+            public TweakActionResult Readback(string id)
+            {
+                return MutationsAllowed
+                    ? _operationAdapter.Readback(id)
+                    : TweakActionResult.Fail("The Mods session is inactive.");
+            }
+
+            public IReadOnlyList<TweakAdapterCompletion> TickWithOutcomes()
+            {
+                return MutationsAllowed
+                    ? _operationAdapter.TickWithOutcomes()
+                    : Array.Empty<TweakAdapterCompletion>();
             }
         }
 

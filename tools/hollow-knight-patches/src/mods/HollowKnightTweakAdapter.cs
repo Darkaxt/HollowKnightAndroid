@@ -19,7 +19,7 @@ namespace DualSouls.Mods.HollowKnight
         void SetFastTransitions(bool enabled);
         void SetAutoMap(bool enabled);
         void SetInnateCompass(bool enabled);
-        void OpenBenchTeleport();
+        void OpenBenchTeleport(long operationToken);
         void SetSecretRadar(bool enabled);
         void SetNailDamageMultiplier(int multiplier);
         void RestoreNailDamage();
@@ -38,7 +38,7 @@ namespace DualSouls.Mods.HollowKnight
         void SetUnlimitedNotches(bool enabled);
         void SetStateSlot(int slot);
         void SaveState();
-        void LoadState();
+        void LoadState(long operationToken);
         void DeleteState();
         void SetGeoMagnet(bool enabled);
         void SetKeepGeoOnDeath(bool enabled);
@@ -46,9 +46,11 @@ namespace DualSouls.Mods.HollowKnight
         void SetGeoMultiplier(int multiplier);
         void SetLifebloodFlash(HollowKnightFlashMode mode);
         void TickGameplay();
+        TweakActionResult Readback(string id);
+        IReadOnlyList<TweakAdapterCompletion> DrainCompletedOperations();
     }
 
-    public sealed class HollowKnightTweakAdapter : ITweakAdapter
+    public sealed class HollowKnightTweakAdapter : ITweakAdapter, ITweakOperationAdapter
     {
         static readonly IReadOnlyList<TweakDescriptor> Rows = Array.AsReadOnly(new[]
         {
@@ -81,13 +83,62 @@ namespace DualSouls.Mods.HollowKnight
             Row("lifeblood_flash", "lifeblood_flash", TweakControlKind.Choice, "PRESENTATION", "LIFEBLOOD FLASH", "Use the original flash, a softened flash, or no flash.", "vanilla", "vanilla", "soft", "off"),
         });
 
+        readonly struct PendingChoice
+        {
+            public PendingChoice(string id, long operationToken)
+            {
+                Id = id;
+                OperationToken = operationToken;
+            }
+
+            public string Id { get; }
+            public long OperationToken { get; }
+        }
+
         readonly IHollowKnightTweakApi _api;
+        readonly List<PendingChoice> _pendingChoiceReadbacks = new List<PendingChoice>();
+        long _nextOperationToken;
         public HollowKnightTweakAdapter(IHollowKnightTweakApi api) => _api = api ?? throw new ArgumentNullException(nameof(api));
         public string GameId => "hollow-knight";
         public IReadOnlyList<TweakDescriptor> Descriptors => Rows;
         public void CaptureBaseline() => _api.CaptureBaseline();
-        public void RestoreBaseline() => _api.RestoreBaseline();
+        public void RestoreBaseline()
+        {
+            _pendingChoiceReadbacks.Clear();
+            _api.RestoreBaseline();
+        }
         public void Tick() => _api.TickGameplay();
+        public TweakActionResult Readback(string id) => _api.Readback(id);
+
+        public IReadOnlyList<TweakAdapterCompletion> TickWithOutcomes()
+        {
+            _api.TickGameplay();
+            IReadOnlyList<TweakAdapterCompletion> runtime =
+                _api.DrainCompletedOperations() ?? Array.Empty<TweakAdapterCompletion>();
+            int completionCount = runtime.Count + _pendingChoiceReadbacks.Count;
+            if (completionCount == 0)
+                return Array.Empty<TweakAdapterCompletion>();
+
+            var completed = new TweakAdapterCompletion[completionCount];
+            int completedIndex = 0;
+            for (int index = 0; index < runtime.Count; index++)
+                completed[completedIndex++] = runtime[index];
+
+            for (int index = 0; index < _pendingChoiceReadbacks.Count; index++)
+            {
+                PendingChoice pending = _pendingChoiceReadbacks[index];
+                TweakActionResult readback = _api.Readback(pending.Id);
+                if (readback.Pending)
+                    readback = TweakActionResult.Fail(
+                        "Hollow Knight runtime readback is still pending for " + pending.Id + ".");
+                completed[completedIndex++] = new TweakAdapterCompletion(
+                    pending.Id,
+                    pending.OperationToken,
+                    readback);
+            }
+            _pendingChoiceReadbacks.Clear();
+            return completed;
+        }
 
         public TweakActionResult Apply(string id, string value)
         {
@@ -95,6 +146,11 @@ namespace DualSouls.Mods.HollowKnight
             if (row == null) return TweakActionResult.Fail("Unknown Hollow Knight tweak: " + id);
             if (!row.Allows(value)) return TweakActionResult.Fail("Unsupported value for " + id + ": " + value);
             if (!_api.IsReady) return TweakActionResult.Fail("Hollow Knight tweak API is not ready for " + id + ".");
+            long operationToken = row.ControlKind == TweakControlKind.Choice ||
+                                  row.ControlKind == TweakControlKind.Route ||
+                                  id == "load_from_slot"
+                ? NextOperationToken()
+                : 0;
             try
             {
                 switch (id)
@@ -107,7 +163,7 @@ namespace DualSouls.Mods.HollowKnight
                     case "fast_transitions": _api.SetFastTransitions(On(value)); break;
                     case "auto_map": _api.SetAutoMap(On(value)); break;
                     case "innate_compass": _api.SetInnateCompass(On(value)); break;
-                    case "bench_teleport": _api.OpenBenchTeleport(); break;
+                    case "bench_teleport": _api.OpenBenchTeleport(operationToken); break;
                     case "secret_radar": _api.SetSecretRadar(On(value)); break;
                     case "nail_damage":
                         if (value == "x1") _api.RestoreNailDamage(); else _api.SetNailDamageMultiplier(Multiplier(value));
@@ -127,7 +183,7 @@ namespace DualSouls.Mods.HollowKnight
                     case "unlimited_notches": _api.SetUnlimitedNotches(On(value)); break;
                     case "state_slot": _api.SetStateSlot(int.Parse(value, System.Globalization.CultureInfo.InvariantCulture)); break;
                     case "save_to_slot": _api.SaveState(); break;
-                    case "load_from_slot": _api.LoadState(); break;
+                    case "load_from_slot": _api.LoadState(operationToken); break;
                     case "delete_slot": _api.DeleteState(); break;
                     case "geo_magnet": _api.SetGeoMagnet(On(value)); break;
                     case "keep_geo_on_death": _api.SetKeepGeoOnDeath(On(value)); break;
@@ -136,9 +192,23 @@ namespace DualSouls.Mods.HollowKnight
                     case "lifeblood_flash": _api.SetLifebloodFlash(value == "soft" ? HollowKnightFlashMode.Soft : value == "off" ? HollowKnightFlashMode.Off : HollowKnightFlashMode.Vanilla); break;
                     default: return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + ".");
                 }
-                return TweakActionResult.Ok();
+                if (row.ControlKind == TweakControlKind.Choice)
+                {
+                    _pendingChoiceReadbacks.Add(new PendingChoice(id, operationToken));
+                    return TweakActionResult.PendingResult(operationToken);
+                }
+                if (id == "load_from_slot" || row.ControlKind == TweakControlKind.Route)
+                    return TweakActionResult.PendingResult(operationToken);
+                return _api.Readback(id);
             }
             catch (Exception e) { return TweakActionResult.Fail("Hollow Knight rejected " + id + ": " + e.Message); }
+        }
+
+        long NextOperationToken()
+        {
+            _nextOperationToken++;
+            if (_nextOperationToken <= 0) _nextOperationToken = 1;
+            return _nextOperationToken;
         }
 
         static bool On(string value) => value == "on";

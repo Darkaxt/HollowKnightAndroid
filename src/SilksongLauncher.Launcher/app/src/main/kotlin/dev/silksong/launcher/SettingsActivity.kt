@@ -130,7 +130,7 @@ class SettingsActivity : Activity() {
             startActivity(Intent(this, SkinsActivity::class.java))
         }
         findViewById<Button>(R.id.btn_settings_mods).setOnClickListener {
-            startActivity(Intent(this, BuiltInModsActivity::class.java))
+            startActivity(Intent(this, ModsActivity::class.java))
         }
 
         // Logs remain available for diagnosing genuine launcher settings/build issues.

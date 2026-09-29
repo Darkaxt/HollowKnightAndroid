@@ -3,6 +3,89 @@ using System.Collections.Generic;
 
 namespace DualSouls.Mods
 {
+    public enum TweakMutationAvailability
+    {
+        Available,
+        Unavailable,
+        RestorationPending,
+    }
+
+    public enum TweakOperationKind
+    {
+        InitializeApply,
+        Apply,
+        Reset,
+        Route,
+        Command,
+        Deferred,
+        BaselineRestore,
+    }
+
+    public enum TweakReadbackKind
+    {
+        None,
+        Choice,
+        Boolean,
+        Integer,
+        Text,
+    }
+
+    public readonly struct TweakReadback
+    {
+        TweakReadback(TweakReadbackKind kind, string value)
+        {
+            Kind = kind;
+            Value = value ?? "";
+        }
+
+        public TweakReadbackKind Kind { get; }
+        public string Value { get; }
+        public bool HasValue => Kind != TweakReadbackKind.None;
+
+        public static TweakReadback Choice(string value) =>
+            new TweakReadback(TweakReadbackKind.Choice, value);
+        public static TweakReadback Boolean(bool value) =>
+            new TweakReadback(TweakReadbackKind.Boolean, value ? "true" : "false");
+        public static TweakReadback Integer(int value) =>
+            new TweakReadback(
+                TweakReadbackKind.Integer,
+                value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        public static TweakReadback Text(string value) =>
+            new TweakReadback(TweakReadbackKind.Text, value);
+    }
+
+    public readonly struct TweakOperationEvidence
+    {
+        internal TweakOperationEvidence(
+            long sequence,
+            string gameId,
+            string featureId,
+            string rowId,
+            TweakOperationKind operation,
+            bool success,
+            string error,
+            TweakReadback readback)
+        {
+            Sequence = sequence;
+            GameId = gameId ?? "";
+            FeatureId = featureId ?? "";
+            RowId = rowId ?? "";
+            Operation = operation;
+            Success = success;
+            Error = error ?? "";
+            Readback = readback;
+        }
+
+        public long Sequence { get; }
+        public string GameId { get; }
+        public string FeatureId { get; }
+        public string RowId { get; }
+        public TweakOperationKind Operation { get; }
+        public bool Success { get; }
+        public string Error { get; }
+        public TweakReadback Readback { get; }
+    }
+
     public enum TweakControlKind
     {
         Choice,
@@ -130,18 +213,140 @@ namespace DualSouls.Mods
 
     public readonly struct TweakActionResult
     {
-        TweakActionResult(bool success, string error)
+        TweakActionResult(
+            bool success,
+            bool pending,
+            long operationToken,
+            string error,
+            TweakReadback readback)
         {
             Success = success;
+            Pending = pending;
+            OperationToken = operationToken;
             Error = error ?? "";
+            Readback = readback;
         }
 
         public bool Success { get; }
+        public bool Pending { get; }
+        public long OperationToken { get; }
         public string Error { get; }
+        public TweakReadback Readback { get; }
 
-        public static TweakActionResult Ok() => new TweakActionResult(true, "");
+        public static TweakActionResult Ok() =>
+            new TweakActionResult(true, false, 0, "", default(TweakReadback));
+        public static TweakActionResult Ok(TweakReadback readback) =>
+            new TweakActionResult(true, false, 0, "", readback);
+        public static TweakActionResult PendingResult(long operationToken)
+        {
+            if (operationToken <= 0)
+                throw new ArgumentOutOfRangeException(nameof(operationToken));
+            return new TweakActionResult(
+                true, true, operationToken, "", default(TweakReadback));
+        }
         public static TweakActionResult Fail(string error) =>
-            new TweakActionResult(false, string.IsNullOrWhiteSpace(error) ? "The tweak could not be applied." : error);
+            new TweakActionResult(
+                false,
+                false,
+                0,
+                string.IsNullOrWhiteSpace(error) ? "The tweak could not be applied." : error,
+                default(TweakReadback));
+    }
+
+    public readonly struct TweakAdapterCompletion
+    {
+        public TweakAdapterCompletion(
+            string rowId,
+            long operationToken,
+            TweakActionResult result)
+        {
+            if (string.IsNullOrWhiteSpace(rowId))
+                throw new ArgumentException("A completed row id is required.", nameof(rowId));
+            if (operationToken <= 0)
+                throw new ArgumentOutOfRangeException(nameof(operationToken));
+            if (result.Pending)
+                throw new ArgumentException("A completion cannot still be pending.", nameof(result));
+            RowId = rowId;
+            OperationToken = operationToken;
+            Result = result;
+        }
+
+        public string RowId { get; }
+        public long OperationToken { get; }
+        public TweakActionResult Result { get; }
+    }
+
+    public sealed class TweakDeferredOperation
+    {
+        readonly string _rowId;
+        readonly float _timeoutSeconds;
+        long _operationToken;
+        float _startedAt;
+
+        public TweakDeferredOperation(string rowId, float timeoutSeconds)
+        {
+            if (string.IsNullOrWhiteSpace(rowId))
+                throw new ArgumentException("A deferred row id is required.", nameof(rowId));
+            if (timeoutSeconds <= 0f || float.IsNaN(timeoutSeconds) ||
+                float.IsInfinity(timeoutSeconds))
+                throw new ArgumentOutOfRangeException(nameof(timeoutSeconds));
+            _rowId = rowId;
+            _timeoutSeconds = timeoutSeconds;
+        }
+
+        public bool IsPending => _operationToken > 0;
+
+        public void Begin(long operationToken, float startedAt)
+        {
+            if (operationToken <= 0)
+                throw new ArgumentOutOfRangeException(nameof(operationToken));
+            if (IsPending)
+                throw new InvalidOperationException(
+                    _rowId + " already has a pending runtime operation.");
+            _operationToken = operationToken;
+            _startedAt = startedAt;
+        }
+
+        public TweakAdapterCompletion? Complete(
+            long operationToken,
+            TweakActionResult result)
+        {
+            if (!IsPending || operationToken != _operationToken)
+                return null;
+            return Finish(result);
+        }
+
+        public TweakAdapterCompletion? Cancel(string error)
+        {
+            return IsPending
+                ? Finish(TweakActionResult.Fail(error))
+                : (TweakAdapterCompletion?)null;
+        }
+
+        public TweakAdapterCompletion? Poll(float now, string timeoutError)
+        {
+            if (!IsPending || now - _startedAt < _timeoutSeconds)
+                return null;
+            return Finish(TweakActionResult.Fail(timeoutError));
+        }
+
+        TweakAdapterCompletion Finish(TweakActionResult result)
+        {
+            long operationToken = _operationToken;
+            _operationToken = 0;
+            _startedAt = 0f;
+            return new TweakAdapterCompletion(_rowId, operationToken, result);
+        }
+    }
+
+    /// <summary>
+    /// Optional production evidence boundary. It supplies owner readback and outcomes
+    /// that resolve only after deferred gameplay maintenance has actually run.
+    /// </summary>
+    public interface ITweakOperationAdapter
+    {
+        TweakActionResult Readback(string id);
+        IReadOnlyList<TweakAdapterCompletion> TickWithOutcomes();
     }
 
     /// <summary>The game-specific side of the shared controller.</summary>

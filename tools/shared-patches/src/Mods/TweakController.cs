@@ -5,16 +5,46 @@ namespace DualSouls.Mods
 {
     /// <summary>
     /// Owns menu state without knowing either game. Mutations are transactional:
-    /// any failed apply restores the captured baseline and turns master off.
+    /// any failed apply restores the captured baseline and marks mutation health unavailable.
     /// </summary>
     public sealed class TweakController
     {
+        public const int MaximumOperationEvidence = 128;
+        const int MaximumEvidenceTextLength = 240;
+
         readonly ITweakAdapter _adapter;
         readonly ITweakStore _store;
         readonly Dictionary<string, TweakDescriptor> _byId = new Dictionary<string, TweakDescriptor>(StringComparer.Ordinal);
         readonly Dictionary<string, string> _values = new Dictionary<string, string>(StringComparer.Ordinal);
+        readonly List<TweakOperationEvidence> _operationEvidence = new List<TweakOperationEvidence>();
+        readonly Dictionary<string, PendingOperation> _pendingOperations =
+            new Dictionary<string, PendingOperation>(StringComparer.Ordinal);
         readonly string _prefix;
         bool _initialized;
+        long _nextEvidenceSequence = 1;
+
+        sealed class PendingOperation
+        {
+            public PendingOperation(
+                TweakDescriptor descriptor,
+                string previousValue,
+                string requestedValue,
+                TweakOperationKind operation,
+                long operationToken)
+            {
+                Descriptor = descriptor;
+                PreviousValue = previousValue;
+                RequestedValue = requestedValue;
+                Operation = operation;
+                OperationToken = operationToken;
+            }
+
+            public TweakDescriptor Descriptor { get; }
+            public string PreviousValue { get; }
+            public string RequestedValue { get; }
+            public TweakOperationKind Operation { get; }
+            public long OperationToken { get; }
+        }
 
         public TweakController(ITweakAdapter adapter, ITweakStore store)
         {
@@ -34,8 +64,15 @@ namespace DualSouls.Mods
         }
 
         public IReadOnlyList<TweakDescriptor> Descriptors { get; }
-        public bool MasterEnabled { get; private set; }
-        public bool RestorationPending { get; private set; }
+        public IReadOnlyList<TweakOperationEvidence> OperationEvidence =>
+            Array.AsReadOnly(_operationEvidence.ToArray());
+        public TweakMutationAvailability MutationAvailability { get; private set; } =
+            TweakMutationAvailability.Unavailable;
+        public bool MutationsAvailable =>
+            MutationAvailability == TweakMutationAvailability.Available;
+        public bool HasCapturedBaseline { get; private set; }
+        public bool RestorationPending =>
+            MutationAvailability == TweakMutationAvailability.RestorationPending;
 
         public TweakActionResult Initialize()
         {
@@ -44,6 +81,8 @@ namespace DualSouls.Mods
 
             try { _adapter.CaptureBaseline(); }
             catch (Exception e) { return TweakActionResult.Fail("Could not capture the game baseline: " + e.Message); }
+            HasCapturedBaseline = true;
+            MutationAvailability = TweakMutationAvailability.Available;
 
             bool corrected = false;
             for (int i = 0; i < Descriptors.Count; i++)
@@ -70,17 +109,8 @@ namespace DualSouls.Mods
                 _values[descriptor.Id] = value;
             }
 
-            string storedMaster = SafeRead(MasterKey);
-            MasterEnabled = string.Equals(storedMaster, "1", StringComparison.Ordinal);
-            if (storedMaster != "0" && storedMaster != "1")
-            {
-                MasterEnabled = false;
-                SafeWrite(MasterKey, "0");
-                corrected = true;
-            }
             if (corrected) SafeFlush();
 
-            if (!MasterEnabled) return TweakActionResult.Ok();
             return ApplySelectedSet();
         }
 
@@ -92,41 +122,27 @@ namespace DualSouls.Mods
             return _byId.TryGetValue(id, out descriptor) ? descriptor.DefaultValue : "";
         }
 
-        public TweakActionResult SetMaster(bool enabled)
+        public void ClearOperationEvidence()
         {
-            EnsureInitialized();
-            if (RestorationPending)
-                return TweakActionResult.Fail("The game baseline restoration is pending; Mods actions are disabled.");
-            if (enabled == MasterEnabled) return TweakActionResult.Ok();
+            _operationEvidence.Clear();
+        }
 
-            if (!enabled)
+        public bool TryGetLatestOperationEvidence(out TweakOperationEvidence evidence)
+        {
+            if (_operationEvidence.Count == 0)
             {
-                try
-                {
-                    _adapter.RestoreBaseline();
-                    RestorationPending = false;
-                }
-                catch (Exception e)
-                {
-                    return MarkRestorationPending("Could not restore the game baseline: " + e.Message);
-                }
-                MasterEnabled = false;
-                TweakActionResult persisted = PersistMaster();
-                return persisted.Success ? persisted : FailClosed(persisted.Error, false);
+                evidence = default(TweakOperationEvidence);
+                return false;
             }
-
-            MasterEnabled = true;
-            return ApplySelectedSet();
+            evidence = _operationEvidence[_operationEvidence.Count - 1];
+            return true;
         }
 
         public TweakActionResult Cycle(string id)
         {
             EnsureInitialized();
-            if (RestorationPending)
-                return TweakActionResult.Fail("The game baseline restoration is pending; Mods actions are disabled.");
             TweakDescriptor descriptor;
             if (!_byId.TryGetValue(id, out descriptor)) return TweakActionResult.Fail("Unknown tweak: " + id);
-            if (!descriptor.IsAvailable) return Unavailable(descriptor);
             if (descriptor.ControlKind != TweakControlKind.Choice)
                 return TweakActionResult.Fail(descriptor.Title + " is a " + descriptor.ControlKind.ToString().ToLowerInvariant() + " and cannot be cycled.");
             return Set(id, descriptor.Next(Value(id)));
@@ -135,14 +151,38 @@ namespace DualSouls.Mods
         public TweakActionResult Set(string id, string value)
         {
             EnsureInitialized();
-            if (RestorationPending)
-                return TweakActionResult.Fail("The game baseline restoration is pending; Mods actions are disabled.");
             TweakDescriptor descriptor;
-            if (!_byId.TryGetValue(id, out descriptor)) return TweakActionResult.Fail("Unknown tweak: " + id);
-            if (!descriptor.IsAvailable) return Unavailable(descriptor);
-            if (!descriptor.Allows(value)) return TweakActionResult.Fail("Unsupported value for " + id + ": " + value);
-            if (descriptor.ControlKind == TweakControlKind.Choice && !MasterEnabled)
-                return TweakActionResult.Fail("Enable MASTER before changing gameplay tweaks.");
+            if (!_byId.TryGetValue(id, out descriptor))
+                return TweakActionResult.Fail("Unknown tweak: " + id);
+
+            TweakOperationKind operation = OperationFor(descriptor.ControlKind);
+            if (_pendingOperations.ContainsKey(id))
+            {
+                TweakActionResult alreadyPending = TweakActionResult.Fail(
+                    descriptor.Title + " already has an unresolved runtime operation.");
+                RecordEvidence(descriptor, operation, alreadyPending);
+                return alreadyPending;
+            }
+            if (!MutationsAvailable)
+            {
+                TweakActionResult unavailable = TweakActionResult.Fail(
+                    "Mods mutations are unavailable until RESET ALL MODS restores the runtime baseline.");
+                RecordEvidence(descriptor, operation, unavailable);
+                return unavailable;
+            }
+            if (!descriptor.IsAvailable)
+            {
+                TweakActionResult unavailable = Unavailable(descriptor);
+                RecordEvidence(descriptor, operation, unavailable);
+                return unavailable;
+            }
+            if (!descriptor.Allows(value))
+            {
+                TweakActionResult unsupported = TweakActionResult.Fail(
+                    "Unsupported value for " + id + ": " + value);
+                RecordEvidence(descriptor, operation, unsupported);
+                return unsupported;
+            }
 
             string previous = Value(id);
             TweakActionResult result;
@@ -150,12 +190,34 @@ namespace DualSouls.Mods
             catch (Exception e) { result = TweakActionResult.Fail(e.Message); }
 
             if (!result.Success)
-                return descriptor.ControlKind == TweakControlKind.Choice
+            {
+                TweakActionResult failed = descriptor.ControlKind == TweakControlKind.Choice
                     ? FailClosed(result.Error)
                     : result;
+                RecordEvidence(descriptor, operation, failed);
+                return failed;
+            }
+
+            if (result.Pending)
+            {
+                _pendingOperations.Add(
+                    id,
+                    new PendingOperation(
+                        descriptor,
+                        previous,
+                        value,
+                        operation,
+                        result.OperationToken));
+                if (descriptor.ControlKind == TweakControlKind.Choice)
+                    _values[id] = value;
+                return result;
+            }
 
             if (descriptor.ControlKind != TweakControlKind.Choice)
-                return TweakActionResult.Ok();
+            {
+                RecordEvidence(descriptor, operation, result);
+                return result;
+            }
 
             try
             {
@@ -166,25 +228,159 @@ namespace DualSouls.Mods
             {
                 _values[id] = previous;
                 BestEffortWrite(ValueKey(id), previous);
-                return FailClosed("Could not persist " + descriptor.Title + ": " + e.Message);
+                TweakActionResult failed = FailClosed(
+                    "Could not persist " + descriptor.Title + ": " + e.Message);
+                RecordEvidence(descriptor, operation, failed);
+                return failed;
             }
             _values[id] = value;
-            return TweakActionResult.Ok();
+            RecordEvidence(descriptor, operation, result);
+            return result;
+        }
+
+        public TweakActionResult CompletePending(
+            string id,
+            long operationToken,
+            TweakActionResult completion)
+        {
+            EnsureInitialized();
+            PendingOperation pending;
+            if (string.IsNullOrWhiteSpace(id) ||
+                !_pendingOperations.TryGetValue(id, out pending) ||
+                pending.OperationToken != operationToken)
+                return TweakActionResult.Fail(
+                    "The runtime operation is stale or no longer pending: " + (id ?? ""));
+            if (completion.Pending)
+                return TweakActionResult.Fail(
+                    "The runtime operation has not completed yet: " + id);
+
+            _pendingOperations.Remove(id);
+            TweakDescriptor descriptor = pending.Descriptor;
+            TweakOperationKind evidenceOperation =
+                descriptor.ControlKind == TweakControlKind.Choice
+                    ? TweakOperationKind.Deferred
+                    : pending.Operation;
+
+            if (!completion.Success)
+            {
+                if (descriptor.ControlKind == TweakControlKind.Choice)
+                    return FailPendingChoice(
+                        id,
+                        pending,
+                        evidenceOperation,
+                        completion.Error);
+                RecordEvidence(descriptor, evidenceOperation, completion);
+                return completion;
+            }
+
+            if (descriptor.ControlKind != TweakControlKind.Choice)
+            {
+                RecordEvidence(descriptor, evidenceOperation, completion);
+                return completion;
+            }
+
+            if (!completion.Readback.HasValue ||
+                completion.Readback.Kind != TweakReadbackKind.Choice ||
+                !string.Equals(
+                    completion.Readback.Value,
+                    pending.RequestedValue,
+                    StringComparison.Ordinal))
+            {
+                return FailPendingChoice(
+                    id,
+                    pending,
+                    evidenceOperation,
+                    descriptor.Title +
+                        " runtime readback was missing or did not match the requested value.");
+            }
+
+            try
+            {
+                _store.Write(ValueKey(id), pending.RequestedValue);
+                _store.Flush();
+            }
+            catch (Exception e)
+            {
+                BestEffortWrite(ValueKey(id), pending.PreviousValue);
+                return FailPendingChoice(
+                    id,
+                    pending,
+                    evidenceOperation,
+                    "Could not persist " + descriptor.Title + ": " + e.Message);
+            }
+
+            _values[id] = pending.RequestedValue;
+            RecordEvidence(descriptor, evidenceOperation, completion);
+            return completion;
+        }
+
+        TweakActionResult FailPendingChoice(
+            string id,
+            PendingOperation pending,
+            TweakOperationKind operation,
+            string error)
+        {
+            _values[id] = pending.PreviousValue;
+            TweakActionResult failure = FailClosed(error);
+            RecordEvidence(pending.Descriptor, operation, failure);
+
+            CancelPendingOperations(
+                "The deferred Mods operation was canceled because another deferred Mods choice failed and the runtime baseline was restored.");
+            return failure;
+        }
+
+        void CancelPendingOperations(string error)
+        {
+            if (_pendingOperations.Count == 0) return;
+            PendingOperation[] pending = new PendingOperation[_pendingOperations.Count];
+            _pendingOperations.Values.CopyTo(pending, 0);
+            _pendingOperations.Clear();
+            for (int index = 0; index < pending.Length; index++)
+            {
+                PendingOperation operation = pending[index];
+                if (operation.Descriptor.ControlKind == TweakControlKind.Choice)
+                    _values[operation.Descriptor.Id] = operation.PreviousValue;
+                RecordEvidence(
+                    operation.Descriptor,
+                    operation.Descriptor.ControlKind == TweakControlKind.Choice
+                        ? TweakOperationKind.Deferred
+                        : operation.Operation,
+                    TweakActionResult.Fail(error));
+            }
         }
 
         public TweakActionResult Reset()
         {
             EnsureInitialized();
             if (RestorationPending)
-                return TweakActionResult.Fail("The game baseline restoration is pending; Mods actions are disabled.");
+            {
+                TweakActionResult pending = TweakActionResult.Fail(
+                    "The game baseline restoration is still pending; RESET ALL MODS will be available after recovery.");
+                RecordResetOutcomes(pending);
+                return pending;
+            }
+            CancelPendingOperations(
+                "The deferred Mods operation was canceled because RESET ALL MODS restored the runtime baseline.");
             try
             {
                 _adapter.RestoreBaseline();
-                RestorationPending = false;
+                MutationAvailability = TweakMutationAvailability.Available;
             }
             catch (Exception e)
             {
-                return MarkRestorationPending("Could not restore the game baseline: " + e.Message);
+                TweakActionResult failed = MarkRestorationPending(
+                    "Could not restore the game baseline: " + e.Message);
+                RecordResetOutcomes(failed);
+                return failed;
+            }
+
+            TweakActionResult[] resetOutcomes = BuildResetOutcomes(TweakActionResult.Ok());
+            TweakActionResult resetFailure = FirstFailure(resetOutcomes);
+            if (!resetFailure.Success)
+            {
+                MutationAvailability = TweakMutationAvailability.Unavailable;
+                RecordResetOutcomes(resetOutcomes);
+                return resetFailure;
             }
 
             var previousValues = new Dictionary<string, string>(_values, StringComparer.Ordinal);
@@ -196,14 +392,23 @@ namespace DualSouls.Mods
                     if (descriptor.ControlKind == TweakControlKind.Choice)
                         _store.Write(ValueKey(descriptor.Id), descriptor.DefaultValue);
                 }
-                _store.Write(MasterKey, MasterEnabled ? "1" : "0");
                 _store.Flush();
             }
             catch (Exception e)
             {
-                foreach (KeyValuePair<string, string> pair in previousValues)
-                    BestEffortWrite(ValueKey(pair.Key), pair.Value);
-                return FailClosed("Could not persist reset settings: " + e.Message, false);
+                for (int i = 0; i < Descriptors.Count; i++)
+                {
+                    TweakDescriptor descriptor = Descriptors[i];
+                    string previousValue;
+                    if (descriptor.ControlKind == TweakControlKind.Choice &&
+                        previousValues.TryGetValue(descriptor.Id, out previousValue))
+                        BestEffortWrite(ValueKey(descriptor.Id), previousValue);
+                }
+                TweakActionResult failed = FailClosed(
+                    "Could not persist reset settings: " + e.Message,
+                    false);
+                RecordResetOutcomes(failed);
+                return failed;
             }
 
             for (int i = 0; i < Descriptors.Count; i++)
@@ -211,30 +416,35 @@ namespace DualSouls.Mods
                 TweakDescriptor descriptor = Descriptors[i];
                 _values[descriptor.Id] = descriptor.DefaultValue;
             }
-            return TweakActionResult.Ok();
+            MutationAvailability = TweakMutationAvailability.Available;
+            TweakActionResult result = TweakActionResult.Ok();
+            RecordResetOutcomes(resetOutcomes);
+            return result;
         }
 
         public TweakActionResult RetryRestoration()
         {
             EnsureInitialized();
             if (!RestorationPending) return TweakActionResult.Ok();
+            TweakActionResult result;
             try
             {
                 _adapter.RestoreBaseline();
-                RestorationPending = false;
-                return TweakActionResult.Ok();
+                MutationAvailability = TweakMutationAvailability.Unavailable;
+                result = TweakActionResult.Ok();
             }
             catch (Exception e)
             {
-                return TweakActionResult.Fail("Could not restore the game baseline: " + e.Message);
+                result = TweakActionResult.Fail(
+                    "Could not restore the game baseline: " + e.Message);
             }
+            RecordSystemEvidence(TweakOperationKind.BaselineRestore, result);
+            return result;
         }
 
-        internal void StageDisabledMaster()
+        internal void MarkSessionUnavailable()
         {
-            MasterEnabled = false;
-            _store.Write(MasterKey, "0");
-            _store.Flush();
+            MutationAvailability = TweakMutationAvailability.Unavailable;
         }
 
         public void Tick()
@@ -245,13 +455,58 @@ namespace DualSouls.Mods
                 RetryRestoration();
                 return;
             }
-            if (!MasterEnabled) return;
-            try { _adapter.Tick(); }
-            catch (Exception e) { FailClosed("Tweak maintenance failed: " + e.Message); }
+            if (!MutationsAvailable) return;
+
+            IReadOnlyList<TweakAdapterCompletion> completions =
+                Array.Empty<TweakAdapterCompletion>();
+            try
+            {
+                ITweakOperationAdapter operationAdapter =
+                    _adapter as ITweakOperationAdapter;
+                if (operationAdapter != null)
+                    completions = operationAdapter.TickWithOutcomes() ??
+                        Array.Empty<TweakAdapterCompletion>();
+                else
+                    _adapter.Tick();
+            }
+            catch (Exception e)
+            {
+                TweakActionResult failure = TweakActionResult.Fail(
+                    "Tweak maintenance failed: " + e.Message);
+                if (_pendingOperations.Count == 0)
+                {
+                    TweakActionResult failed = FailClosed(failure.Error);
+                    RecordSystemEvidence(TweakOperationKind.Deferred, failed);
+                    return;
+                }
+
+                string[] pendingIds = new string[_pendingOperations.Count];
+                _pendingOperations.Keys.CopyTo(pendingIds, 0);
+                for (int index = 0; index < pendingIds.Length; index++)
+                {
+                    PendingOperation pending;
+                    if (_pendingOperations.TryGetValue(pendingIds[index], out pending))
+                        CompletePending(
+                            pendingIds[index],
+                            pending.OperationToken,
+                            failure);
+                }
+                return;
+            }
+
+            for (int index = 0; index < completions.Count; index++)
+            {
+                TweakAdapterCompletion completion = completions[index];
+                CompletePending(
+                    completion.RowId,
+                    completion.OperationToken,
+                    completion.Result);
+            }
         }
 
         TweakActionResult ApplySelectedSet()
         {
+            long firstPendingToken = 0;
             for (int i = 0; i < Descriptors.Count; i++)
             {
                 TweakDescriptor descriptor = Descriptors[i];
@@ -262,12 +517,39 @@ namespace DualSouls.Mods
                 TweakActionResult result;
                 try { result = _adapter.Apply(descriptor.Id, value); }
                 catch (Exception e) { result = TweakActionResult.Fail(e.Message); }
-                if (!result.Success) return FailClosed(result.Error);
+                if (!result.Success)
+                {
+                    TweakActionResult failed = FailClosed(result.Error);
+                    RecordEvidence(
+                        descriptor,
+                        TweakOperationKind.InitializeApply,
+                        failed);
+                    return failed;
+                }
+                if (result.Pending)
+                {
+                    _pendingOperations.Add(
+                        descriptor.Id,
+                        new PendingOperation(
+                            descriptor,
+                            value,
+                            value,
+                            TweakOperationKind.InitializeApply,
+                            result.OperationToken));
+                    if (firstPendingToken == 0)
+                        firstPendingToken = result.OperationToken;
+                    continue;
+                }
+                RecordEvidence(
+                    descriptor,
+                    TweakOperationKind.InitializeApply,
+                    result);
             }
 
-            MasterEnabled = true;
-            TweakActionResult persisted = PersistMaster();
-            return persisted.Success ? persisted : FailClosed(persisted.Error);
+            MutationAvailability = TweakMutationAvailability.Available;
+            return firstPendingToken != 0
+                ? TweakActionResult.PendingResult(firstPendingToken)
+                : TweakActionResult.Ok();
         }
 
         static TweakActionResult Unavailable(TweakDescriptor descriptor)
@@ -283,42 +565,25 @@ namespace DualSouls.Mods
                 try
                 {
                     _adapter.RestoreBaseline();
-                    RestorationPending = false;
+                    MutationAvailability = TweakMutationAvailability.Available;
                 }
                 catch (Exception restoreError)
                 {
-                    RestorationPending = true;
+                    MutationAvailability = TweakMutationAvailability.RestorationPending;
                     error += "; baseline restore failed: " + restoreError.Message;
                 }
             }
-            MasterEnabled = false;
-            BestEffortWrite(MasterKey, "0");
+            if (MutationAvailability != TweakMutationAvailability.RestorationPending)
+                MutationAvailability = TweakMutationAvailability.Unavailable;
             return TweakActionResult.Fail(error);
         }
 
         TweakActionResult MarkRestorationPending(string error)
         {
-            RestorationPending = true;
-            MasterEnabled = false;
-            BestEffortWrite(MasterKey, "0");
+            MutationAvailability = TweakMutationAvailability.RestorationPending;
             return TweakActionResult.Fail(error);
         }
 
-        TweakActionResult PersistMaster()
-        {
-            try
-            {
-                _store.Write(MasterKey, MasterEnabled ? "1" : "0");
-                _store.Flush();
-                return TweakActionResult.Ok();
-            }
-            catch (Exception e)
-            {
-                return TweakActionResult.Fail("Could not persist the Mods master state: " + e.Message);
-            }
-        }
-
-        string MasterKey => _prefix + "master";
         string ValueKey(string id) => _prefix + "value." + id;
 
         string SafeRead(string key)
@@ -345,6 +610,204 @@ namespace DualSouls.Mods
                 _store.Flush();
             }
             catch { }
+        }
+
+        TweakActionResult[] BuildResetOutcomes(TweakActionResult result)
+        {
+            var outcomes = new List<TweakActionResult>();
+            ITweakOperationAdapter operationAdapter =
+                result.Success ? _adapter as ITweakOperationAdapter : null;
+            for (int i = 0; i < Descriptors.Count; i++)
+            {
+                TweakDescriptor descriptor = Descriptors[i];
+                if (descriptor.ControlKind != TweakControlKind.Choice) continue;
+
+                TweakActionResult outcome = result;
+                if (operationAdapter != null)
+                {
+                    try { outcome = operationAdapter.Readback(descriptor.Id); }
+                    catch (Exception error)
+                    {
+                        outcome = TweakActionResult.Fail(
+                            "Could not read back " + descriptor.Title + ": " + error.Message);
+                    }
+                    if (outcome.Pending)
+                        outcome = TweakActionResult.Fail(
+                            descriptor.Title + " reset readback is still pending.");
+                    else if (outcome.Success &&
+                             (!outcome.Readback.HasValue ||
+                              outcome.Readback.Kind != TweakReadbackKind.Choice ||
+                              !string.Equals(
+                                  outcome.Readback.Value,
+                                  descriptor.DefaultValue,
+                                  StringComparison.Ordinal)))
+                        outcome = TweakActionResult.Fail(
+                            descriptor.Title + " reset readback was missing or did not match the default.");
+                }
+                outcomes.Add(outcome);
+            }
+            return outcomes.ToArray();
+        }
+
+        static TweakActionResult FirstFailure(TweakActionResult[] outcomes)
+        {
+            for (int index = 0; index < outcomes.Length; index++)
+                if (!outcomes[index].Success) return outcomes[index];
+            return TweakActionResult.Ok();
+        }
+
+        void RecordResetOutcomes(TweakActionResult result)
+        {
+            RecordResetOutcomes(BuildResetOutcomes(result));
+        }
+
+        void RecordResetOutcomes(TweakActionResult[] outcomes)
+        {
+            int outcomeIndex = 0;
+            for (int i = 0; i < Descriptors.Count; i++)
+            {
+                TweakDescriptor descriptor = Descriptors[i];
+                if (descriptor.ControlKind != TweakControlKind.Choice) continue;
+                RecordEvidence(
+                    descriptor,
+                    TweakOperationKind.Reset,
+                    outcomes[outcomeIndex++]);
+            }
+        }
+
+        void RecordEvidence(
+            TweakDescriptor descriptor,
+            TweakOperationKind operation,
+            TweakActionResult result)
+        {
+            TweakReadback readback = result.Readback.HasValue
+                ? SafeReadback(descriptor, result.Readback)
+                : default(TweakReadback);
+            AddEvidence(new TweakOperationEvidence(
+                _nextEvidenceSequence++,
+                _adapter.GameId,
+                FeatureId(_adapter.GameId, descriptor.ContractId),
+                descriptor.Id,
+                operation,
+                result.Success,
+                result.Success ? "" : SanitizeEvidenceText(result.Error),
+                result.Success ? readback : default(TweakReadback)));
+        }
+
+        void RecordSystemEvidence(
+            TweakOperationKind operation,
+            TweakActionResult result)
+        {
+            AddEvidence(new TweakOperationEvidence(
+                _nextEvidenceSequence++,
+                _adapter.GameId,
+                "MOD-TRANSACTION-SAFETY",
+                "runtime",
+                operation,
+                result.Success,
+                result.Success ? "" : SanitizeEvidenceText(result.Error),
+                default(TweakReadback)));
+        }
+
+        void AddEvidence(TweakOperationEvidence evidence)
+        {
+            if (_operationEvidence.Count == MaximumOperationEvidence)
+                _operationEvidence.RemoveAt(0);
+            _operationEvidence.Add(evidence);
+        }
+
+        static TweakOperationKind OperationFor(TweakControlKind controlKind)
+        {
+            if (controlKind == TweakControlKind.Command) return TweakOperationKind.Command;
+            if (controlKind == TweakControlKind.Route) return TweakOperationKind.Route;
+            return TweakOperationKind.Apply;
+        }
+
+        static string FeatureId(string gameId, string contractId)
+        {
+            if (string.Equals(gameId, "hollow-knight", StringComparison.Ordinal) &&
+                string.Equals(contractId, "lifeblood_flash", StringComparison.Ordinal))
+                return "MOD-HK-LIFEBLOOD-FLASH";
+            if (string.Equals(gameId, "silksong", StringComparison.Ordinal))
+            {
+                switch (contractId)
+                {
+                    case "instant_dialogue": return "MOD-SS-INSTANT-DIALOGUE";
+                    case "disable_world_rumble": return "MOD-SS-DISABLE-WORLD-RUMBLE";
+                    case "ignore_frost_slowdown": return "MOD-SS-IGNORE-FROST-SLOWDOWN";
+                }
+            }
+            return "MOD-" + (contractId ?? "unknown")
+                .Replace('_', '-')
+                .ToUpperInvariant();
+        }
+
+        static TweakReadback SafeReadback(
+            TweakDescriptor descriptor,
+            TweakReadback readback)
+        {
+            if (!readback.HasValue) return default(TweakReadback);
+            switch (readback.Kind)
+            {
+                case TweakReadbackKind.Choice:
+                    return descriptor.Allows(readback.Value)
+                        ? readback
+                        : default(TweakReadback);
+                case TweakReadbackKind.Boolean:
+                    return string.Equals(readback.Value, "true", StringComparison.Ordinal) ||
+                           string.Equals(readback.Value, "false", StringComparison.Ordinal)
+                        ? readback
+                        : default(TweakReadback);
+                case TweakReadbackKind.Integer:
+                    int parsed;
+                    return int.TryParse(
+                        readback.Value,
+                        System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out parsed)
+                        ? TweakReadback.Integer(parsed)
+                        : default(TweakReadback);
+                case TweakReadbackKind.Text:
+                    return TweakReadback.Text(SanitizeEvidenceText(readback.Value));
+                default:
+                    return default(TweakReadback);
+            }
+        }
+
+        static string SanitizeEvidenceText(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "The operation failed.";
+            var safe = new System.Text.StringBuilder();
+            for (int index = 0; index < value.Length && safe.Length < MaximumEvidenceTextLength;)
+            {
+                bool windowsPath = index + 2 < value.Length &&
+                    char.IsLetter(value[index]) && value[index + 1] == ':' &&
+                    (value[index + 2] == '\\' || value[index + 2] == '/');
+                bool networkPath = index + 1 < value.Length &&
+                    ((value[index] == '\\' && value[index + 1] == '\\') ||
+                     (value[index] == '/' && value[index + 1] == '/'));
+                bool rootedPath =
+                    (value[index] == '/' || value[index] == '\\') &&
+                    (index == 0 || !char.IsLetterOrDigit(value[index - 1]));
+                if (windowsPath || networkPath || rootedPath)
+                {
+                    const string marker = "[path]";
+                    for (int markerIndex = 0;
+                         markerIndex < marker.Length &&
+                         safe.Length < MaximumEvidenceTextLength;
+                         markerIndex++)
+                        safe.Append(marker[markerIndex]);
+                    index += windowsPath ? 3 : networkPath ? 2 : 1;
+                    while (index < value.Length && value[index] != ';' &&
+                           value[index] != ',')
+                        index++;
+                    continue;
+                }
+
+                char next = value[index++];
+                safe.Append(char.IsControl(next) ? ' ' : next);
+            }
+            return safe.ToString().Trim();
         }
 
         void EnsureInitialized()

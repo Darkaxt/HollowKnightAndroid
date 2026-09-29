@@ -59,15 +59,14 @@ not substitute for that comparison.
   batched map comparison must decide whether a fade improves Hollow Knight
   without dimming labels, markers, or the compass; closure requires a bounded
   fade on all four edges with no map bleed during pan or zoom.
-- **HK-MODS-01 — live-gated; automated parity closed:** the exact required
+- **HK-MODS-01 — host-complete; device validation deferred:** the exact required
   catalog and metadata are enforced for both adapters by
-  `test_builtin_mods_catalog.py`, while the shared menu-model tests and both
+  `test_native_mods_catalog.py`, while the shared controller/model tests and both
   native-menu contract suites prove grouped row/window reachability, visible
-  unavailable explanations, master/reset/Back, command/route dispatch, and
-  controller event routing. The duplicate `SKINS OPEN` row is excluded. Do not
-  remove Hollow Knight’s legacy lower Mods presenter until live controller
-  validation passes in both games. Final closure still requires no reachable
-  lower gear, pane, hit region, or input owner.
+  unavailable explanations, direct Choice mutation, reset/Back, command/route
+  dispatch, and controller event routing. The duplicate `SKINS OPEN` row is
+  excluded, and the obsolete lower-display Mods presenter and input owner are
+  removed. Final closure still requires live controller validation in both games.
 
 ## Built-in Mods
 
@@ -131,42 +130,38 @@ because an implementation seam has not yet been built.
 The product has exactly two Mods-related surfaces:
 
 1. The **upper-display** in-game Options → Mods screen. It is the sole in-game
-   Mods interface and must expose the complete required catalog for the active
-   game, including every group, row, unavailable-state explanation, master
-   switch, Reset Mods command, and Back action. It must provide practical
-   controller navigation, stable focus after confirm or value changes,
-   left/right value changes, command and route execution, reset, and native
+   Mods configuration interface and must expose the complete required catalog for
+   the active game, including every group, row, unavailable-state explanation,
+   Reset Mods command, and Back action. Every supported Choice row mutates
+   directly through Left/Right or confirm; no global switch or prerequisite may
+   gate it. The screen must provide practical controller navigation, stable focus
+   after confirm or value changes, command and route execution, reset, and native
    Back/Cancel behavior. Grouping and scrolling may organize the catalog, but
    must not omit rows that exist in the shared Mods model. The category selector
    is shown at the upper left as `< CATEGORY >`, with its `n/N` category position
    separately at the upper right. Settings use aligned name and value columns,
-   plus a description for the focused setting; they must not appear as centered
-   sentence-like rows. `STATUS READY` and similar implementation diagnostics are
-   not product UI. The separate Options → Skins screen is the only in-game route
-   to skin configuration, so Mods must not contain a duplicate `SKINS OPEN` row.
-2. The launcher skin-package screen for installing and managing Custom Knight
-   packs. This remains separate because package import and management happen
-   outside gameplay.
+   plus a readable multiline description for the focused setting; they must not
+   appear as centered sentence-like rows. `STATUS READY` and similar
+   implementation diagnostics are not product UI. The separate Options → Skins
+   screen is the only in-game route to skin configuration, so Mods must not
+   contain a duplicate `SKINS OPEN` row.
+2. The **launcher mod-package screen** for installing and managing profile-scoped
+   plugin packages. It must not configure built-in Mods choices or write their
+   runtime settings. Skin-package management remains a separate launcher screen.
 
 The lower display is reserved for its resident HUD, game pages, and their
 existing controls. It must not contain a Mods wheel, gear, shortcut, pane,
-modal, catalog, or duplicate Mods presenter. The existing lower-display Mods
-UI may be removed only after automated catalog parity and live controller
-validation prove that the upper Options → Mods screen exposes and operates the
-complete catalog in both games. Once that gate passes, the lower Mods UI and
-its touch/input ownership must be removed rather than retained as a hidden or
-fallback path.
+modal, catalog, or duplicate Mods presenter. No hidden or fallback lower-display
+Mods input owner may remain.
 
-The launcher skin-package screen must provide visible controller focus, stable
-focus after changes, deterministic directional navigation, confirm, controller
-Back, and a readable full-window layout. These launcher requirements do not
-create a second in-game Mods menu.
+The launcher mod-package and skin-package screens remain outside gameplay.
+They do not create a second in-game Mods configuration menu.
 
-Mods must be profile-isolated, default off unless the user enabled them, apply
-live where the reference applies live, persist across relaunch, and restore
-normal game behavior when disabled or reset. Labels must describe the actual
-effect. Silent no-ops, hidden required rows, and presentation-only substitutes
-do not count as parity.
+Mods must be profile-isolated. Each Choice starts at its descriptor default
+(normally off or vanilla), applies live where the reference applies live,
+persists across relaunch, and restores normal game behavior when reset. Labels
+must describe the actual effect. Silent no-ops, hidden required rows, and
+presentation-only substitutes do not count as parity.
 
 ## Skins
 

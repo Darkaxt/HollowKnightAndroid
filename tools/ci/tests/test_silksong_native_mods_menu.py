@@ -88,7 +88,6 @@ class SilksongNativeModsMenuContractTest(unittest.TestCase):
             ".Close()",
             ".MoveGroup(",
             ".MoveRow(",
-            ".ToggleMaster()",
             ".ActivateSelected()",
             ".SetSelected(",
             ".Reset()",
@@ -173,15 +172,46 @@ class SilksongNativeModsMenuContractTest(unittest.TestCase):
         self.assertIn("!button.transform.IsChildOf(content)", helper)
         self.assertIn("button.gameObject.SetActive(false);", helper)
 
-    def test_description_uses_a_bounded_single_line_above_separate_commands(self):
+    def test_mods_menu_has_no_master_role_row_or_index_assumptions(self):
+        source = self.source()
+        for forbidden in (
+            "ButtonRole.Master",
+            "ToggleMaster",
+            "MasterEnabled",
+            "MASTER MODS",
+        ):
+            self.assertNotIn(forbidden, source)
+        build = method_body(source, "void BuildModsScreen(")
+        self.assertIn("ButtonRole.Row,\n                             TweakMenuPresenterLayout.FirstRowButtonIndex + i", build)
+        self.assertIn("TweakMenuFocusGraph", source)
+        self.assertIn("TweakMenuPresenterLayout", source)
+        self.assertIn("DataIndexForRowButton", source)
+        self.assertIn("_labels.Count != TweakMenuPresenterLayout.ButtonCount", source)
+
+    def test_presenter_executes_shared_window_layout_and_game_b_contract(self):
+        source = self.source()
+        self.assertIn("const int VisibleRows = TweakMenuPresenterLayout.VisibleRows;", source)
+        self.assertIn("TweakMenuPresenterLayout.DataIndexForRowButton(", source)
+        self.assertIn("TweakMenuPresenterLayout.ButtonIndex(", source)
+        self.assertIn("TweakMenuPresenterLayout.DescriptionVisualIndex", source)
+        self.assertIn("TweakMenuPresenterLayout.DescriptionHeight", source)
+        cancel = method_body(source, "internal void Cancel()")
+        self.assertIn("TweakMenuPresenterLayout.CancelTarget(_benchOpen)", cancel)
+        self.assertIn("TweakMenuCancelTarget.CloseRoute", cancel)
+        on_cancel = method_body(source, "void ICancelHandler.OnCancel(BaseEventData eventData)")
+        self.assertIn("Owner.Cancel();", on_cancel)
+
+    def test_description_uses_readable_multiline_bounded_autosizing(self):
         source = self.source()
         configure = method_body(source, "static void ConfigureDescription(UiText text)")
-        self.assertIn("text.horizontalOverflow = HorizontalWrapMode.Overflow", configure)
+        self.assertIn("rect.sizeDelta = new Vector2(-DescriptionHorizontalInset, DescriptionHeight)", configure)
+        self.assertIn("text.horizontalOverflow = HorizontalWrapMode.Wrap", configure)
+        self.assertIn("text.verticalOverflow = VerticalWrapMode.Truncate", configure)
         self.assertIn("text.resizeTextForBestFit = true", configure)
         self.assertIn("text.resizeTextMinSize = DescriptionMinimumFontSize", configure)
         self.assertIn("text.resizeTextMaxSize = DescriptionFontSize", configure)
-        self.assertIn("text.fontSize = Mathf.Min(text.fontSize, DescriptionFontSize)", configure)
-        self.assertIn("-DescriptionHorizontalInset", configure)
+        self.assertIn("text.fontSize = DescriptionFontSize", configure)
+        self.assertIn("DescriptionMinimumFontSize", source)
         create = method_body(source, "static GameObject CreateDescriptionRow(")
         self.assertIn("ConfigureDescription(label);", create)
         build = method_body(source, "void BuildModsScreen(")
@@ -195,21 +225,43 @@ class SilksongNativeModsMenuContractTest(unittest.TestCase):
         self.assertIn("_valueLabels.Add", create)
         self.assertIn("CloneColumnText", create)
         self.assertIn("ConfigureColumn", create)
-        self.assertIn("_valueLabels[0].text", paint)
-        self.assertIn("_valueLabels[1].text", paint)
-        self.assertIn("_valueLabels[slot + 2].text", paint)
+        self.assertIn("_valueLabels[TweakMenuPresenterLayout.GroupButtonIndex].text", paint)
+        self.assertIn("_valueLabels[buttonIndex].text", paint)
+        self.assertNotIn("_valueLabels[TweakMenuPresenterLayout.FirstRowButtonIndex].text", paint)
         self.assertNotIn('"GROUP', paint)
 
-    def test_mods_description_tracks_focus_and_only_errors_override_it(self):
+    def test_mods_description_surfaces_operation_outcomes_without_status_row(self):
         source = self.source()
         paint = method_body(source, "void Paint()")
         self.assertIn("string FocusDescription()", source)
         describe = method_body(source, "string FocusDescription()")
+        focus = method_body(source, "void Focus(TweakMenuFocusTarget target)")
         self.assertIn("_description.text =", paint)
-        self.assertIn("_menu.MessageIsError", paint)
+        self.assertIn("_menu.RefreshOperationMessage();", paint)
+        self.assertIn("_menu.DismissMessage();", focus)
+        self.assertIn("string.IsNullOrEmpty(_menu.Message)", paint)
         self.assertIn("descriptor.Description", describe)
         self.assertIn("descriptor.UnavailableReason", describe)
         self.assertNotIn('"STATUS', source)
+
+    def test_bench_route_evidence_waits_for_selected_warp_or_cancel_result(self):
+        source = self.source()
+        submit = method_body(source, "void SubmitBench(")
+        close = method_body(source, "void CloseBenchRoute(")
+        self.assertLess(
+            submit.index("SilksongGameplayFeatures.WarpToBench("),
+            submit.index("CompleteBenchOperation(TweakActionResult.Ok("),
+        )
+        self.assertIn("TweakReadback.Text(destination.scene)", submit)
+        self.assertIn("CompleteBenchOperation(TweakActionResult.Fail(", submit)
+        self.assertIn("CompleteBenchOperation(TweakActionResult.Fail(", close)
+        self.assertIn("_benchOpen = false;", submit)
+        helper = method_body(source, "TweakActionResult CompleteBenchOperation(")
+        self.assertIn("long operationToken = _benchOperationToken;", helper)
+        self.assertIn("_benchOperationToken = 0;", helper)
+        self.assertIn('"bench_teleport",', helper)
+        self.assertIn("operationToken,", helper)
+        self.assertIn("result);", helper)
 
     def test_skins_description_explains_focus_or_actionable_error(self):
         source = self.source()

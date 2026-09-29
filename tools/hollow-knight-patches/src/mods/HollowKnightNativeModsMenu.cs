@@ -19,20 +19,22 @@ namespace DualSouls.Mods.HollowKnight
     /// </summary>
     public sealed class HollowKnightNativeModsMenu : MonoBehaviour
     {
-        const int VisibleRows = 5;
+        const int VisibleRows = TweakMenuPresenterLayout.VisibleRows;
         const int MaximumSkinSnapshotBytes = 262144;
         const string SkinProfileId = "hollow-knight";
         const float ButtonTextHorizontalInset = 80f;
         const float DescriptionHorizontalInset = 220f;
-        const float DescriptionMinimumFontSize = 16f;
-        const float DescriptionFontSize = 24f;
-        const float ResetVisualIndex = 8.35f;
-        const float BackVisualIndex = 9.45f;
-        const float MaximumRowStep = 78f;
-        const float MinimumRowStep = 58f;
+        const float DescriptionMinimumFontSize = TweakMenuPresenterLayout.DescriptionMinimumFontSize;
+        const float DescriptionFontSize = TweakMenuPresenterLayout.DescriptionFontSize;
+        const float DescriptionHeight = TweakMenuPresenterLayout.DescriptionHeight;
+        const float DescriptionVisualIndex = TweakMenuPresenterLayout.DescriptionVisualIndex;
+        const float ResetVisualIndex = TweakMenuPresenterLayout.ResetVisualIndex;
+        const float BackVisualIndex = TweakMenuPresenterLayout.BackVisualIndex;
+        const float MaximumRowStep = TweakMenuPresenterLayout.MaximumAdaptiveRowStep;
+        const float MinimumRowStep = TweakMenuPresenterLayout.MinimumAdaptiveRowStep;
 
         internal enum NativeMenuRoute { Mods, Skins }
-        enum ButtonRole { Group, Master, Row, Reset, Back }
+        enum ButtonRole { Group, Row, Reset, Back }
 
         sealed class NativeMenuBinding
         {
@@ -143,26 +145,31 @@ namespace DualSouls.Mods.HollowKnight
                 uiText.verticalOverflow = VerticalWrapMode.Overflow;
             }
 
-            public void ConfigureDescription()
+            public void ConfigureDescription(float height)
             {
-                ConfigureSingleLine(DescriptionHorizontalInset);
+                RectTransform rect = _component.transform as RectTransform;
+                if (rect != null)
+                    rect.sizeDelta = new Vector2(-DescriptionHorizontalInset, height);
 
                 Text uiText = _component as Text;
                 if (uiText != null)
                 {
-                    uiText.fontSize = Math.Min(uiText.fontSize, (int)DescriptionFontSize);
+                    uiText.fontSize = (int)DescriptionFontSize;
                     uiText.resizeTextForBestFit = true;
                     uiText.resizeTextMinSize = (int)DescriptionMinimumFontSize;
                     uiText.resizeTextMaxSize = (int)DescriptionFontSize;
+                    uiText.horizontalOverflow = HorizontalWrapMode.Wrap;
+                    uiText.verticalOverflow = VerticalWrapMode.Truncate;
                     uiText.alignment = TextAnchor.MiddleCenter;
                     return;
                 }
 
-                TrySetProperty("enableWordWrapping", false);
+                TrySetProperty("enableWordWrapping", true);
                 TrySetProperty("enableAutoSizing", true);
                 TrySetProperty("fontSizeMin", DescriptionMinimumFontSize);
                 TrySetProperty("fontSizeMax", DescriptionFontSize);
                 TrySetProperty("fontSize", DescriptionFontSize);
+                TrySetEnumProperty("overflowMode", "Truncate");
                 TrySetEnumProperty("alignment", "Center");
             }
 
@@ -495,19 +502,22 @@ namespace DualSouls.Mods.HollowKnight
                 UnityObject.Destroy(child);
             }
 
-            CreateButton(content, rowTemplate, ButtonRole.Group, 0, firstY, rowStep, "CATEGORY");
-            CreateButton(content, rowTemplate, ButtonRole.Master, 1, firstY, rowStep,
-                         "MASTER MODS");
+            CreateButton(content, rowTemplate, ButtonRole.Group,
+                         TweakMenuPresenterLayout.GroupButtonIndex,
+                         firstY, rowStep, "CATEGORY");
             for (int i = 0; i < VisibleRows; i++)
-                CreateButton(content, rowTemplate, ButtonRole.Row, i + 2, firstY, rowStep, "MOD");
-            CreateDescription(content, rowTemplate, 7, firstY, rowStep);
+                CreateButton(content, rowTemplate, ButtonRole.Row,
+                             TweakMenuPresenterLayout.FirstRowButtonIndex + i,
+                             firstY, rowStep, "MOD");
+            CreateDescription(content, rowTemplate, DescriptionVisualIndex, firstY, rowStep);
             CreateButton(content, rowTemplate, ButtonRole.Reset, ResetVisualIndex,
                          firstY, rowStep, "RESET ALL MODS");
             CreateButton(content, rowTemplate, ButtonRole.Back, BackVisualIndex,
                          firstY, rowStep, "BACK");
 
             DisableForeignDrivers(root);
-            _modsScreen.defaultHighlight = _buttons[0].Selectable;
+            _modsScreen.defaultHighlight =
+                _buttons[TweakMenuPresenterLayout.GroupButtonIndex].Selectable;
             _title.Text = "MODS";
             root.SetActive(false);
         }
@@ -559,7 +569,7 @@ namespace DualSouls.Mods.HollowKnight
             }
         }
 
-        void CreateDescription(Transform parent, GameObject template, int visualIndex,
+        void CreateDescription(Transform parent, GameObject template, float visualIndex,
                                float firstY, float rowStep)
         {
             _descriptionRoot = CreateDescriptionRow(
@@ -576,7 +586,7 @@ namespace DualSouls.Mods.HollowKnight
         }
 
         static GameObject CreateDescriptionRow(Transform parent, GameObject template, string name,
-                                               int visualIndex, float firstY, float rowStep,
+                                               float visualIndex, float firstY, float rowStep,
                                                out NativeText label)
         {
             GameObject wrapper = Instantiate(template, parent, false);
@@ -593,7 +603,7 @@ namespace DualSouls.Mods.HollowKnight
             source.navigation = new Navigation { mode = Navigation.Mode.None };
             DisableForeignDrivers(wrapper);
             label = SetButtonText(wrapper, "Choose a category.");
-            label.ConfigureDescription();
+            label.ConfigureDescription(DescriptionHeight);
             return wrapper;
         }
 
@@ -618,7 +628,7 @@ namespace DualSouls.Mods.HollowKnight
             RectTransform buttonRect = source.transform as RectTransform;
             if (buttonRect != null)
                 buttonRect.sizeDelta = new Vector2(buttonRect.sizeDelta.x,
-                                                   Math.Min(buttonRect.sizeDelta.y, rowStep - 4f));
+                                                   Math.Min(buttonRect.sizeDelta.y, rowStep - TweakMenuPresenterLayout.RowVerticalPadding));
             DisableForeignDrivers(wrapper);
             _skinButtonRoots.Add(wrapper);
             _skinButtons.Add(button);
@@ -650,12 +660,11 @@ namespace DualSouls.Mods.HollowKnight
             RectTransform buttonRect = source.transform as RectTransform;
             if (buttonRect != null)
                 buttonRect.sizeDelta = new Vector2(buttonRect.sizeDelta.x,
-                                                   Math.Min(buttonRect.sizeDelta.y, rowStep - 4f));
+                                                   Math.Min(buttonRect.sizeDelta.y, rowStep - TweakMenuPresenterLayout.RowVerticalPadding));
             DisableForeignDrivers(wrapper);
             NativeText label = SetButtonText(wrapper, initialText, fullRow: true);
             NativeText valueLabel = null;
-            if (role == ButtonRole.Group || role == ButtonRole.Master ||
-                role == ButtonRole.Row)
+            if (role == ButtonRole.Group || role == ButtonRole.Row)
             {
                 valueLabel = label.CloneSibling("ModsValue");
                 label.ConfigureColumn(rightAligned: false);
@@ -797,6 +806,13 @@ namespace DualSouls.Mods.HollowKnight
             BeginClose(_binding, showOptions: true);
         }
 
+        internal void Cancel()
+        {
+            if (TweakMenuPresenterLayout.CancelTarget(nestedRouteOpen: false) ==
+                TweakMenuCancelTarget.CloseMenu)
+                Close();
+        }
+
         void BeginClose(NativeMenuBinding binding, bool showOptions)
         {
             if (!_nativeOpen || !BindingIsAlive(binding, _generation) || _transitioning)
@@ -867,7 +883,6 @@ namespace DualSouls.Mods.HollowKnight
             switch ((ButtonRole)button.Role)
             {
                 case ButtonRole.Group: _menu.MoveGroup(1); break;
-                case ButtonRole.Master: _menu.ToggleMaster(); break;
                 case ButtonRole.Row: _menu.ActivateSelected(); break;
                 case ButtonRole.Reset: _menu.Reset(); break;
                 case ButtonRole.Back: Close(); return;
@@ -889,35 +904,13 @@ namespace DualSouls.Mods.HollowKnight
             }
             if (direction != MoveDirection.Up && direction != MoveDirection.Down) return;
 
-            bool down = direction == MoveDirection.Down;
-            if (role == ButtonRole.Row)
-            {
-                Select(button);
-                int selected = _menu.SelectedRowIndex;
-                int count = _menu.CurrentRows.Count;
-                if ((!down && selected > 0) || (down && selected + 1 < count))
-                {
-                    _menu.MoveRow(down ? 1 : -1);
-                    Paint();
-                    SelectCurrentRowButton();
-                }
-                else
-                    Focus(down ? ButtonRole.Reset : ButtonRole.Master);
-                return;
-            }
-
-            if (role == ButtonRole.Group) Focus(down ? ButtonRole.Master : ButtonRole.Back);
-            else if (role == ButtonRole.Master)
-            {
-                if (down && _menu.CurrentRows.Count > 0) SelectCurrentRowButton();
-                else Focus(ButtonRole.Group);
-            }
-            else if (role == ButtonRole.Reset)
-            {
-                if (!down && _menu.CurrentRows.Count > 0) SelectCurrentRowButton();
-                else Focus(ButtonRole.Back);
-            }
-            else if (role == ButtonRole.Back) Focus(down ? ButtonRole.Group : ButtonRole.Reset);
+            Select(button);
+            TweakMenuFocusTarget current = FocusTarget((ButtonRole)button.Role);
+            TweakMenuFocusTarget next = TweakMenuFocusGraph.Move(
+                current,
+                direction == MoveDirection.Down ? 1 : -1,
+                _menu.CurrentRows.Count);
+            Focus(next);
         }
 
         void MoveChoice(int delta)
@@ -938,19 +931,47 @@ namespace DualSouls.Mods.HollowKnight
             _menu.SetSelected(selected.Values[next]);
         }
 
-        void SelectCurrentRowButton()
+        TweakMenuFocusTarget FocusTarget(ButtonRole role)
         {
-            int slot = _menu.SelectedRowIndex - _menu.WindowStart;
-            if (slot >= 0 && slot < VisibleRows &&
-                _buttons[slot + 2].gameObject.activeInHierarchy)
-                _buttons[slot + 2].Selectable.Select();
+            if (role == ButtonRole.Row)
+                return TweakMenuFocusTarget.Row(_menu.SelectedRowIndex);
+            if (role == ButtonRole.Reset) return TweakMenuFocusTarget.Reset;
+            if (role == ButtonRole.Back) return TweakMenuFocusTarget.Back;
+            return TweakMenuFocusTarget.Group;
         }
 
-        void Focus(ButtonRole role)
+        void SelectCurrentRowButton()
         {
-            int index = role == ButtonRole.Group ? 0 :
-                        role == ButtonRole.Master ? 1 :
-                        role == ButtonRole.Reset ? 7 : 8;
+            int buttonIndex = TweakMenuPresenterLayout.ButtonIndex(
+                TweakMenuFocusTarget.Row(_menu.SelectedRowIndex),
+                _menu.WindowStart,
+                _menu.CurrentRows.Count);
+            if (buttonIndex >= TweakMenuPresenterLayout.FirstRowButtonIndex &&
+                buttonIndex < TweakMenuPresenterLayout.ResetButtonIndex &&
+                _buttons[buttonIndex].gameObject.activeInHierarchy)
+                _buttons[buttonIndex].Selectable.Select();
+        }
+
+        void Focus(TweakMenuFocusTarget target)
+        {
+            _menu.DismissMessage();
+            if (target.Kind == TweakMenuFocusKind.Row)
+            {
+                _menu.MoveRow(target.RowIndex - _menu.SelectedRowIndex);
+                _focusedRole = ButtonRole.Row;
+                Paint();
+                SelectCurrentRowButton();
+                return;
+            }
+
+            ButtonRole role = target.Kind == TweakMenuFocusKind.Reset
+                ? ButtonRole.Reset
+                : target.Kind == TweakMenuFocusKind.Back
+                    ? ButtonRole.Back
+                    : ButtonRole.Group;
+            int index = TweakMenuPresenterLayout.ButtonIndex(
+                target, _menu.WindowStart, _menu.CurrentRows.Count);
+            if (index < 0 || index >= _buttons.Count) return;
             _focusedRole = role;
             _buttons[index].Selectable.Select();
             Paint();
@@ -958,19 +979,23 @@ namespace DualSouls.Mods.HollowKnight
 
         void Paint()
         {
-            if (_menu == null || _labels.Count != 9 || _valueLabels.Count != 9) return;
-            _labels[0].Text = "< " + Friendly(_menu.Groups[_menu.SelectedGroupIndex]) + " >";
-            _valueLabels[0].Text = (_menu.SelectedGroupIndex + 1) + "/" + _menu.Groups.Count;
-            _labels[1].Text = "MASTER MODS";
-            _valueLabels[1].Text = _session.Controller.MasterEnabled ? "ON" : "OFF";
+            if (_menu == null || _labels.Count != TweakMenuPresenterLayout.ButtonCount ||
+                _valueLabels.Count != TweakMenuPresenterLayout.ButtonCount) return;
+            _menu.RefreshOperationMessage();
+            _labels[TweakMenuPresenterLayout.GroupButtonIndex].Text =
+                "< " + Friendly(_menu.Groups[_menu.SelectedGroupIndex]) + " >";
+            _valueLabels[TweakMenuPresenterLayout.GroupButtonIndex].Text =
+                (_menu.SelectedGroupIndex + 1) + "/" + _menu.Groups.Count;
 
             IReadOnlyList<TweakDescriptor> rows = _menu.CurrentRows;
             for (int slot = 0; slot < VisibleRows; slot++)
             {
-                int dataIndex = _menu.WindowStart + slot;
-                HollowKnightNativeModsButton button = _buttons[slot + 2];
-                GameObject root = _buttonRoots[slot + 2];
-                bool shown = dataIndex >= 0 && dataIndex < rows.Count;
+                int buttonIndex = TweakMenuPresenterLayout.FirstRowButtonIndex + slot;
+                int dataIndex = TweakMenuPresenterLayout.DataIndexForRowButton(
+                    buttonIndex, _menu.WindowStart, rows.Count);
+                HollowKnightNativeModsButton button = _buttons[buttonIndex];
+                GameObject root = _buttonRoots[buttonIndex];
+                bool shown = dataIndex >= 0;
                 if (root.activeSelf != shown) root.SetActive(shown);
                 button.DataIndex = shown ? dataIndex : -1;
                 if (!shown) continue;
@@ -981,24 +1006,22 @@ namespace DualSouls.Mods.HollowKnight
                 else if (descriptor.ControlKind == TweakControlKind.Command) value = "RUN";
                 else if (descriptor.ControlKind == TweakControlKind.Route) value = "OPEN";
                 else value = Friendly(_session.Controller.Value(descriptor.Id));
-                _labels[slot + 2].Text = descriptor.Title.ToUpperInvariant();
-                _valueLabels[slot + 2].Text = value;
+                _labels[buttonIndex].Text = descriptor.Title.ToUpperInvariant();
+                _valueLabels[buttonIndex].Text = value;
             }
 
-            _labels[7].Text = "RESET ALL MODS";
-            _labels[8].Text = "BACK";
+            _labels[TweakMenuPresenterLayout.ResetButtonIndex].Text = "RESET ALL MODS";
+            _labels[TweakMenuPresenterLayout.BackButtonIndex].Text = "BACK";
             _title.Text = "MODS";
-            _description.Text = _menu.MessageIsError
-                ? _menu.Message.ToUpperInvariant()
-                : FocusDescription();
+            _description.Text = string.IsNullOrEmpty(_menu.Message)
+                ? FocusDescription()
+                : _menu.Message.ToUpperInvariant();
         }
 
         string FocusDescription()
         {
             if (_focusedRole == ButtonRole.Group)
                 return "Choose a mod category.";
-            if (_focusedRole == ButtonRole.Master)
-                return "Enable or disable all built-in mods.";
             if (_focusedRole == ButtonRole.Reset)
                 return "Restore every mod setting to its default.";
             if (_focusedRole == ButtonRole.Back)
@@ -1320,7 +1343,7 @@ namespace DualSouls.Mods.HollowKnight
         {
             if (Selectable == null || !Selectable.interactable || Owner == null) return;
             Selectable.ForceDeselect();
-            Owner.Close();
+            Owner.Cancel();
             eventData.Use();
         }
 

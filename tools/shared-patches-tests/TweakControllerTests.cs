@@ -71,7 +71,6 @@ public sealed class TweakControllerTests
         var adapter = new UnavailableRecordingAdapter();
         var store = new MemoryStore
         {
-            ["dualsouls.mods.hollow-knight.master"] = "1",
             ["dualsouls.mods.hollow-knight.value.secret_radar"] = "on"
         };
         var controller = new TweakController(adapter, store);
@@ -80,7 +79,7 @@ public sealed class TweakControllerTests
         var changed = controller.Set("secret_radar", "off");
 
         Assert.True(initialized.Success);
-        Assert.True(controller.MasterEnabled);
+        Assert.True(controller.MutationsAvailable);
         Assert.Equal("on", controller.Value("secret_radar"));
         Assert.Equal("on", store["dualsouls.mods.hollow-knight.value.secret_radar"]);
         Assert.Empty(adapter.Applied);
@@ -91,7 +90,7 @@ public sealed class TweakControllerTests
     }
 
     [Fact]
-    public void InitializeDefaultsMasterOffWithoutApplyingTweaks()
+    public void InitializeCapturesBaselineAndMakesDirectMutationsAvailable()
     {
         var adapter = new RecordingAdapter("silksong");
         var store = new MemoryStore();
@@ -100,11 +99,12 @@ public sealed class TweakControllerTests
         var result = controller.Initialize();
 
         Assert.True(result.Success);
-        Assert.False(controller.MasterEnabled);
+        Assert.True(controller.MutationsAvailable);
         Assert.Equal("vanilla", controller.Value("damage_received"));
         Assert.Equal("off", controller.Value("unlimited_silk"));
         Assert.Equal(1, adapter.CaptureCount);
         Assert.Empty(adapter.Applied);
+        Assert.Empty(store);
     }
 
     [Fact]
@@ -126,12 +126,11 @@ public sealed class TweakControllerTests
     }
 
     [Fact]
-    public void EnablingMasterAppliesOnlyPersistedNonDefaults()
+    public void InitializeAppliesOnlyPersistedNonDefaults()
     {
         var adapter = new RecordingAdapter("silksong");
         var store = new MemoryStore
         {
-            ["dualsouls.mods.silksong.master"] = "1",
             ["dualsouls.mods.silksong.value.damage_received"] = "prevent_death",
             ["dualsouls.mods.silksong.value.unlimited_silk"] = "off"
         };
@@ -140,64 +139,77 @@ public sealed class TweakControllerTests
         var result = controller.Initialize();
 
         Assert.True(result.Success);
-        Assert.True(controller.MasterEnabled);
+        Assert.True(controller.MutationsAvailable);
         Assert.Equal(new[] { ("damage_received", "prevent_death") }, adapter.Applied);
     }
 
     [Fact]
-    public void DisablingMasterRestoresCapturedBaseline()
+    public void ResetRestoresCapturedBaselineAndPersistsDescriptorDefaults()
     {
         var adapter = new RecordingAdapter("silksong");
         var store = new MemoryStore
         {
-            ["dualsouls.mods.silksong.master"] = "1",
             ["dualsouls.mods.silksong.value.unlimited_silk"] = "on"
         };
         var controller = new TweakController(adapter, store);
         Assert.True(controller.Initialize().Success);
 
-        var result = controller.SetMaster(false);
+        var result = controller.Reset();
 
         Assert.True(result.Success);
-        Assert.False(controller.MasterEnabled);
+        Assert.True(controller.MutationsAvailable);
         Assert.Equal(1, adapter.RestoreCount);
-        Assert.Equal("0", store["dualsouls.mods.silksong.master"]);
+        Assert.Equal("vanilla", store["dualsouls.mods.silksong.value.damage_received"]);
+        Assert.Equal("off", store["dualsouls.mods.silksong.value.unlimited_silk"]);
     }
 
     [Fact]
-    public void FailedMasterDisableRestorationRemainsOwnedUntilRetrySucceeds()
+    public void FailedResetRestorationPublishesFreshAggregateRetryEvidenceUntilRecovery()
     {
         var adapter = new RecordingAdapter("silksong");
-        var store = new MemoryStore
-        {
-            ["dualsouls.mods.silksong.master"] = "1",
-            ["dualsouls.mods.silksong.value.unlimited_silk"] = "on"
-        };
-        var controller = new TweakController(adapter, store);
+        var controller = new TweakController(adapter, new MemoryStore());
         Assert.True(controller.Initialize().Success);
-        adapter.RestoreFailuresRemaining = 1;
+        adapter.RestoreFailuresRemaining = 2;
 
-        var failed = controller.SetMaster(false);
+        var failed = controller.Reset();
 
         Assert.False(failed.Success);
         Assert.True(controller.RestorationPending);
-        Assert.False(controller.MasterEnabled);
-        Assert.Equal("0", store["dualsouls.mods.silksong.master"]);
+        Assert.False(controller.MutationsAvailable);
+        controller.ClearOperationEvidence();
+
+        var failedRetry = controller.RetryRestoration();
+
+        Assert.False(failedRetry.Success);
+        TweakOperationEvidence failedEvidence = Assert.Single(controller.OperationEvidence);
+        Assert.Equal("MOD-TRANSACTION-SAFETY", failedEvidence.FeatureId);
+        Assert.Equal(TweakOperationKind.BaselineRestore, failedEvidence.Operation);
+        Assert.False(failedEvidence.Success);
+        Assert.Contains("restore", failedEvidence.Error, StringComparison.OrdinalIgnoreCase);
 
         var retried = controller.RetryRestoration();
 
         Assert.True(retried.Success);
         Assert.False(controller.RestorationPending);
-        Assert.Equal(2, adapter.RestoreCount);
+        Assert.False(controller.MutationsAvailable);
+        Assert.Equal(3, adapter.RestoreCount);
+        Assert.Collection(
+            controller.OperationEvidence,
+            evidence => Assert.False(evidence.Success),
+            evidence =>
+            {
+                Assert.Equal(TweakOperationKind.BaselineRestore, evidence.Operation);
+                Assert.True(evidence.Success);
+                Assert.True(evidence.Sequence > failedEvidence.Sequence);
+            });
     }
 
     [Fact]
-    public void FailedEnableRestoresBaselineAndLeavesMasterOff()
+    public void PersistedApplyFailureRestoresBaselineAndBlocksMutations()
     {
         var adapter = new RecordingAdapter("silksong") { FailId = "unlimited_silk" };
         var store = new MemoryStore
         {
-            ["dualsouls.mods.silksong.master"] = "1",
             ["dualsouls.mods.silksong.value.unlimited_silk"] = "on"
         };
 
@@ -206,16 +218,16 @@ public sealed class TweakControllerTests
 
         Assert.False(result.Success);
         Assert.Contains("unlimited_silk", result.Error);
-        Assert.False(controller.MasterEnabled);
+        Assert.False(controller.MutationsAvailable);
         Assert.Equal(1, adapter.RestoreCount);
-        Assert.Equal("0", store["dualsouls.mods.silksong.master"]);
+        Assert.Equal("on", store["dualsouls.mods.silksong.value.unlimited_silk"]);
     }
 
     [Fact]
     public void CyclePersistsOnlyAfterSuccessfulApply()
     {
         var adapter = new RecordingAdapter("silksong");
-        var store = new MemoryStore { ["dualsouls.mods.silksong.master"] = "1" };
+        var store = new MemoryStore();
         var controller = new TweakController(adapter, store);
         Assert.True(controller.Initialize().Success);
 
@@ -231,17 +243,16 @@ public sealed class TweakControllerTests
         Assert.False(result.Success);
         Assert.Equal("vanilla", controller.Value("damage_received"));
         Assert.False(store.ContainsKey("dualsouls.mods.silksong.value.damage_received"));
-        Assert.False(controller.MasterEnabled);
+        Assert.False(controller.MutationsAvailable);
         Assert.Equal(1, adapter.RestoreCount);
     }
 
     [Fact]
-    public void ResetRestoresDefaultsWithoutChangingMasterSelection()
+    public void ResetRestoresEveryValueAndLeavesMutationHealthAvailable()
     {
         var adapter = new RecordingAdapter("silksong");
         var store = new MemoryStore
         {
-            ["dualsouls.mods.silksong.master"] = "1",
             ["dualsouls.mods.silksong.value.damage_received"] = "invincible",
             ["dualsouls.mods.silksong.value.unlimited_silk"] = "on"
         };
@@ -251,10 +262,11 @@ public sealed class TweakControllerTests
         var result = controller.Reset();
 
         Assert.True(result.Success);
-        Assert.True(controller.MasterEnabled);
+        Assert.True(controller.MutationsAvailable);
         Assert.Equal("vanilla", controller.Value("damage_received"));
         Assert.Equal("off", controller.Value("unlimited_silk"));
-        Assert.Equal("1", store["dualsouls.mods.silksong.master"]);
+        Assert.Equal("vanilla", store["dualsouls.mods.silksong.value.damage_received"]);
+        Assert.Equal("off", store["dualsouls.mods.silksong.value.unlimited_silk"]);
         Assert.Equal(1, adapter.RestoreCount);
     }
 
@@ -263,7 +275,6 @@ public sealed class TweakControllerTests
     {
         var store = new MemoryStore
         {
-            ["dualsouls.mods.silksong.master"] = "1",
             ["dualsouls.mods.silksong.value.unlimited_silk"] = "on"
         };
         var silksong = new TweakController(new RecordingAdapter("silksong"), store);
@@ -272,31 +283,24 @@ public sealed class TweakControllerTests
         Assert.True(silksong.Initialize().Success);
         Assert.True(hollowKnight.Initialize().Success);
 
-        Assert.True(silksong.MasterEnabled);
+        Assert.True(silksong.MutationsAvailable);
         Assert.Equal("on", silksong.Value("unlimited_silk"));
-        Assert.False(hollowKnight.MasterEnabled);
+        Assert.True(hollowKnight.MutationsAvailable);
         Assert.Equal("off", hollowKnight.Value("unlimited_silk"));
     }
 
     [Fact]
-    public void MasterAndSelectionsSurviveControllerRecreation()
+    public void SelectionsSurviveControllerRecreation()
     {
         var store = new MemoryStore();
         var firstRun = new TweakController(new RecordingAdapter("silksong"), store);
         Assert.True(firstRun.Initialize().Success);
-        Assert.True(firstRun.SetMaster(true).Success);
         Assert.True(firstRun.Cycle("unlimited_silk").Success);
 
         var relaunched = new TweakController(new RecordingAdapter("silksong"), store);
         Assert.True(relaunched.Initialize().Success);
-        Assert.True(relaunched.MasterEnabled);
+        Assert.True(relaunched.MutationsAvailable);
         Assert.Equal("on", relaunched.Value("unlimited_silk"));
-
-        Assert.True(relaunched.SetMaster(false).Success);
-        var relaunchedMasterOff = new TweakController(new RecordingAdapter("silksong"), store);
-        Assert.True(relaunchedMasterOff.Initialize().Success);
-        Assert.False(relaunchedMasterOff.MasterEnabled);
-        Assert.Equal("on", relaunchedMasterOff.Value("unlimited_silk"));
     }
 
     [Fact]
@@ -307,9 +311,7 @@ public sealed class TweakControllerTests
         var hollowKnight = new TweakController(new RecordingAdapter("hollow-knight"), store);
         Assert.True(silksong.Initialize().Success);
         Assert.True(hollowKnight.Initialize().Success);
-        Assert.True(silksong.SetMaster(true).Success);
         Assert.True(silksong.Cycle("unlimited_silk").Success);
-        Assert.True(hollowKnight.SetMaster(true).Success);
         Assert.True(hollowKnight.Cycle("damage_received").Success);
 
         var silksongRelaunched = new TweakController(new RecordingAdapter("silksong"), store);
@@ -317,53 +319,36 @@ public sealed class TweakControllerTests
         Assert.True(silksongRelaunched.Initialize().Success);
         Assert.True(hollowKnightRelaunched.Initialize().Success);
 
-        Assert.True(silksongRelaunched.MasterEnabled);
+        Assert.True(silksongRelaunched.MutationsAvailable);
         Assert.Equal("on", silksongRelaunched.Value("unlimited_silk"));
         Assert.Equal("vanilla", silksongRelaunched.Value("damage_received"));
-        Assert.True(hollowKnightRelaunched.MasterEnabled);
+        Assert.True(hollowKnightRelaunched.MutationsAvailable);
         Assert.Equal("off", hollowKnightRelaunched.Value("unlimited_silk"));
         Assert.Equal("prevent_death", hollowKnightRelaunched.Value("damage_received"));
     }
 
     [Fact]
-    public void TickRunsOnlyWhileMasterIsEnabled()
+    public void TickRunsOnlyWhileMutationsAreAvailable()
     {
         var adapter = new RecordingAdapter("silksong");
         var store = new MemoryStore();
         var controller = new TweakController(adapter, store);
         Assert.True(controller.Initialize().Success);
 
-        controller.Tick();
-        Assert.Equal(0, adapter.TickCount);
-
-        Assert.True(controller.SetMaster(true).Success);
         controller.Tick();
         Assert.Equal(1, adapter.TickCount);
-    }
 
-    [Fact]
-    public void EnablingMasterFailsClosedWhenPersistenceCannotBeFlushed()
-    {
-        var adapter = new RecordingAdapter("silksong");
-        var store = new MemoryStore();
-        var controller = new TweakController(adapter, store);
-        Assert.True(controller.Initialize().Success);
-        store.ThrowOnFlush = true;
-
-        var result = controller.SetMaster(true);
-
-        Assert.False(result.Success);
-        Assert.Contains("persist", result.Error, StringComparison.OrdinalIgnoreCase);
-        Assert.False(controller.MasterEnabled);
-        Assert.Equal(1, adapter.RestoreCount);
-        Assert.Equal("0", store["dualsouls.mods.silksong.master"]);
+        adapter.FailId = "damage_received";
+        Assert.False(controller.Cycle("damage_received").Success);
+        controller.Tick();
+        Assert.Equal(1, adapter.TickCount);
     }
 
     [Fact]
     public void CycleRollsBackSelectionAndFailsClosedWhenPersistenceCannotBeFlushed()
     {
         var adapter = new RecordingAdapter("silksong");
-        var store = new MemoryStore { ["dualsouls.mods.silksong.master"] = "1" };
+        var store = new MemoryStore();
         var controller = new TweakController(adapter, store);
         Assert.True(controller.Initialize().Success);
         store.ThrowOnFlush = true;
@@ -372,10 +357,9 @@ public sealed class TweakControllerTests
 
         Assert.False(result.Success);
         Assert.Contains("persist", result.Error, StringComparison.OrdinalIgnoreCase);
-        Assert.False(controller.MasterEnabled);
+        Assert.False(controller.MutationsAvailable);
         Assert.Equal("off", controller.Value("unlimited_silk"));
         Assert.Equal("off", store["dualsouls.mods.silksong.value.unlimited_silk"]);
-        Assert.Equal("0", store["dualsouls.mods.silksong.master"]);
         Assert.Equal(1, adapter.RestoreCount);
     }
 
@@ -396,7 +380,7 @@ public sealed class TweakControllerTests
     public void SetValidatesAndPersistsAnExactChoiceValue()
     {
         var adapter = new RecordingAdapter("silksong");
-        var store = new MemoryStore { ["dualsouls.mods.silksong.master"] = "1" };
+        var store = new MemoryStore();
         var controller = new TweakController(adapter, store);
         Assert.True(controller.Initialize().Success);
 
@@ -416,7 +400,6 @@ public sealed class TweakControllerTests
         var adapter = new OperationAdapter();
         var store = new MemoryStore
         {
-            ["dualsouls.mods.operations.master"] = "1",
             ["dualsouls.mods.operations.value.save_to_slot"] = "run",
             ["dualsouls.mods.operations.value.skins"] = "open",
             ["dualsouls.mods.operations.value.state_slots"] = "legacy",
@@ -432,6 +415,22 @@ public sealed class TweakControllerTests
         Assert.Equal("open", store["dualsouls.mods.operations.value.skins"]);
         Assert.Equal("legacy", store["dualsouls.mods.operations.value.state_slots"]);
         Assert.False(controller.Cycle("save_to_slot").Success);
+    }
+
+    [Fact]
+    public void FailedResetNeverPersistsCommandOrRouteRows()
+    {
+        var adapter = new OperationAdapter();
+        var store = new MemoryStore();
+        var controller = new TweakController(adapter, store);
+        Assert.True(controller.Initialize().Success);
+        store.ThrowOnFlush = true;
+
+        var result = controller.Reset();
+
+        Assert.False(result.Success);
+        Assert.DoesNotContain("dualsouls.mods.operations.value.save_to_slot", store.Keys);
+        Assert.DoesNotContain("dualsouls.mods.operations.value.skins", store.Keys);
     }
 
     [Fact]

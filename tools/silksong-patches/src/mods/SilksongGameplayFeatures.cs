@@ -60,11 +60,13 @@ namespace DualSouls.Mods.Silksong
         sealed class StateSceneLoadInfo : GameManager.SceneLoadInfo
         {
             public Vector3 Position;
+            public Action<string> Completed;
             public override void NotifyFinished()
             {
                 base.NotifyFinished();
                 HeroController hero = HeroController.instance;
                 if (hero != null) hero.transform.position = Position;
+                Completed?.Invoke(SceneName);
             }
         }
 
@@ -154,11 +156,11 @@ namespace DualSouls.Mods.Silksong
             WriteStateSidecar(StatePath(slot, game.playerData.profileID), CaptureStateJson(game, hero));
         }
 
-        public static void LoadState(int slot)
+        public static void LoadState(int slot, Action<string> completed = null)
         {
             ValidateSlot(slot);
             GameManager game = RequireGame();
-            LoadStateFile(StatePath(slot, game.playerData.profileID));
+            LoadStateFile(StatePath(slot, game.playerData.profileID), completed);
         }
 
         public static void DeleteState(int slot)
@@ -167,6 +169,13 @@ namespace DualSouls.Mods.Silksong
             GameManager game = RequireGame();
             string path = StatePath(slot, game.playerData.profileID);
             if (File.Exists(path)) File.Delete(path);
+        }
+
+        public static bool StateExists(int slot)
+        {
+            ValidateSlot(slot);
+            GameManager game = RequireGame();
+            return File.Exists(StatePath(slot, game.playerData.profileID));
         }
 
         static string CaptureStateJson(GameManager game, HeroController hero)
@@ -190,7 +199,7 @@ namespace DualSouls.Mods.Silksong
             return json;
         }
 
-        static void LoadStateFile(string path)
+        static void LoadStateFile(string path, Action<string> completed = null)
         {
             if (!File.Exists(path)) throw new FileNotFoundException("The selected save-state slot is empty.", path);
             var info = new FileInfo(path);
@@ -222,6 +231,7 @@ namespace DualSouls.Mods.Silksong
                 AlwaysUnloadUnusedAssets = true,
                 Visualization = GameManager.SceneLoadVisualizations.ContinueFromSave,
                 Position = new Vector3(envelope.x, envelope.y, envelope.z),
+                Completed = completed,
             });
         }
 

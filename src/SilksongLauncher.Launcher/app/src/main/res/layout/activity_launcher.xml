@@ -277,8 +277,8 @@
                     </FrameLayout>
                 </LinearLayout>
 
-                <!-- Built-in Mods and Skins are primary profile actions. The
-                     separate plugin installer is reachable from Mods. -->
+                <!-- Plugins and Skins are primary profile actions. Built-in
+                     gameplay Mods are available inside each running game. -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -290,7 +290,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:layout_marginEnd="6dp"
-                        android:text="@string/action_mods"
+                        android:text="@string/action_plugins"
                         android:textSize="16sp"
                         android:textColor="@color/text_on_control"
                         android:backgroundTint="@color/surface_control"

@@ -10,6 +10,7 @@ namespace DualSouls.Mods
 
         readonly TweakController _controller;
         readonly IReadOnlyList<TweakDescriptor>[] _rowsByGroup;
+        long _lastOperationEvidenceSequence;
 
         public TweakMenuModel(TweakController controller, int visibleRows)
         {
@@ -61,11 +62,20 @@ namespace DualSouls.Mods
         public void Open()
         {
             IsOpen = true;
+            TweakOperationEvidence evidence;
+            if (_controller.TryGetLatestOperationEvidence(out evidence))
+                _lastOperationEvidenceSequence = evidence.Sequence;
         }
 
         public void Close()
         {
             IsOpen = false;
+            DismissMessage();
+        }
+
+        public void DismissMessage()
+        {
+            ClearMessage();
         }
 
         public void MoveGroup(int delta)
@@ -92,15 +102,6 @@ namespace DualSouls.Mods
             SelectedRowIndex = next;
             KeepSelectionVisible();
             ClearMessage();
-        }
-
-        public TweakActionResult ToggleMaster()
-        {
-            TweakActionResult result = _controller.SetMaster(!_controller.MasterEnabled);
-            string success = _controller.MasterEnabled
-                ? "Mods enabled."
-                : "Mods disabled; game baseline restored.";
-            return Record(result, success);
         }
 
         public TweakActionResult CycleSelected()
@@ -138,6 +139,21 @@ namespace DualSouls.Mods
             return Record(_controller.Reset(), "All values reset.");
         }
 
+        public bool RefreshOperationMessage()
+        {
+            TweakOperationEvidence evidence;
+            if (!_controller.TryGetLatestOperationEvidence(out evidence) ||
+                evidence.Sequence <= _lastOperationEvidenceSequence)
+                return false;
+
+            _lastOperationEvidenceSequence = evidence.Sequence;
+            MessageIsError = !evidence.Success;
+            Message = evidence.Success
+                ? SuccessMessage(evidence)
+                : evidence.Error;
+            return true;
+        }
+
         void ClearMessage()
         {
             Message = "";
@@ -154,9 +170,52 @@ namespace DualSouls.Mods
 
         TweakActionResult Record(TweakActionResult result, string successMessage)
         {
-            Message = result.Success ? successMessage : result.Error;
+            Message = result.Pending
+                ? "Runtime operation pending."
+                : result.Success
+                    ? successMessage
+                    : result.Error;
             MessageIsError = !result.Success;
+            if (result.Pending) return result;
+
+            TweakOperationEvidence evidence;
+            if (_controller.TryGetLatestOperationEvidence(out evidence) &&
+                evidence.Sequence > _lastOperationEvidenceSequence)
+            {
+                _lastOperationEvidenceSequence = evidence.Sequence;
+                if (result.Success)
+                {
+                    MessageIsError = !evidence.Success;
+                    Message = evidence.Success
+                        ? SuccessMessage(evidence)
+                        : evidence.Error;
+                }
+            }
             return result;
+        }
+
+        string SuccessMessage(TweakOperationEvidence evidence)
+        {
+            string row = "Mods operation";
+            if (!string.IsNullOrEmpty(evidence.RowId))
+            {
+                TweakDescriptor descriptor = null;
+                for (int index = 0; index < _controller.Descriptors.Count; index++)
+                {
+                    TweakDescriptor candidate = _controller.Descriptors[index];
+                    if (!string.Equals(candidate.Id, evidence.RowId, StringComparison.Ordinal))
+                        continue;
+                    descriptor = candidate;
+                    break;
+                }
+                row = descriptor != null
+                    ? descriptor.Title
+                    : evidence.RowId.Replace('_', ' ').Replace('-', ' ');
+                row = row.ToUpperInvariant();
+            }
+            if (evidence.Readback.HasValue)
+                return row + ": " + evidence.Readback.Value.Replace('_', ' ').ToUpperInvariant() + ".";
+            return row + " completed; runtime readback unavailable.";
         }
 
         static int Wrap(int index, int delta, int count)

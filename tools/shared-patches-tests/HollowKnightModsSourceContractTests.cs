@@ -40,7 +40,12 @@ public sealed class HollowKnightModsSourceContractTests
         Assert.Contains("SetStateTransferPreparation(PrepareForStateTransfer)", api, StringComparison.Ordinal);
         Assert.Contains("void EnsureStateTransferPreparation()", api, StringComparison.Ordinal);
         Assert.Contains("EnsureStateTransferPreparation();\n            HollowKnightGameplayFeatures.SaveState", api, StringComparison.Ordinal);
-        Assert.Contains("EnsureStateTransferPreparation();\n            HollowKnightGameplayFeatures.LoadState", api, StringComparison.Ordinal);
+        Assert.Contains("_stateLoadOperation.Begin(operationToken", api, StringComparison.Ordinal);
+        Assert.Contains("HollowKnightGameplayFeatures.LoadState(", api, StringComparison.Ordinal);
+        Assert.Contains("_stateLoadOperation.Complete(", api, StringComparison.Ordinal);
+        Assert.Contains("_stateLoadOperation.Poll(", api, StringComparison.Ordinal);
+        Assert.Contains("_stateLoadOperation.Cancel(", api, StringComparison.Ordinal);
+        Assert.Contains("\"load_from_slot\"", api, StringComparison.Ordinal);
         Assert.Contains("if (enabled) EnsureStateTransferPreparation();", api, StringComparison.Ordinal);
         Assert.Contains("RestoreDamageOwner()", api, StringComparison.Ordinal);
         Assert.Contains("RestoreNailOwner()", api, StringComparison.Ordinal);
@@ -63,12 +68,17 @@ public sealed class HollowKnightModsSourceContractTests
     public void RoutesAndBenchMapSeamsHaveConcreteManagedIntegrations()
     {
         string hooks = Source("HkStageHooks.cs");
+        string api = Source("HollowKnightGameTweakApi.cs");
         string companion = Source("HKDualScreen.cs");
         string nativeMenu = NativeSource("HollowKnightNativeModsMenu.cs");
 
         Assert.Contains("dev.silksong.launcher.skins.ui.SkinsActivity", hooks, StringComparison.Ordinal);
         Assert.Contains("player.SetBenchRespawn", hooks, StringComparison.Ordinal);
         Assert.Contains("game.ReadyForRespawn(false)", hooks, StringComparison.Ordinal);
+        Assert.Contains("pendingBenchCompletion", hooks, StringComparison.Ordinal);
+        Assert.Contains("_benchOperation.Begin(operationToken", api, StringComparison.Ordinal);
+        Assert.Contains("_benchOperation.Poll(", api, StringComparison.Ordinal);
+        Assert.Contains("_benchOperation.Complete(", api, StringComparison.Ordinal);
         Assert.Contains("HKDualScreen.OpenBenchTeleportRoute()", hooks, StringComparison.Ordinal);
         Assert.Contains("activeInstance.tab.tap = COMP_MAP", companion, StringComparison.Ordinal);
         Assert.Contains("_menu.ActivateSelected()", nativeMenu, StringComparison.Ordinal);

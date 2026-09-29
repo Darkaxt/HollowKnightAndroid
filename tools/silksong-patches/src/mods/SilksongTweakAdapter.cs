@@ -6,6 +6,54 @@ namespace DualSouls.Mods.Silksong
 {
     public enum SilksongDamageMode { PreventDeath, Invincible }
 
+    /// <summary>
+    /// Tracks the Mods choices applied over the captured runtime baseline. Readback
+    /// must describe the requested overlay even when that baseline already had the
+    /// same cheat enabled before Mods captured it.
+    /// </summary>
+    internal sealed class SilksongAppliedChoiceState
+    {
+        SilksongDamageMode? _damageMode;
+        bool _oneHitKills;
+        bool _equipAnywhere;
+        bool _instantDialogue;
+        bool _worldRumbleDisabled;
+        bool _frostDisabled;
+
+        public void SetDamageMode(SilksongDamageMode mode) => _damageMode = mode;
+        public void RestoreDamageMode() => _damageMode = null;
+        public void SetOneHitKills(bool enabled) => _oneHitKills = enabled;
+        public void SetEquipAnywhere(bool enabled) => _equipAnywhere = enabled;
+        public void SetInstantDialogue(bool enabled) => _instantDialogue = enabled;
+        public void SetWorldRumbleDisabled(bool enabled) => _worldRumbleDisabled = enabled;
+        public void SetFrostDisabled(bool enabled) => _frostDisabled = enabled;
+
+        public TweakActionResult Readback(string id)
+        {
+            switch (id)
+            {
+                case "damage_received":
+                    return Choice(!_damageMode.HasValue ? "vanilla" :
+                        _damageMode.Value == SilksongDamageMode.PreventDeath
+                            ? "prevent_death"
+                            : "invincible");
+                case "one_hit_kills": return OnOff(_oneHitKills);
+                case "equip_anywhere": return OnOff(_equipAnywhere);
+                case "instant_dialogue": return OnOff(_instantDialogue);
+                case "disable_world_rumble": return OnOff(_worldRumbleDisabled);
+                case "ignore_frost_slowdown": return OnOff(_frostDisabled);
+                default:
+                    return TweakActionResult.Fail(
+                        "No applied Silksong choice state exists for " + id + ".");
+            }
+        }
+
+        static TweakActionResult Choice(string value) =>
+            TweakActionResult.Ok(TweakReadback.Choice(value));
+        static TweakActionResult OnOff(bool enabled) =>
+            Choice(enabled ? "on" : "off");
+    }
+
     public interface ISilksongTweakApi
     {
         bool IsReady { get; }
@@ -18,7 +66,7 @@ namespace DualSouls.Mods.Silksong
         void SetFastTransitions(bool enabled);
         void SetAutoMap(bool enabled);
         void SetInnateCompass(bool enabled);
-        void OpenBenchTeleport();
+        void OpenBenchTeleport(long operationToken);
         void SetSecretRadar(bool enabled);
         void SetNeedleDamageMultiplier(int multiplier);
         void RestoreNeedleDamage();
@@ -38,7 +86,7 @@ namespace DualSouls.Mods.Silksong
         void SetUnlimitedToolSlots(bool enabled);
         void SetStateSlot(int slot);
         void SaveState();
-        void LoadState();
+        void LoadState(long operationToken);
         void DeleteState();
         void SetRosaryMagnet(bool enabled);
         void SetKeepRosariesOnDeath(bool enabled);
@@ -51,10 +99,12 @@ namespace DualSouls.Mods.Silksong
         void SetFrostDisabled(bool enabled);
         void RestoreFrostDisabled();
         void TickGameplay();
+        TweakActionResult Readback(string id);
+        IReadOnlyList<TweakAdapterCompletion> DrainCompletedOperations();
     }
 
     /// <summary>Silksong adapter for the shared built-in Mods contract.</summary>
-    public sealed class SilksongTweakAdapter : ITweakAdapter
+    public sealed class SilksongTweakAdapter : ITweakAdapter, ITweakOperationAdapter
     {
         static readonly IReadOnlyList<TweakDescriptor> Rows = Array.AsReadOnly(new[]
         {
@@ -96,13 +146,62 @@ namespace DualSouls.Mods.Silksong
             Row("ignore_frost_slowdown", "ignore_frost_slowdown", TweakControlKind.Choice, "PLAYER", "IGNORE FROST SLOWDOWN", "Prevent frost buildup from slowing Hornet.", "off", "off", "on"),
         });
 
+        readonly struct PendingChoice
+        {
+            public PendingChoice(string id, long operationToken)
+            {
+                Id = id;
+                OperationToken = operationToken;
+            }
+
+            public string Id { get; }
+            public long OperationToken { get; }
+        }
+
         readonly ISilksongTweakApi _api;
+        readonly List<PendingChoice> _pendingChoiceReadbacks = new List<PendingChoice>();
+        long _nextOperationToken;
         public SilksongTweakAdapter(ISilksongTweakApi api) => _api = api ?? throw new ArgumentNullException(nameof(api));
         public string GameId => "silksong";
         public IReadOnlyList<TweakDescriptor> Descriptors => Rows;
         public void CaptureBaseline() => _api.CaptureBaseline();
-        public void RestoreBaseline() => _api.RestoreBaseline();
+        public void RestoreBaseline()
+        {
+            _pendingChoiceReadbacks.Clear();
+            _api.RestoreBaseline();
+        }
         public void Tick() => _api.TickGameplay();
+        public TweakActionResult Readback(string id) => _api.Readback(id);
+
+        public IReadOnlyList<TweakAdapterCompletion> TickWithOutcomes()
+        {
+            _api.TickGameplay();
+            IReadOnlyList<TweakAdapterCompletion> runtime =
+                _api.DrainCompletedOperations() ?? Array.Empty<TweakAdapterCompletion>();
+            int completionCount = runtime.Count + _pendingChoiceReadbacks.Count;
+            if (completionCount == 0)
+                return Array.Empty<TweakAdapterCompletion>();
+
+            var completed = new TweakAdapterCompletion[completionCount];
+            int completedIndex = 0;
+            for (int index = 0; index < runtime.Count; index++)
+                completed[completedIndex++] = runtime[index];
+
+            for (int index = 0; index < _pendingChoiceReadbacks.Count; index++)
+            {
+                PendingChoice pending = _pendingChoiceReadbacks[index];
+                TweakActionResult readback = _api.Readback(pending.Id);
+                if (readback.Pending)
+                    readback = TweakActionResult.Fail(
+                        "Silksong runtime readback is still pending for " + pending.Id + ".");
+                completed[completedIndex++] = new TweakAdapterCompletion(
+                    pending.Id,
+                    pending.OperationToken,
+                    readback);
+            }
+            _pendingChoiceReadbacks.Clear();
+            return completed;
+        }
 
         public TweakActionResult Apply(string id, string value)
         {
@@ -110,6 +209,11 @@ namespace DualSouls.Mods.Silksong
             if (row == null) return TweakActionResult.Fail("Unknown Silksong tweak: " + id);
             if (!row.Allows(value)) return TweakActionResult.Fail("Unsupported value for " + id + ": " + value);
             if (!_api.IsReady) return TweakActionResult.Fail("Silksong gameplay owners are not ready for Mods actions.");
+            long operationToken = row.ControlKind == TweakControlKind.Choice ||
+                                  row.ControlKind == TweakControlKind.Route ||
+                                  id == "load_from_slot"
+                ? NextOperationToken()
+                : 0;
             try
             {
                 switch (id)
@@ -119,7 +223,7 @@ namespace DualSouls.Mods.Silksong
                     case "fast_transitions": _api.SetFastTransitions(On(value)); break;
                     case "auto_map": _api.SetAutoMap(On(value)); break;
                     case "innate_compass": _api.SetInnateCompass(On(value)); break;
-                    case "bench_teleport": _api.OpenBenchTeleport(); break;
+                    case "bench_teleport": _api.OpenBenchTeleport(operationToken); break;
                     case "secret_radar": _api.SetSecretRadar(On(value)); break;
                     case "nail_damage": if (value == "x1") _api.RestoreNeedleDamage(); else _api.SetNeedleDamageMultiplier(Multiplier(value)); break;
                     case "damage_received": if (value == "vanilla") _api.RestoreDamageMode(); else _api.SetDamageMode(value == "prevent_death" ? SilksongDamageMode.PreventDeath : SilksongDamageMode.Invincible); break;
@@ -134,7 +238,7 @@ namespace DualSouls.Mods.Silksong
                     case "unlimited_notches": _api.SetUnlimitedToolSlots(On(value)); break;
                     case "state_slot": _api.SetStateSlot(int.Parse(value, System.Globalization.CultureInfo.InvariantCulture)); break;
                     case "save_to_slot": _api.SaveState(); break;
-                    case "load_from_slot": _api.LoadState(); break;
+                    case "load_from_slot": _api.LoadState(operationToken); break;
                     case "delete_slot": _api.DeleteState(); break;
                     case "geo_magnet": _api.SetRosaryMagnet(On(value)); break;
                     case "keep_geo_on_death": _api.SetKeepRosariesOnDeath(On(value)); break;
@@ -145,9 +249,23 @@ namespace DualSouls.Mods.Silksong
                     case "ignore_frost_slowdown": if (On(value)) _api.SetFrostDisabled(true); else _api.RestoreFrostDisabled(); break;
                     default: return TweakActionResult.Fail("No Silksong dispatch exists for " + id + ".");
                 }
-                return TweakActionResult.Ok();
+                if (row.ControlKind == TweakControlKind.Choice)
+                {
+                    _pendingChoiceReadbacks.Add(new PendingChoice(id, operationToken));
+                    return TweakActionResult.PendingResult(operationToken);
+                }
+                if (row.ControlKind == TweakControlKind.Route || id == "load_from_slot")
+                    return TweakActionResult.PendingResult(operationToken);
+                return _api.Readback(id);
             }
             catch (Exception e) { return TweakActionResult.Fail("Silksong rejected " + id + ": " + e.Message); }
+        }
+
+        long NextOperationToken()
+        {
+            _nextOperationToken++;
+            if (_nextOperationToken <= 0) _nextOperationToken = 1;
+            return _nextOperationToken;
         }
 
         static bool On(string value) => value == "on";

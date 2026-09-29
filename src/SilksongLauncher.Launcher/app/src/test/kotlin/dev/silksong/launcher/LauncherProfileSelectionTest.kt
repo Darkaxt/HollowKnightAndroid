@@ -112,9 +112,11 @@ class LauncherProfileSelectionTest {
         SelectedGameStore(context).set(GameProfiles.require("hollow-knight"))
         val launcher = Robolectric.buildActivity(LauncherActivity::class.java).setup().get()
 
-        launcher.findViewById<Button>(R.id.btn_mods).performClick()
+        val pluginsButton = launcher.findViewById<Button>(R.id.btn_mods)
+        assertEquals("Plugins", pluginsButton.text.toString())
+        pluginsButton.performClick()
         val modsIntent = shadowOf(launcher).nextStartedActivity
-        assertEquals(BuiltInModsActivity::class.java.name, modsIntent.component?.className)
+        assertEquals(ModsActivity::class.java.name, modsIntent.component?.className)
 
         launcher.findViewById<Button>(R.id.btn_skins).performClick()
         assertEquals(
@@ -128,8 +130,10 @@ class LauncherProfileSelectionTest {
             shadowOf(launcher).nextStartedActivity.component?.className,
         )
 
-        val mods = Robolectric.buildActivity(BuiltInModsActivity::class.java, modsIntent).setup().get()
-        assertTrue(collectText(mods.findViewById(android.R.id.content)).contains("MODS — HOLLOW KNIGHT"))
+        val mods = Robolectric.buildActivity(ModsActivity::class.java, modsIntent).setup().get()
+        val packageManagerCopy = collectText(mods.findViewById(android.R.id.content))
+        assertTrue(packageManagerCopy.contains("Plugins — Hollow Knight"))
+        assertTrue(packageManagerCopy.contains("Install a plugin from a folder"))
         assertEquals("hollow-knight", SelectedGameStore(context).get().id)
     }
 
@@ -141,8 +145,10 @@ class LauncherProfileSelectionTest {
         settings.findViewById<Button>(R.id.btn_settings_skins).performClick()
         assertEquals(SkinsActivity::class.java.name, shadow.nextStartedActivity.component?.className)
 
-        settings.findViewById<Button>(R.id.btn_settings_mods).performClick()
-        assertEquals(BuiltInModsActivity::class.java.name, shadow.nextStartedActivity.component?.className)
+        val settingsPluginsButton = settings.findViewById<Button>(R.id.btn_settings_mods)
+        assertEquals("Plugins", settingsPluginsButton.text.toString())
+        settingsPluginsButton.performClick()
+        assertEquals(ModsActivity::class.java.name, shadow.nextStartedActivity.component?.className)
 
         settings.findViewById<Button>(R.id.btn_settings_logs).performClick()
         assertEquals(LogActivity::class.java.name, shadow.nextStartedActivity.component?.className)
