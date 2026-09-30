@@ -82,7 +82,6 @@ MODULE_CONTRACTS = {
     ),
     "HKDualScreen.Bottom.Hud.cs": (
         "void BuildAreaName(",
-        "void BuildStats(",
         "void BuildEquipCharmRow()",
         "void UpdateEquipCharmRow(",
         "void UpdateNotchRow(",
@@ -573,17 +572,16 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("JsonUtility.FromJsonOverwrite(txt, parsed)", load)
         self.assertNotIn("JsonUtility.FromJson<HKLayout>(txt)", load)
 
-    def test_backdrop_preserves_reference_blur_and_measured_aspect(self):
+    def test_canonical_black_shell_suppresses_capture_without_changing_logo_authority(self):
         main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
         adapter = strip_csharp_comments(read(ADAPTER))
         sync = method_body(main, r"void\s+SyncBgCapture\s*\([^)]*\)")
-        self.assertIn("bgCaptureCam.CopyFrom(m)", sync)
-        self.assertIn("bgCaptureCam.aspect = (float)BOTTOM_W / BOTTOM_H", sync)
-        self.assertLess(
-            sync.index("bgCaptureCam.CopyFrom(m)"),
-            sync.index("bgCaptureCam.aspect = (float)BOTTOM_W / BOTTOM_H"),
-        )
-        self.assertIn("bgDimmer.BlurFactor = cfg.bgBlur", sync)
+        tick = method_body(main, r"void\s+Tick\s*\(\s*\)")
+        self.assertIn("bgCaptureCam.enabled = false", sync)
+        self.assertIn("clearCam.clearFlags = CameraClearFlags.SolidColor", sync)
+        self.assertNotIn("bgCaptureCam.CopyFrom", sync)
+        self.assertNotIn("SetupBgCapture(gc)", tick)
+        self.assertNotIn("bgShow =", sync)
         self.assertIn("RenderTexture.GetTemporary", adapter)
         self.assertIn("RenderTexture.ReleaseTemporary", adapter)
 
@@ -597,16 +595,26 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn('HasProperty("_Color")', render)
         self.assertNotIn('Shader.Find("Unlit/Texture")', render)
 
-    def test_backdrop_has_one_stage_hook_decision_in_the_capture_policy(self):
+    def test_black_shell_does_not_remove_the_upper_mods_background_setting(self):
         main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
+        hooks = strip_csharp_comments(read(STAGE_HOOKS))
         sync = method_body(main, r"void\s+SyncBgCapture\s*\([^)]*\)")
         self.assertTrue(sync, "missing SyncBgCapture")
-        self.assertEqual(1, sync.count("HkStageHooks.BlackBackground"))
-        self.assertRegex(
-            " ".join(sync.split()),
-            r"bgDimmer\.Brightness\s*=\s*HkStageHooks\.BlackBackground\s*"
-            r"\?\s*0f\s*:\s*cfg\.dim\s*;",
-        )
+        self.assertNotIn("HkStageHooks.BlackBackground", sync)
+        self.assertIn("BlackBackground", hooks)
+
+    def test_lower_telemetry_objects_config_and_polling_are_retired(self):
+        lower = "\n".join(strip_csharp_comments(read(REFERENCE_ROOT / name)) for name in (
+            "HKDualScreen.Bottom.Frame.cs", "HKDualScreen.Bottom.Hud.cs", "HKLayout.cs"))
+        for token in ("BuildStats", "DrawBatteryTex", "F_Stats", "F_BattIcon", "F_BattLevel",
+                      "SystemInfo.batteryLevel", "fpsAccum", "fpsFrames", "fpsShown", "fpsStrFor",
+                      "battPollT", "battShown", "battIconTex", "battIconLvl", "statsTmp",
+                      "battLevelTmp", "compStats", "compBatt", "compFps", "tabMidR"):
+            with self.subTest(retired=token):
+                self.assertNotIn(token, lower)
+        hud = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Hud.cs"))
+        self.assertIn("HeaderActionRightMarginPixels = 40f", hud)
+        self.assertEqual(2, hud.count("s * asp - HeaderActionRightMarginPixels"))
 
     def test_lifeblood_flash_policy_delegates_transitions_to_host_tested_core(self):
         self.assertTrue(FLASH_CORE.is_file(), "missing Unity-free flash policy core")
@@ -856,7 +864,6 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             (frame, r"void\s+BuildFrame\s*\(\s*\)", 1),
             (frame, r"void\s+BuildTabRow\s*\([^)]*\)", 1),
             (hud, r"void\s+BuildAreaName\s*\([^)]*\)", 1),
-            (hud, r"void\s+BuildStats\s*\([^)]*\)", 2),
             (hud, r"void\s+BuildNoMapLabel\s*\([^)]*\)", 1),
             (hud, r"void\s+EnsureNameClone\s*\(\s*\)", 1),
         ):
@@ -902,8 +909,6 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         for clone in (
             "areaNameT.gameObject",
-            "statsT.gameObject",
-            "battLevelT.gameObject",
             "noMapT.gameObject",
         ):
             call = f"NeutralizeDetachedTmpClip({clone})"

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 // [B3] BOTTOM SCREEN — persistent HUD. HK's own Hud Canvas (masks / soul / geo) is re-layered onto hudLayer and
-// mirrored by hudCam2 (FrameHudCams). This file adds the always-on widgets: map-zone name, FPS + battery readout,
+// mirrored by hudCam2 (FrameHudCams). This file adds the always-on widgets: map-zone name,
 // the equipped-charm icon row, and the "Map not acquired yet" label (built once under frameRoot; positioned per frame).
 public partial class HKDualScreen
 {
@@ -21,32 +21,14 @@ public partial class HKDualScreen
     Texture2D notchTexLit, notchTexEmpty; int lastNotchTotal = -1, lastNotchUsed = -1;
     Sprite notchSprLitFb, notchSprEmptyFb;   // fix(1.0.0/B6): cached procedural fallback sprites
 
-    Component statsTmp;              // TMP label: "<fps> fps  <batt>%" (top-right corner, all tabs)
-
-    Transform statsT;
-
-    string lastStats = "x";          // last text pushed to the stats label (non-empty sentinel forces first update)
-
-    float fpsYNudge, lvlYNudge; bool fpsYNudgeOk, lvlYNudgeOk;   // cached Y-align corrections as FRACTIONS of the ortho size (fps / battery-%); re-measured only on frames whose text did NOT just change (a fresh ForceMeshUpdate can report one-frame-stale bounds -> the old visible fps dip). Stored /s because a room/zone crossing changes the camera scale on the SAME frame a load hitch changes the fps text — a world-space cache applied at the old scale made the label jump on every room move.
-
-    float fpsAccum; int fpsFrames; int fpsShown = 60;   // rolling FPS, refreshed ~4x/sec
-
-    float battPollT; int battShown = -1;                // battery %, polled ~every 5s (SystemInfo.batteryLevel)
-
-    Transform battIconT; SpriteRenderer battIconSR; Texture2D battIconTex; int battIconLvl = -2;   // procedural battery glyph
-
-    Component battLevelTmp; Transform battLevelT; string lastBattLevel = "z";   // 2nd TMP: battery % (order = fps | icon | level)
-
     string lastAreaName = "";  // last text pushed to the label (sentinel forces the first update)
 
     // PERF caches for the per-frame PositionHudStrip: TMP renderers fetched once per frame-build (they were
     // 5-6 GetComponent calls per frame), the raw zone key (ZoneName's language-sheet lookup now runs only when
-    // the zone actually changes), and the fps/battery strings (interpolation only when the number changes).
-    Renderer areaNameR, statsR, battLevelR, noMapR, tabMidR;
+    // the zone actually changes), with no lower telemetry polling.
+    Renderer areaNameR, noMapR;
     string lastAreaZoneRaw = "\u0001";
-    int fpsStrFor = int.MinValue; string fpsStr = "";
-    int battStrFor = int.MinValue; string battStr = "";
-
+    const float HeaderActionRightMarginPixels = 40f;
     Transform equipRowRoot; readonly List<SpriteRenderer> equipCharmSRs = new List<SpriteRenderer>(); int lastEquipStamp = int.MinValue;   // equipped-charm icon row (top of the box)
 
     // Map-zone title (e.g. "Forgotten Crossroads") — the name HK flashes at the top when you hold LB.
@@ -82,55 +64,6 @@ public partial class HKDualScreen
             frameEdge[go.transform] = new Vector3(cfg.compAreaNameX, cfg.compAreaNameY, 4f);
         }
         catch (Exception e) { Dbg($"HKDS area name err {e.Message}"); }
-    }
-
-    // FPS + battery readout (top-right of the bottom screen, on every tab). Same TMP-clone approach as
-    // BuildAreaName; the text + position are updated LIVE in PositionFrame. Stays always-active (we hide it by
-    // pushing empty text, same as the area name — toggling a TMP inactive leaves its mesh un-regenerated).
-    void BuildStats(Transform root)
-    {
-        try
-        {
-            var src = FindDeep(root, "Pane Name");
-            if (src == null) return;
-            var go = Instantiate(src.gameObject, frameRoot.transform);
-            go.name = "F_Stats";
-            SanitizeDetachedTmpClone(go);
-            SetLayerRecursive(go.transform, ATTR_LAYER);
-            go.SetActive(true);
-            foreach (var r in go.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = true; }
-            foreach (var c in go.GetComponentsInChildren<Component>(true))
-            {
-                if (!IsTextMeshProGraphic(c)) continue;
-                statsTmp = c;
-                try { c.GetType().GetProperty("text")?.SetValue(c, "", null); } catch { }
-                try { var rr2 = c.GetComponent<Renderer>(); if (rr2 != null) rr2.sortingOrder = 52; } catch { }   // fps in FRONT of battery icon (50)
-                break;
-            }
-            statsT = go.transform;
-            float s = attrCam.orthographicSize;
-            var rr = go.GetComponentsInChildren<Renderer>();
-            Bounds b = new Bounds(); bool hv = false;
-            foreach (var r in rr) { var rb = r.bounds; if (float.IsNaN(rb.center.x) || rb.size.sqrMagnitude < 1e-8f) continue; if (!hv) { b = rb; hv = true; } else b.Encapsulate(rb); }
-            float nd = hv ? Mathf.Max(0.001f, b.size.y) : 1f;
-            go.transform.localScale *= (0.055f * 2f * s) / nd;   // base size; compStatsScale applied LIVE in PositionFrame
-            frameBase[go.transform] = go.transform.localScale;
-            try { var fsp = statsTmp.GetType().GetProperty("fontStyle"); if (fsp != null) fsp.SetValue(statsTmp, Enum.ToObject(fsp.PropertyType, 1), null); } catch { }   // Bold
-            // Procedural battery glyph (SpriteRenderer on ATTR_LAYER), sits just left of the readout; fill = level.
-            battIconTex = Own(new Texture2D(30, 15, TextureFormat.RGBA32, false)); battIconTex.filterMode = FilterMode.Bilinear;
-            var bgo = new GameObject("F_BattIcon"); bgo.transform.SetParent(frameRoot.transform, false);
-            battIconSR = bgo.AddComponent<SpriteRenderer>(); battIconSR.sortingOrder = 50;
-            battIconT = bgo.transform; SetLayerRecursive(battIconT, ATTR_LAYER);
-            // second TMP: the battery % (so the readout reads  fps | icon | level  left-to-right).
-            var lgo = Instantiate(src.gameObject, frameRoot.transform); lgo.name = "F_BattLevel";
-            SanitizeDetachedTmpClone(lgo);
-            SetLayerRecursive(lgo.transform, ATTR_LAYER); lgo.SetActive(true);
-            foreach (var r in lgo.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = true; }
-            foreach (var c in lgo.GetComponentsInChildren<Component>(true)) { if (!IsTextMeshProGraphic(c)) continue; battLevelTmp = c; try { c.GetType().GetProperty("text")?.SetValue(c, "", null); } catch { } try { var rr3 = c.GetComponent<Renderer>(); if (rr3 != null) rr3.sortingOrder = 52; } catch { } break; }   // level % in FRONT of battery icon (50)
-            battLevelT = lgo.transform; battLevelT.localScale = go.transform.localScale; frameBase[battLevelT] = battLevelT.localScale;
-            try { var fsp2 = battLevelTmp.GetType().GetProperty("fontStyle"); if (fsp2 != null) fsp2.SetValue(battLevelTmp, Enum.ToObject(fsp2.PropertyType, 1), null); } catch { }
-        }
-        catch (Exception e) { Dbg($"HKDS stats build err {e.Message}"); }
     }
 
     // ---- Equipped-charms icon row (top of the box, every tab) --------------------------------------------------
@@ -177,11 +110,11 @@ public partial class HKDualScreen
         int n = equipRowN; if (n == 0) return;
         float targetH = 0.5f * s * Mathf.Max(0.05f, cfg.compEquipRowScale);       // icon world height (∝ ortho => constant apparent size)
         float pitch = targetH * (1f + Mathf.Max(0f, cfg.compEquipRowGap));
-        // RIGHT-ANCHOR the row so its RIGHT edge sits at the SAME X as the battery readout (compStatsX), matching
+        // RIGHT-ANCHOR the row to the canonical 40px header margin, matching
         // the HUD's right margin (user: "right spacing equal battery side"). compEquipRowX is now a fine-nudge on
         // that right edge; compEquipRowY sets the top gap. Icons grow LEFTWARD from the rightmost.
         float cy = cfg.compEquipRowY * s;
-        float rightEdge = (cfg.compStatsX + cfg.compEquipRowX) * s * asp;
+        float rightEdge = s * asp - HeaderActionRightMarginPixels * (2f * s / Mathf.Max(1, BOTTOM_H));
         var srLast = equipCharmSRs[Mathf.Min(n, equipCharmSRs.Count) - 1];
         float lastAsp = (srLast != null && srLast.sprite != null) ? srLast.sprite.bounds.size.x / Mathf.Max(0.01f, srLast.sprite.bounds.size.y) : 1f;
         float rightIconCx = rightEdge - targetH * lastAsp * 0.5f;                  // rightmost icon centre
@@ -192,33 +125,6 @@ public partial class HKDualScreen
             float sc = targetH / sh; sr.transform.localScale = new Vector3(sc, sc, 1f);
             sr.transform.localPosition = new Vector3(rightIconCx - pitch * (n - 1 - i), cy, 4f);
         }
-    }
-
-    // Redraw the battery glyph texture for a given level (0..100; -1 = unknown). White outline + terminal nub,
-    // inner fill proportional to level and coloured green/amber/red. Cheap: only called when the level changes.
-    void DrawBatteryTex(int lvl)
-    {
-        if (battIconTex == null) return;
-        int W = battIconTex.width, H = battIconTex.height;
-        var px = new Color32[W * H];
-        Color32 clear = new Color32(0, 0, 0, 0), white = new Color32(255, 255, 255, 235);
-        for (int i = 0; i < px.Length; i++) px[i] = clear;
-        int bx0 = 0, bx1 = W - 5, by0 = 1, by1 = H - 2;                 // body rect (leaves room for the terminal)
-        void Set(int x, int y, Color32 col) { if (x >= 0 && x < W && y >= 0 && y < H) px[y * W + x] = col; }
-        for (int x = bx0; x <= bx1; x++) { Set(x, by0, white); Set(x, by1, white); }   // top/bottom
-        for (int y = by0; y <= by1; y++) { Set(bx0, y, white); Set(bx1, y, white); }   // left/right
-        for (int y = by0 + 2; y <= by1 - 2; y++) { Set(bx1 + 1, y, white); Set(bx1 + 2, y, white); Set(bx1 + 3, y, white); }   // terminal nub
-        float f = lvl < 0 ? 0f : Mathf.Clamp01(lvl / 100f);
-        int fillMax = bx1 - 2, fillTo = bx0 + 2 + Mathf.RoundToInt((fillMax - (bx0 + 2)) * f);
-        Color32 fc = lvl < 0 ? new Color32(160, 160, 160, 235)
-                   : lvl <= 15 ? new Color32(230, 70, 60, 235)
-                   : lvl <= 35 ? new Color32(235, 190, 60, 235)
-                                : new Color32(90, 210, 110, 235);
-        for (int x = bx0 + 2; x <= fillTo; x++) for (int y = by0 + 2; y <= by1 - 2; y++) Set(x, y, fc);
-        battIconTex.SetPixels32(px); battIconTex.Apply(false);
-        if (battIconSR != null && (battIconSR.sprite == null || battIconSR.sprite.texture != battIconTex))
-            battIconSR.sprite = Own(Sprite.Create(battIconTex, new Rect(0, 0, W, H), new Vector2(0.5f, 0.5f), 100f));   // once; the texture updates in place (was: a new leaked Sprite per level change)
-        battIconLvl = lvl;
     }
 
     // fix4: subtle grey "Map not acquired yet" label — shown centred in the box when the current zone has no
@@ -255,7 +161,7 @@ public partial class HKDualScreen
         catch (Exception e) { Dbg($"HKDS nomap label err {e.Message}"); }
     }
 
-    // [B3] Persistent HUD strip widgets (every tab): map-zone title (Map tab), FPS + battery readout, equipped-charm
+    // [B3] Persistent HUD strip widgets (every tab): map-zone title (Map tab), equipped-charm
     // icon row, "Map not acquired yet" label. Layout locals threaded from PositionFrame: s = attrCam ortho, asp =
     // aspect, zf = frame zoom factor, effectiveTab = the tab being shown.
     void PositionHudStrip(float s, float asp, float zf, int effectiveTab)
@@ -296,118 +202,6 @@ public partial class HKDualScreen
             // reflection text-set — force it every frame (this was the invisible label: real mesh, vis=False).
             if (areaNameR != null) areaNameR.enabled = lastAreaName.Length > 0 && benchToastUntil <= Time.unscaledTime;   // fix#5(163-fb): give the bench toast the corner
             if (lastAreaName.Length > 0 && frameBase.TryGetValue(areaNameT, out var anbs)) areaNameT.localScale = anbs * zf * Mathf.Max(0.1f, cfg.compAreaNameScale);
-        }
-        // FPS + battery readout (top-right corner, EVERY tab). Right-anchored like the area name so the right
-        // edge stays put regardless of digit count. FPS = rolling average over ~15 frames; battery from
-        // SystemInfo.batteryLevel polled ~every 5s (-1 -> omit the %). Empty text hides it (same TMP quirk).
-        if (statsT != null && statsTmp != null)
-        {
-            fpsAccum += Time.unscaledDeltaTime; fpsFrames++;
-            if (fpsFrames >= 15) { fpsShown = Mathf.Clamp(Mathf.RoundToInt(fpsFrames / Mathf.Max(1e-4f, fpsAccum)), 0, 999); fpsAccum = 0f; fpsFrames = 0; }
-            battPollT -= Time.unscaledDeltaTime;
-            if (battShown < 0 || battPollT <= 0f)
-            {
-                battPollT = 5f;
-                float bl = -1f; try { bl = SystemInfo.batteryLevel; } catch { }
-                battShown = bl >= 0f ? Mathf.Clamp(Mathf.RoundToInt(bl * 100f), 0, 100) : -1;
-            }
-            bool showStats = cfg.compStats == 1;
-            float scl = zf * Mathf.Max(0.1f, cfg.compStatsScale);
-            // FPS text + battery % are TWO TMPs so the readout reads  fps | icon | level  left-to-right.
-            if (fpsStrFor != fpsShown) { fpsStrFor = fpsShown; fpsStr = fpsShown + " fps"; }   // PERF: interp only when the number changes
-            string fwant = showStats ? fpsStr : "";
-            bool fpsTextChanged = fwant != lastStats;
-            if (fpsTextChanged)
-            {
-                lastStats = fwant;
-                try { statsTmp.GetType().GetProperty("text")?.SetValue(statsTmp, fwant, null); } catch { }
-                try { statsTmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(statsTmp, null); } catch { }
-                NeutralizeDetachedTmpClip(statsT.gameObject);
-            }
-            if (battStrFor != battShown) { battStrFor = battShown; battStr = battShown >= 0 ? battShown + "%" : ""; }
-            string lwant = showStats ? battStr : "";
-            bool lvlTextChanged = battLevelTmp != null && lwant != lastBattLevel;
-            if (lvlTextChanged)
-            {
-                lastBattLevel = lwant;
-                try { battLevelTmp.GetType().GetProperty("text")?.SetValue(battLevelTmp, lwant, null); } catch { }
-                try { battLevelTmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(battLevelTmp, null); } catch { }
-                NeutralizeDetachedTmpClip(battLevelT.gameObject);
-            }
-            if (frameBase.TryGetValue(statsT, out var stbs)) statsT.localScale = stbs * scl;
-            if (battLevelT != null && frameBase.TryGetValue(battLevelT, out var lbs)) battLevelT.localScale = lbs * scl;
-            if (statsR == null) { try { statsR = (statsTmp as Component).GetComponent<Renderer>(); } catch { } }         // PERF: cached
-            if (battLevelR == null && battLevelTmp != null) { try { battLevelR = (battLevelTmp as Component).GetComponent<Renderer>(); } catch { } }
-            Renderer str = statsR, lr = battLevelR;
-            if (str != null) { str.enabled = fwant.Length > 0; if (fpsTextChanged) SetTmpColor(statsTmp, new Color(1f, 1f, 1f, 0.96f)); }   // constant tint — re-set on text change only
-            if (lr != null) { lr.enabled = lwant.Length > 0; if (lvlTextChanged) SetTmpColor(battLevelTmp, new Color(1f, 1f, 1f, 0.96f)); }
-            // Bottom row, vertically CENTRED on the tab labels. The tab TMPs render offset from their transform and
-            // at a bigger scale (compTabScale) than the stats, so matching transform-Y doesn't line up — instead we
-            // read the active tab's RENDERED centre Y and align the FPS/battery rendered centres to it.
-            Vector3 fr = frameRoot != null ? frameRoot.transform.position : Vector3.zero;
-            float yRow = cfg.compTabY * s;
-            // Align to a STABLE tab (the Map tab, col 1 — always present + centred), NOT the active one: the active
-            // tab changes per switch and (with its fleurs) gave a shifting reference, so FPS/battery jumped around.
-            if (tabMidR == null || !tabMidR.enabled)   // PERF: cached reference tab renderer (per-frame GetComponent otherwise)
-            {
-                tabMidR = null;
-                foreach (var (tmp2, t2, col2) in frameTabs)
-                {
-                    if (tmp2 == null || col2 != 1) continue;
-                    try { var tr2 = (tmp2 as Component).GetComponent<Renderer>(); if (tr2 != null && tr2.enabled) tabMidR = tr2; } catch { }
-                    break;
-                }
-                if (tabMidR == null)   // fallback: first tab with a live renderer
-                    foreach (var (tmp2, t2, col2) in frameTabs)
-                    { if (tmp2 == null) continue; try { var tr2 = (tmp2 as Component).GetComponent<Renderer>(); if (tr2 != null && tr2.enabled) { tabMidR = tr2; break; } } catch { } }
-            }
-            float tabMidW = tabMidR != null && tabMidR.enabled ? tabMidR.bounds.center.y : float.NaN;
-            // Battery LEVEL first (right-anchored; centred on the tab text row) — the FPS aligns to IT below.
-            float grpRight = cfg.compStatsX * s * asp;
-            bool hasLvl = lr != null && lwant.Length > 0;
-            float lHalfW = hasLvl ? lr.bounds.extents.x : 0f;
-            if (battLevelT != null)
-            {
-                battLevelT.localPosition = new Vector3(grpRight - lHalfW, yRow, 4f);
-                if (!float.IsNaN(tabMidW) && lr != null && hasLvl)
-                {
-                    if (!lvlTextChanged || !lvlYNudgeOk) { lvlYNudge = (tabMidW - lr.bounds.center.y) / s; lvlYNudgeOk = !lvlTextChanged; }   // stable-frame rule: fresh ForceMeshUpdate bounds are one frame stale
-                    battLevelT.localPosition += new Vector3(0f, lvlYNudge * s, 0f);   // fraction * current s -> scale-proof on zone crossings
-                }
-            }
-            // FPS: left-anchored; TOP-aligned with the battery % — "fps" has a descender ('p'), so centring its
-            // ink bounds sat it visibly LOWER than "87%"; matching the top edges puts both on the same digit line.
-            float fHalfW = str != null && fwant.Length > 0 ? str.bounds.extents.x : 0f;
-            statsT.localPosition = new Vector3(cfg.compFpsX * s * asp + fHalfW, yRow, 4f);
-            if (str != null && fwant.Length > 0)
-            {
-                bool alignToLvl = hasLvl && battLevelT != null;
-                if ((!fpsTextChanged && !lvlTextChanged) || !fpsYNudgeOk)
-                {
-                    fpsYNudge = alignToLvl ? (lr.bounds.max.y - str.bounds.max.y) / s
-                                           : (float.IsNaN(tabMidW) ? 0f : (tabMidW - str.bounds.center.y) / s);
-                    fpsYNudgeOk = !fpsTextChanged && !lvlTextChanged;
-                }
-                statsT.localPosition += new Vector3(0f, fpsYNudge * s, 0f);
-            }
-            Renderer refR = hasLvl ? lr : str;
-            float cyW = !float.IsNaN(tabMidW) ? tabMidW : (refR != null ? refR.bounds.center.y : fr.y + yRow), czW = 4f;
-            float cH = refR != null ? Mathf.Max(0.05f, refR.bounds.size.y) : 0.5f, gapIL = cH * Mathf.Max(0f, cfg.compBattGap);
-            float levelLeft = grpRight - 2f * lHalfW;
-            if (battIconSR != null)
-            {
-                if (battIconLvl != battShown) DrawBatteryTex(battShown);
-                battIconSR.enabled = showStats;
-                if (showStats)
-                {
-                    // Rotate the battery glyph 90° (upright/vertical, terminal nub on top). The sprite is 0.30w×0.15h;
-                    // rotated, its displayed HEIGHT = 0.30·sc and WIDTH = 0.15·sc, so scale off 0.30 to keep height≈cH·scale.
-                    float sc = Mathf.Max(0.01f, (cH * Mathf.Max(0.1f, cfg.compBattScale)) / 0.30f); battIconT.localScale = new Vector3(sc, sc, 1f);
-                    battIconT.localRotation = Quaternion.Euler(0f, 0f, 90f);
-                    float iconW = 0.15f * sc;   // rotated horizontal footprint = the sprite's original height
-                    battIconT.position = new Vector3(fr.x + (levelLeft - gapIL - iconW * 0.5f), cyW + cfg.compBattOffY * cH, czW);   // Y = tab text centre + tunable nudge
-                }
-            }
         }
         UpdateNotchRow(s, asp, effectiveTab);      // fix#3(164-fb): Charms tab: notch icons where the area name sits
         UpdateEquipCharmRow(s, asp);   // equipped-charm icon row across the top (every tab)
@@ -558,7 +352,7 @@ public partial class HKDualScreen
         float targetH = 0.5f * s * Mathf.Max(0.05f, cfg.compEquipRowScale);   // same metric as the charm row
         float h = targetH * 0.70f;                                            // fix(173): larger [user] (was 0.5x the charm icons)
         float rowY = cfg.compEquipRowY * s - targetH * 0.5f - h * 0.95f;      // below the charm icons, nudged further down [user]
-        float rightEdge = (cfg.compStatsX + cfg.compEquipRowX) * s * asp;     // same right margin as that row
+        float rightEdge = s * asp - HeaderActionRightMarginPixels * (2f * s / Mathf.Max(1, BOTTOM_H));     // same right margin as that row
         bool retex = total != lastNotchTotal || used != lastNotchUsed;
         for (int i = 0; i < notchSRs.Count; i++)
         {

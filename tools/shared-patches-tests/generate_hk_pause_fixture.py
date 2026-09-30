@@ -9,6 +9,7 @@ methods = {
     "HKDualScreen.Bottom.Layering.cs": (
         "CompanionVisible", "ApplyDualScreenToggle", "ApplyLowerPauseGate"),
     "HKDualScreen.Bottom.Hud.cs": ("FrameHudCams",),
+    "HKDualScreen.Bottom.Frame.cs": ("ApplyCompanionCamera",),
 }
 parts = []
 for filename, names in methods.items():
@@ -32,5 +33,6 @@ for filename, names in methods.items():
 output = Path(sys.argv[1])
 output.parent.mkdir(parents=True, exist_ok=True)
 output.write_text("// Generated from production; do not edit.\nnamespace HkPauseContracts;\n"
-                  "internal partial class HKDualScreen {\n" + "\n".join(parts) + "\n}\n",
+                  "internal partial class HKDualScreen {\n" + "\n".join(parts) + "\n}\n" +
+                  (root / "HKLayout.cs").read_text(encoding="utf-8").replace("using System;", "").replace("using UnityEngine;", ""),
                   encoding="utf-8")

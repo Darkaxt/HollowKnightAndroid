@@ -313,9 +313,8 @@ public partial class HKDualScreen
                 return;
             }
             if (frameTabs.Count == 0 || attrCam == null) return;   // bottom tab-row band -> switch tab
-            // B6: hit-test the ACTUAL tab-text bounds instead of splitting the whole width into 3 (nx*3). The FPS
-            // (far left) and battery (far right) readouts share this band but sit OUTSIDE the tabs — the old split
-            // mapped their taps onto Inventory/Charms. Now only a tap landing on a tab's own X extent switches.
+            // Hit-test the retained native tab glyphs in world space. Full-width
+            // canonical cell routing is owned by the five-route shell checkpoint.
             Rect rc = attrCam.rect;
             float vx = (nx - rc.x) / Mathf.Max(1e-4f, rc.width);
             float vy = ((1f - ny) - rc.y) / Mathf.Max(1e-4f, rc.height);
@@ -337,7 +336,7 @@ public partial class HKDualScreen
                 tab.tap = hitTab;
                 Dbg($"HKDS tab tapped -> tab={tab.tap}");
             }
-            else Dbg("HKDS tab-band tap outside tabs (fps/battery) -> ignored");
+            else Dbg("HKDS tab-band tap outside native glyphs -> ignored");
         }
         catch (Exception e) { Dbg($"HKDS touch err {e.Message}"); }
     }

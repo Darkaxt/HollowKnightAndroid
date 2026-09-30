@@ -24,7 +24,7 @@ public sealed class HollowKnightPauseContractsTests
         lower.Step(false);
         Assert.True(lower.Drawn(lower.Health));
         Assert.True(lower.Drawn(lower.frameRoot));
-        Assert.True(lower.bgCaptureCam.enabled);
+        Assert.False(lower.bgCaptureCam.enabled);
         Assert.False(lower.Drawn(lower.logoGo));
         lower.Step(true);
         AssertGameplayHidden(lower);
@@ -65,7 +65,7 @@ public sealed class HollowKnightPauseContractsTests
             Assert.True(lower.Drawn(lower.Health));
             Assert.True(lower.Drawn(frame));
             Assert.True(lower.Drawn(lower.Heal));
-            Assert.True(lower.bgCaptureCam.enabled);
+            Assert.False(lower.bgCaptureCam.enabled);
             Assert.False(lower.Drawn(lower.logoGo));
             Assert.Equal(++updates, lower.Updates);
             Assert.Equal(++touches, lower.TouchPolls);

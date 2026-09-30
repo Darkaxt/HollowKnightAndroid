@@ -98,16 +98,9 @@ class HKLayout
     public float compAreaNameX = 0.92f;  // area-name center X (fraction of half-view, +right)
     public float compAreaNameY = 0.5f;  // area-name center Y (+up, near the top = inline with the HUD)
     public float compAreaNameScale = 1.15f;// area-name label size multiplier
-    public int compStats = 1;            // 1 = show an FPS + battery readout on the bottom screen (all tabs)   [build-time]
-    public float compStatsX = 0.92f;      // battery readout RIGHT-edge anchor X (bottom-right, inline with the tab row); also anchors the equip row
-    public float compFpsX = -0.92f;      // FPS readout LEFT-edge anchor X (bottom-left, inline with the tab row)
-    public float compStatsScale = 1.0f;  // stats label size multiplier (bold, a touch bigger than the area name)
-    public float compBattScale = 0.4f;  // battery glyph height as a fraction of the readout text height
-    public float compBattOffY = 0.4f;   // battery glyph vertical nudge (fraction of text height; + = up) to align it with the text — 0.40 centres it on the fps/level digit line (emulator-verified 2026-08-13)
-    public float compBattGap = 0.12f;    // horizontal gap between the battery icon and the level % (fraction of text height); fps<->icon keeps the wider 0.35 so icon+% read as one unit
     public int compEquipRow = 1;         // 1 = show a row of EQUIPPED-CHARM icons across the TOP of the box (every tab)
     public float compEquipRowX = 0.0f;     // equipped-charm row centre X (fraction of half-view)
-    public float compEquipRowY = 0.85f;  // equipped-charm row Y (+up, top area where FPS/battery used to sit)
+    public float compEquipRowY = 0.85f;  // equipped-charm row Y (+up, canonical header context)
     public float compEquipRowScale = 0.22f; // charm-icon height as a fraction of half-view
     public float compEquipRowGap = 0.3f;   // extra spacing between charm icons (fraction of icon height)
     public int compNoMapMsg = 1;         // fix4: show a subtle grey "Map not acquired yet" label when the zone has no map   [build-time]

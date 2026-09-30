@@ -26,7 +26,14 @@ internal partial class HKDualScreen
     internal readonly Tab tab = new();
     internal GameObject mapClone = new(), invCloneCache = new(), charmCloneCache = new(), frameRoot = new();
     internal readonly List<int> routedLayers = new();
-    internal int Teardowns, Updates, TouchPolls, Prewarms, FrameTeardowns;
+    internal int Teardowns, Updates, TouchPolls, Prewarms, FrameTeardowns, CaptureSetups;
+    const int COMP_MAP = 0, COMP_INV = 1, COMP_CHARM = 2;
+    internal struct FitResult { internal Vector3 center; internal float ortho; internal bool valid; }
+    internal FitResult fit;
+    internal bool mapFitIsArea, mapAvailable;
+    internal float mapUserZoom = 1, mapInnerYc;
+    internal Vector2 mapUserPan;
+    internal void FramePane(Vector3 center) => ApplyCompanionCamera(center);
     internal readonly GameObject Health = new(), Soul = new(), Geo = new(), Frame = new(), Controls = new(), Heal = new();
 
     internal HKDualScreen()
@@ -79,7 +86,7 @@ internal partial class HKDualScreen
     }
     bool CreditShowing() => Credit;
     bool BottomOverlayActive() => Popup;
-    void SetupBgCapture(GameCameras gc) { }
+    void SetupBgCapture(GameCameras gc) => CaptureSetups++;
     void ApplyMainFocusLift() { }
     void FixEmptyCounterDetail() { }
     void InvalidateCompanionClones() => throw new InvalidOperationException("unexpected skin invalidation");
@@ -109,6 +116,10 @@ internal sealed class Layout
 {
     internal int dualScreen = 1, companion = 1, compTab = 1, debug, compPopupBlack = 1, bgMask;
     internal float dim = .5f, bgBlur = 2, panX, panY, zoomMul = 1, creditScale = 1;
+    internal int compBox, compFrame;
+    internal float compBoxX, compBoxY, compBoxW = 1, compBoxH = 1, compZoom = 1, compFrameFit = 1;
+    internal float compOffX, compOffY, compMapCenterY, compInvOffX, compCharmOffY;
+    internal float compCharmZoom = 1, compPaneZoom = 1;
 }
 internal sealed class Tab { internal int tap = 2, cur = 2, built = 2, lastCfg = 1; }
 internal sealed class Transport { internal int TargetDisplayIndex = 1; internal void SetProductEnabled(bool requested) { } }
@@ -133,7 +144,22 @@ internal static class HkStageHooks
     internal static void Tick(Layout cfg, bool debug) { }
 }
 internal static class Time { internal static int frameCount; }
-internal static class Mathf { internal static float Max(float a, float b) => Math.Max(a, b); }
+internal static class Mathf
+{
+    internal static float Max(float a, float b) => Math.Max(a, b);
+    internal static float Clamp(float v, float min, float max) => Math.Clamp(v, min, max);
+}
+internal struct Rect
+{
+    internal float x, y, width, height;
+    internal Rect(float x, float y, float width, float height) { this.x = x; this.y = y; this.width = width; this.height = height; }
+}
+internal struct Vector2
+{
+    internal float x, y;
+    internal Vector2(float x, float y) { this.x = x; this.y = y; }
+}
+internal static class Quaternion { internal static readonly object identity = new(); }
 internal enum CameraClearFlags { SolidColor, Depth }
 internal struct Color { internal static readonly Color black = new(); }
 internal struct Vector3
@@ -144,7 +170,8 @@ internal struct Vector3
 }
 internal sealed class Camera
 {
-    internal bool enabled = true;
+    internal bool enabled = true, orthographic;
+    internal Rect rect;
     internal int cullingMask, targetDisplay;
     internal float aspect = 1, orthographicSize = 8, depth;
     internal object targetTexture;

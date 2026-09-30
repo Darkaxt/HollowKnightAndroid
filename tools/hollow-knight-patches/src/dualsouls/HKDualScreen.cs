@@ -28,7 +28,7 @@ using UnityEngine;
 //                                         tab state, clone-cache lifecycle, pane fit, UpdateCompanion/PositionFrame
 //                                         orchestration, companion camera.
 //   HKDualScreen.Bottom.Hud.cs       [B3] BOTTOM SCREEN 3: persistent HUD — hudCam2 mirror of HK's masks/soul/geo
-//                                         + our widgets: area name, fps, battery, equipped-charm row, no-map label.
+//                                         + our widgets: area name, equipped-charm row, no-map label.
 //   HKDualScreen.Bottom.Inventory.cs [B4] BOTTOM SCREEN 4: Inventory tab — clone init/settle/finalize, equipment
 //                                         grid, counters, Focus lift, item->detail resolution.
 //   HKDualScreen.Bottom.Select.cs    [B5] tap/select (touch bridge, hit-test, HK cursor) + the control-prompt line.
@@ -329,32 +329,10 @@ public partial class HKDualScreen : MonoBehaviour
 
     void SyncBgCapture(GameCameras gc)
     {
-        if (bgCaptureCam == null || gc.mainCamera == null) return;
-        // PERF: the backdrop cam renders the WHOLE scene a second time into bgRT. Only the gameplay backdrop
-        // (bgShow) ever uses it — menus/pause/inventory/dual-screen-off show black+logo, and a bottom popup
-        // (popupBlack) wants clean black behind it — so disable the cam (and skip the CopyFrom) when unused.
-        bgCaptureCam.enabled = directDisplayActive && bgShow && !popupBlack;
-        if (clearCam != null)
-            clearCam.clearFlags = bgCaptureCam.enabled
-                ? CameraClearFlags.Depth : CameraClearFlags.SolidColor;
-        if (!bgCaptureCam.enabled) return;
-        var m = gc.mainCamera;
-        bgCaptureCam.CopyFrom(m);                       // match projection/zoom/clip exactly
-        bgCaptureCam.aspect = (float)BOTTOM_W / BOTTOM_H;
-        int wantMask = cfg.bgMask != 0 ? cfg.bgMask : bgCullMask;
-        bgCaptureCam.cullingMask = wantMask & ~((1 << HUD_LAYER) | (1 << TUT_LAYER));   // never our private layers
-        bgCaptureCam.targetTexture = null;
-        bgCaptureCam.targetDisplay = transport.TargetDisplayIndex;
-        bgCaptureCam.clearFlags = CameraClearFlags.SolidColor;
-        bgCaptureCam.backgroundColor = Color.black;
-        bgCaptureCam.depth = 97;
-        bgCaptureCam.transform.position = m.transform.position;
-        bgCaptureCam.transform.rotation = m.transform.rotation;
-        if (bgDimmer != null)
-        {
-            bgDimmer.Brightness = HkStageHooks.BlackBackground ? 0f : cfg.dim;
-            bgDimmer.BlurFactor = cfg.bgBlur;
-        }
+        // The canonical gameplay shell is opaque black. bgShow remains the
+        // gameplay/title authority used by LogoTick, not a capture switch.
+        if (bgCaptureCam != null) bgCaptureCam.enabled = false;
+        if (clearCam != null) clearCam.clearFlags = CameraClearFlags.SolidColor;
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -583,8 +561,7 @@ public partial class HKDualScreen : MonoBehaviour
             // with the credit drawing over it on promptCam (depth 101 > companion 99/100).
             bool popupAny = loreDialogueOpen || BottomOverlayActive();
             popupBlack = cfg.compPopupBlack == 1 && popupAny;
-            SetupBgCapture(gc);        // M : backdrop capture (after popupBlack so its gate is same-frame)
-            SyncBgCapture(gc);
+            SyncBgCapture(gc);        // black shell; never construct or render a second scenery camera
             ApplyMainFocusLift();      // M : lift the REAL inventory's Focus+3-spells cluster (edits the Check Active FSMs' Up Y/Down Y once)
             if (invOpen) FixEmptyCounterDetail();   // M : mask-shard / vessel counters with 0 found: swap HK's empty *_NONE convo keys for the informative *_0 ones (match the bottom screen)
             // fix#6(161-fb): skin textures changed -> the clones hold material copies frozen at clone

@@ -305,7 +305,6 @@ public partial class HKDualScreen
         if (cfg.compSepBot == 1) sepBotT = BuildSeparator("hkds_sep_bot", false);
         BuildTabRow(root);
         if (cfg.compAreaName == 1) BuildAreaName(root);
-        if (cfg.compStats == 1) BuildStats(root);
         BuildEquipCharmRow();
         if (cfg.compNoMapMsg == 1) BuildNoMapLabel(root);
         // our own fleur/separator quads: renderers ON once here (nothing disables them later; the old per-frame
@@ -597,7 +596,7 @@ public partial class HKDualScreen
             }
         }
         if (colChanged) tabColorCol = activeCol;
-        PositionHudStrip(s, asp, zf, effectiveTab);   // B3: area name, fps/battery, equipped-charm row, no-map label
+        PositionHudStrip(s, asp, zf, effectiveTab);   // B3: area name, equipped-charm row, no-map label
         var cam = attrCam.transform;
         // Anchor the selection line + bottom fleur to the tabs' ACTUAL rendered glyph bounds (world AABB),
         // read AFTER the scale loops above. The tab transform sits at compTabY (panel bottom) but TMP draws
@@ -731,7 +730,7 @@ public partial class HKDualScreen
         botFleurT = botFleur2T = sepTopT = sepBotT = null; mapMaskTopT = mapMaskBotT = null; mapMaskTopR = mapMaskBotR = null; mapResetT = null; mapResetTmp = null; mapResetR = null; mapResetPillSR = null; tabColorCol = -1; tabFleurMoveCol = -1; tabFleurMoveT = 1f; frameInnerBotFrac = frameInnerTopFrac = float.NaN; selBox = null; sel.item = null; sel.invKey = null; sel.charmN = 0; sel.kind = -1; paneCursor = null; paneCursorFor = null;
         costPipRoot = null; charmBoardsFor = null;   // redesign: re-create cost pips + rebuild the per-clone charm cache for the fresh pane
         areaNameT = null; areaNameTmp = null; areaNameR = null; lastAreaZoneRaw = "\u0001"; lastAreaName = "\u0001";   // sentinel: the rebuilt TMP starts blank — force a re-set even for the same zone
-        statsT = null; statsTmp = null; lastStats = "x"; statsR = null; battLevelR = null; noMapR = null; tabMidR = null;
+        noMapR = null;
         // EQUIPPED-CHARM ROW — all three of these must die with the frame.
         //   * equipCharmSRs kept every destroyed renderer and appended 11 more per rebuild, so the update
         //     loop then wrote sprites into the DEAD leading entries and disabled the live ones.
@@ -739,9 +738,7 @@ public partial class HKDualScreen
         //     disabled) renderers are never populated, because the charm set legitimately has not changed.
         //     Net effect: one build-time config edit blanked the row until the process restarted.
         equipRowRoot = null; equipCharmSRs.Clear(); lastEquipStamp = int.MinValue;
-        if (battIconSR != null) { Destroy(battIconSR.gameObject); battIconSR = null; } battIconT = null; battIconTex = null; battIconLvl = -2;
         TeardownMapControls();
-        if (battLevelT != null) { Destroy(battLevelT.gameObject); battLevelT = null; } battLevelTmp = null; lastBattLevel = "z";
     }
 
     // ---- bottom-screen companion (Map / Inventory / Charms) ------------------------------------
@@ -793,7 +790,7 @@ public partial class HKDualScreen
     }
 
     // Config hot-reload re-apply. Live per-frame knobs need nothing (they're read every frame). Two classes need help:
-    //   * BUILD-TIME knobs (only read inside BuildFrame/Build*: which widgets exist, separators on/off, area name/stats/
+    //   * BUILD-TIME knobs (only read inside BuildFrame/Build*: which widgets exist, separators on/off, area name/
     //     no-map on/off) — BuildFrame early-returns while frameRoot exists, so before this an edit was a SILENT no-op
     //     until the frame happened to be torn down. Hash them; on change tear the frame down (rebuilt next frame).
     //   * the Inventory equipment grid offset (compEquipGridDY) — re-lay a finalized INV clone directly (works stowed).
@@ -802,7 +799,7 @@ public partial class HKDualScreen
     {
         paneNeedsFit = true;   // re-fit the pane/charms layout instantly (live tuning), then lock again
         int h = 17;
-        h = h * 31 + cfg.compSepTop; h = h * 31 + cfg.compSepBot; h = h * 31 + cfg.compAreaName; h = h * 31 + cfg.compStats;
+        h = h * 31 + cfg.compSepTop; h = h * 31 + cfg.compSepBot; h = h * 31 + cfg.compAreaName;
         h = h * 31 + cfg.compNoMapMsg; h = h * 31 + cfg.compEquipRow;
         if (h != frameBuildHash) { if (frameBuildHash != 0 && frameRoot != null) { TeardownFrame(); Dbg("HKDS cfg: build-time frame knob changed -> frame rebuilt"); } frameBuildHash = h; }
         if (ctrlActive) { ctrlLayoutPending = 1; ctrlLayoutWait = 0; }   // B5: re-measure + re-place the control-prompt line with the new compCtrl* values (live tuning)
@@ -1216,10 +1213,8 @@ public partial class HKDualScreen
         float ortho = attrCam.orthographicSize;
         // when framed, shift the camera DOWN so the content sits in the UPPER part of the box (inside the frame).
         float mapShift = (cfg.compFrame == 1) ? cfg.compMapCenterY * ortho : 0f;
-        float tabOffX = (tab.cur == COMP_INV ? cfg.compInvOffX : 0f) * ortho;     // +X => camera right => content LEFT (inventory)
-        float tabOffY = (tab.cur == COMP_CHARM ? cfg.compCharmOffY : 0f) * ortho; // +Y => camera up => content DOWN (charms)
-        attrCam.transform.position = new Vector3(frameCenter.x + cfg.compOffX + tabOffX,
-                                                 frameCenter.y + cfg.compOffY - mapShift + tabOffY, frameCenter.z - 10f);
+        attrCam.transform.position = new Vector3(frameCenter.x + cfg.compOffX,
+                                                 frameCenter.y + cfg.compOffY - mapShift, frameCenter.z - 10f);
         attrCam.transform.rotation = Quaternion.identity;
     }
 
