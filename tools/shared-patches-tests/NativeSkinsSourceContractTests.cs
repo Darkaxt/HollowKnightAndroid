@@ -70,6 +70,9 @@ public sealed class NativeSkinsSourceContractTests
         string source = Source(file);
 
         Assert.Equal(1, Count(source, "readMenuSnapshot"));
+        Assert.Contains("if (_skinTransport.Due(Time.unscaledTime)) RefreshSkinMenu();", source, StringComparison.Ordinal);
+        Assert.Contains("_skinTransport.CompleteEvidence(wire.evidenceState);", source, StringComparison.Ordinal);
+        Assert.Contains("_skinTransport.Cancel();", source, StringComparison.Ordinal);
         Assert.Contains("WireSkinObservation", source, StringComparison.Ordinal);
         Assert.Contains("evidenceState", source, StringComparison.Ordinal);
         Assert.Contains("TERMINAL", source, StringComparison.Ordinal);
@@ -94,12 +97,14 @@ public sealed class NativeSkinsSourceContractTests
         string source = Source(file);
 
         int start = source.IndexOf("bool ReportManaged", StringComparison.Ordinal);
-        int end = source.IndexOf("#pragma warning disable CS0649", start, StringComparison.Ordinal);
+        int end = source.IndexOf("#endif", start, StringComparison.Ordinal);
         Assert.True(start >= 0 && end > start);
         string transport = source.Substring(start, end - start);
         Assert.Contains("if (observation.PendingOccurrence > 0)\n", transport, StringComparison.Ordinal);
         Assert.DoesNotContain("observation.PendingOccurrence > 0 &&", transport, StringComparison.Ordinal);
         Assert.Contains("CallStatic<bool>(\"reportRotation\"", transport, StringComparison.Ordinal);
+        Assert.Contains("observation.SaveSlot", transport, StringComparison.Ordinal);
+        Assert.Contains("SkinLibraryTransport.Decode", source, StringComparison.Ordinal);
         int warningStart = transport.IndexOf("string warning", StringComparison.Ordinal);
         int warningEnd = transport.IndexOf("lastWarning = warning;", warningStart, StringComparison.Ordinal);
         Assert.True(warningStart >= 0 && warningEnd > warningStart);
@@ -130,6 +135,10 @@ public sealed class NativeSkinsSourceContractTests
 
         Assert.Contains("internal void InvalidateSkinLibrary()", source, StringComparison.Ordinal);
         Assert.Contains("skinLibrary.Invalidate()", source, StringComparison.Ordinal);
+        int boundary = source.IndexOf("skinLibrary.AdmitSaveBoundary();", StringComparison.Ordinal);
+        int visual = source.IndexOf("Skins.Tick();", StringComparison.Ordinal);
+        int authority = source.IndexOf("skinLibrary.Tick();", StringComparison.Ordinal);
+        Assert.True(boundary >= 0 && boundary < visual && visual < authority, "Save admission must precede both profiles' visual tick.");
         Assert.DoesNotContain("library.json", source, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -141,6 +150,24 @@ public sealed class NativeSkinsSourceContractTests
         string source = Source(file);
         Assert.Contains("void OnApplicationPause(bool paused)", source, StringComparison.Ordinal);
         Assert.Contains("if (!paused) InvalidateSkinLibrary();", source, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("HollowKnight")]
+    [InlineData("Silksong")]
+    public void Save_visual_gate_precedes_discovery_without_reinterpreting_normal_refresh_permission(string profile)
+    {
+        string runtime = Source(profile + "SkinRuntime.cs");
+        string owner = Source(profile + "SkinLibrary.cs");
+        int tick = runtime.IndexOf("public void Tick()", StringComparison.Ordinal);
+        int gate = runtime.IndexOf("SaveVisualRefreshAllowed?.Invoke()", tick, StringComparison.Ordinal);
+        string discovery = profile == "HollowKnight" ? "refreshSchedule.Tick(" : "ownerRefresh.ShouldPoll(";
+        int refresh = runtime.IndexOf(discovery, tick, StringComparison.Ordinal);
+        Assert.True(tick >= 0 && gate > tick && gate < refresh);
+        Assert.Contains("runtime.SaveVisualRefreshAllowed = () => SaveVisualRefreshAllowed;", owner, StringComparison.Ordinal);
+        Assert.Contains("controller.InvalidateSave();", owner, StringComparison.Ordinal);
+        if (profile == "Silksong") Assert.Contains("VisualRefreshRequired(normalRefresh)", runtime, StringComparison.Ordinal);
+        else Assert.True(runtime.IndexOf("hero = nextHero; hud = nextHud;", tick, StringComparison.Ordinal) < gate);
     }
 
     static int Count(string value, string token)

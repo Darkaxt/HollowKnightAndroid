@@ -70,6 +70,7 @@ namespace DualSouls.Mods.Silksong
 
         void Update()
         {
+            if (skinLibrary != null) skinLibrary.AdmitSaveBoundary();
             if (Skins != null) Skins.Tick();
             if (skinLibrary != null) skinLibrary.Tick();
             TweakSession session = Session;

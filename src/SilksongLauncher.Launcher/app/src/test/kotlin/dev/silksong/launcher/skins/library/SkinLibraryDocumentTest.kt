@@ -23,7 +23,7 @@ class SkinLibraryDocumentTest {
     @Test fun `malformed identity duplicates dangling ids and unknown modes fail closed`() {
         val good = SkinLibraryCodec.encode(SkinLibraryDocument(packs = listOf(a))).toString(Charsets.UTF_8)
         for (bad in listOf(good.replace("hollow-knight", "silksong"), good.replace("\"OFF\"", "\"BOGUS\""),
-            good.replace("\"schemaVersion\":1", "\"schemaVersion\":1,\"schemaVersion\":1"), good + "{}", "{}")) {
+            good.replace("\"schemaVersion\":2", "\"schemaVersion\":2,\"schemaVersion\":2"), good + "{}", "{}")) {
             assertThrows(IllegalArgumentException::class.java) { SkinLibraryCodec.decode(bad.toByteArray()) }
         }
         for (bad in listOf(SkinLibraryDocument(packs = listOf(a, a)), SkinLibraryDocument(selectedPackId = "missing"),
@@ -96,6 +96,27 @@ class SkinLibraryDocumentTest {
         val encoded = SkinLibraryCodec.encode(SkinLibraryDocument()).toString(Charsets.UTF_8)
             .replace("\"ALL\"", "\"HUD_ONLY\"")
         assertThrows(IllegalArgumentException::class.java) { SkinLibraryCodec.decode(encoded.toByteArray()) }
+    }
+
+    @Test fun `schema one migrates without attributing intent to any save`() {
+        val legacy = """{"schemaVersion":1,"profileId":"silksong","mode":"ON","selectedPackId":"a","packs":[{"id":"a","name":"Pack A","author":"Unknown","candidateKey":"${a.candidateKey}","treeSha256":"${a.treeSha256}","receiptSha256":"${a.receiptSha256}"}],"eligiblePackIds":[]}"""
+        val migrated = SkinLibraryCodec.decode(legacy.toByteArray(), "silksong")
+        assertEquals("a", migrated.selectedPackId)
+        assertNull(migrated.activeSaveSlot)
+        assertTrue(migrated.saveAffinities.isEmpty())
+        assertTrue(SkinLibraryCodec.encode(migrated, "silksong").toString(Charsets.UTF_8).contains("\"schemaVersion\":2"))
+    }
+
+    @Test fun `five actual slot identities imported and true default round trip with strict bounds`() {
+        val document = SkinLibraryDocument(packs = listOf(a, b), activeSaveSlot = 0,
+            saveAffinities = listOf(SaveSkinAffinity(0, "a", a.treeSha256), SaveSkinAffinity(1, "b", b.treeSha256),
+                SaveSkinAffinity(2), SaveSkinAffinity(3), SaveSkinAffinity(4)))
+        for (profile in listOf("hollow-knight", "silksong"))
+            assertEquals(document, SkinLibraryCodec.decode(SkinLibraryCodec.encode(document, profile), profile))
+        for (bad in listOf(document.copy(activeSaveSlot = -1), document.copy(activeSaveSlot = 5),
+            document.copy(saveAffinities = document.saveAffinities + SaveSkinAffinity(0)),
+            document.copy(saveAffinities = listOf(SaveSkinAffinity(0, "a", "d".repeat(64))))))
+            assertThrows(IllegalArgumentException::class.java) { SkinLibraryCodec.encode(bad) }
     }
 
     @Test fun `document byte bound is enforced before parsing`() {

@@ -19,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="fixtures/skin-runtime-chain.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../skin-goldens/v1/launch-descriptors.json" Link="skin-goldens/v1/launch-descriptors.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../skin-goldens/v1/lifecycle.json" Link="skin-goldens/v1/lifecycle.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../skin-goldens/v1/transactions.json" Link="skin-goldens/v1/transactions.json" CopyToOutputDirectory="PreserveNewest" />
@@ -32,6 +33,8 @@
     <Content Include="../silksong-patches/src/mods/SilksongModsRuntime.cs" Link="native-skin-contracts/SilksongModsRuntime.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/skins/runtime/HollowKnightSkinLibrary.cs" Link="native-skin-contracts/HollowKnightSkinLibrary.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../silksong-patches/src/skins/runtime/SilksongSkinLibrary.cs" Link="native-skin-contracts/SilksongSkinLibrary.cs" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../hollow-knight-patches/src/skins/runtime/HollowKnightSkinRuntime.cs" Link="native-skin-contracts/HollowKnightSkinRuntime.cs" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../silksong-patches/src/skins/runtime/SilksongSkinRuntime.cs" Link="native-skin-contracts/SilksongSkinRuntime.cs" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="..\shared-patches\src\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="../silksong-patches/src/dualscreen/DsPortHudState.cs" Link="Silksong/DsPortHudState.cs" />
     <Compile Include="../silksong-patches/src/dualscreen/DsPortSelectState.cs" Link="Silksong/DsPortSelectState.cs" />

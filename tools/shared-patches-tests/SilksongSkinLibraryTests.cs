@@ -476,6 +476,32 @@ public sealed class SilksongSkinLibraryTests
     }
 
     [Fact]
+    public void Asynchronous_occurrence_acknowledgements_do_not_replay_earlier_queue_members_or_drop_later_tokens()
+    {
+        var frame = Frame(); var death = new SilksongSkinDeathAdapter(() => frame); var request = Request("a");
+        long transportToken = 0;
+        var accepted = new List<long>();
+        using var library = new SilksongSkinLibrary(() => request,
+            _ => new SkinApplyResult(SkinApplyStatus.Applied), () => new SkinApplyResult(SkinApplyStatus.Restored),
+            _ => true, () => new SkinApplyResult(SkinApplyStatus.Unchanged), death,
+            (_, occurrence) => {
+                if (transportToken != occurrence) { transportToken = occurrence; return false; }
+                transportToken = 0;
+                accepted.Add(occurrence);
+                if (request.PendingOccurrence == 0) request.LastDeath = request.PendingOccurrence = occurrence;
+                return true;
+            }, (_, _) => true, _ => true);
+        library.Tick(0);
+        frame.BridgeOccurrence = 3;
+        frame.BridgeOccurrences = new[] { new SilksongDeathOccurrence(1, frame.Hero, frame.Manager),
+            new SilksongDeathOccurrence(2, frame.Hero, frame.Manager), new SilksongDeathOccurrence(3, frame.Hero, frame.Manager) };
+        frame.Dead = true;
+        for (int second = 1; second <= 10; second++) { frame.Frame++; library.Tick(second); }
+        Assert.Equal(new long[] { 1, 2, 3 }, accepted);
+        Assert.Equal(1, death.Occurrence); Assert.Equal(2, death.PendingOccurrences);
+    }
+
+    [Fact]
     public void Native_menu_invalidation_exposes_an_immediate_runtime_poll()
     {
         var frame = Frame(); var death = new SilksongSkinDeathAdapter(() => frame); var request = Request("a");

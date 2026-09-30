@@ -96,6 +96,19 @@ namespace DualSouls.Skins.HollowKnight.Core
             }
         }
 
+        internal static bool TryParseTransport(string text, int maximumBytes, out StrictJson value)
+        {
+            value = null;
+            if (text == null || text.Length > maximumBytes) return false;
+            try {
+                if (Utf8.GetByteCount(text) > maximumBytes) return false;
+                value = new Parser(text).Parse();
+                return true;
+            }
+            catch (EncoderFallbackException) { return false; }
+            catch (InvalidJsonException) { return false; }
+        }
+
         private static bool IsDigest(string text)
         {
             if (text == null || text.Length != 64) return false;

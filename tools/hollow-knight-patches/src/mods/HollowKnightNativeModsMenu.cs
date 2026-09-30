@@ -223,6 +223,7 @@ namespace DualSouls.Mods.HollowKnight
         HollowKnightModsSession _session;
         TweakMenuModel _menu;
         NativeSkinMenuModel _skinMenu;
+        readonly SkinNativeTransportWindow _skinTransport = new SkinNativeTransportWindow();
         AndroidJavaClass _skinBridge;
         UIManager _ui;
         MenuScreen _modsScreen;
@@ -252,6 +253,7 @@ namespace DualSouls.Mods.HollowKnight
 
         void Update()
         {
+            if (_skinTransport.Due(Time.unscaledTime)) RefreshSkinMenu();
             if (!BindingIsAlive())
             {
                 CancelAndClearBinding();
@@ -785,6 +787,7 @@ namespace DualSouls.Mods.HollowKnight
             else
             {
                 _skinError = "";
+                _skinTransport.Start(Time.unscaledTime);
                 RefreshSkinMenu();
                 PaintSkins();
             }
@@ -1106,6 +1109,9 @@ namespace DualSouls.Mods.HollowKnight
         {
             if (_skinMenu == null || mutation.Kind == NativeSkinMutationKind.None) return;
             string expected = _skinMenu.Snapshot.ConfigSha256;
+            _skinTransport.Start(Time.unscaledTime);
+            HollowKnightModsRuntime currentRuntime = HollowKnightModsRuntime.Current;
+            if (currentRuntime != null) currentRuntime.InvalidateSkinLibrary(); // queued intent is never counted as apply
             bool accepted = false;
             try
             {
@@ -1144,6 +1150,10 @@ namespace DualSouls.Mods.HollowKnight
                 if (string.IsNullOrEmpty(json) || json.Length > MaximumSkinSnapshotBytes)
                     throw new InvalidOperationException("Invalid native skin snapshot length.");
                 WireSkinSnapshot wire = JsonUtility.FromJson<WireSkinSnapshot>(json);
+                if (wire != null && !wire.ok && wire.code == "LIFECYCLE_BLOCKED") {
+                    _skinError = "SKIN EVENT PENDING · BOUNDED RETRY";
+                    return;
+                }
                 if (wire == null || !wire.ok)
                     throw new InvalidOperationException((wire != null ? wire.code : "MISSING") +
                                                         ": " + (wire != null ? wire.detail : "snapshot"));
@@ -1156,6 +1166,13 @@ namespace DualSouls.Mods.HollowKnight
                 for (int index = 0; index < sourcePacks.Length; index++)
                     packs[index] = new NativeSkinPackDescriptor(sourcePacks[index].id,
                         sourcePacks[index].name, sourcePacks[index].author);
+                bool changedConfiguration = _skinMenu == null || _skinMenu.Snapshot.ConfigSha256 != wire.configSha256;
+                _skinTransport.CompleteEvidence(wire.evidenceState);
+                if (changedConfiguration) {
+                    _skinError = "";
+                    HollowKnightModsRuntime current = HollowKnightModsRuntime.Current;
+                    if (current != null) current.InvalidateSkinLibrary();
+                }
                 var snapshot = new NativeSkinMenuSnapshot(wire.profileId, wire.configSha256,
                     wire.mode, wire.spriteScope, wire.selectedPackId,
                     wire.eligiblePackIds ?? Array.Empty<string>(), packs);
@@ -1169,6 +1186,7 @@ namespace DualSouls.Mods.HollowKnight
             }
             catch (Exception error)
             {
+                _skinTransport.Cancel();
                 _skinError = "SKINS UNAVAILABLE · " + error.GetBaseException().Message;
                 Debug.LogWarning("[HK Skins] " + _skinError);
             }
@@ -1272,6 +1290,7 @@ namespace DualSouls.Mods.HollowKnight
 
         void CancelAndClearBinding()
         {
+            _skinTransport.Cancel();
             NativeMenuBinding binding = _binding;
             if (_transitionCoroutine != null)
             {

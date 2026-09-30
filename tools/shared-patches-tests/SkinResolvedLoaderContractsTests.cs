@@ -92,6 +92,9 @@ public sealed class SkinResolvedLoaderContractsTests
         rig.Request.Mode = mode;
         rig.Request.RotationRun = "run";
         var hero = new object(); var manager = new object(); var hud = new object();
+        var saveIdentity = new SkinSaveIdentity();
+        rig.Request.SaveSlot = 0;
+        Func<int> sampleSave = () => saveIdentity.Sample(manager, 0, true, false);
         int currentFrame = 0;
         SkinDeathFrame hkFrame = null;
         SilksongDeathFrame ssFrame = null;
@@ -108,10 +111,10 @@ public sealed class SkinResolvedLoaderContractsTests
         });
         using var hk = profile == "hollow-knight" ? new HollowKnightSkinLibrary(rig.Read, rig.Apply,
             rig.Restore, rig.Report, () => rig.Last, hkDeath, (_, _) => throw new Exception("idle confirm"),
-            _ => throw new Exception("idle cancellation")) : null;
+            _ => throw new Exception("idle cancellation"), saveIdentity: sampleSave) : null;
         using var ss = profile == "silksong" ? new SilksongSkinLibrary(rig.Read, rig.Apply,
             rig.Restore, rig.Report, () => rig.Last, ssDeath, (_, _) => throw new Exception("idle confirm"),
-            (_, _) => throw new Exception("idle occurrence cancellation"), _ => throw new Exception("idle cancellation")) : null;
+            (_, _) => throw new Exception("idle occurrence cancellation"), _ => throw new Exception("idle cancellation"), sampleSave) : null;
         var identities = new List<object>(3) { hero, manager, hud };
         var ownerRefresh = new SilksongOwnerRefreshState(1);
         ownerRefresh.UpdateOwners(identities);
@@ -121,14 +124,15 @@ public sealed class SkinResolvedLoaderContractsTests
             () => hkSchedule.Publish(rig.Last = rig.Session.Refresh()));
         bool measuring = false;
         long visualAllocated = 0, libraryAllocated = 0;
-        // Production order: visuals first, then library/death admission. Warm all branches/JIT.
+        // Production order: scalar save boundary, gated visuals, then library/death admission.
         void Tick(int frame)
         {
             currentFrame = frame;
             float now = frame / 60f;
             long before = measuring ? GC.GetAllocatedBytesForCurrentThread() : 0;
-            if (hk != null) hkSchedule.Tick(now, hero, hud);
-            else if (ownerRefresh.ShouldPoll(now))
+            if (hk != null) hk.AdmitSaveBoundary(); else ss.AdmitSaveBoundary();
+            if (hk != null) { if (hk.SaveVisualRefreshAllowed) hkSchedule.Tick(now, hero, hud); }
+            else if (ss.SaveVisualRefreshAllowed && ownerRefresh.ShouldPoll(now))
             {
                 identities.Clear(); identities.Add(hero); identities.Add(manager); identities.Add(hud);
                 ownerRefresh.UpdateOwners(identities);

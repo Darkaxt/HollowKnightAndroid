@@ -85,7 +85,10 @@ namespace DualSouls.Skins.Silksong.Runtime
         public SkinApplyResult LastResult => ownerRefresh.LastResult;
         public bool TeardownComplete => disposed;
         public string LastError { get; private set; } = "";
+        internal Func<bool> SaveVisualRefreshAllowed;
         public Func<bool> RefreshAllowed { get; set; }
+        internal Func<bool> RecoverySuspended;
+        internal Action AuthorityEdge;
         internal object HudOwnerIdentity => hudOwners;
         internal bool DeathTargetsAvailable(HeroController hero, GameManager manager) => !disposed &&
             hero != null && manager != null && heroOwners != null && hudOwners != null &&
@@ -112,14 +115,15 @@ namespace DualSouls.Skins.Silksong.Runtime
 
         public void Tick()
         {
-            if (disposed || !ownerRefresh.ShouldPoll(Time.unscaledTime)) return;
+            if (disposed || (RecoverySuspended?.Invoke() ?? false) || !(SaveVisualRefreshAllowed?.Invoke() ?? true) ||
+                !ownerRefresh.ShouldPoll(Time.unscaledTime)) return;
             RefreshOwnerIdentity();
             bool normalRefresh = RefreshAllowed == null || RefreshAllowed();
             if (ownerRefresh.VisualRefreshRequired(normalRefresh)) Publish(session.Refresh());
         }
 
-        void SceneChanged(Scene scene, LoadSceneMode mode) { ownerRefresh.InvalidateVisuals(); }
-        void SceneUnloaded(Scene scene) { ownerRefresh.InvalidateVisuals(); }
+        void SceneChanged(Scene scene, LoadSceneMode mode) { ownerRefresh.InvalidateVisuals(); AuthorityEdge?.Invoke(); }
+        void SceneUnloaded(Scene scene) { ownerRefresh.InvalidateVisuals(); AuthorityEdge?.Invoke(); }
 
         SkinApplyResult Publish(SkinApplyResult result)
         {

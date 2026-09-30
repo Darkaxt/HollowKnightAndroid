@@ -17,11 +17,14 @@ enum class LibraryMode { OFF, ON, ROTATE }
 enum class SpriteScope { ALL, CHARACTER_HUD, CHARACTER }
 data class LibraryPack(val id: String, val name: String, val author: String, val candidateKey: String,
     val treeSha256: String, val receiptSha256: String)
+data class SaveSkinAffinity(val slot: Int, val packId: String? = null, val treeSha256: String? = null)
 data class SkinLibraryDocument(val mode: LibraryMode = LibraryMode.OFF, val selectedPackId: String? = null,
     val packs: List<LibraryPack> = emptyList(), val eligiblePackIds: List<String> = emptyList(),
     val rotationRun: String? = null, val lastDeath: Long = 0, val pendingPackId: String? = null,
     val pendingVanilla: Boolean = false, val queuedDeathOccurrences: List<Long> = emptyList(),
-    val spriteScope: SpriteScope = SpriteScope.ALL)
+    val spriteScope: SpriteScope = SpriteScope.ALL, val activeSaveSlot: Int? = null,
+    val saveAffinities: List<SaveSkinAffinity> = emptyList(), val configurationGeneration: Long = 0,
+    val unboundSelectionPending: Boolean = false)
 
 /** The only durable configuration document. Eligibility order is explicit, never inferred from display sorting. */
 object SkinLibraryCodec {
@@ -43,6 +46,15 @@ object SkinLibraryCodec {
             require(id.matches(pack.id) && digest(pack.candidateKey) && digest(pack.treeSha256) && digest(pack.receiptSha256)) { "Invalid pack identity" }
             require(listOf(pack.name, pack.author).all { it.isNotBlank() && it.length <= 160 && it.none(Char::isISOControl) }) { "Invalid pack display text" }
         }
+        require(!value.unboundSelectionPending || value.activeSaveSlot == null) { "Unbound intent cannot belong to an admitted save" }
+        require(value.configurationGeneration >= 0) { "Invalid configuration generation" }
+        require(value.activeSaveSlot == null || value.activeSaveSlot in 0..4) { "Unsupported save slot" }
+        require(value.saveAffinities.size <= 5 && value.saveAffinities.map { it.slot }.distinct().size == value.saveAffinities.size) { "Save affinity bound/duplicate" }
+        value.saveAffinities.forEach { affinity ->
+            require(affinity.slot in 0..4) { "Unsupported affinity slot" }
+            if (affinity.packId == null) require(affinity.treeSha256 == null) { "Default affinity contains imported data" }
+            else require(value.packs.any { it.id == affinity.packId && it.treeSha256 == affinity.treeSha256 }) { "Confirmed affinity pack is absent or replaced" }
+        }
         require(value.selectedPackId == null || value.selectedPackId in ids) { "Selected pack is absent" }
         require(value.mode != LibraryMode.ON || value.selectedPackId != null) { "Select a pack before turning skins ON" }
         require(value.eligiblePackIds.distinct().size == value.eligiblePackIds.size && value.eligiblePackIds.all { it in ids }) { "Invalid eligibility order" }
@@ -60,7 +72,17 @@ object SkinLibraryCodec {
         val owner = requireProfile(profileId)
         validate(value)
         val root = JsonObject().apply {
-            addProperty("schemaVersion", 1); addProperty("profileId", owner); addProperty("mode", value.mode.name)
+            addProperty("schemaVersion", 2); addProperty("profileId", owner); addProperty("mode", value.mode.name)
+            addProperty("configurationGeneration", value.configurationGeneration)
+            addProperty("unboundSelectionPending", value.unboundSelectionPending)
+            add("activeSaveSlot", value.activeSaveSlot?.let(::JsonPrimitive) ?: JsonNull.INSTANCE)
+            add("saveAffinities", JsonArray().apply { value.saveAffinities.sortedBy { it.slot }.forEach { affinity ->
+                add(JsonObject().apply {
+                    addProperty("slot", affinity.slot)
+                    add("packId", affinity.packId?.let(::JsonPrimitive) ?: JsonNull.INSTANCE)
+                    add("treeSha256", affinity.treeSha256?.let(::JsonPrimitive) ?: JsonNull.INSTANCE)
+                })
+            } })
             addProperty("spriteScope", value.spriteScope.name)
             add("selectedPackId", value.selectedPackId?.let(::JsonPrimitive) ?: JsonNull.INSTANCE)
             add("packs", JsonArray().apply { value.packs.forEach { p -> add(JsonObject().apply {
@@ -86,8 +108,11 @@ object SkinLibraryCodec {
         else if (root.has("rotationRun") || root.has("lastDeath") || root.has("pendingPackId"))
             baseKeys += listOf("rotationRun", "lastDeath", "pendingPackId")
         if (root.has("pendingVanilla")) baseKeys += "pendingVanilla"
+        val schema = root["schemaVersion"].toString()
+        require(schema == "1" || schema == "2") { "Unsupported library schema" }
+        if (schema == "2") baseKeys += listOf("activeSaveSlot", "saveAffinities", "configurationGeneration", "unboundSelectionPending")
         keys(root, *baseKeys.toTypedArray())
-        require(root["schemaVersion"].toString() == "1" && text(root["profileId"]) == owner) { "Unsupported library profile/schema" }
+        require(text(root["profileId"]) == owner) { "Unsupported library profile/schema" }
         val mode = LibraryMode.valueOf(text(root["mode"]))
         val spriteScope = root["spriteScope"]?.let { SpriteScope.valueOf(text(it)) } ?: legacySpriteScope(mode, owner)
         val packs = root["packs"].asJsonArray.map { item -> item.asJsonObject.let { p ->
@@ -110,6 +135,16 @@ object SkinLibraryCodec {
             pendingVanilla = root["pendingVanilla"]?.let(::boolean) ?: false,
             queuedDeathOccurrences = root["queuedDeathOccurrences"]?.asJsonArray?.map(::occurrence) ?: emptyList(),
             spriteScope = spriteScope,
+            configurationGeneration = root["configurationGeneration"]?.let(::occurrence) ?: 0,
+            unboundSelectionPending = if (schema == "1") mode != LibraryMode.OFF && !root["selectedPackId"].isJsonNull
+                else boolean(root["unboundSelectionPending"]),
+            activeSaveSlot = root["activeSaveSlot"]?.takeUnless { it.isJsonNull }?.let { occurrence(it).also { slot -> require(slot in 0..4) }.toInt() },
+            saveAffinities = root["saveAffinities"]?.asJsonArray?.map { item -> item.asJsonObject.let { affinity ->
+                keys(affinity, "slot", "packId", "treeSha256")
+                SaveSkinAffinity(occurrence(affinity["slot"]).also { require(it in 0..4) }.toInt(),
+                    affinity["packId"].takeUnless { it.isJsonNull }?.let(::text),
+                    affinity["treeSha256"].takeUnless { it.isJsonNull }?.let(::text))
+            } } ?: emptyList(),
         ).also(::validate)
     } catch (error: Exception) { throw IllegalArgumentException("Invalid skin library: ${error.message}", error) }
 

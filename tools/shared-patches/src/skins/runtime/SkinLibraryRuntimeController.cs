@@ -7,6 +7,7 @@ namespace DualSouls.Skins.Runtime
     {
         public string ProfileId, ConfigSha256, Mode, SpriteScope = SkinSpriteScopes.All, PackId, TreeSha256, Root, RotationRun, RotationDetail;
         public long LastDeath, PendingOccurrence;
+        public int SaveSlot = SkinSaveIdentity.Unbound;
         public bool Vanilla;
         public IDictionary<string, string> Textures;
     }
@@ -14,6 +15,7 @@ namespace DualSouls.Skins.Runtime
     {
         public string ConfigSha256, ActivePackId, ActiveTreeSha256, Status, Detail, RotationRun;
         public long PendingOccurrence;
+        public int SaveSlot = SkinSaveIdentity.Unbound;
     }
 
     // Kotlin alone chooses/commits successors. Live admission only gates the frozen candidate.
@@ -27,6 +29,7 @@ namespace DualSouls.Skins.Runtime
         readonly Func<SkinApplyResult> observe;
         readonly Func<SkinLibraryRequest, bool> ready;
         SkinPack cached;
+        SkinLibraryRequest latestRequest;
         string cachedTree, cachedScope, activeId, activeTree, activeScope;
         bool restored, restoreRequired, awaitingApply;
         public SkinLibraryRuntimeController(SkinRuntimeRules rules, Func<SkinLibraryRequest> read,
@@ -45,8 +48,9 @@ namespace DualSouls.Skins.Runtime
             try
             {
                 request = read();
-                if (request == null) return; // nonblocking Kotlin lock was busy; next poll retries
-                if (request.ProfileId != rules.ProfileId || !Digest(request.ConfigSha256) ||
+                if (request == null) return; // nonblocking Kotlin lock was busy; bounded owner retries
+                latestRequest = request;
+                if (request.ProfileId != rules.ProfileId || request.SaveSlot < -1 || request.SaveSlot > 4 || !Digest(request.ConfigSha256) ||
                     (request.Mode != "OFF" && request.Mode != "ON" && request.Mode != "ROTATE") ||
                     (request.Vanilla && request.Mode != "ROTATE") ||
                     !SkinSpriteScopes.IsValid(request.SpriteScope))
@@ -80,6 +84,17 @@ namespace DualSouls.Skins.Runtime
             {
                 Publish(request, "Failed", error.Message);
             }
+        }
+        // Save authority, not ordinary refresh permission, retires cached execution settlement.
+        public void InvalidateSave()
+        {
+            latestRequest = null;
+            activeScope = null;
+            restored = awaitingApply = false;
+        }
+        public void CancelPending(string detail)
+        {
+            if (latestRequest != null) Publish(latestRequest, "Cancelled", detail);
         }
         SkinApplyResult ApplyRequested(SkinLibraryRequest request)
         {
@@ -140,6 +155,7 @@ namespace DualSouls.Skins.Runtime
         void Publish(SkinLibraryRequest request, string status, string detail)
         {
             try { report(new SkinLibraryObservation { ConfigSha256 = request?.ConfigSha256, ActivePackId = activeId,
+                SaveSlot = request?.SaveSlot ?? SkinSaveIdentity.Unbound,
                 RotationRun = request?.RotationRun, PendingOccurrence = request?.PendingOccurrence ?? 0,
                 ActiveTreeSha256 = activeTree, Status = status, Detail = (detail ?? "").Length > 1024 ? detail.Substring(0, 1024) : detail ?? "" }); }
             catch { /* Reporting never changes visual/configuration authority; next poll reports again. */ }

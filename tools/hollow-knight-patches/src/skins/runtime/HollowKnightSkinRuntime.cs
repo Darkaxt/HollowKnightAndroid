@@ -25,7 +25,10 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         GameObject hud;
         Renderer deathHeroRenderer;
         SpriteRenderer deathHudRenderer;
+        internal Func<bool> SaveVisualRefreshAllowed;
         internal Func<bool> RefreshAllowed;
+        internal Func<bool> RecoverySuspended;
+        internal Action AuthorityEdge;
         int reportedStamp;
         bool disposed;
         public static HollowKnightSkinRuntime Current { get; private set; }
@@ -59,12 +62,13 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         }
         public void Tick()
         {
-            if (disposed) return;
+            if (disposed || (RecoverySuspended?.Invoke() ?? false)) return;
             var manager = GameManager.UnsafeInstance;
             var nextHero = manager != null ? HeroController.UnsafeInstance : null;
             var cameras = manager != null ? GameCameras.instance : null;
             var nextHud = cameras != null ? cameras.hudCanvas : null;
             hero = nextHero; hud = nextHud;
+            if (!(SaveVisualRefreshAllowed?.Invoke() ?? true)) return;
             var before = LastResult;
             refreshSchedule.Tick(Time.unscaledTime, nextHero, nextHud,
                 nextHero != null && nextHud != null);
@@ -89,8 +93,8 @@ namespace DualSouls.Skins.HollowKnight.Runtime
                 deathHeroRenderer.sharedMaterial.mainTexture != null && deathHudRenderer != null &&
                 deathHudRenderer.sprite != null && deathHudRenderer.sprite.texture != null;
         }
-        void SceneLoaded(Scene scene, LoadSceneMode mode) { refreshSchedule.Invalidate(); }
-        void SceneUnloaded(Scene scene) { refreshSchedule.Invalidate(); }
+        void SceneLoaded(Scene scene, LoadSceneMode mode) { refreshSchedule.Invalidate(); AuthorityEdge?.Invoke(); }
+        void SceneUnloaded(Scene scene) { refreshSchedule.Invalidate(); AuthorityEdge?.Invoke(); }
         public void Dispose()
         {
             if (disposed) return;

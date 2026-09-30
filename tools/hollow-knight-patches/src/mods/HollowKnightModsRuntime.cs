@@ -65,6 +65,7 @@ namespace DualSouls.Mods.HollowKnight
 
         void Update()
         {
+            if (skinLibrary != null) skinLibrary.AdmitSaveBoundary();
             if (Skins != null) Skins.Tick();
             if (skinLibrary != null) skinLibrary.Tick();
             HollowKnightModsSession session = Session;

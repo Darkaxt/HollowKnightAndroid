@@ -63,7 +63,7 @@ class SkinLibraryRuntimeBridgeTest {
         assertTrue(report.length() < 16384)
         val observation = JsonParser.parseString(report.readText()).asJsonObject
         assertEquals(setOf(
-            "schemaVersion", "profileId", "featureId", "operationId", "operationGeneration",
+            "schemaVersion", "profileId", "saveSlot", "featureId", "operationId", "operationGeneration",
             "operationKind", "rotationRun", "requestConfigSha256", "resultingConfigSha256",
             "resolvedKind", "resolvedPackId", "resolvedTreeSha256", "resolvedReceiptSha256",
             "activeKind", "activePackId", "activeTreeSha256", "activeReceiptSha256",
@@ -520,6 +520,65 @@ class SkinLibraryRuntimeBridgeTest {
             assertFalse(SkinLibraryRuntimeBridge.confirmPack("silksong", "a".repeat(64), "a"))
         } finally { GameProcessStartup.resetForTests() }
     }
+    @Test fun `one shot native mutation expires through snapshot lane and cannot publish retired intent after an ignored interrupt`() {
+        val entered = java.util.concurrent.CountDownLatch(1); val release = java.util.concurrent.CountDownLatch(1)
+        val stopped = java.util.concurrent.CountDownLatch(1)
+        val interrupted = java.util.concurrent.atomic.AtomicBoolean(false)
+        val armed = java.util.concurrent.atomic.AtomicBoolean(false)
+        val publications = java.util.concurrent.CopyOnWriteArrayList<LibraryMode>()
+        val base = FastSkinFileSystem()
+        var collecting = false
+        val fs = object : SkinFileSystem by base, dev.silksong.launcher.skins.storage.SkinFileSystemSecurity by base,
+            dev.silksong.launcher.skins.storage.SkinFileSystemBoundedListing by base {
+            override fun openNoFollow(file: File): java.io.InputStream {
+                if (file.name == "library.json" && armed.compareAndSet(true, false)) {
+                    entered.countDown()
+                    while (true) {
+                        try { if (release.await(5, java.util.concurrent.TimeUnit.SECONDS)) break else error("bounded mutation fixture expired") }
+                        catch (_: InterruptedException) { interrupted.set(true) } // emulate an I/O provider clearing interruption
+                    }
+                }
+                return base.openNoFollow(file)
+            }
+            override fun atomicMove(source: File, target: File) {
+                if (collecting && target.name == "library.json") publications.add(SkinLibraryCodec.decode(source.readBytes(), "hollow-knight").mode)
+                base.atomicMove(source, target)
+            }
+        }
+        val prepared = importedStore(fs)
+        val store = SkinLibraryStore(prepared.paths, fs, prepared.catalog, SkinRuntimeIo::mayPublish)
+        val access = SkinLibraryRuntimeAccess(store)
+        val wire = JsonParser.parseString(access.readConfiguration(0)).asJsonObject
+        val config = wire["configSha256"].asString
+        var time = 0L
+        val io = SkinRuntimeIo { time }
+        fun awaitMode(): Boolean {
+            val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5)
+            while (System.nanoTime() < deadline) {
+                if (io.poll(2, "later-valid", false) { access.setMode("hollow-knight", config, "OFF") }) return true
+                Thread.sleep(5)
+            }
+            return false
+        }
+        try {
+            collecting = true; armed.set(true)
+            assertFalse(io.poll(2, "one-shot", false) {
+                try { access.setMode("hollow-knight", config, "ON") } finally { stopped.countDown() }
+            })
+            assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            time = SkinRuntimeIo.TIMEOUT_NANOS
+            // Real native shape: lane2 is NOT polled again. Its bounded window reads lane1 only.
+            assertEquals("pending", io.poll(1, "snapshot", "pending") { access.readMenuSnapshot("hollow-knight") })
+            release.countDown()
+            assertTrue(stopped.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            assertTrue("retired mutation interruption=$interrupted publications=$publications", interrupted.get())
+            assertFalse("retired mutation published $publications", publications.contains(LibraryMode.ON))
+            assertEquals(LibraryMode.ROTATE, store.read().required().mode)
+            assertTrue(awaitMode())
+            assertEquals(LibraryMode.OFF, store.read().required().mode)
+        } finally { release.countDown(); io.close() }
+    }
+
     private fun observation(store: SkinLibraryStore) = JsonParser.parseString(
         File(store.paths.root, "library.observation.json").readText(),
     ).asJsonObject

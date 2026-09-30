@@ -153,7 +153,7 @@ class GameProcessStartupTest {
         }
         SkinLibraryRuntimeBridge.initialize(isolated,profile.id)
         dev.silksong.launcher.profiles.SelectedGameStore(context).set(GameProfiles.require("silksong"))
-        val wire = com.google.gson.JsonParser.parseString(SkinLibraryRuntimeBridge.readConfiguration()).asJsonObject
+        val wire = readSkinConfiguration()
         assertTrue(wire.toString(),wire["ok"].asBoolean)
         assertEquals("hollow-knight",wire["profileId"].asString)
         assertTrue(File(isolated.filesDir,"profiles/hollow-knight/skins/library.json").isFile)
@@ -168,11 +168,20 @@ class GameProcessStartupTest {
         }
         SkinLibraryRuntimeBridge.initialize(isolated,profile.id)
         dev.silksong.launcher.profiles.SelectedGameStore(context).set(GameProfiles.require("hollow-knight"))
-        val wire = com.google.gson.JsonParser.parseString(SkinLibraryRuntimeBridge.readConfiguration()).asJsonObject
+        val wire = readSkinConfiguration()
         assertTrue(wire.toString(), wire["ok"].asBoolean)
         assertEquals("silksong", wire["profileId"].asString)
         assertTrue(File(isolated.filesDir,"profiles/silksong/skins/library.json").isFile)
         assertTrue(!File(isolated.filesDir,"profiles/hollow-knight").exists())
+    }
+    private fun readSkinConfiguration(): com.google.gson.JsonObject {
+        val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5)
+        while (System.nanoTime() < deadline) {
+            val wire = com.google.gson.JsonParser.parseString(SkinLibraryRuntimeBridge.readConfiguration()).asJsonObject
+            if (wire["ok"].asBoolean || wire["code"].asString != "LIFECYCLE_BLOCKED") return wire
+            Thread.sleep(5)
+        }
+        error("Skin JNI configuration exceeded bounded startup host contract")
     }
     private fun paths(profileId: String): ProfileBuildPaths {
         val profile = GameProfiles.require(profileId)
