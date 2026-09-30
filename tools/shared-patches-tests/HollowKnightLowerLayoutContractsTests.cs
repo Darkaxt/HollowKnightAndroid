@@ -3,6 +3,7 @@ using System.Text.Json;
 using HkPauseContracts;
 using Xunit;
 
+[Collection("HollowKnightPauseOwners")]
 public sealed class HollowKnightLowerLayoutContractsTests
 {
     [Theory]
@@ -19,7 +20,10 @@ public sealed class HollowKnightLowerLayoutContractsTests
         lower.fit = new() { valid = true, ortho = 10 };
         lower.FramePane(new(120, 240, 0));
         Assert.Equal(120, lower.attrCam.transform.position.x);
-        Assert.Equal(240, lower.attrCam.transform.position.y);
+        // Camera centers the pane in the canonical body, not the whole display.
+        float bodyCenter = HKLowerLayout.Measure(lower.BOTTOM_W,lower.BOTTOM_H).BodyCenterY;
+        float expected = 240 - (1 - 2 * bodyCenter / lower.BOTTOM_H) * lower.attrCam.orthographicSize;
+        Assert.Equal(expected, lower.attrCam.transform.position.y);
     }
 
     [Fact]

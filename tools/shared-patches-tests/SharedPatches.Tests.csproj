@@ -36,6 +36,7 @@
     <Content Include="../hollow-knight-patches/src/skins/runtime/HollowKnightSkinRuntime.cs" Link="native-skin-contracts/HollowKnightSkinRuntime.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../silksong-patches/src/skins/runtime/SilksongSkinRuntime.cs" Link="native-skin-contracts/SilksongSkinRuntime.cs" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="..\shared-patches\src\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="../hollow-knight-patches/src/dualsouls/HKLowerLayout.cs" Link="HollowKnight/HKLowerLayout.cs" Condition="Exists('../hollow-knight-patches/src/dualsouls/HKLowerLayout.cs')" />
     <Compile Include="../silksong-patches/src/dualscreen/DsPortHudState.cs" Link="Silksong/DsPortHudState.cs" />
     <Compile Include="../silksong-patches/src/dualscreen/DsPortSelectState.cs" Link="Silksong/DsPortSelectState.cs" />
     <Compile Include="../silksong-patches/src/dualscreen/DsPortOverlays.cs" Link="Silksong/DsPortOverlays.cs" />

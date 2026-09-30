@@ -528,10 +528,11 @@ public partial class HKDualScreen : MonoBehaviour
         // load starts fresh on cfg.compTab (Map) with re-cloned panes — the new save's data and any language
         // changed in the menu included. Pause hides the resident clones without resetting them; Inventory
         // keeps them visible. The menu is the one real reset point. Without this the old tab + stale-language clones survived.
+        SyncSupplementarySource(); // identity-only while healthy; retire all five owners even during pause
         bool atMenu = false; try { atMenu = gm.gameState == GlobalEnums.GameState.MAIN_MENU; } catch { }
-        if (atMenu && !wasAtMenu && (mapClone != null || invCloneCache != null || charmCloneCache != null || tab.built != -1))
+        if (atMenu && !wasAtMenu)
         {
-            TeardownCompanion();
+            if(mapClone != null || invCloneCache != null || charmCloneCache != null || journalCloneCache != null || guideCloneCache != null || frameRoot != null || tab.built != -1) TeardownCompanion();
             tab.tap = -1;   // back to the configured startup tab (Map)
             Dbg("HKDS session reset: quit-to-menu -> companion torn down, tab -> cfg.compTab");
         }
@@ -566,7 +567,6 @@ public partial class HKDualScreen : MonoBehaviour
             if (invOpen) FixEmptyCounterDetail();   // M : mask-shard / vessel counters with 0 found: swap HK's empty *_NONE convo keys for the informative *_0 ones (match the bottom screen)
             // fix#6(161-fb): skin textures changed -> the clones hold material copies frozen at clone
             // time; rebuild them so the bottom screen wears the skin too.
-            if (HkStageHooks.SkinStamp != lastSkinStamp) { lastSkinStamp = HkStageHooks.SkinStamp; InvalidateCompanionClones(); }
             if (cfg.debug == 1) { InvStateDiag(); DebugPopupTick(); }   // M : debug — inventory FSM trace + popup glyph repro/diag
             FrameHudCams(src, popupBlack, creditShowing);   // B3: hudCam2 (HUD mirror; blanked behind popups) + promptCam framing (credit zoom + dialogue centring)
             SyncBottomFade();          // B1: mirror the main screen's CameraFade (room/death/cutscene dims) onto the bottom
@@ -590,7 +590,7 @@ public partial class HKDualScreen : MonoBehaviour
             else
             {
                 // Companion OFF -> tear it down; nothing renders on ATTR_LAYER.
-                if (mapClone != null || tab.built != -1) TeardownCompanion();
+                if (mapClone != null || invCloneCache != null || charmCloneCache != null || journalCloneCache != null || guideCloneCache != null || frameRoot != null || tab.built != -1) TeardownCompanion();
                 attrCam.cullingMask = 0;
             }
             if (creditShowing) CenterAttribution();   // M : keep the credit card on promptCam's view axis

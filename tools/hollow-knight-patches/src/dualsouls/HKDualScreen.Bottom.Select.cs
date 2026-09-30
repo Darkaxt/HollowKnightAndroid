@@ -7,6 +7,8 @@ using UnityEngine;
 // right-detail fonts, and the [verb][glyph] PRESS/HOLD/TAP control-prompt line drawn as our own overlay.
 public partial class HKDualScreen
 {
+    readonly HKLowerLayout.TabGesture lowerTabGesture = new HKLowerLayout.TabGesture();
+    int lowerCleanTabSeq; bool lowerTouchDownBody;
     int lastTapSeq;                   // bottom-panel touch: last seen tap sequence (the tapped tab lives in tab.tap)
 
     // tap-to-select-item state (Inventory/Charms): the picked item's identity + its transform (for the highlight box)
@@ -73,18 +75,7 @@ public partial class HKDualScreen
 
     // [B5] Selected-item highlight box (5-pt rectangle loop, placed around the tapped item in PositionSelection) — the
     // fallback when the pane clone has no HK "Cursor" object. Parented under frameRoot so TeardownFrame frees it.
-    void BuildSelBox()
-    {
-        Shader ush = Shader.Find("Sprites/Default") ?? Shader.Find("Sprites/Default-ColorFlash") ?? Shader.Find("Unlit/Color") ?? Shader.Find("UI/Default");
-        if (ush != null)
-        {
-            var sgo = new GameObject("F_SelBox"); sgo.transform.SetParent(frameRoot.transform, false); sgo.layer = ATTR_LAYER;
-            selBox = sgo.AddComponent<LineRenderer>();
-            selBox.useWorldSpace = true; selBox.material = Own(new Material(ush) { color = Color.white });
-            selBox.startColor = selBox.endColor = new Color(1f, 0.98f, 0.7f, 0.9f);
-            selBox.positionCount = 5; selBox.numCapVertices = 1; selBox.loop = true; selBox.alignment = LineAlignment.View; selBox.sortingOrder = 61; selBox.enabled = false;
-        }
-    }
+    void BuildSelBox() { }
 
     // [B5] Selected-item highlight — HK's OWN corner-bracket cursor (Inv_0014_selection_cursor + Glow) moved and
     // scaled onto the tapped item, with the LineRenderer selBox as the fallback when the clone has no Cursor.
@@ -130,6 +121,8 @@ public partial class HKDualScreen
                         SetLayerRecursive(paneCursor, ATTR_LAYER);
                         selCurTL = FindDeep(paneCursor, "TL"); selCurTR = FindDeep(paneCursor, "TR"); selCurBL = FindDeep(paneCursor, "BL"); selCurBR = FindDeep(paneCursor, "BR");
                         foreach (var r in paneCursor.GetComponentsInChildren<Renderer>(true)) r.enabled = true;
+                        if(selCurTR != null) selCurTR.gameObject.SetActive(false);
+                        if(selCurBL != null) selCurBL.gameObject.SetActive(false);
                         selCurFor = sel.item;
                     }
                     var bb = selBB; var pl = paneCursor.parent != null ? paneCursor.parent.lossyScale : Vector3.one;
@@ -159,18 +152,7 @@ public partial class HKDualScreen
                 else if (paneCursor.gameObject.activeSelf) { paneCursor.gameObject.SetActive(false); selCurFor = null; }
             }
         }
-        if (selBox != null)   // fallback box only when no HK cursor exists in the clone
-        {
-            if (selOk && paneCursor == null)
-            {
-                var bb = selBB; float ins = cfg.compSelInset;
-                float x0 = bb.min.x + ins, x1 = bb.max.x - ins, y0 = bb.min.y + ins, y1 = bb.max.y - ins, z = bb.center.z - 0.15f;
-                selBox.enabled = true; selBox.widthMultiplier = 0.03f * s;
-                selBox.SetPosition(0, new Vector3(x0, y0, z)); selBox.SetPosition(1, new Vector3(x1, y0, z));
-                selBox.SetPosition(2, new Vector3(x1, y1, z)); selBox.SetPosition(3, new Vector3(x0, y1, z)); selBox.SetPosition(4, new Vector3(x0, y0, z));
-            }
-            else selBox.enabled = false;
-        }
+        if (selBox != null) selBox.enabled = false;
     }
 
     // Poll the bottom-panel touch bridge (HKAux). On a new tap in the tab-row band, select that tab.
@@ -201,7 +183,7 @@ public partial class HKDualScreen
     // a clean tap on the map area resets the view. Runs off HKAux's live multi-pointer bridge.
     void MapPinchTick()
     {
-        if (cfg.compMapPinch != 1 || transport == null || attrCam == null) return;
+        if (cfg.compMapPinch != 1 || transport == null || attrCam == null || slideT < 1f) return;
         try
         {
             int tc = transport.TouchCount;
@@ -235,7 +217,7 @@ public partial class HKDualScreen
             else if (tc == 1 && mapUserZoom > 1.01f)
             {
                 float nx = transport.T0X, ny = transport.T0Y;
-                if (ny < cfg.compTabBandY)   // never pan from the tab band
+                if (LowerGeometry().InBody(nx * BOTTOM_W, ny * BOTTOM_H))   // never pan from the tab band
                 {
                     // Pan from SCREEN-space finger deltas converted by the current world-per-viewport factor. The
                     // earlier world-point delta went through the camera THAT THE PAN ITSELF MOVES each frame — a
@@ -292,53 +274,55 @@ public partial class HKDualScreen
     {
         bool dispatchDebugSimulation = cfg.debug == 1 && cfg.compSimTapN != lastSimTapN;
         if (cfg.debug == 1) lastSimTapN = cfg.compSimTapN;
-        // DEBUG sim-tap: fire a synthetic item tap at (compSimTapX, compSimTapY) when compSimTapN changes.
-        if (dispatchDebugSimulation)
+        if (dispatchDebugSimulation && cfg.compSimTapX >= 0f && slideT >= 1f)
         {
-            if (cfg.compSimTapX >= 0f && (tab.cur == COMP_INV || tab.cur == COMP_CHARM)) { Dbg($"HKDS SIMTAP {cfg.compSimTapX},{cfg.compSimTapY}"); PollItemTap(cfg.compSimTapX, cfg.compSimTapY); }
+            if(tab.cur == COMP_INV || tab.cur == COMP_CHARM) PollItemTap(cfg.compSimTapX,cfg.compSimTapY);
+            else if(tab.cur == COMP_JOURNAL) JournalTap(cfg.compSimTapX,cfg.compSimTapY);
+            else if(tab.cur == COMP_GUIDE) GuideTap(cfg.compSimTapX,cfg.compSimTapY);
         }
-        if (cfg.compTouch != 1 || transport == null) return;
+        if(cfg.compTouch != 1 || transport == null) return;
         try
         {
-            int seq = transport.TapSequence;
-            if (seq == lastTapSeq) return;
-            lastTapSeq = seq;
-            float nx = transport.TouchX;
-            float ny = transport.TouchY;
-            Dbg($"HKDS tap nx={nx:F2} ny={ny:F2}");
-            if (nx < 0f) return;
-            if (ny < cfg.compTabBandY)   // ABOVE the tab row -> an item tap on the Inventory/Charms pane (tab band is only the bottom strip)
+            var g=LowerGeometry(); int contacts=transport.TouchCount;
+            int seq=transport.TapSequence;
+            if(seq != lastTapSeq)
             {
-                if (cfg.compTapSelect == 1 && (tab.cur == COMP_INV || tab.cur == COMP_CHARM)) PollItemTap(nx, ny);
-                return;
-            }
-            if (frameTabs.Count == 0 || attrCam == null) return;   // bottom tab-row band -> switch tab
-            // Hit-test the retained native tab glyphs in world space. Full-width
-            // canonical cell routing is owned by the five-route shell checkpoint.
-            Rect rc = attrCam.rect;
-            float vx = (nx - rc.x) / Mathf.Max(1e-4f, rc.width);
-            float vy = ((1f - ny) - rc.y) / Mathf.Max(1e-4f, rc.height);
-            Vector3 wp = attrCam.ViewportToWorldPoint(new Vector3(Mathf.Clamp01(vx), Mathf.Clamp01(vy), 10f));
-            int hitTab = -1; float bestDx = float.MaxValue;
-            foreach (var (tmp2, t2, col2) in frameTabs)
-            {
-                if (tmp2 == null) continue;
-                var rr = (tmp2 as Component).GetComponent<Renderer>(); if (rr == null || !rr.enabled) continue;
-                var b = rr.bounds; float padX = b.extents.x * 0.5f + 0.15f;   // small tap tolerance around each tab glyph
-                if (wp.x >= b.min.x - padX && wp.x <= b.max.x + padX)
+                lastTapSeq=seq;
+                float x=transport.TouchX*g.Width, y=transport.TouchY*g.Height;
+                lowerTabGesture.Down(g.HitColumn(x,y));
+                lowerTouchDownBody=g.InBody(x,y);
+                supplementaryDragValid=lowerTouchDownBody && (tab.cur == COMP_JOURNAL || tab.cur == COMP_GUIDE);
+                supplementaryDragRegion=0;
+                if(tab.cur == COMP_JOURNAL)
                 {
-                    float dx = Mathf.Abs(wp.x - b.center.x);
-                    if (dx < bestDx) { bestDx = dx; hitTab = TAB_TO_COL[Mathf.Clamp(col2, 0, 2)]; }
+                    supplementaryDragRegion=x<400*g.Width/1240f ? 0 : -1;
+                    if(journalSelected>=0 && journalDescription != null && journalDescription.ClipRect.Contains(new Vector2(x,y))) supplementaryDragRegion=1;
+                    else if(journalSelected>=0 && journalNotes != null && journalNotes.ClipRect.Contains(new Vector2(x,y))) supplementaryDragRegion=2;
+                    supplementaryDragValid &= supplementaryDragRegion>=0;
                 }
+                supplementaryDragY=transport.TouchY;
             }
-            if (hitTab >= 0)
+            if(contacts>=2 || slideT < 1f || (mapMarkerMode && tab.cur == COMP_MAP))
+            { lowerTabGesture.Cancel(); lowerTouchDownBody=false; supplementaryDragValid=false; }
+            if(contacts==1 && supplementaryDragValid) ScrollSupplementary(transport.T0Y-supplementaryDragY);
+            int clean=transport.CleanTapSequence;
+            if(clean != lowerCleanTabSeq)
             {
-                tab.tap = hitTab;
-                Dbg($"HKDS tab tapped -> tab={tab.tap}");
+                lowerCleanTabSeq=clean;
+                float nx=transport.CleanTapX, ny=transport.CleanTapY;
+                int hit=lowerTabGesture.Tap(g.HitColumn(nx*g.Width,ny*g.Height),mapMarkerMode,slideT < 1f);
+                if(hit>=0) tab.tap=hit;
+                else if(lowerTouchDownBody && g.InBody(nx*g.Width,ny*g.Height) && slideT>=1f)
+                {
+                    if(tab.cur == COMP_JOURNAL) JournalTap(nx,ny);
+                    else if(tab.cur == COMP_GUIDE) GuideTap(nx,ny);
+                    else if(cfg.compTapSelect == 1 && (tab.cur == COMP_INV || tab.cur == COMP_CHARM)) PollItemTap(nx,ny);
+                }
+                lowerTouchDownBody=false;
             }
-            else Dbg("HKDS tab-band tap outside native glyphs -> ignored");
+            if(contacts==0) supplementaryDragValid=false;
         }
-        catch (Exception e) { Dbg($"HKDS touch err {e.Message}"); }
+        catch(Exception e){ WarnOnce("five-route touch",e); }
     }
 
     // Convert a bottom-screen touch (nx,ny normalized 0..1, top-left) to a world point in attrCam space, hit-test

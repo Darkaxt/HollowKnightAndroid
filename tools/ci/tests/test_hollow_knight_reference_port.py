@@ -153,6 +153,111 @@ def method_body(source: str, signature_pattern: str) -> str:
     return ""
 
 
+class HollowKnightFiveRoutesContractTest(unittest.TestCase):
+    def test_five_camera_dispatches_and_retirements_are_real(self):
+        frame = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs"))
+        for token in ("COMP_JOURNAL = 3", "COMP_GUIDE = 4", "BuildSupplementaryPane(tab)",
+                      "HKLowerLayout.SlideDirection(prevTab, tab.cur)", "CloneForTab(tab.cur)",
+                      "RetireSupplementaryPanes()", "SyncSupplementarySource()"):
+            self.assertIn(token, frame)
+
+    def test_native_donor_authorities_are_not_relic_or_stale_flower(self):
+        frame = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs"))
+        for token in ("InvNailSprite", "nativeNail.level1", "charms.spriteList[0]",
+                      '"pins_combined"', '"bestiary_hunter_mark_f"',
+                      '"inv_item_map_quill_combined"', "iconRetry.Due(Time.frameCount)"):
+            self.assertIn(token, frame)
+        self.assertNotIn("wanderers-journal", frame)
+        self.assertNotIn("White_Flower_Full", frame)
+
+    def test_journal_and_guide_never_clone_or_drive_native_managers(self):
+        panes = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.JournalGuide.cs"))
+        for token in ("list.list", "JournalEntryStats", "stats.playerDataName", "stats.convoName",
+                      "stats.sprite", "HKLowerLayout.NotesUnlocked", "hasJournal", "GuideVisible",
+                      "hasPinBench", "hasPinBlackEgg", "JournalTap", "GuideTap"):
+            self.assertIn(token, panes)
+        for forbidden in ("BuildEnemyList(", "UpdateEnemyList(", "SetBool(", "SetInt(",
+                          "newData", "Instantiate(template", "MapKeymanager", "InventoryPane"):
+            self.assertNotIn(forbidden, panes)
+
+    def test_guide_conditions_come_from_native_root_control_not_guessed_row_flags(self):
+        source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.JournalGuide.cs"))
+        resolve = method_body(source, r"string\s+GuideRowCondition\s*\([^)]*\)")
+        build = method_body(source, r"GameObject\s+BuildGuidePane\s*\(\s*\)")
+        refresh = method_body(source, r"void\s+RefreshGuide\s*\([^)]*\)")
+        for token in ('root.GetComponents<PlayMakerFSM>()', 'fsm.FsmName != "Control"',
+                      'binding.Value != row.gameObject', 'state.Name == "Draw Pins"',
+                      'test.boolName.Value == "hasPin"', 'test.isFalse.Name == "NO PIN"',
+                      'test.isFalse.Name == "FINISHED"', 'return null'):
+            self.assertIn(token, resolve)
+        self.assertIn("GuideRowCondition(root,row,i)", build)
+        self.assertIn('pd.GetBool("hasPin")', refresh)
+        self.assertNotIn("pd.hasMap", refresh)
+        self.assertNotIn("SendEvent(", resolve)
+        self.assertNotIn("SetActive(", resolve)
+
+    def test_partial_supplementary_build_cleanup_preserves_donor_deadlines(self):
+        source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.JournalGuide.cs"))
+        build = method_body(source, r"GameObject\s+BuildSupplementaryPane\s*\([^)]*\)")
+        discard = method_body(source, r"void\s+DiscardSupplementaryPane\s*\([^)]*\)")
+        self.assertIn("catch(Exception e)", build)
+        self.assertIn("DiscardSupplementaryPane(id)", build)
+        self.assertIn('WarnOnce("read-only pane build",e)', build)
+        self.assertNotIn("Retry.Reset", discard)
+        for pane in ("Journal", "Guide"):
+            body = method_body(source, rf"GameObject\s+Build{pane}Pane\s*\(\s*\)")
+            self.assertLess(body.index(f"Refresh{pane}(true)"), body.index(f"{pane.lower()}Retry.Resolved()"))
+            self.assertIn("BuildPaneGraphics(go,COMP_" + pane.upper() + ")", body)
+
+    def test_new_pane_graphics_and_local_clips_are_wired_into_actual_layout_and_retirement(self):
+        source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.JournalGuide.cs"))
+        graphics = method_body(source, r"void\s+PositionPaneGraphics\s*\([^)]*\)")
+        clip = method_body(source, r"void\s+ApplyPaneLabelClip\s*\([^)]*\)")
+        cursor = method_body(source, r"void\s+PaneCursorTick\s*\([^)]*\)")
+        label = method_body(source, r"void\s+SetPaneLabel\s*\([^)]*\)")
+        for token in ("415f", "820f", "875*sx", "16f : 20f", "v.Top", "v.Bottom", "v.Left", "v.Right"):
+            self.assertIn(token, graphics)
+        for pane in ("Journal", "Guide"):
+            body = method_body(source, rf"void\s+Layout{pane}\s*\(\s*\)")
+            self.assertIn(f"PositionPaneGraphics({pane.lower()}Graphics,COMP_{pane.upper()})", body)
+            self.assertIn(f"SetPaneSelection({pane.lower()}Graphics", body)
+            self.assertIn(f"PaneCursorTick({pane.lower()}Graphics)", body)
+        self.assertIn("label.Root.InverseTransformPoint", clip)
+        self.assertIn("foreach(var r in label.ClipRenderers)", clip)
+        self.assertIn("SetVector(TMP_CLIP_RECT,bounds)", clip)
+        self.assertIn("r.SetPropertyBlock(label.ClipBlock)", clip)
+        self.assertIn("ApplyPaneLabelClip(label,rect)", label)
+        for token in ("v.CursorFrame != Time.frameCount", "SelectionMoveSeconds", "22,22", "110,110"):
+            self.assertIn(token, cursor)
+        for forbidden in ("new ", "Resources.", "FindDeep", "GetComponents", "File."):
+            self.assertNotIn(forbidden, method_body(source, r"void\s+SupplementaryTick\s*\(\s*\)"))
+        discard = method_body(source, r"void\s+DiscardSupplementaryPane\s*\([^)]*\)")
+        self.assertIn("journalGraphics=null", discard)
+        self.assertIn("guideGraphics=null", discard)
+
+    def test_journal_labels_use_verified_native_keys_and_read_only_fill_journal(self):
+        source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.JournalGuide.cs"))
+        binding = method_body(source, r"void\s+BindJournalLabels\s*\([^)]*\)")
+        refresh = method_body(source, r"void\s+RefreshJournal\s*\([^)]*\)")
+        for token in ('NativeText("INV_NAME_JOURNAL","UI")', 'NativeText("KILL_COUNT_1","Journal")',
+                      'NativeText("KILL_COUNT_2","Journal")', "record.NameKey", "record.DescKey", "record.NotesKey"):
+            self.assertIn(token, binding)
+        self.assertIn('pd.GetBool("fillJournal")', refresh)
+        self.assertIn("killed || fill", refresh)
+        self.assertNotIn("record.Remaining.ToString()", binding)
+        self.assertNotIn("LocalizedLabel", binding)
+
+    def test_touch_uses_shared_geometry_and_down_to_clean_tap(self):
+        source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Select.cs"))
+        body = method_body(source, r"void\s+PollTouch\s*\(\s*\)")
+        for token in ("HitColumn", "lowerTabGesture.Down", "lowerTabGesture.Tap",
+                      "CleanTapSequence", "TouchCount", "lowerTabGesture.Cancel",
+                      "slideT < 1f", "mapMarkerMode", "JournalTap", "GuideTap"):
+            self.assertIn(token, body)
+        self.assertNotIn("compTabBandY", body)
+        self.assertNotIn("frameTabs", body)
+
+
 class HollowKnightReferencePortContractTest(unittest.TestCase):
     def test_every_pinned_dual_souls_reference_module_is_present(self):
         self.assertEqual(
@@ -198,7 +303,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("Time.unscaledDeltaTime", animate_tab)
         self.assertIn("Mathf.Lerp", animate_tab)
         self.assertIn("AnimateSelectionBounds(selBB, sel.item)", select)
-        self.assertIn("AnimateTabFleurX(activeCol, actB.center.x)", frame)
+        self.assertIn("AnimateTabFleurX(activeCol,(activeCol+.5f)*g.CellWidth)", frame)
 
     def test_map_controls_use_native_marker_state_and_visible_zoom(self):
         source = strip_csharp_comments(read(MAP_CONTROLS))
@@ -235,7 +340,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("mapClone.transform.InverseTransformPoint(world)", source)
         self.assertIn("Mathf.Exp(Mathf.Log(maxZoom) * position)", source)
         self.assertIn("BuildMapControls(root)", build_frame)
-        self.assertIn("PositionMapControls(s, asp, yt, yb, onMap)", position_frame)
+        self.assertIn("PositionMapControls(attrCam.orthographicSize,attrCam.aspect,frameInnerTopFrac,frameInnerBotFrac,tab.cur==COMP_MAP)", position_frame)
         self.assertIn("SetMapMarkerMode(false)", update)
         self.assertLess(
             pinch.index("MapControlTouchTick(tc)"),
@@ -341,7 +446,9 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("mapAnyAvailable = (tab.cur == COMP_MAP) && HasAnyMap()", map_tick)
         self.assertIn("mapWorldMode ? mapAnyAvailable : HasMapForCurrentZone()", map_tick)
         self.assertIn("if (mapAnyAvailable) MapPinchTick()", update)
-        self.assertIn("effectiveTab == COMP_MAP && mapWorldMode", hud_strip)
+        self.assertIn("effectiveTab == COMP_MAP && !mapWorldMode", hud_strip)
+        self.assertIn("GameManager.instance.GetCurrentMapZone()", hud_strip)
+        self.assertIn('title=!string.IsNullOrEmpty(raw) ? ZoneName(raw) : LocalizedLabel("Map","PANE_MAP")', hud_strip)
         self.assertIn("mapNeedsSetup = true", toggle)
         self.assertIn("ResetMapView()", toggle)
         self.assertIn("m.WorldMap()", setup)
@@ -786,37 +893,23 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertNotIn("HollowKnightLifebloodFlashPolicy", direct)
         self.assertNotRegex(restore_reference, r"policy\.(?:Restore|Dispose)\s*\(")
 
-    def test_frame_tab_clones_reenable_the_retained_tmp_visual(self):
-        frame = strip_csharp_comments(
-            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
-        )
+    def test_frame_native_icons_retain_five_slots_without_text_fallback(self):
+        frame = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs"))
         tabs = method_body(frame, r"void\s+BuildTabRow\s*\([^)]*\)")
-        position = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
-        self.assertIn("Instantiate(src.gameObject, frameRoot.transform)", tabs)
-        self.assertNotIn("HKTabCloneStaging", tabs)
-        first_activation = tabs.index("go.SetActive(true)")
-        text_assignment = tabs.index('GetProperty("text")')
-        mesh_update = tabs.index("ForceMeshUpdate")
-        self.assertLess(first_activation, text_assignment)
-        self.assertLess(text_assignment, mesh_update)
-        self.assertIn("glyphRenderer.enabled = true", position)
-        self.assertLess(
-            position.index("glyphRenderer.enabled = true"),
-            position.index("var glyphBounds = glyphRenderer.bounds"),
-        )
+        resolve = method_body(frame, r"void\s+ResolveTabDonors\s*\([^)]*\)")
+        self.assertIn("col < 5", tabs)
+        self.assertIn('ShellSprite("F_Tab" + col', tabs)
+        self.assertNotIn("Instantiate(", tabs)
+        self.assertIn("frameTabs[col].enabled = tabIcons[col] != null", resolve)
 
-    def test_frame_tab_sanitization_keeps_only_the_actual_tmp_graphic(self):
-        frame = strip_csharp_comments(
-            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
-        )
-        tabs = method_body(frame, r"void\s+BuildTabRow\s*\([^)]*\)")
-        self.assertIn("SanitizeDetachedTmpClone(go)", tabs)
-        self.assertLess(
-            tabs.index("SanitizeDetachedTmpClone(go)"),
-            tabs.index("go.SetActive(true)"),
-        )
-        self.assertNotIn('Name.Contains("TextMeshPro")', tabs)
-        self.assertNotRegex(tabs, r"Destroy(?:Immediate)?\s*\(\s*mb\s*\)")
+    def test_read_only_native_text_is_sanitized_below_inactive_staging(self):
+        source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.JournalGuide.cs"))
+        copy = method_body(source, r"NativePaneLabel\s+CopyPaneLabel\s*\([^)]*\)")
+        self.assertLess(copy.index("staging.SetActive(false)"), copy.index("Instantiate(donor.gameObject,staging.transform)"))
+        self.assertLess(copy.index("SanitizeDetachedTmpClone(go)"), copy.index("go.SetActive(true)"))
+        self.assertIn("!IsTextMeshProGraphic(driver)", copy)
+        self.assertIn("DestroyImmediate(driver)", copy)
+        self.assertIn("shellCapsFont.material", copy)
 
     def test_detached_tmp_clone_sanitizer_disables_clip_driver_and_neutralizes_clip_bounds(self):
         util = strip_csharp_comments(
@@ -861,9 +954,6 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             read(REFERENCE_ROOT / "HKDualScreen.Bottom.Hud.cs")
         )
         for source, signature, minimum_calls in (
-            (frame, r"void\s+BuildFrame\s*\(\s*\)", 1),
-            (frame, r"void\s+BuildTabRow\s*\([^)]*\)", 1),
-            (hud, r"void\s+BuildAreaName\s*\([^)]*\)", 1),
             (hud, r"void\s+BuildNoMapLabel\s*\([^)]*\)", 1),
             (hud, r"void\s+EnsureNameClone\s*\(\s*\)", 1),
         ):
@@ -882,31 +972,21 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         self.assertIn("SanitizeDetachedTmpClone(v)", control)
 
-        finalize = method_body(
-            frame,
-            r"void\s+FinalizeFrameTabLabels\s*\(\s*\)",
-        )
-        position_hud = method_body(
-            hud,
-            r"void\s+PositionHudStrip\s*\([^)]*\)",
-        )
+        position_hud = method_body(hud, r"void\s+PositionHudStrip\s*\([^)]*\)")
         set_name = method_body(hud, r"void\s+SetNameClone\s*\([^)]*\)")
-        populate_control = method_body(
-            select,
-            r"void\s+PopulateControlPrompt\s*\([^)]*\)",
-        )
-        build_frame = method_body(frame, r"void\s+BuildFrame\s*\(\s*\)")
-        reset_start = build_frame.index('go.name = "F_MapReset"')
-        reset_end = build_frame.index('Dbg($"HKDS frame built', reset_start)
-        map_reset = build_frame[reset_start:reset_end]
-        self.assertLess(
-            map_reset.index("ForceMeshUpdate"),
-            map_reset.index("NeutralizeDetachedTmpClip(go)"),
-        )
-        self.assertLess(
-            finalize.index("ForceMeshUpdate"),
-            finalize.index("NeutralizeDetachedTmpClip(t.gameObject)"),
-        )
+        populate_control = method_body(select, r"void\s+PopulateControlPrompt\s*\([^)]*\)")
+        header = method_body(hud, r"void\s+BuildAreaName\s*\([^)]*\)")
+        self.assertIn('CopyPaneLabel(donor,frameRoot.transform,"F_AreaName",52,true)', header)
+        panes = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.JournalGuide.cs"))
+        copy = method_body(panes, r"NativePaneLabel\s+CopyPaneLabel\s*\([^)]*\)")
+        label = method_body(panes, r"void\s+SetPaneLabel\s*\([^)]*\)")
+        self.assertIn("NeutralizeDetachedTmpClip(go)", copy)
+        self.assertLess(label.index("ForceMeshUpdate"), label.index("ApplyPaneLabelClip(label,rect)"))
+        clip = method_body(panes, r"void\s+ApplyPaneLabelClip\s*\([^)]*\)")
+        self.assertIn("label.Root.InverseTransformPoint", clip)
+        self.assertIn("foreach(var r in label.ClipRenderers)", clip)
+        self.assertIn("SetVector(TMP_CLIP_RECT,bounds)", clip)
+        self.assertIn("r.SetPropertyBlock(label.ClipBlock)", clip)
         for clone in (
             "areaNameT.gameObject",
             "noMapT.gameObject",
@@ -1081,27 +1161,15 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             routing,
         )
 
-    def test_frame_tab_row_uses_pinned_reference_scale_and_centres_real_glyph_bounds(self):
-        layout = strip_csharp_comments(read(REFERENCE_ROOT / "HKLayout.cs"))
-        frame = strip_csharp_comments(
-            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
-        )
+    def test_frame_native_art_uses_measured_cells_and_trim_corrected_fit(self):
+        frame = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs"))
         position = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
-        self.assertRegex(layout, r"compTabScale\s*=\s*2\.7f")
-        self.assertRegex(layout, r"compTabY\s*=\s*-0\.95f")
-        self.assertIn("desiredGlyphCenter", position)
-        self.assertIn("desiredGlyphCenter.x - glyphBounds.center.x", position)
-        self.assertIn("desiredGlyphCenter.y - glyphBounds.center.y", position)
-        self.assertRegex(
-            position,
-            r"(?s)var\s+rb\s*=\s*tr\.bounds;.*?"
-            r"if\s*\(TryTmpGlyphBoundsWorld\([^;]+?\)\)\s*"
-            r"rb\s*=\s*new Bounds\(\(glyphMin \+ glyphMax\) \* 0\.5f, glyphMax - glyphMin\);",
-        )
-        self.assertIn(
-            "if (col == activeCol) { if (!actHave) { actB = rb; actHave = true; } else actB.Encapsulate(rb); }",
-            position,
-        )
+        fit = method_body(frame, r"static\s+void\s+FitSprite\s*\([^)]*\)")
+        self.assertIn("(col+.5f)*g.CellWidth", position)
+        self.assertIn("g.IconMax*unit,g.IconMax*unit", position)
+        self.assertIn("Mathf.Min(maxWidth", fit)
+        self.assertIn("b.center.x * scale", fit)
+        self.assertIn("b.center.y * scale", fit)
 
     def test_tmp_glyph_bounds_world_encapsulates_every_rotated_corner(self):
         charms = strip_csharp_comments(
@@ -1118,61 +1186,28 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("Vector3.Min", bounds)
         self.assertIn("Vector3.Max", bounds)
 
-    def test_frame_tab_labels_sort_above_chrome_and_fleurs_are_slot_bounded(self):
-        frame = strip_csharp_comments(
-            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
-        )
-        tabs = method_body(frame, r"void\s+BuildTabRow\s*\([^)]*\)")
+    def test_frame_native_cursors_and_glow_sort_above_clipped_body(self):
+        frame = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs"))
+        resolve = method_body(frame, r"void\s+ResolveTabDonors\s*\([^)]*\)")
         position = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
-        self.assertIn('r.sortingLayerName = "Inventory"', tabs)
-        self.assertRegex(tabs, r"r\.sortingOrder\s*=\s*10080\s*\+\s*i")
-        self.assertIn("float fleurMaxW", position)
-        self.assertIn("Mathf.Min(charmsW", position)
-        self.assertIn("float textBot = actB.min.y", position)
+        for name in ('"F_TabTL"', '"F_TabBR"', '"F_TabGlow"'):
+            self.assertIn(name, resolve)
+        self.assertIn("selected.bounds", position)
+        self.assertIn("22*unit,22*unit", position)
+        self.assertIn("110*unit,110*unit", position)
+        self.assertIn("mapMaskTopR.enabled=true", position)
+        self.assertIn("mapMaskBotR.enabled=true", position)
 
-    def test_frame_tab_labels_finalize_after_frame_construction(self):
-        frame = strip_csharp_comments(
-            read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs")
-        )
-        tabs = method_body(frame, r"void\s+BuildTabRow\s*\([^)]*\)")
-        finalize = method_body(
-            frame,
-            r"void\s+FinalizeFrameTabLabels\s*\(\s*\)",
-        )
-        position = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
-        self.assertIn('SetValue(c, "", null)', tabs)
-        self.assertNotIn("SetValue(c, labels[i]", tabs)
-        self.assertIn("frameTabLabels.Add(labels[i])", tabs)
-        self.assertLess(
-            tabs.index("frameTabLabelsPending = true"),
-            tabs.index("for (int i = 0; i < labels.Length; i++)"),
-        )
-        self.assertIn("frameTabBuildFailed = true", tabs)
-        self.assertIn(
-            "if (frameTabBuildFailed) { TeardownFrame(); return; }",
-            position,
-        )
-        self.assertIn("FinalizeFrameTabLabels()", position)
-        self.assertLess(
-            position.index("FinalizeFrameTabLabels()"),
-            position.index("foreach (var kv in frameEdge)"),
-        )
-        self.assertIn("frameTabLabels[i]", finalize)
-        self.assertIn("ForceMeshUpdate", finalize)
-        self.assertIn("glyphRenderer.enabled = true", finalize)
-        self.assertIn("bool textSet = false", finalize)
-        self.assertIn("bool meshUpdated = false", finalize)
-        self.assertIn(
-            "if (!textSet || !meshUpdated) { complete = false; continue; }",
-            finalize,
-        )
-        self.assertIn("bool complete = true", finalize)
-        self.assertIn("if (!hv) { complete = false; continue; }", finalize)
-        self.assertIn("if (!frameBase.ContainsKey(t))", finalize)
-        self.assertIn("frameBase[t] = t.localScale", finalize)
-        self.assertIn("frameTabLabelsPending = !complete", finalize)
+    def test_native_icon_retry_is_bounded_and_failed_attempt_keeps_five_slots(self):
+        frame = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs"))
+        resolve = method_body(frame, r"void\s+ResolveTabDonors\s*\([^)]*\)")
+        self.assertIn("iconRetry.Due(Time.frameCount)", resolve)
+        self.assertIn("if (complete) iconRetry.Resolved()", resolve)
+        self.assertNotIn("TeardownFrame()", resolve)
+        self.assertNotIn("iconRetry.Reset()", resolve)
         teardown = method_body(frame, r"void\s+TeardownFrame\s*\(\s*\)")
-        self.assertIn("frameTabBuildFailed = false", teardown)
+        self.assertIn("iconRetry.Reset()", teardown)
+        self.assertIn("i<5", teardown)
 
     def test_pane_clones_are_sanitized_while_inactive_before_activation(self):
         frame = strip_csharp_comments(

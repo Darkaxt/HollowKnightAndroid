@@ -7,6 +7,8 @@ using UnityEngine;
 // the equipped-charm icon row, and the "Map not acquired yet" label (built once under frameRoot; positioned per frame).
 public partial class HKDualScreen
 {
+    NativePaneLabel shellTitle; int shellTitleTab = -1, shellTitleLanguage = -1;
+    float shellTitleWidth, shellTitleHeight;
     Component areaNameTmp;            // TMP label showing the current map-zone name (top-right, Map tab only)
 
     Transform areaNameT;
@@ -36,34 +38,13 @@ public partial class HKDualScreen
     // the Map tab is active (set text + visibility each frame in PositionFrame).
     void BuildAreaName(Transform root)
     {
-        try
-        {
-            var src = FindDeep(root, "Pane Name");
-            if (src == null) return;
-            var go = Instantiate(src.gameObject, frameRoot.transform);
-            go.name = "F_AreaName";
-            SanitizeDetachedTmpClone(go);
-            SetLayerRecursive(go.transform, ATTR_LAYER);
-            go.SetActive(true);
-            foreach (var r in go.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = true; }
-            foreach (var c in go.GetComponentsInChildren<Component>(true))
-            {
-                if (!IsTextMeshProGraphic(c)) continue;
-                areaNameTmp = c;
-                try { c.GetType().GetProperty("text")?.SetValue(c, "", null); } catch { }
-                break;
-            }
-            areaNameT = go.transform;
-            float s = attrCam.orthographicSize;
-            var rr = go.GetComponentsInChildren<Renderer>();
-            Bounds b = new Bounds(); bool hv = false;
-            foreach (var r in rr) { var rb = r.bounds; if (float.IsNaN(rb.center.x) || rb.size.sqrMagnitude < 1e-8f) continue; if (!hv) { b = rb; hv = true; } else b.Encapsulate(rb); }
-            float nd = hv ? Mathf.Max(0.001f, b.size.y) : 1f;
-            go.transform.localScale *= (0.055f * 2f * s) / nd;   // base size; compAreaNameScale applied LIVE in PositionFrame
-            frameBase[go.transform] = go.transform.localScale;
-            frameEdge[go.transform] = new Vector3(cfg.compAreaNameX, cfg.compAreaNameY, 4f);
-        }
-        catch (Exception e) { Dbg($"HKDS area name err {e.Message}"); }
+        if(areaNameT != null || root == null) return;
+        var donor=FindDeep(root,"Pane Name");
+        shellTitle=CopyPaneLabel(donor,frameRoot.transform,"F_AreaName",52,true);
+        if(shellTitle == null) return;
+        areaNameT=shellTitle.Root; areaNameTmp=shellTitle.Tmp; areaNameR=shellTitle.Renderer;
+        areaNameR.sortingLayerName="Inventory"; areaNameR.sortingOrder=30090;
+        shellTitleTab=-1; shellTitleLanguage=-1;
     }
 
     // ---- Equipped-charms icon row (top of the box, every tab) --------------------------------------------------
@@ -77,7 +58,7 @@ public partial class HKDualScreen
         for (int i = 0; i < 11; i++)   // 11 = comfortably above the real max equipped count
         {
             var c = new GameObject("F_EquipCharm" + i); c.transform.SetParent(equipRowRoot, false); c.layer = ATTR_LAYER;
-            var sr = c.AddComponent<SpriteRenderer>(); sr.sortingOrder = 55; sr.enabled = false;
+            var sr = c.AddComponent<SpriteRenderer>(); sr.sortingLayerName = "Inventory"; sr.sortingOrder = 30055; sr.enabled = false;
             equipCharmSRs.Add(sr);
         }
     }
@@ -108,12 +89,12 @@ public partial class HKDualScreen
             }
         }
         int n = equipRowN; if (n == 0) return;
-        float targetH = 0.5f * s * Mathf.Max(0.05f, cfg.compEquipRowScale);       // icon world height (∝ ortho => constant apparent size)
+        float targetH = 54f * ShellPixel;       // icon world height (∝ ortho => constant apparent size)
         float pitch = targetH * (1f + Mathf.Max(0f, cfg.compEquipRowGap));
         // RIGHT-ANCHOR the row to the canonical 40px header margin, matching
         // the HUD's right margin (user: "right spacing equal battery side"). compEquipRowX is now a fine-nudge on
         // that right edge; compEquipRowY sets the top gap. Icons grow LEFTWARD from the rightmost.
-        float cy = cfg.compEquipRowY * s;
+        float cy = s - 54f * ShellPixel;
         float rightEdge = s * asp - HeaderActionRightMarginPixels * (2f * s / Mathf.Max(1, BOTTOM_H));
         var srLast = equipCharmSRs[Mathf.Min(n, equipCharmSRs.Count) - 1];
         float lastAsp = (srLast != null && srLast.sprite != null) ? srLast.sprite.bounds.size.x / Mathf.Max(0.01f, srLast.sprite.bounds.size.y) : 1f;
@@ -166,42 +147,41 @@ public partial class HKDualScreen
     // aspect, zf = frame zoom factor, effectiveTab = the tab being shown.
     void PositionHudStrip(float s, float asp, float zf, int effectiveTab)
     {
-        // Map-zone title (top-right): the label GameObject stays ALWAYS ACTIVE (like the tabs — toggling a
-        // TMP inactive/active left its mesh un-regenerated => invisible). We hide it by pushing EMPTY text
-        // off the Map tab, and only re-set text (+ ForceMeshUpdate) when the string actually changes.
-        if (areaNameT != null && areaNameTmp != null)
+        if(areaNameT != null && areaNameTmp != null)
         {
-            // area-name position is LIVE here (compAreaNameX/Y hot-reload) — set it directly rather than via
-            // the frameEdge dict, which BuildFrame doesn't refresh, so X/Y were stuck until a rebuild.
-            // fix5: RIGHT-anchor the label — keep its right edge at compAreaNameX (matches the HUD's right
-            // margin) so the gap is constant regardless of zone-name length; text grows leftward. Raise Y
-            // (compAreaNameY) to sit slightly higher. Half-width read from the rendered bounds (frameRoot is
-            // an identity-scale child of attrCam, so world offsets == local offsets here).
-            if (areaNameR == null) { try { areaNameR = (areaNameTmp as Component).GetComponent<Renderer>(); } catch { } }   // PERF: cached (was 2x GetComponent per frame)
-            float anHalfW = areaNameR != null ? areaNameR.bounds.extents.x : 0f;
-            areaNameT.localPosition = new Vector3(cfg.compAreaNameX * s * asp - anHalfW, cfg.compAreaNameY * s, 4f);
-            bool showName = cfg.compAreaName == 1 && effectiveTab != COMP_CHARM &&
-                            !(effectiveTab == COMP_MAP && mapWorldMode);   // a world map is not the current area
-            // PERF: ZoneName does a language-sheet lookup — resolve only when the RAW zone key changes, not per frame.
-            string zRaw = showName ? "" : null;
-            if (showName) { try { var g = GameManager.instance; if (g != null) zRaw = g.GetCurrentMapZone(); } catch { } }
-            if (zRaw != lastAreaZoneRaw)
+            var g=LowerGeometry();
+            int language=(int)TeamCherry.Localization.Language.CurrentLanguage();
+            string raw="";
+            if(effectiveTab == COMP_MAP && !mapWorldMode)
+                try { raw=GameManager.instance != null ? GameManager.instance.GetCurrentMapZone() : ""; } catch { }
+            if(effectiveTab != shellTitleTab || raw != lastAreaZoneRaw || language != shellTitleLanguage || shellTitleWidth != g.Width || shellTitleHeight != g.Height)
             {
-                lastAreaZoneRaw = zRaw;
-                string want = string.IsNullOrEmpty(zRaw) ? "" : ZoneName(zRaw);
-                if (want != lastAreaName)
+                shellTitleWidth=g.Width; shellTitleHeight=g.Height;
+                if(shellTitle.Container != null) TcSetSize(shellTitle.Container,
+                    new Vector2((g.Width-40)/Mathf.Max(.001f,shellTitle.UnitScale),g.HudHeight/Mathf.Max(.001f,shellTitle.UnitScale)));
+                shellTitleTab=effectiveTab; lastAreaZoneRaw=raw; shellTitleLanguage=language;
+                string title;
+                switch(effectiveTab)
                 {
-                    lastAreaName = want;
-                    try { areaNameTmp.GetType().GetProperty("text")?.SetValue(areaNameTmp, want, null); } catch { }
-                    try { areaNameTmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(areaNameTmp, null); } catch { }
-                    NeutralizeDetachedTmpClip(areaNameT.gameObject);
-                    SetTmpColor(areaNameTmp, new Color(1f, 1f, 1f, 0.92f));   // constant tint — on text change, not per frame
+                    case COMP_INV: title=LocalizedLabel("Inventory","PANE_INVENTORY"); break;
+                    case COMP_CHARM: title=LocalizedLabel("Charms","PANE_CHARMS"); break;
+                    case COMP_JOURNAL: title=LocalizedLabel("Journal","PANE_JOURNAL"); break;
+                    case COMP_GUIDE: title=LocalizedLabel("Map Key","PANE_MAP_KEY"); break;
+                    default: title=!string.IsNullOrEmpty(raw) ? ZoneName(raw) : LocalizedLabel("Map","PANE_MAP"); break;
                 }
+                lastAreaName=title.ToUpperInvariant();
+                TmpProp(areaNameTmp,"text")?.SetValue(areaNameTmp,lastAreaName,null);
+                areaNameTmp.GetType().GetMethod("ForceMeshUpdate",Type.EmptyTypes)?.Invoke(areaNameTmp,null);
+                NeutralizeDetachedTmpClip(areaNameT.gameObject); SetTmpColor(areaNameTmp,ShellInk);
             }
-            // TMP auto-DISABLES its mesh renderer while the text is empty and doesn't re-enable it after a
-            // reflection text-set — force it every frame (this was the invisible label: real mesh, vis=False).
-            if (areaNameR != null) areaNameR.enabled = lastAreaName.Length > 0 && benchToastUntil <= Time.unscaledTime;   // fix#5(163-fb): give the bench toast the corner
-            if (lastAreaName.Length > 0 && frameBase.TryGetValue(areaNameT, out var anbs)) areaNameT.localScale = anbs * zf * Mathf.Max(0.1f, cfg.compAreaNameScale);
+            areaNameT.localScale=Vector3.one*shellTitle.UnitScale*ShellPixel;
+            areaNameT.position=ShellPoint(g.Width/2,g.HudHeight-6);
+            var bounds=areaNameR.bounds;
+            if(bounds.size.x>(g.Width-40)*ShellPixel) areaNameT.localScale *= (g.Width-40)*ShellPixel/bounds.size.x;
+            bounds=areaNameR.bounds;
+            Vector3 target=ShellPoint(g.Width/2,g.HudHeight-6);
+            areaNameT.position += new Vector3(target.x-bounds.center.x,target.y-bounds.min.y,0);
+            areaNameR.enabled=lastAreaName.Length>0;
         }
         UpdateNotchRow(s, asp, effectiveTab);      // fix#3(164-fb): Charms tab: notch icons where the area name sits
         UpdateEquipCharmRow(s, asp);   // equipped-charm icon row across the top (every tab)
@@ -349,9 +329,9 @@ public partial class HKDualScreen
         // which also picks up skins for free, and sit the row DIRECTLY UNDER the equipped-charm row in
         // the top strip (was parked on the area-name line, reading as inside the box).
         FindNotchSprites();
-        float targetH = 0.5f * s * Mathf.Max(0.05f, cfg.compEquipRowScale);   // same metric as the charm row
+        float targetH = 54f * ShellPixel;   // same metric as the charm row
         float h = targetH * 0.70f;                                            // fix(173): larger [user] (was 0.5x the charm icons)
-        float rowY = cfg.compEquipRowY * s - targetH * 0.5f - h * 0.95f;      // below the charm icons, nudged further down [user]
+        float rowY = s - 112f * ShellPixel;      // below the charm icons, nudged further down [user]
         float rightEdge = s * asp - HeaderActionRightMarginPixels * (2f * s / Mathf.Max(1, BOTTOM_H));     // same right margin as that row
         bool retex = total != lastNotchTotal || used != lastNotchUsed;
         for (int i = 0; i < notchSRs.Count; i++)

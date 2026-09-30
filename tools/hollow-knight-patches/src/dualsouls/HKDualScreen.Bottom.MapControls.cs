@@ -19,7 +19,7 @@ public partial class HKDualScreen
         public bool Normalized;
     }
 
-    MapActionButton mapViewAction, mapMarkerAction, mapMarkerTypeAction;
+    MapActionButton mapViewAction, mapMarkerAction, mapMarkerTypeAction, mapResetAction;
     LineRenderer mapZoomTrack;
     SpriteRenderer mapZoomThumb;
     Sprite mapControlPill;
@@ -49,6 +49,8 @@ public partial class HKDualScreen
             mapMarkerAction = BuildMapActionButton(nativeRoot, "F_MapMarkers", "MARKERS");
         if (mapMarkerTypeAction == null)
             mapMarkerTypeAction = BuildMapActionButton(nativeRoot, "F_MapMarkerType", "BLUE 0");
+        if (mapResetAction == null)
+            mapResetAction = BuildMapActionButton(nativeRoot, "F_MapReset", "RESET");
         if (mapZoomTrack == null)
         {
             var track = new GameObject("F_MapZoomTrack");
@@ -213,6 +215,9 @@ public partial class HKDualScreen
                         cam.position.z + 3.4f), zf,
             Color.white, new Color(0.08f, 0.08f, 0.1f, 1f));
 
+        SetMapAction(mapResetAction, showMap && !mapMarkerMode, "RESET",
+            new Vector3(actionX, bottomY + 0.10f * s, cam.position.z + 3.4f), zf,
+            Color.white, new Color(0.08f, 0.08f, 0.1f, 1f));
         EnsureSelectedMarkerType();
         int spare = mapMarkerType >= 0 ? MarkerSpare(mapMarkerType) : 0;
         Color markerColor = mapMarkerType >= 0 ? MAP_MARKER_COLORS[mapMarkerType] : Color.white;
@@ -316,6 +321,11 @@ public partial class HKDualScreen
             return true;
         }
         if (!mapAvailable || !mapContentVisible || mapNeedsSetup) return false;
+        if (!mapMarkerMode && ValidButton(mapResetAction) && mapResetAction.Root.gameObject.activeSelf && mapResetAction.Hit.Contains(world))
+        {
+            ResetMapViewAnimated();
+            return true;
+        }
         if (ValidButton(mapMarkerAction) && mapMarkerAction.Root.gameObject.activeSelf &&
             mapMarkerAction.Hit.Contains(world))
         {
@@ -505,6 +515,7 @@ public partial class HKDualScreen
     void TeardownMapControls()
     {
         mapViewAction = null;
+        mapResetAction = null;
         mapMarkerAction = null;
         mapMarkerTypeAction = null;
         mapZoomTrack = null;

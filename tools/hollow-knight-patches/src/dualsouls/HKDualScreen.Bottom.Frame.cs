@@ -1,15 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using UnityEngine;
 
-// [B2] BOTTOM SCREEN — area management: the context-box FRAME (ornaments, tab fleurs, separators), the TAB ROW +
-// tab state, the clone-cache lifecycle (build/stow/show/rebuild-on-PlayerData-change), pane fit-to-box, and the
-// UpdateCompanion()/PositionFrame() orchestration + companion camera. Tenants: B4 (inventory), B6 (map), B7 (charms),
-// B3 (HUD strip), B5 (selection) each expose a *Tick/Position* entry called from here.
+// B2: canonical measured shell, five native routes and retained pane lifecycle.
 public partial class HKDualScreen
 {
-    // ---- bottom-screen companion state ----
     Transform compRoot;            // our own parent (DontDestroyOnLoad); pan = move it, zoom = scale it
 
     InputHandler lowerHudFixtureInputHandler;
@@ -40,8 +35,6 @@ public partial class HKDualScreen
     // change clears it); lastCfg = last cfg.compTab seen (edge detect for that clear).
     struct TabState { public int cur, built, tap, lastCfg; }
     TabState tab = new TabState { built = -1, tap = -1, lastCfg = int.MinValue };
-    static readonly int[] TAB_TO_COL = { 1, 0, 2 };   // compTab {Map,Inv,Charm} -> display column {Inventory,Map,Charms}
-
     bool paneNeedsFit;             // recompute the Charms/Inv pane fit-to-box next frame
 
     int compFrameTick;             // throttle for the map auto-frame bounds scan
@@ -54,184 +47,201 @@ public partial class HKDualScreen
     void ApplyFit(FitResult r) { if (r.valid) fit = r; }
 
 
-    GameObject frameRoot;         // context-box frame: parent of the ornament clones, child of attrCam
-
-    readonly Dictionary<Transform, Vector3> frameEdge = new Dictionary<Transform, Vector3>();  // clone -> (edge dir x,y in [-1..1], local z)
-
-    readonly Dictionary<Transform, Vector3> frameBase = new Dictionary<Transform, Vector3>();   // clone -> normalized base scale
-
-    readonly List<(Component tmp, Transform t, int col)> frameTabs = new List<(Component, Transform, int)>();  // tab TMP + transform + column
-
-    readonly List<string> frameTabLabels = new List<string>();   // localized text finalized only after BuildFrame completes
-    bool frameTabLabelsPending;
-    bool frameTabBuildFailed;
-
-
-    Transform botFleurT, botFleur2T;   // botFleurT = fleur ABOVE selected tab (#3); botFleur2T = BELOW (#2)
-
-    float botFleurAspWH = 6.9f, botFleur2AspWH = 7.3f;   // texture aspects (width/height) for aspect-locked resizing
-
-    Transform sepTopT, sepBotT;        // full-width separators: #5 (HUD->box) and #6 (box->tabs)
-
-    float sepTopAspWH = 31f, sepBotAspWH = 31f;
-
-    float frameRefOrtho = 8f;     // attrCam ortho captured at frame-build (for zoom-proportional scaling)
-
-    Transform CloneOrnament(Transform root, string name, Vector2 edge, float targetFrac, bool useWidth, float zRot, int spriteId)
+    GameObject frameRoot;
+    readonly Dictionary<Transform, Vector3> frameEdge = new Dictionary<Transform, Vector3>();
+    readonly Dictionary<Transform, Vector3> frameBase = new Dictionary<Transform, Vector3>();
+    readonly SpriteRenderer[] frameTabs = new SpriteRenderer[5];
+    readonly Sprite[] tabIcons = new Sprite[5];
+    readonly HKLowerLayout.Retry iconRetry = new HKLowerLayout.Retry();
+    SpriteRenderer tabTL, tabBR, tabGlow, shellRule;
+    Transform mapMaskTopT, mapMaskBotT;
+    Renderer mapMaskTopR, mapMaskBotR;
+    Transform mapResetT; Component mapResetTmp; Renderer mapResetR;
+    SpriteRenderer mapResetPillSR;
+    float frameRefOrtho = 8f;
+    int tabColorCol = -1, tabFleurMoveCol = -1;
+    float tabFleurMoveFromX, tabFleurMoveX, tabFleurMoveT = 1f;
+    const float TabCaretMoveSeconds = 0.15f;
+    // Kept solely for byte-identical LogoTick compatibility; no obsolete art scan.
+    bool fleurBaked = true;
+    void TryBakeTabFleurs() { fleurBaked = true; }
+    HKLowerLayout.Geometry LowerGeometry() { return HKLowerLayout.Measure(BOTTOM_W, BOTTOM_H); }
+    float ShellPixel { get { return attrCam != null ? 2f * attrCam.orthographicSize / Mathf.Max(1, BOTTOM_H) : 1f; } }
+    Vector3 ShellPoint(float x, float y, float z = 4f)
     {
-        var src = FindDeep(root, name);
-        if (src == null) { Dbg($"HKDS frame: no '{name}'"); return null; }
-        var go = Instantiate(src.gameObject, frameRoot.transform);
-        go.name = "F_" + name + (zRot != 0f ? "_" + (int)zRot : "");
-        // Disable EVERY MonoBehaviour except the tk2dSprite renderer, so the clone can't animate/fade/
-        // close itself (kills its PlayMakerFSM, tk2dSpriteAnimator, up/down driver, NestedFadeGroup).
-        foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true))
-            if (mb != null && mb.GetType().Name != "tk2dSprite") mb.enabled = false;
-        SetLayerRecursive(go.transform, ATTR_LAYER);
-        go.transform.localRotation = Quaternion.Euler(0f, 0f, zRot);
-        go.SetActive(true);
-        // The inventory-closed fade may have DISABLED the ornament's MeshRenderer and/or deactivated its
-        // sprite child (that's how HK hides it) — force renderers on + their GameObjects active, else the
-        // clone is invisible even though it "built".
-        foreach (var r in go.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = true; }
-        // Force the authored open frame + full opacity: the fade also drives the tk2dSprite VERTEX-COLOR
-        // alpha to 0 while closed → the ornament would otherwise be transparent.
-        foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true))
-        {
-            if (mb == null || mb.GetType().Name != "tk2dSprite") continue;
-            var ty = mb.GetType();
-            if (spriteId >= 0) { try { ty.GetProperty("spriteId")?.SetValue(mb, spriteId, null); } catch { } }
-            try { ty.GetProperty("color")?.SetValue(mb, Color.white, null); } catch { }
-        }
-        // normalize: scale so the ornament's measured size == targetFrac of the (build-time) view dim
-        float s = attrCam.orthographicSize, asp = attrCam.aspect;
-        float viewDim = useWidth ? (2f * s * asp) : (2f * s);
-        var rr = go.GetComponentsInChildren<Renderer>();
-        Bounds b = new Bounds(); bool hv = false;
-        foreach (var r in rr) { var rb = r.bounds; if (float.IsNaN(rb.center.x) || rb.size.sqrMagnitude < 1e-8f) continue; if (!hv) { b = rb; hv = true; } else b.Encapsulate(rb); }
-        float nd = hv ? Mathf.Max(0.001f, useWidth ? b.size.x : b.size.y) : 1f;
-        go.transform.localScale *= (targetFrac * viewDim) / nd;
-        frameBase[go.transform] = go.transform.localScale;
-        frameEdge[go.transform] = new Vector3(edge.x, edge.y, 5f);
-        if (cfg.debug == 1)
-        {
-            int en = 0; foreach (var r in rr) if (r.enabled) en++;
-            float a = 1f; foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true)) { if (mb == null || mb.GetType().Name != "tk2dSprite") continue; try { a = ((Color)mb.GetType().GetProperty("color").GetValue(mb, null)).a; } catch { } break; }
-            Dbg($"HKDS orn '{name}' rends={rr.Length} en={en} boundsX={(hv ? b.size.x : 0):F2} boundsY={(hv ? b.size.y : 0):F2} lossy={go.transform.lossyScale.x:F3} a={a:F2}");
-        }
-        return go.transform;
+        var g = LowerGeometry();
+        return attrCam.transform.position + new Vector3((x - g.Width / 2f) * ShellPixel,
+            (g.Height / 2f - y) * ShellPixel, z);
     }
-
-    // Bake the two tab fleurs ONCE from HK's own "Menu" sprite atlas (resident only at the title/menu, not during
-    // gameplay) into persistentDataPath PNGs; thereafter BuildFleurFromFile just loads the cache. Atlas rects:
-    //   TOP    = Yes_No_top_fleur0007     atlas rect (0,69,409,64)     -> hkds_fleur.png
-    //   BOTTOM = Yes_No_bottom_fleur0007  atlas rect (349,408,345,47)  -> hkds_fleur_bot.png
-    // Rects are bottom-left origin (Unity sprite space); divide by the atlas's real dims for UVs. No APK art —
-    // the atlas belongs to the user's game; we own only the baked Texture2D copies (cached, regenerable).
-    bool fleurBaked;
-
-    void TryBakeTabFleurs()
+    static readonly Color ShellInk = new Color(.93f, .91f, .86f, 1f);
+    static readonly Color ShellMuted = new Color(.62f, .60f, .58f, 1f);
+    SpriteRenderer ShellSprite(string name, Transform parent, Sprite sprite, int order = 30080)
     {
-        if (fleurBaked) return;
-        try
-        {
-            string pTop = Path.Combine(Application.persistentDataPath, "hkds_fleur.png");
-            string pBot = Path.Combine(Application.persistentDataPath, "hkds_fleur_bot.png");
-            bool haveTop = File.Exists(pTop), haveBot = File.Exists(pBot);
-            if (haveTop && haveBot) { fleurBaked = true; return; }
-            Texture2D atlas = null;
-            var all = Resources.FindObjectsOfTypeAll<Texture2D>();
-            for (int i = 0; i < all.Length; i++)
-                if (all[i] != null && NameHas(all[i].name, "-Menu-") && !NameHas(all[i].name, "premenu")) { atlas = all[i]; break; }
-            if (atlas == null) return;   // Menu atlas not resident yet — retry (it's up at the title menu)
-            float W = atlas.width, H = atlas.height;
-            if (!haveTop) { var t = BakeRegion(atlas, new Rect(0f / W, 69f / H, 409f / W, 64f / H)); if (t != null) { botFleurAspWH = (float)t.width / Mathf.Max(1, t.height); CacheCompanionTex("hkds_fleur", t); } }
-            if (!haveBot) { var b = BakeRegion(atlas, new Rect(349f / W, 408f / H, 345f / W, 47f / H)); if (b != null) { botFleur2AspWH = (float)b.width / Mathf.Max(1, b.height); CacheCompanionTex("hkds_fleur_bot", b); } }
-            fleurBaked = File.Exists(pTop) && File.Exists(pBot);
-            Dbg($"HKDS tab-fleurs bake atlas='{atlas.name}' {W}x{H} top={File.Exists(pTop)} bot={File.Exists(pBot)}");
-        }
-        catch (Exception e) { Dbg($"HKDS tab-fleur err {e.Message}"); }
+        var go = new GameObject(name); go.transform.SetParent(parent, false); go.layer = ATTR_LAYER;
+        var sr = go.AddComponent<SpriteRenderer>(); sr.sprite = sprite; sr.sortingLayerName = "Inventory";
+        sr.sortingOrder = order; sr.enabled = sprite != null; return sr;
     }
-
-    // Bottom ornament from a standalone PNG (hkds_fleur.png in persistentDataPath): the pause/options-menu
-    // divider flourish, pre-baked from the Pause_fleurs atlas with real alpha. We own the Texture2D (LoadImage)
-    // so it's always GPU-resident — the live atlas sprite drew nothing during gameplay (atlas not resident).
-    // Rendered as an explicit quad (full 0..1 UVs) with Sprites/Default-ColorFlash (guaranteed in the build).
-    // Returns null if the PNG isn't present (caller falls back to a tk2d ornament).
-    Transform BuildFleurFromFile(string cacheName, bool isTop, Vector2 edge, float targetFrac)
+    static void FitSprite(SpriteRenderer sr, Vector3 center, float maxWidth, float maxHeight)
     {
-        try
-        {
-            // The two tab fleurs are baked from the Menu atlas by TryBakeTabFleurs and loaded here from cache.
-            var tex = Own(LoadCompanionTex(cacheName));
-            if (tex == null) { Dbg($"HKDS fleur '{cacheName}': cache not ready yet"); return null; }
-            var go = new GameObject("F_Fleur_" + cacheName);
-            go.transform.SetParent(frameRoot.transform, false);
-            go.layer = ATTR_LAYER;
-            var mf = go.AddComponent<MeshFilter>();
-            var mr = go.AddComponent<MeshRenderer>();
-            var mesh = Own(new Mesh { name = "F_FleurQuad" });
-            float aspectWH = Mathf.Max(0.01f, (float)tex.width / Mathf.Max(1, tex.height));   // quad: width=aspectWH, height=1
-            if (isTop) botFleurAspWH = aspectWH; else botFleur2AspWH = aspectWH;   // for aspect-locked resize in PositionFrame
-            float hw = aspectWH * 0.5f, hh = 0.5f;
-            mesh.vertices = new[] { new Vector3(-hw, -hh, 0f), new Vector3(hw, -hh, 0f), new Vector3(hw, hh, 0f), new Vector3(-hw, hh, 0f) };
-            mesh.uv = new[] { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f) };
-            mesh.colors = new[] { Color.white, Color.white, Color.white, Color.white };   // ColorFlash multiplies COLOR; absent channel = (0,0,0,0) = invisible
-            mesh.triangles = new[] { 0, 1, 2, 0, 2, 3 };
-            mesh.RecalculateBounds();
-            mf.mesh = mesh;
-            Shader fsh = Shader.Find("Sprites/Default-ColorFlash") ?? Shader.Find("Sprites/Default") ?? Shader.Find("UI/Default");
-            var mat = Own(new Material(fsh) { mainTexture = tex, color = Color.white });
-            mr.sharedMaterial = mat; mr.sortingOrder = 40;
-            float s2 = attrCam.orthographicSize, asp = attrCam.aspect;
-            float sc = (targetFrac * 2f * s2 * asp) / aspectWH;   // scale the unit-height quad so its WIDTH = targetFrac of the view
-            go.transform.localScale = new Vector3(sc, sc, 1f);
-            frameBase[go.transform] = go.transform.localScale;
-            frameEdge[go.transform] = new Vector3(edge.x, edge.y, 5f);
-            Dbg($"HKDS bottom fleur from file {tex.width}x{tex.height} aspWH={aspectWH:F2} sc={sc:F2} shader={(fsh != null ? fsh.name : "NULL")}");
-            return go.transform;
-        }
-        catch (Exception e) { Dbg($"HKDS fleur file err {e.Message}"); return null; }
+        if (sr == null || sr.sprite == null) return;
+        var b = sr.sprite.bounds;
+        float scale = Mathf.Min(maxWidth / Mathf.Max(.001f, b.size.x), maxHeight / Mathf.Max(.001f, b.size.y));
+        sr.transform.localScale = new Vector3(scale, scale, 1f);
+        sr.transform.position = center - new Vector3(b.center.x * scale, b.center.y * scale, 0f);
     }
-
-    // Full-width horizontal separator from a cached PNG (a thin divider fleur). Unlike the tab fleurs, its
-    // source (credits / SS_Death_Screen atlases) is NOT resident during gameplay, so it comes from a pushed
-    // persistentDataPath cache (user data, not APK). Positioned + scaled every frame in PositionFrame.
-    Transform BuildSeparator(string cacheName, bool isTop)
+    // Commissioned production SS divider, copied verbatim; not game/placeholder art.
+    const string ShellRulePng = "iVBORw0KGgoAAAANSUhEUgAABEwAAAACCAYAAABCHEm1AAAACXBIWXMAAAsTAAALEwEAmpwYAAABoklEQVRoge1Yy47DMAjEUbX//717iPfQWoumMICTw1bLSFYTmAH8UGN7zDkf8sSUX+hnSdh3MMj7IDaPMxxb1occyyYicjic1Y4gxxFoGV/UuxUniu3ZMrrDiSXK5sWJfKwGVttVf1aLc5Jpei5R760hlgd9Gb0QnQQ2jIF8pre4FU6kY1zUMD3apjzn5uvVGo1Go9H4b/h+tVPev5GIafjYGQJ9lp5xkV/hYEyWw4vj2ay4FsfTISfSn6RO9GXa0kda5r+iZf4z4c/4xMkVxY841THRsbyaMnPJ1kBU14qNmszas353fGK8WxzGv4r0GeLhEHewOuAlZ3zUzEKcTP41Yd7BSQ9+NS/iFPvSxAJOutYOg+P1DZ+rc1Adb6yJ1Zrtxydgtw94AZEdbytfRnvXWHtxcAO1kwPXRXV8LP1Ofnz/1LXZaDQajcZd0PsW/M5WDyy4l4j0Op8+cGX1UUys6a4DmHcgZNz1jP3MaKPLLKav5PuLwD7odeH5dvu9o/MuKaLYen1aFx4esP8n4WbB8mZq2l1jqLH+BypxbtnX/wDHRTzww1ZPywAAAABJRU5ErkJggg==";
+    Sprite CreateShellRule()
     {
-        try
+        var tex = Own(new Texture2D(2, 2, TextureFormat.RGBA32, false));
+        if (!tex.LoadImage(Convert.FromBase64String(ShellRulePng))) return null;
+        tex.wrapMode = TextureWrapMode.Clamp; tex.filterMode = FilterMode.Bilinear;
+        return Own(Sprite.Create(tex, new Rect(0,0,tex.width,tex.height),new Vector2(.5f,.5f),100f));
+    }
+    void BuildFrame()
+    {
+        if (frameRoot != null || attrCam == null) return;
+        frameRoot = new GameObject("HKCompFrame"); frameRoot.transform.SetParent(attrCam.transform, false);
+        frameRefOrtho = attrCam.orthographicSize;
+        shellRule = ShellSprite("F_HeaderRule", frameRoot.transform, CreateShellRule(), 30040);
+        var inv = GameManager.instance != null ? GameManager.instance.inventoryFSM : null;
+        var root = inv != null ? inv.transform.root : null;
+        BuildTabRow(root);
+        if (root != null) { BuildAreaName(root); if (noMapT == null) BuildNoMapLabel(root); BuildMapControls(root); }
+        BuildEquipCharmRow();
+        mapMaskTopT = BuildMapMask("HKDS BodyMaskTop"); mapMaskBotT = BuildMapMask("HKDS BodyMaskBottom");
+        mapMaskTopR = mapMaskTopT.GetComponent<Renderer>(); mapMaskBotR = mapMaskBotT.GetComponent<Renderer>();
+    }
+    void BuildTabRow(Transform root)
+    {
+        for (int col = 0; col < 5; col++)
+            frameTabs[col] = ShellSprite("F_Tab" + col, frameRoot.transform, null);
+        ResolveTabDonors(root);
+    }
+    void ResolveTabDonors(Transform root)
+    {
+        if (!iconRetry.Due(Time.frameCount)) return;
+        if (root == null)
         {
-            var tex = Own(LoadCompanionTex(cacheName));
-            if (tex == null)
+            var inv = GameManager.instance != null ? GameManager.instance.inventoryFSM : null;
+            root = inv != null ? inv.transform.root : null;
+        }
+        if (root != null)
+        {
+            var nail = FindDeep(root, "Nail");
+            var nativeNail = nail != null ? nail.GetComponent<InvNailSprite>() : null;
+            if (nativeNail != null && nativeNail.level1 != null && nativeNail.level1.name == "Inv_0033_inv_nail_01") tabIcons[0] = nativeNail.level1;
+            CharmIconList charms = null; try { charms = CharmIconList.Instance; } catch { }
+            if (charms != null && charms.spriteList != null && charms.spriteList.Length > 0 &&
+                charms.spriteList[0] != null && charms.spriteList[0].name == "charm_sprite_01") tabIcons[1] = charms.spriteList[0];
+            var key = FindDeep(root, "Map Key");
+            var keys = key != null ? FindDeep(key, "Keys") : null;
+            var vendor = keys != null ? FindDeep(keys, "Vendor") : null;
+            var pin = vendor != null ? FindDeep(vendor, "Pin Icon") : null;
+            var sr = pin != null ? pin.GetComponent<SpriteRenderer>() : null;
+            if (sr != null && sr.sprite != null && sr.sprite.name == "pins_combined") tabIcons[2] = sr.sprite;
+            var journal = FindDeep(root, "Journal");
+            var list = journal != null ? journal.GetComponentInChildren<JournalList>(true) : null;
+            if (list != null && list.list != null)
+                foreach (var template in list.list)
+                {
+                    var stats = template != null ? template.GetComponent<JournalEntryStats>() : null;
+                    if (stats != null && stats.sprite != null && stats.sprite.name == "bestiary_hunter_mark_f") { tabIcons[3] = stats.sprite; break; }
+                }
+            var cursor = FindDeep(root, "Cursor");
+            var tl = cursor != null ? FindDeep(cursor,"TL") : null;
+            var br = cursor != null ? FindDeep(cursor,"BR") : null;
+            var glow = cursor != null ? FindDeep(cursor,"Glow") : null;
+            if (tabTL == null && tl != null) { var donor = tl.GetComponentInChildren<SpriteRenderer>(true); if(donor != null) tabTL = ShellSprite("F_TabTL",frameRoot.transform,donor.sprite,30100); }
+            if (tabBR == null && br != null) { var donor = br.GetComponentInChildren<SpriteRenderer>(true); if(donor != null) { tabBR = ShellSprite("F_TabBR",frameRoot.transform,donor.sprite,30100); tabBR.transform.localRotation = donor.transform.localRotation; } }
+            if (tabGlow == null && glow != null) { var donor = glow.GetComponentInChildren<SpriteRenderer>(true); if(donor != null) tabGlow = ShellSprite("F_TabGlow",frameRoot.transform,donor.sprite,30070); }
+            if (areaNameT == null) BuildAreaName(root);
+            if (noMapT == null) BuildNoMapLabel(root);
+            if (mapViewAction == null) BuildMapControls(root);
+        }
+        // Guarded typed lookup; Map and Quill's renderer is a known stale flower.
+        if (tabIcons[3] == null || tabIcons[4] == null)
+        {
+            var all = Resources.FindObjectsOfTypeAll<Sprite>();
+            foreach (var sprite in all)
             {
-                // Unlike the tab fleurs, a separator has no source in the game's live assets to bake
-                // from — so fall back to the copy shipped in the build and write it out as the normal
-                // cache. Without this the box silently loses an edge whenever the file goes missing.
-                tex = Own(HKEmbedded.LoadTexture(cacheName));
-                if (tex != null) { CacheCompanionTex(cacheName, tex); Dbg($"HKDS sep '{cacheName}': restored from the built-in copy"); }
+                if(sprite == null) continue;
+                if (sprite.name == "inv_item_map_quill_combined" && sprite.rect.width > 0 && sprite.rect.height > 0) tabIcons[4] = sprite;
             }
-            if (tex == null) { Dbg($"HKDS sep '{cacheName}': no cache and nothing built in"); return null; }
-            var go = new GameObject("F_Sep_" + cacheName);
-            go.transform.SetParent(frameRoot.transform, false);
-            go.layer = ATTR_LAYER;
-            var mf = go.AddComponent<MeshFilter>();
-            var mr = go.AddComponent<MeshRenderer>();
-            var mesh = Own(new Mesh { name = "F_SepQuad" });
-            float aspectWH = Mathf.Max(0.01f, (float)tex.width / Mathf.Max(1, tex.height));   // unit-height quad, width=aspectWH
-            if (isTop) sepTopAspWH = aspectWH; else sepBotAspWH = aspectWH;
-            float hw = aspectWH * 0.5f, hh = 0.5f;
-            mesh.vertices = new[] { new Vector3(-hw, -hh, 0f), new Vector3(hw, -hh, 0f), new Vector3(hw, hh, 0f), new Vector3(-hw, hh, 0f) };
-            mesh.uv = new[] { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f) };
-            mesh.colors = new[] { Color.white, Color.white, Color.white, Color.white };
-            mesh.triangles = new[] { 0, 1, 2, 0, 2, 3 };
-            mesh.RecalculateBounds(); mf.mesh = mesh;
-            Shader fsh = Shader.Find("Sprites/Default-ColorFlash") ?? Shader.Find("Sprites/Default") ?? Shader.Find("UI/Default");
-            mr.sharedMaterial = Own(new Material(fsh) { mainTexture = tex, color = Color.white });
-            mr.sortingOrder = 40;
-            Dbg($"HKDS separator '{cacheName}' {tex.width}x{tex.height} aspWH={aspectWH:F1}");
-            return go.transform;
+            if (tabIcons[3] == null)
+            {
+                foreach (var stats in Resources.FindObjectsOfTypeAll<JournalEntryStats>())
+                    if (stats != null && stats.sprite != null && stats.sprite.name == "bestiary_hunter_mark_f") { tabIcons[3] = stats.sprite; break; }
+            }
         }
-        catch (Exception e) { Dbg($"HKDS sep err {e.Message}"); return null; }
+        bool complete = areaNameT != null && tabTL != null && tabBR != null && tabGlow != null;
+        for(int col=0;col<5;col++) { frameTabs[col].sprite = tabIcons[col]; frameTabs[col].enabled = tabIcons[col] != null; complete &= tabIcons[col] != null; }
+        if (complete) iconRetry.Resolved();
+    }
+    float AnimateTabFleurX(int activeCol, float targetX)
+    {
+        if (tabFleurMoveCol < 0) { tabFleurMoveCol = activeCol; tabFleurMoveX = targetX; tabFleurMoveT = 1f; }
+        else if (activeCol != tabFleurMoveCol) { tabFleurMoveCol = activeCol; tabFleurMoveFromX = tabFleurMoveX; tabFleurMoveT = 0f; }
+        if(tabFleurMoveT < 1f) tabFleurMoveT = Mathf.Min(1f,tabFleurMoveT + Time.unscaledDeltaTime / TabCaretMoveSeconds);
+        tabFleurMoveX = Mathf.Lerp(tabFleurMoveFromX,targetX,tabFleurMoveT); return tabFleurMoveX;
+    }
+    void PositionFrame()
+    {
+        if(frameRoot == null || attrCam == null) return;
+        ResolveTabDonors(null);
+        var g = LowerGeometry(); float unit = ShellPixel;
+        frameInnerTopFrac = 1f - 2f * g.HudHeight / g.Height;
+        frameInnerBotFrac = 1f - 2f * g.TabTop / g.Height;
+        if(shellRule != null && shellRule.sprite != null)
+        {
+            var size=shellRule.sprite.bounds.size;
+            shellRule.transform.localScale = new Vector3((g.Width-40f)*unit/size.x,2f*unit/size.y,1f);
+            shellRule.transform.position = ShellPoint(g.Width/2f,g.HudHeight); shellRule.color=ShellInk;
+        }
+        int activeCol=HKLowerLayout.ColumnForTab(tab.cur);
+        bool ownsStrip = mapMarkerMode && tab.cur == COMP_MAP;
+        for(int col=0;col<5;col++)
+        {
+            var sr=frameTabs[col]; if(sr == null) continue;
+            sr.enabled = !ownsStrip && sr.sprite != null;
+            sr.color = col == activeCol ? ShellInk : ShellMuted;
+            FitSprite(sr,ShellPoint((col+.5f)*g.CellWidth,g.TabTop+g.TabHeight/2),g.IconMax*unit,g.IconMax*unit);
+        }
+        var selected=frameTabs[activeCol];
+        bool cursorShow = !ownsStrip && selected != null && selected.sprite != null;
+        float x=AnimateTabFleurX(activeCol,(activeCol+.5f)*g.CellWidth);
+        Bounds art=cursorShow ? selected.bounds : default;
+        float halfW=art.extents.x+6*unit,halfH=art.extents.y+6*unit;
+        Vector3 center=ShellPoint(x,g.TabTop+g.TabHeight/2,3.8f);
+        if(tabTL != null){ tabTL.enabled=cursorShow; FitSprite(tabTL,center+new Vector3(-halfW,halfH,0),22*unit,22*unit); }
+        if(tabBR != null){ tabBR.enabled=cursorShow; FitSprite(tabBR,center+new Vector3(halfW,-halfH,0),22*unit,22*unit); }
+        if(tabGlow != null){ tabGlow.enabled=cursorShow; FitSprite(tabGlow,center,110*unit,110*unit); }
+        PositionHudStrip(attrCam.orthographicSize,attrCam.aspect,attrCam.orthographicSize/Mathf.Max(.01f,frameRefOrtho),tab.cur);
+        PositionSelection(attrCam.orthographicSize);
+        // Fixed HUD and strip clip every pane, including both sliding owners.
+        float hudH=g.HudHeight*unit, tabsH=g.TabHeight*unit;
+        if(mapMaskTopT != null){ mapMaskTopR.enabled=true; mapMaskTopT.position=ShellPoint(g.Width/2,g.HudHeight/2,4.5f); mapMaskTopT.localScale=new Vector3(g.Width*unit,hudH,1); }
+        if(mapMaskBotT != null){ mapMaskBotR.enabled=true; mapMaskBotT.position=ShellPoint(g.Width/2,g.TabTop+g.TabHeight/2,4.5f); mapMaskBotT.localScale=new Vector3(g.Width*unit,tabsH,1); }
+        PositionMapControls(attrCam.orthographicSize,attrCam.aspect,frameInnerTopFrac,frameInnerBotFrac,tab.cur==COMP_MAP);
+    }
+    void TeardownFrame()
+    {
+        // Label material sanitizer and rule assets belong to this ownership epoch.
+        RetireSupplementaryPanes();
+        if(frameRoot != null){ Destroy(frameRoot); frameRoot=null; }
+        DestroyOwnedAssets(); frameEdge.Clear(); frameBase.Clear();
+        for(int i=0;i<5;i++){ frameTabs[i]=null; tabIcons[i]=null; }
+        iconRetry.Reset(); tabTL=tabBR=tabGlow=shellRule=null;
+        mapMaskTopT=mapMaskBotT=null; mapMaskTopR=mapMaskBotR=null; mapResetT=null; mapResetTmp=null; mapResetR=null; mapResetPillSR=null;
+        tabColorCol=-1; tabFleurMoveCol=-1; tabFleurMoveT=1f; frameInnerBotFrac=frameInnerTopFrac=float.NaN;
+        selBox=null; sel.Clear(); paneCursor=null; paneCursorFor=null;
+        costPipRoot=null; charmBoardsFor=null;
+        areaNameT=null; areaNameTmp=null; areaNameR=null; lastAreaZoneRaw="\u0001"; lastAreaName="\u0001";
+        noMapT=null; noMapTmp=null; noMapR=null; benchPillSR=null; benchPillT=null;
+        equipRowRoot=null; equipCharmSRs.Clear(); lastEquipStamp=int.MinValue;
+        notchSRs.Clear(); notchTexLit=notchTexEmpty=null; notchSprLitFb=notchSprEmptyFb=null;
+        lastNotchTotal=lastNotchUsed=-1; notchSprFull=notchSprEmpty=null; notchScanT=0;
+        TeardownMapControls();
     }
 
     // Procedural white capsule (pill) sprite for the RESET button background. Built once, Own()-tracked.
@@ -278,481 +288,20 @@ public partial class HKDualScreen
         return go.transform;
     }
 
-    // Build HK's context-box frame from the real inventory ornaments (skip the corner swirls) + a tab
-    // title row. Parented to attrCam so it stays fixed at the panel edges while the map pans/zooms.
-    void BuildFrame()
-    {
-        if (frameRoot != null || cfg.compFrame != 1) return;
-        var invFsm = GameManager.instance != null ? GameManager.instance.inventoryFSM : null;
-        if (invFsm == null) return;
-        // The real ornaments are Inventory/Border/Inv_Border_Top|Bottom — UNIQUE names, so a root search is
-        // unambiguous (the old "Fleur Top"/"Divider L" hit the dialogue-box fleurs + item-slot dividers).
-        var root = invFsm.transform.root;
-        if (FindDeep(root, "Inv_Border_Top") == null) return;   // inventory chrome not ready — retry next frame
-        frameRoot = new GameObject("HKCompFrame");
-        frameRoot.transform.SetParent(attrCam.transform, false);
-        frameRefOrtho = attrCam.orthographicSize;
-        // Two fleurs FRAME the selected tab: TOP (#3, hkds_fleur.png) above its text, BOTTOM (#2,
-        // hkds_fleur_bot.png) below it — both baked from the Menu atlas (TryBakeTabFleurs), loaded from cache.
-        // Positioned + resized live in PositionFrame (BOT_FLEUR_W0 is only the build-time width; the follow-the-tab
-        // layout recomputes both widths from the Charms tab text every frame). tk2d Inv_Border_Top = last-ditch fallback.
-        botFleurT = BuildFleurFromFile("hkds_fleur", true, new Vector2(0f, cfg.compTabY + cfg.compBotFleurGap), BOT_FLEUR_W0);
-        botFleur2T = BuildFleurFromFile("hkds_fleur_bot", false, new Vector2(0f, cfg.compTabY - cfg.compBotFleurGap), BOT_FLEUR_W0 * cfg.compBotFleur2WScale);
-        if (botFleurT == null)
-            botFleurT = CloneOrnament(root, "Inv_Border_Top", new Vector2(0f, cfg.compTabY + cfg.compBotFleurGap), BOT_FLEUR_W0, true, 0f, 41);
-        // Full-width separators (positioned live in PositionFrame): #5 HUD->box, #6 box->tabs.
-        if (cfg.compSepTop == 1) sepTopT = BuildSeparator("hkds_sep_top", true);
-        if (cfg.compSepBot == 1) sepBotT = BuildSeparator("hkds_sep_bot", false);
-        BuildTabRow(root);
-        if (cfg.compAreaName == 1) BuildAreaName(root);
-        BuildEquipCharmRow();
-        if (cfg.compNoMapMsg == 1) BuildNoMapLabel(root);
-        // our own fleur/separator quads: renderers ON once here (nothing disables them later; the old per-frame
-        // re-enable was 5 GetComponentsInChildren allocations every frame)
-        foreach (var t in new[] { botFleurT, botFleur2T, sepTopT, sepBotT }) if (t != null) foreach (var r in t.GetComponentsInChildren<Renderer>(true)) r.enabled = true;
-        // CHROME ABOVE THE MAP MASKS: raise every frame renderer's sortingOrder well past the masks (10000) so the
-        // clip quads cover only MAP CONTENT (which uses HK's low orders), never the box chrome / HUD strip labels.
-        foreach (var r in frameRoot.GetComponentsInChildren<Renderer>(true)) { r.sortingLayerName = "Inventory"; r.sortingOrder += 20000; }
-        // MAP CLIP MASKS (pinch-zoom): screen-anchored black quads over everything ABOVE the top-separator fleur and
-        // BELOW the tab-row fleur line — a zoomed/panned map hard-clips at the context box's inner rect.
-        mapMaskTopT = BuildMapMask("HKDS MapMaskTop");
-        mapMaskBotT = BuildMapMask("HKDS MapMaskBot");
-        mapMaskTopR = mapMaskTopT != null ? mapMaskTopT.GetComponent<Renderer>() : null;
-        mapMaskBotR = mapMaskBotT != null ? mapMaskBotT.GetComponent<Renderer>() : null;
-        // RESET button: a small label centred ON the top fleur; shown only when the map view isn't default.
-        try
-        {
-            var src = FindDeep(root, "Pane Name");
-            if (src != null)
-            {
-                var go = Instantiate(src.gameObject, frameRoot.transform);
-                go.name = "F_MapReset";
-                SanitizeDetachedTmpClone(go);
-                SetLayerRecursive(go.transform, ATTR_LAYER);
-                go.SetActive(true);
-                foreach (var r in go.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = false; r.sortingLayerName = "Inventory"; r.sortingOrder = 30050; }
-                foreach (var c in go.GetComponentsInChildren<Component>(true))
-                {
-                    if (!IsTextMeshProGraphic(c)) continue;
-                    mapResetTmp = c;
-                    try { c.GetType().GetProperty("text")?.SetValue(c, "RESET", null); } catch { }
-                    try { c.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(c, null); } catch { }
-                    NeutralizeDetachedTmpClip(go);
-                    mapResetR = (c as Component).GetComponent<Renderer>();
-                    break;
-                }
-                // white PILL behind the text (procedural capsule sprite); text renders black on top
-                var pillGo = new GameObject("pill");
-                pillGo.transform.SetParent(go.transform, false);
-                pillGo.layer = ATTR_LAYER;
-                mapResetPillSR = pillGo.AddComponent<SpriteRenderer>();
-                mapResetPillSR.sprite = MakePillSprite();
-                mapResetPillSR.color = Color.white;   // solid fill (user)
-                mapResetPillSR.sortingLayerName = "Inventory";
-                mapResetPillSR.sortingOrder = 30045;   // just under the RESET text (30050)
-                mapResetPillSR.enabled = false;
-                float s0 = attrCam.orthographicSize;
-                var rr0 = go.GetComponentsInChildren<Renderer>(); Bounds b0 = new Bounds(); bool hv0 = false;
-                foreach (var r in rr0) { if (r == mapResetPillSR) continue; var rb = r.bounds; if (float.IsNaN(rb.center.x) || rb.size.sqrMagnitude < 1e-8f) continue; if (!hv0) { b0 = rb; hv0 = true; } else b0.Encapsulate(rb); }
-                go.transform.localScale *= (0.06f * 2f * s0) / Mathf.Max(0.001f, hv0 ? b0.size.y : 1f);   // readable thumb-target size
-                mapResetT = go.transform;
-                frameBase[mapResetT] = mapResetT.localScale;
-                frameEdge[mapResetT] = new Vector3(0f, cfg.compSepTopY, 3.5f);   // centred on the top separator's fleur
-            }
-        }
-        catch (Exception e) { Dbg($"HKDS map reset btn err {e.Message}"); }
-        BuildMapControls(root);
-        Dbg($"HKDS frame built, parts={frameEdge.Count} tabs={frameTabs.Count}");
-    }
-
-    Transform mapMaskTopT, mapMaskBotT;   // MAP-tab clip masks: black quads over everything past the inner rect (above the top-sep fleur / below the tab fleur); chrome sorts ABOVE them, map content below
-    Renderer mapMaskTopR, mapMaskBotR;    // their renderers, cached at build (PositionFrame toggles them per frame)
-    int tabColorCol = -1;                 // active display column the tab colors were last set for (reflection-set only on change)
-    const float TabCaretMoveSeconds = 0.15f;
-    int tabFleurMoveCol = -1;
-    float tabFleurMoveFromX, tabFleurMoveX, tabFleurMoveT = 1f;
-    Transform mapResetT; Component mapResetTmp; Renderer mapResetR;   // RESET button centred on the top fleur, shown only when the pinch view isn't default
-    SpriteRenderer mapResetPillSR;   // white pill behind the RESET text (text drawn black on top)
-
-    const float BOT_FLEUR_W0 = 0.55f;   // build-time width of the two tab fleurs (fraction of view); PositionFrame resizes them live
-
-    // Tab-name row: Inventory | Map | Charms (3 tabs). HK has no static tab row — it uses a 3-name carousel
-    // (Pane Name / L / R). We clone the "Pane Name" world-space TMP (Perpetua SDF) once per label and highlight
-    // the active one by alpha (active=1, others=0.4) — HK's own indicator.
-    void BuildTabRow(Transform root)
-    {
-        try
-        {
-            var src = FindDeep(root, "Pane Name");
-            if (src == null) { frameTabBuildFailed = true; Dbg("HKDS frame: no 'Pane Name'"); return; }
-            // Localized tab names (fall back to English if the key isn't found). Candidate keys cover HK's known
-            // inventory-pane title conventions; the discovery dump below reveals the exact ones per language.
-            // Exact HK pane-title keys (UI sheet), verified by decrypting EN_UI.txt: PANE_INVENTORY/PANE_MAP/PANE_CHARMS.
-            string[] labels = {
-                LocalizedLabel("Inventory", "PANE_INVENTORY"),
-                LocalizedLabel("Map",       "PANE_MAP"),
-                LocalizedLabel("Charms",    "PANE_CHARMS"),
-            };
-            frameTabBuildFailed = false;
-            frameTabLabelsPending = true;
-            for (int i = 0; i < labels.Length; i++)
-            {
-                // Preserve the proven Dual Souls label lifecycle: clone the
-                // live Pane Name directly under the resident frame, disable
-                // its non-TMP drivers, activate it, then assign/mesh the final
-                // localized text. The inactive staging lifecycle used by the
-                // pane clones is not valid for this legacy TMP hierarchy; the
-                // signed 1.5.12620 pass produced no glyph pixels from it.
-                var go = Instantiate(src.gameObject, frameRoot.transform);
-                go.name = "F_Tab" + i;
-                SanitizeDetachedTmpClone(go);
-                SetLayerRecursive(go.transform, ATTR_LAYER);
-                go.SetActive(true);
-                foreach (var r in go.GetComponentsInChildren<Renderer>(true))
-                {
-                    r.gameObject.SetActive(true);
-                    r.enabled = true;
-                    r.sortingLayerName = "Inventory";
-                    r.sortingOrder = 10080 + i;
-                }
-                Component tmp = null;
-                foreach (var c in go.GetComponentsInChildren<Component>(true))
-                {
-                    if (!IsTextMeshProGraphic(c)) continue;
-                    tmp = c;
-                    // Match the working resident-label lifecycle used by the
-                    // no-map label: keep the clone blank while the rest of the
-                    // frame's native TMP hierarchy is constructed, then set
-                    // the final text from PositionFrame after BuildFrame has
-                    // finished creating and sorting every sibling clone.
-                    try { c.GetType().GetProperty("text")?.SetValue(c, "", null); } catch { }
-                    try { c.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(c, null); } catch { }
-                    NeutralizeDetachedTmpClip(go);
-                    break;
-                }
-                frameTabs.Add((tmp, go.transform, i));
-                frameTabLabels.Add(labels[i]);
-                frameEdge[go.transform] = new Vector3((i - 1f) * cfg.compTabSpacing, cfg.compTabY, 4f);   // 3 tabs centered on col 1
-            }
-            frameTabLabelsPending = frameTabs.Count > 0;
-            BuildSelBox();   // B5: the selection-highlight fallback box lives with the frame (destroyed with it)
-        }
-        catch (Exception e)
-        {
-            // PositionFrame tears down this partial frame and the next Tick
-            // retries from a clean native donor. Never strand already-created
-            // labels blank after a partial construction failure.
-            frameTabBuildFailed = true;
-            frameTabLabelsPending = true;
-            Dbg($"HKDS frame tabs err {e.Message}");
-        }
-    }
-
-    // Hollow Knight's legacy TMP clones share native initialization state.
-    // Finalizing the tab glyphs inside BuildTabRow produces valid bounds but
-    // no fragments on 1.5.12620, while the no-map clone that receives its text
-    // after BuildFrame renders correctly in the same camera/layer. Complete
-    // the three native labels once, from PositionFrame, after every frame
-    // sibling and sorting adjustment exists.
-    void FinalizeFrameTabLabels()
-    {
-        if (!frameTabLabelsPending || attrCam == null) return;
-        float s = attrCam.orthographicSize;
-        bool complete = true;
-        if (frameTabs.Count == 0 || frameTabs.Count != frameTabLabels.Count) complete = false;
-        for (int i = 0; i < frameTabs.Count && i < frameTabLabels.Count; i++)
-        {
-            var (tmp, t, col) = frameTabs[i];
-            if (tmp == null || t == null) { complete = false; continue; }
-            bool textSet = false;
-            try
-            {
-                var textProperty = tmp.GetType().GetProperty("text");
-                if (textProperty != null) { textProperty.SetValue(tmp, frameTabLabels[i], null); textSet = true; }
-            }
-            catch { }
-            bool meshUpdated = false;
-            try
-            {
-                var forceMesh = tmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes);
-                if (forceMesh != null) { forceMesh.Invoke(tmp, null); meshUpdated = true; }
-            }
-            catch { }
-            if (!textSet || !meshUpdated) { complete = false; continue; }
-            NeutralizeDetachedTmpClip(t.gameObject);
-            var glyphRenderer = (tmp as Component).GetComponent<Renderer>();
-            if (glyphRenderer == null) { complete = false; continue; }
-            glyphRenderer.enabled = true;
-
-            var rr = t.GetComponentsInChildren<Renderer>();
-            Bounds b = new Bounds(); bool hv = false;
-            foreach (var r in rr)
-            {
-                if (r == null) continue;
-                var rb = r.bounds;
-                if (float.IsNaN(rb.center.x) || rb.size.sqrMagnitude < 1e-8f) continue;
-                if (!hv) { b = rb; hv = true; } else b.Encapsulate(rb);
-            }
-            if (!hv) { complete = false; continue; }
-            if (!frameBase.ContainsKey(t))
-            {
-                float nd = Mathf.Max(0.001f, b.size.y);
-                t.localScale *= (0.055f * 2f * s) / nd;
-                frameBase[t] = t.localScale;
-            }
-            if (cfg.debug == 1)
-                Dbg($"HKDS tab{col} '{frameTabLabels[i]}' rends={rr.Length} bX={(hv ? b.size.x : 0):F2} bY={(hv ? b.size.y : 0):F2} lossy={t.lossyScale.x:F3}");
-        }
-        frameTabLabelsPending = !complete;
-        if (complete) tabColorCol = -1;
-    }
-
-    float AnimateTabFleurX(int activeCol, float targetX)
-    {
-        if (tabFleurMoveCol < 0)
-        {
-            tabFleurMoveCol = activeCol;
-            tabFleurMoveX = targetX;
-            tabFleurMoveT = 1f;
-        }
-        else if (activeCol != tabFleurMoveCol)
-        {
-            tabFleurMoveCol = activeCol;
-            tabFleurMoveFromX = tabFleurMoveX;
-            tabFleurMoveT = 0f;
-        }
-        if (tabFleurMoveT < 1f)
-            tabFleurMoveT = Mathf.Min(1f,
-                tabFleurMoveT + Time.unscaledDeltaTime / TabCaretMoveSeconds);
-        tabFleurMoveX = Mathf.Lerp(tabFleurMoveFromX, targetX, tabFleurMoveT);
-        return tabFleurMoveX;
-    }
-
-    void PositionFrame()
-    {
-        if (frameRoot == null || attrCam == null) return;
-        if (frameTabBuildFailed) { TeardownFrame(); return; }
-        float s = attrCam.orthographicSize, asp = attrCam.aspect;
-        // The fleur ornaments frame the whole CONTEXT BOX, not just the map — show them on EVERY companion
-        // tab (Map / Inventory / Charms), always, whenever the frame is up. (They used to be gated on
-        // mapAvailable, which hid them on the non-map tabs; user wants the box decorated everywhere.)
-        if (botFleurT != null && !botFleurT.gameObject.activeSelf) botFleurT.gameObject.SetActive(true);
-        if (botFleur2T != null && !botFleur2T.gameObject.activeSelf) botFleur2T.gameObject.SetActive(true);
-        if (sepTopT != null && !sepTopT.gameObject.activeSelf) sepTopT.gameObject.SetActive(true);
-        if (sepBotT != null && !sepBotT.gameObject.activeSelf) sepBotT.gameObject.SetActive(true);
-        float zf = (s / Mathf.Max(0.01f, frameRefOrtho)) * cfg.compFrameScale;   // keep constant apparent size as the map zooms
-        // bottom fleur is positioned in WORLD space from the tab-row's real glyph bounds below (near the
-        // tab text) — not from raw compTabY, since TMP draws the visible glyphs well above the transform.
-        // LIVE tab positions (compTabY / compTabSpacing tune without a rebuild). 3 tabs centered on col 1.
-        foreach (var (tmp, t, col) in frameTabs)
-            if (t != null && frameEdge.ContainsKey(t)) frameEdge[t] = new Vector3((col - 1f) * cfg.compTabSpacing, cfg.compTabY, 4f);   // 3 tabs centered on col 1
-        // area-name label lives TOP-RIGHT (live-tunable X/Y)
-        if (areaNameT != null && frameEdge.ContainsKey(areaNameT))
-            frameEdge[areaNameT] = new Vector3(cfg.compAreaNameX, cfg.compAreaNameY, 4f);
-        FinalizeFrameTabLabels();
-        foreach (var kv in frameEdge)
-        {
-            var t = kv.Key; if (t == null) continue;
-            var e = kv.Value;
-            t.localPosition = new Vector3(e.x * s * asp, e.y * s, e.z);
-            if (frameBase.TryGetValue(t, out var bs)) t.localScale = bs * zf;
-        }
-        // active-tab highlight — the tapped tab wins, else cfg.compTab. compTab order {0=Map 1=Inv 2=Charm}
-        // -> display column {Inventory|Map|Charms} = {1,0,2}.
-        int effectiveTab = tab.cur;   // == the value UpdateCompanion resolved this frame (tap wins over cfg.compTab)
-        int activeCol = TAB_TO_COL[Mathf.Clamp(effectiveTab, 0, 2)];
-        bool colChanged = activeCol != tabColorCol;   // PERF: SetTmpColor is a reflection property set x3 — only on active-tab change
-        foreach (var (tmp, t, col) in frameTabs)
-        {
-            if (tmp == null) continue;
-            bool active = col == activeCol;
-            if (colChanged) SetTmpColor(tmp, new Color(1f, 1f, 1f, active ? 1f : 0.6f));
-            if (t != null && frameBase.TryGetValue(t, out var tbs))
-            {
-                t.localScale = tbs * zf * Mathf.Max(0.1f, cfg.compTabScale);   // LIVE font size
-                // Pane Name is authored deep inside HK's inventory canvas, so
-                // its generated glyph mesh is offset from the cloned root.
-                // Place the REAL mesh bounds at the requested tab centre;
-                // otherwise the labels (and the fleurs which follow them)
-                // can land outside the 1240x1080 companion view.
-                var glyphRenderer = (tmp as Component).GetComponent<Renderer>();
-                if (glyphRenderer != null)
-                {
-                    // TMP may disable the retained renderer again during a
-                    // subsequent mesh rebuild. Keep resident tab labels live
-                    // just as the other bottom-screen TMP clones are kept
-                    // live each frame.
-                    glyphRenderer.enabled = true;
-                    var glyphBounds = glyphRenderer.bounds;
-                    if (glyphBounds.size.x > 1e-5f && glyphBounds.size.y > 1e-5f)
-                    {
-                        Vector3 desiredGlyphCenter = t.position;
-                        t.position += new Vector3(
-                            desiredGlyphCenter.x - glyphBounds.center.x,
-                            desiredGlyphCenter.y - glyphBounds.center.y,
-                            0f);
-                    }
-                }
-            }
-        }
-        if (colChanged) tabColorCol = activeCol;
-        PositionHudStrip(s, asp, zf, effectiveTab);   // B3: area name, equipped-charm row, no-map label
-        var cam = attrCam.transform;
-        // Anchor the selection line + bottom fleur to the tabs' ACTUAL rendered glyph bounds (world AABB),
-        // read AFTER the scale loops above. The tab transform sits at compTabY (panel bottom) but TMP draws
-        // the glyphs ~1 line-height higher, so placing decorations at raw compTabY left a big gap.
-        Bounds rowB = default, actB = default, charmsB = default; bool rowHave = false, actHave = false, charmsHave = false;
-        foreach (var (tmp2, t, col) in frameTabs)
-        {
-            if (tmp2 == null) continue;
-            // Prefer TMP's drawn-glyph bounds. Renderer bounds can retain lower
-            // line-box padding and leave the lower fleur far below visible ink.
-            // Keep the renderer as a fallback when TMP reflection is unavailable.
-            var tr = (tmp2 as Component).GetComponent<Renderer>();
-            if (tr == null) continue;
-            var rb = tr.bounds;
-            Vector3 glyphMin, glyphMax;
-            if (TryTmpGlyphBoundsWorld((tmp2 as Component).transform, out glyphMin, out glyphMax))
-                rb = new Bounds((glyphMin + glyphMax) * 0.5f, glyphMax - glyphMin);
-            if (rb.size.x < 1e-5f || rb.size.y < 1e-5f) continue;
-            if (!rowHave) { rowB = rb; rowHave = true; } else rowB.Encapsulate(rb);
-            if (col == activeCol) { if (!actHave) { actB = rb; actHave = true; } else actB.Encapsulate(rb); }
-            if (col == 2) { if (!charmsHave) { charmsB = rb; charmsHave = true; } else charmsB.Encapsulate(rb); }   // fix7: Charms tab = col 2 (was 3, never matched -> fleur fell back to the SELECTED tab's width, so it resized per tab). Now the fleur width is ALWAYS the Charms-tab text width; Map/Inv follow it.
-        }
-        PositionSelection(s);   // B5: HK's corner-bracket cursor / selBox fallback around the tapped item
-        // TWO fleurs FRAME the selected tab: TOP (#3) above its text, BOTTOM (#2, narrower) below it, with the
-        // SAME gap (compBotFleurGap) between the text and each fleur. Both sized aspect-locked to the Charms tab
-        // width. Tracks the selected tab.
-        if (actHave)
-        {
-            float charmsW = charmsHave ? charmsB.size.x : actB.size.x;
-            float fleurX = AnimateTabFleurX(activeCol, actB.center.x);
-            // A native localized title can be much wider than its tab cell.
-            // Keep each selected fleur inside that cell instead of allowing
-            // its source-aspect quad to grow across or beyond the display.
-            float fleurMaxW = Mathf.Max(0.1f, cfg.compTabSpacing * s * asp * 0.82f);
-            float gap = cfg.compBotFleurGap * s;
-            float textTop = actB.max.y;                              // cap tops (reliable)
-            float textBot = actB.min.y;                              // tight live glyph bottom
-            if (botFleurT != null)
-            {
-                float w = Mathf.Min(charmsW * Mathf.Max(0.05f, cfg.compBotFleurWScale), fleurMaxW);
-                float sc = Mathf.Max(0.0001f, w / botFleurAspWH), hh = sc * 0.5f;
-                botFleurT.localScale = new Vector3(sc, sc * (cfg.compBotFleurFlip == 1 ? -1f : 1f), sc);
-                botFleurT.position = new Vector3(fleurX, textTop + gap + hh, actB.center.z - 0.1f);   // above, edge = gap over text top
-                frameInnerBotFrac = (textTop + gap + hh * 2f - cam.position.y) / s;   // B6: the box's inner BOTTOM = this fleur's top edge (ortho fracs) -> the map's full-area fit stops here
-            }
-            else frameInnerBotFrac = (textTop + gap - cam.position.y) / s;
-            if (botFleur2T != null)
-            {
-                float w2 = Mathf.Min(charmsW * Mathf.Max(0.05f, cfg.compBotFleur2WScale), fleurMaxW);
-                float sc2 = Mathf.Max(0.0001f, w2 / botFleur2AspWH), hh2 = sc2 * 0.5f;
-                botFleur2T.localScale = new Vector3(sc2, sc2 * (cfg.compBotFleur2Flip == 1 ? -1f : 1f), sc2);
-                botFleur2T.position = new Vector3(fleurX, textBot - gap - hh2, actB.center.z - 0.1f);  // below, edge = gap under text bottom
-            }
-        }
-        // Full-width horizontal separators (#5 HUD->box, #6 box->tabs): centred in X, width = compSepW of the
-        // full view width (aspect-locked so they stay thin), at the live-adjustable compSepTopY / compSepBotY.
-        float sepFullW = cfg.compSepW * 2f * s * asp;
-        if (sepTopT != null)
-        {
-            float sc = Mathf.Max(0.0001f, sepFullW / sepTopAspWH); sepTopT.localScale = new Vector3(sc, sc, sc);
-            sepTopT.position = cam.position + cam.up * (cfg.compSepTopY * s) + cam.forward * 5f;
-            frameInnerTopFrac = cfg.compSepTopY - sc * 0.5f / s;   // B6: the box's inner TOP = the bottom edge of this separator's fleur ornament (unit-height quad, tight bake) -> the map's full-area fit starts here
-        }
-        if (sepBotT != null)
-        {
-            float sc = Mathf.Max(0.0001f, sepFullW / sepBotAspWH); sepBotT.localScale = new Vector3(sc, sc, sc);
-            sepBotT.position = cam.position + cam.up * (cfg.compSepBotY * s) + cam.forward * 5f;
-        }
-        // MAP clip masks + RESET button (MAP tab only). The masks pin to the inner rect's edges in SCREEN space
-        // (children of attrCam -> they ride the camera), so a pinch-zoomed/panned map hard-clips at the top-sep
-        // fleur and the tab-fleur line. RESET shows centred on the top fleur only when the view isn't default.
-        bool onMap = effectiveTab == COMP_MAP;
-        float yt = float.IsNaN(frameInnerTopFrac) ? cfg.compSepTopY : frameInnerTopFrac;
-        float yb = float.IsNaN(frameInnerBotFrac) ? cfg.compTabY + 0.4f : frameInnerBotFrac;
-        if (mapMaskTopT != null)
-        {
-            if (mapMaskTopR != null && mapMaskTopR.enabled != onMap) mapMaskTopR.enabled = onMap;
-            if (onMap)
-            {
-                float hgt = Mathf.Max(0.01f, (1.35f - yt) * s);
-                mapMaskTopT.position = cam.position + cam.up * ((yt * s) + hgt * 0.5f) + cam.forward * 4.5f;
-                mapMaskTopT.localScale = new Vector3(2.3f * s * asp, hgt, 1f);
-            }
-        }
-        if (mapMaskBotT != null)
-        {
-            if (mapMaskBotR != null && mapMaskBotR.enabled != onMap) mapMaskBotR.enabled = onMap;
-            if (onMap)
-            {
-                float hgt = Mathf.Max(0.01f, (yb + 1.35f) * s);
-                mapMaskBotT.position = cam.position + cam.up * ((yb * s) - hgt * 0.5f) + cam.forward * 4.5f;
-                mapMaskBotT.localScale = new Vector3(2.3f * s * asp, hgt, 1f);
-            }
-        }
-        if (mapResetR != null)
-        {
-            bool show = onMap && (mapUserZoom > 1.01f || mapUserPan.sqrMagnitude > 1e-4f);
-            if (mapResetR.enabled != show) mapResetR.enabled = show;
-            if (mapResetPillSR != null && mapResetPillSR.enabled != show) mapResetPillSR.enabled = show;
-            if (show)
-            {
-                SetTmpColor(mapResetTmp, new Color(0.08f, 0.08f, 0.1f, 1f));   // black text on the white pill
-                if (mapResetPillSR != null && mapResetPillSR.sprite != null)
-                {
-                    // GLYPH-tight bounds (TMP renderer bounds span the whole line box, which reaches below the caps —
-                    // the pill sat low with extra space under the text). Equal padding on all four sides.
-                    Vector3 gMin, gMax; Bounds tb;
-                    if (TryTmpGlyphBoundsWorld((mapResetTmp as Component).transform, out gMin, out gMax))
-                        tb = new Bounds((gMin + gMax) * 0.5f, gMax - gMin);
-                    else tb = mapResetR.bounds;
-                    float pad = tb.size.y * 0.6f;                                   // one pad, all four margins
-                    var ps = mapResetPillSR.sprite.bounds.size;
-                    var pt = mapResetPillSR.transform;
-                    pt.position = new Vector3(tb.center.x, tb.center.y, tb.center.z + 0.05f);   // centred on the visible glyphs
-                    pt.rotation = Quaternion.identity;
-                    float sx = (tb.size.x + 2f * pad) / Mathf.Max(0.001f, ps.x);
-                    float sy = (tb.size.y + 2f * pad) / Mathf.Max(0.001f, ps.y);
-                    var ls = pt.lossyScale; var lp = pt.localScale;
-                    pt.localScale = new Vector3(sx * lp.x / Mathf.Max(1e-5f, ls.x), sy * lp.y / Mathf.Max(1e-5f, ls.y), 1f);   // world-size the pill regardless of parent scale
-                }
-            }
-        }
-        PositionMapControls(s, asp, yt, yb, onMap);
-    }
-
-    void TeardownFrame()
-    {
-        if (frameRoot != null) { Destroy(frameRoot); frameRoot = null; }
-        DestroyOwnedAssets();   // Materials / Meshes / Textures / Sprites we created for the frame (see Own)
-        frameEdge.Clear(); frameBase.Clear(); frameTabs.Clear(); frameTabLabels.Clear(); frameTabLabelsPending = false; frameTabBuildFailed = false;
-        botFleurT = botFleur2T = sepTopT = sepBotT = null; mapMaskTopT = mapMaskBotT = null; mapMaskTopR = mapMaskBotR = null; mapResetT = null; mapResetTmp = null; mapResetR = null; mapResetPillSR = null; tabColorCol = -1; tabFleurMoveCol = -1; tabFleurMoveT = 1f; frameInnerBotFrac = frameInnerTopFrac = float.NaN; selBox = null; sel.item = null; sel.invKey = null; sel.charmN = 0; sel.kind = -1; paneCursor = null; paneCursorFor = null;
-        costPipRoot = null; charmBoardsFor = null;   // redesign: re-create cost pips + rebuild the per-clone charm cache for the fresh pane
-        areaNameT = null; areaNameTmp = null; areaNameR = null; lastAreaZoneRaw = "\u0001"; lastAreaName = "\u0001";   // sentinel: the rebuilt TMP starts blank — force a re-set even for the same zone
-        noMapR = null;
-        // EQUIPPED-CHARM ROW — all three of these must die with the frame.
-        //   * equipCharmSRs kept every destroyed renderer and appended 11 more per rebuild, so the update
-        //     loop then wrote sprites into the DEAD leading entries and disabled the live ones.
-        //   * lastEquipStamp is the "charms changed?" gate; leaving it set means the rebuilt (empty,
-        //     disabled) renderers are never populated, because the charm set legitimately has not changed.
-        //     Net effect: one build-time config edit blanked the row until the process restarted.
-        equipRowRoot = null; equipCharmSRs.Clear(); lastEquipStamp = int.MinValue;
-        TeardownMapControls();
-    }
-
     // ---- bottom-screen companion (Map / Inventory / Charms) ------------------------------------
     // Additive feature: render a CLONE of HK's real pane onto the reclaimed ATTR layer (attrCam),
     // composited between the backdrop and the untouched HUD. Config-gated (cfg.companion). Cloning
     // (vs reusing HK's panes) keeps us independent of the Inventory Control FSM and of the top-screen
     // menu. Clones are built once and cached (SetActive-toggled on tab switch; rebuilt only when the
     // PlayerData that drives their content changes — see PaneStamp).
-    const int COMP_MAP = 0, COMP_INV = 1, COMP_CHARM = 2;   // the 3 companion tabs (Journal/Guide were removed)
+    const int COMP_MAP = 0, COMP_INV = 1, COMP_CHARM = 2, COMP_JOURNAL = 3, COMP_GUIDE = 4;
 
     // Tab-slide animation, mirroring the MAIN screen's pane carousel ("Tween Panes" = two simultaneous
     // iTweenMoveTo: old pane out one side, new pane in from the other), with the camera framing eased between
     // the two tabs' fits. Only ready (finalized) clones slide; a first build shows instantly as before.
     GameObject slideOutClone; float slideT = 1f; int slideDir; Vector3 slideStartCamPos; bool slideCamValid;
+    float slideStartOrtho;
+    Vector3 slideStartPanePos, slideNormalLocalPos, slideNormalLocalScale;
 
     // Per-frame slide driver. Runs AFTER ApplyCompanionCamera set the new tab's target framing: the camera is
     // eased from the outgoing tab's captured framing toward it, the incoming clone starts one view-width away in
@@ -773,8 +322,14 @@ public partial class HKDualScreen
         if (slideOutClone != null)
         {
             if (!slideOutClone.activeSelf) slideOutClone.SetActive(true);   // BuildCompanionTab stowed it — keep it visible for the slide
-            Vector3 camDelta = slideCamValid && attrCam != null ? attrCam.transform.position - slideStartCamPos : Vector3.zero;
-            slideOutClone.transform.position = compRoot.position + new Vector3(camDelta.x - slideDir * W * e, camDelta.y, 0f);   // screen-anchored, exits horizontally
+            float ratio = slideCamValid && attrCam != null ? attrCam.orthographicSize / Mathf.Max(.001f, slideStartOrtho) : 1f;
+            Vector3 camera = attrCam != null ? attrCam.transform.position : slideStartCamPos;
+            Vector3 relative = slideStartPanePos - slideStartCamPos;
+            // Affine camera-relative compensation preserves every renderer point,
+            // not just the root, across native-unit <-> pixel-unit camera snaps.
+            slideOutClone.transform.localScale = new Vector3(slideNormalLocalScale.x * ratio, slideNormalLocalScale.y * ratio, slideNormalLocalScale.z);
+            slideOutClone.transform.position = new Vector3(camera.x + relative.x * ratio - slideDir * W * e,
+                camera.y + relative.y * ratio, slideStartPanePos.z);
         }
         if (slideT >= 1f) StowSlideClone();
     }
@@ -785,7 +340,8 @@ public partial class HKDualScreen
         if (slideOutClone == null) { slideCamValid = false; return; }
         var cur = tab.cur == COMP_MAP ? mapClone : paneClone;
         if (slideOutClone != cur) slideOutClone.SetActive(false);
-        slideOutClone.transform.localPosition = Vector3.zero;
+        slideOutClone.transform.localPosition = slideNormalLocalPos;
+        slideOutClone.transform.localScale = slideNormalLocalScale;
         slideOutClone = null; slideCamValid = false; slideT = 1f;
     }
 
@@ -801,10 +357,11 @@ public partial class HKDualScreen
         int h = 17;
         h = h * 31 + cfg.compSepTop; h = h * 31 + cfg.compSepBot; h = h * 31 + cfg.compAreaName;
         h = h * 31 + cfg.compNoMapMsg; h = h * 31 + cfg.compEquipRow;
-        if (h != frameBuildHash) { if (frameBuildHash != 0 && frameRoot != null) { TeardownFrame(); Dbg("HKDS cfg: build-time frame knob changed -> frame rebuilt"); } frameBuildHash = h; }
+        if (h != frameBuildHash) { if (frameBuildHash != 0 && frameRoot != null) { InvalidateCompanionClones(); Dbg("HKDS cfg: build-time frame knob changed -> ownership rebuilt"); } frameBuildHash = h; }
         if (ctrlActive) { ctrlLayoutPending = 1; ctrlLayoutWait = 0; }   // B5: re-measure + re-place the control-prompt line with the new compCtrl* values (live tuning)
         equipGridDirty = true;   // ReassertEquipment re-lays the grid on its next pass...
-        if (invCloneCache != null && invRun.finalized) ReassertEquipment(invCloneCache);   // ...and right now for a finished clone (stowed or shown), so compEquipGridDY tunes live
+        // Layout/data mutation is deferred to the admitted unpaused update;
+        // LoadConfig itself runs before the pause authority is sampled.
     }
 
     // our own parent, parked far from the live game world so the clones can't overlap real geometry
@@ -888,7 +445,7 @@ public partial class HKDualScreen
         TryBakeTabFleurs();
         EnsureCompRoot();
         fit.valid = false;
-        tab.cur = Mathf.Clamp(cfg.compTab, 0, 2);
+        tab.cur = HKLowerLayout.NormalizeTab(cfg.compTab);
         ApplyCompanionCamera(compRoot.position);
         BuildFrame();
         PositionFrame();
@@ -1097,31 +654,37 @@ public partial class HKDualScreen
         // HK instantiates gameMap lazily (only on first map-open), so keep retrying the Map build until
         // the clone actually exists — then it persists and stays visible thereafter.
         int prevTab = tab.cur;
-        tab.cur = tab.tap >= 0 ? tab.tap : Mathf.Clamp(cfg.compTab, 0, 2);
+        tab.cur = HKLowerLayout.NormalizeTab(tab.tap >= 0 ? tab.tap : cfg.compTab);
+        SyncSupplementarySource();
         if (tab.cur != prevTab)
         {
             SetMapMarkerMode(false);
             // (pinch zoom/pan PERSIST across tab switches — only the RESET button / an area change clears them)
             if (slideOutClone != null) StowSlideClone();   // a switch mid-slide finishes the previous slide instantly
-            var fromClone = prevTab == COMP_MAP ? mapClone : prevTab == COMP_INV ? invCloneCache : prevTab == COMP_CHARM ? charmCloneCache : null;
-            bool fromReady = fromClone != null && (prevTab == COMP_MAP || (prevTab == COMP_INV ? invRun.finalized : charmRun.finalized));
+            var fromClone = CloneForTab(prevTab);
+            bool fromReady = ReadyForTab(prevTab);
             if (cfg.compTabSlide == 1 && fromReady && prevTab >= 0 && attrCam != null)
             {
                 slideOutClone = fromClone; slideT = 0f;
-                slideDir = TAB_TO_COL[Mathf.Clamp(tab.cur, 0, 2)] >
-                           TAB_TO_COL[Mathf.Clamp(prevTab, 0, 2)] ? 1 : -1;
+                slideDir = HKLowerLayout.SlideDirection(prevTab, tab.cur);
                 slideStartCamPos = attrCam.transform.position;
+                slideStartOrtho = attrCam.orthographicSize;
+                slideStartPanePos = fromClone.transform.position;
+                slideNormalLocalPos = fromClone.transform.localPosition;
+                slideNormalLocalScale = fromClone.transform.localScale;
                 slideCamValid = true;
             }
+            lowerTabGesture.Cancel(); supplementaryDragValid = false;
+            if (paneClone != null) HideControlPrompt(paneClone);
             sel.invKey = null; sel.charmN = 0; sel.item = null; sel.kind = -1;   // tab change clears the item selection
             if (invCloneCache != null) ClearInvDetail(invCloneCache);            // ...and blank the cached INV detail (cache reuse skips the settle-clear)
         }
-        bool needBuild = tab.built != tab.cur || (tab.cur == COMP_MAP && mapClone == null);
+        bool needBuild = tab.built != tab.cur || CloneForTab(tab.cur) == null;
         if (needBuild)
         {
             BuildCompanionTab(tab.cur);
             bool built = (tab.cur == COMP_MAP) ? mapClone != null
-                       : (tab.cur == COMP_CHARM || tab.cur == COMP_INV) ? paneClone != null : true;
+                       : CloneForTab(tab.cur) != null;
             if (built) tab.built = tab.cur;   // lock once built; retry next frame if the source wasn't ready
         }
         // Self-heal: guarantee the CURRENT tab's clone is actually shown every frame. A stow/show desync — or an
@@ -1133,7 +696,7 @@ public partial class HKDualScreen
         if (creditNow)
         { if (mapClone != null && mapClone.activeSelf) { mapStowStamp = MapContentStamp(); mapClone.SetActive(false); } }
         else if (tab.cur == COMP_MAP) { if (mapClone != null && !mapClone.activeSelf) mapClone.SetActive(true); }
-        else if ((tab.cur == COMP_CHARM || tab.cur == COMP_INV) && paneClone != null && !paneClone.activeSelf) paneClone.SetActive(true);
+        else { var shown = CloneForTab(tab.cur); if(shown != null && !shown.activeSelf) shown.SetActive(true); }
 
         MapTick();   // B6: availability gate + deferred SetupMap + zone/room/compass watchers + Quill/pin watches (EVERY frame — it also clears mapAvailable off the Map tab)
 
@@ -1153,6 +716,7 @@ public partial class HKDualScreen
             PaneSettleTick(paneClone, RunFor(tab.cur == COMP_CHARM), tab.cur == COMP_INV, true);   // B4: open-kicks + settle/freeze window (INV finalize; charms detail re-assert)
             CharmsTick();       // B7: equip/unequip watch -> re-darken the charm grid in place
             if (tab.cur == COMP_INV && invRun.finalized && (Time.frameCount % 30) == 0) RefreshInvCounters(paneClone);   // B4: geo/relic/ore/egg/key numbers stay live (~2x/s)
+            if (tab.cur == COMP_INV && invRun.finalized && equipGridDirty) ReassertEquipment(paneClone);
             compFrameTick++;
             if (paneNeedsFit)
             {
@@ -1163,10 +727,10 @@ public partial class HKDualScreen
             }
             if (fit.valid) frameCenter = fit.center;
         }
+        if (tab.cur == COMP_JOURNAL || tab.cur == COMP_GUIDE) SupplementaryTick();
         ApplyCompanionCamera(frameCenter);   // B2: box rect/aspect -> per-tab ortho -> position (BEFORE BuildFrame/PositionFrame: they read attrCam.orthographicSize)
         TabSlideTick();                      // B2: HK-style pane slide (offsets BOTH clones + eases the camera between the two tabs' framings)
-        if (cfg.compFrame == 1) { BuildFrame(); PositionFrame(); }
-        else if (frameRoot != null) TeardownFrame();
+        BuildFrame(); PositionFrame();
         ReassertControlPrompt();   // re-pin the control-prompt line at pre-render (beats ActionButtonIcon's Update)
         if (cfg.debug == 1 && (Time.frameCount % 90) == 0)   // frame-count gate: compFrameTick only advances on the pane tabs, so on the Map tab the old %90 was true EVERY frame -> logcat flood at debug=1
             Debug.Log($"HKDS mapframe attrPos={attrCam.transform.position} ortho={attrCam.orthographicSize:F1} centered={fit.valid} c={fit.center}");
@@ -1178,14 +742,15 @@ public partial class HKDualScreen
     void ApplyCompanionCamera(Vector3 frameCenter)
     {
         attrCam.orthographic = true;
-        // Confine the whole companion (map + frame) to its own BOX below the HUD (a viewport sub-rect), or
-        // full-screen when compBox is off. aspect is matched to the box so nothing stretches.
-        if (cfg.compBox == 1)
+        attrCam.rect = new Rect(0f,0f,1f,1f);
+        attrCam.aspect = (float)BOTTOM_W / Mathf.Max(1,BOTTOM_H);
+        if(tab.cur == COMP_JOURNAL || tab.cur == COMP_GUIDE)
         {
-            attrCam.rect = new Rect(cfg.compBoxX, cfg.compBoxY, cfg.compBoxW, cfg.compBoxH);
-            attrCam.aspect = (cfg.compBoxW * BOTTOM_W) / Mathf.Max(1f, cfg.compBoxH * BOTTOM_H);
+            attrCam.orthographicSize = BOTTOM_H / 2f;
+            attrCam.transform.position = new Vector3(frameCenter.x,frameCenter.y,frameCenter.z-10f);
+            attrCam.transform.rotation = Quaternion.identity;
+            return;
         }
-        else { attrCam.rect = new Rect(0f, 0f, 1f, 1f); attrCam.aspect = (float)BOTTOM_W / BOTTOM_H; }
         // MAP tab (full-area fit): fit.ortho already has the equal margin against the inner rect baked in; centre the
         // area on the inner rect's vertical centre (mapInnerYc, cam-relative ortho fracs). compZoom>1 zooms in (the area
         // stays centred in the rect). compFrameFit / compMapCenterY do NOT apply here — the margin knob replaces them.
@@ -1212,7 +777,8 @@ public partial class HKDualScreen
         attrCam.orthographicSize = Mathf.Max(0.5f, (fit.valid ? fit.ortho * fitMargin : 8.71f) / Mathf.Max(0.05f, zoomDiv));
         float ortho = attrCam.orthographicSize;
         // when framed, shift the camera DOWN so the content sits in the UPPER part of the box (inside the frame).
-        float mapShift = (cfg.compFrame == 1) ? cfg.compMapCenterY * ortho : 0f;
+        var geometry = LowerGeometry();
+        float mapShift = (1f - 2f * geometry.BodyCenterY / geometry.Height) * ortho;
         attrCam.transform.position = new Vector3(frameCenter.x + cfg.compOffX,
                                                  frameCenter.y + cfg.compOffY - mapShift, frameCenter.z - 10f);
         attrCam.transform.rotation = Quaternion.identity;
@@ -1234,7 +800,8 @@ public partial class HKDualScreen
         b.Expand(b.size * 0.06f);   // small margin
         center = b.center;
         float aspect = attrCam != null ? attrCam.aspect : (float)BOTTOM_W / BOTTOM_H;
-        fitOrtho = Mathf.Max(b.extents.y, b.extents.x / aspect) * 1.05f;
+        var geometry = LowerGeometry();
+        fitOrtho = Mathf.Max(b.extents.y * geometry.Height / Mathf.Max(1f,geometry.BodyHeight), b.extents.x / aspect) * 1.05f;
         if (cfg.debug == 1) Dbg($"HKDS paneFit {(charmsGrid ? "CHARM" : "INV")} kept={kept}/{total} ext=({b.extents.x:F1},{b.extents.y:F1}) fitOrtho={fitOrtho:F1}");
         return have;
     }
@@ -1245,12 +812,8 @@ public partial class HKDualScreen
     {
         try
         {
-            paneSrcRef = null;   // BuildCompanionTab's rebuilt-source path destroys + rebuilds both panes
-            if (mapClone != null) { Destroy(mapClone); mapClone = null; mapGm = null; }
-            mapSrcRef = null;
-            tab.built = -1;      // force BuildCompanionTab for the tab currently on screen
-            lastEquipStamp = int.MinValue;   // equipped-charm icon row re-snapshots
-            Dbg("HKDS companion clones invalidated (skin change)");
+            TeardownCompanion();
+            Dbg("HKDS companion clones invalidated (owner boundary)");
         }
         catch (Exception e) { WarnOnce("clone invalidate", e); }
     }
@@ -1266,8 +829,10 @@ public partial class HKDualScreen
         // (via PrewarmTick, isCurrent=false) finalizes and stows it when done. Finished clones stow immediately.
         if (tab != COMP_INV   && invCloneCache != null)   { if (invRun.finalized)   invCloneCache.SetActive(false);   else invCloneCache.transform.localPosition = PARK; }
         if (tab != COMP_CHARM && charmCloneCache != null) { if (charmRun.finalized) charmCloneCache.SetActive(false); else charmCloneCache.transform.localPosition = PARK; }
+        StowSupplementaryExcept(tab);
         fit.valid = false;
 
+        if (tab == COMP_JOURNAL || tab == COMP_GUIDE) { paneClone = BuildSupplementaryPane(tab); return; }
         if (tab == COMP_MAP)
         {
             paneClone = null;
@@ -1388,6 +953,20 @@ public partial class HKDualScreen
         return h;
     }
 
+    void RetireCompanionCaches()
+    {
+        StowSlideClone();
+        if (mapClone != null) { Destroy(mapClone); mapClone = null; }
+        if (invCloneCache != null) { Destroy(invCloneCache); invCloneCache = null; }
+        if (charmCloneCache != null) { Destroy(charmCloneCache); charmCloneCache = null; }
+        paneClone = null;
+        // TeardownFrame owns supplementary labels/materials and resets retries
+        // exactly once. A failed build never uses this owner-retirement path.
+        TeardownFrame();
+        tab.built = -1;
+        iconRetry.Reset();
+    }
+
     void TeardownCompanion()
     {
         bool attrCameraWasEnabled = attrCam != null && attrCam.enabled;
@@ -1396,10 +975,9 @@ public partial class HKDualScreen
         if (hudCam2 != null) hudCam2.enabled = false;
         if (attrCam != null) attrCam.cullingMask = 0;
         ReleaseLowerHudFixtureInputLock();
-        if (mapClone != null) { Destroy(mapClone); mapClone = null; mapGm = null; mapContentVisible = false; mapAreaBValid = false; mapAreaBFor = null; mapFitIsArea = false; }
-        if (invCloneCache != null) { Destroy(invCloneCache); invCloneCache = null; }
-        if (charmCloneCache != null) { Destroy(charmCloneCache); charmCloneCache = null; }
-        paneClone = null;
+        RetireCompanionCaches();
+        mapGm = null; mapContentVisible = false; mapAreaBValid = false; mapAreaBFor = null; mapFitIsArea = false;
+        lowerTabGesture.Cancel(); supplementaryDragValid = false; lowerTouchDownBody = false;
         slideOutClone = null; slideT = 1f; slideCamValid = false;   // any in-flight tab slide dies with the clones
         refsInv = refsCharm = null;   // B4 PaneRefs caches die with their clones
         nudgedFocusFor = null; nudgedFocusAmt = 0f;   // don't pin a destroyed clone
@@ -1412,7 +990,7 @@ public partial class HKDualScreen
         try { if (ctrlMyVerbTmp != null) { var vr = (ctrlMyVerbTmp as Component).GetComponent<Renderer>(); if (vr != null) vr.enabled = false; } } catch { }
         prewarmDone = false;
         mapSrcRef = null; paneSrcRef = null; invStamp = int.MinValue; charmStamp = int.MinValue;
-        TeardownFrame();
+        supplementarySource = null; supplementaryPlayer = null; supplementaryMapSource = null;
         if (attrCam != null) attrCam.enabled = attrCameraWasEnabled;
         if (hudCam2 != null)
             hudCam2.enabled = directDisplayActive && hudCameraWasEnabled;
