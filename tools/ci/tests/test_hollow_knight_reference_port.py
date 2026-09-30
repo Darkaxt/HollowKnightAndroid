@@ -476,18 +476,24 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         self.assertIn("RelayerHud(cameras, true)", restore)
 
-    def test_active_direct_display_keeps_full_lower_hud_during_pause_and_inventory(self):
+    def test_active_direct_display_suppresses_pause_but_preserves_inventory(self):
         source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
         tick = method_body(source, r"void\s+Tick\s*\(\s*\)")
         self.assertRegex(
             " ".join(tick.split()),
             r"presentationOverlay\s*=\s*paused\s*\|\|\s*invOpen",
         )
-        self.assertIn("RelayerHud(gc, false)", tick)
+        self.assertIn("ApplyLowerPauseGate(gc, paused)", tick)
         self.assertLess(
             tick.index("if (!dsOn) return;"),
-            tick.index("RelayerHud(gc, false)"),
+            tick.index("ApplyLowerPauseGate(gc, paused)"),
         )
+        self.assertLess(
+            tick.index("ApplyLowerPauseGate(gc, paused)"),
+            tick.index("MainGameHooks(gc)"),
+        )
+        self.assertIn("if (!paused && gc != null && gc.hudCamera != null)", tick)
+        self.assertEqual(1, tick.count("ApplyLowerPauseGate(gc, paused)"))
         self.assertIn(
             "CompanionVisible(companionOn, paused, invOpen, hudFadedInGameplay, popupAny)",
             tick,
@@ -496,7 +502,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
 
         relayer = method_body(source, r"void\s+RelayerHud\s*\([^)]*\)")
         self.assertIn(
-            "restoreToUpperDisplay ? UI_LAYER : hudLayer",
+            "restoreToUpperDisplay ? UI_LAYER : suppressForPause ? ATTR_LAYER : hudLayer",
             relayer,
         )
 
@@ -512,11 +518,18 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             companion_visible,
         )
         self.assertIn(
-            "return companionOn && !gameplayHudFaded && !popupAny",
+            "return companionOn && !paused && !gameplayHudFaded && !popupAny",
             companion_visible,
         )
-        self.assertNotIn("return companionOn && !paused", companion_visible)
         self.assertNotIn("return companionOn && !inventoryOpen", companion_visible)
+        gate = method_body(layering, r"void\s+ApplyLowerPauseGate\s*\([^)]*\)")
+        self.assertIn("RelayerHud(gc, false, paused)", gate)
+        self.assertIn("hudCam2.cullingMask", gate)
+        self.assertIn("attrCam.cullingMask = 0", gate)
+        self.assertIn("promptCam.cullingMask", gate)
+        self.assertNotRegex(gate, r"Destroy|Teardown|SetActive|new\s+")
+        logo = method_body(source, r"void\s+LogoTick\s*\(\s*\)")
+        self.assertIn("logoGo.SetActive(!bgShow)", logo)
 
     def test_inactive_transport_cannot_run_bottom_screen_routing_hooks(self):
         source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
@@ -1283,7 +1296,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         tick = method_body(main, r"void\s+Tick\s*\(\s*\)")
         update = method_body(frame, r"void\s+UpdateCompanion\s*\([^)]*\)")
         for call in (
-            "RelayerHud(",
+            "ApplyLowerPauseGate(",
             "MainGameHooks(",
             "FrameHudCams(",
             "SyncBottomFade()",
@@ -1360,12 +1373,18 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         bind = method_body(death, r"void\s+BindManaged\s*\(\s*\)")
         capture = method_body(
             death,
-            r"static\s+SkinDeathFrame\s+CaptureManaged\s*\([^)]*\)",
+            r"static\s+void\s+CaptureManaged\s*\([^)]*\)",
         )
         self.assertIn("HeroController.UnsafeInstance", bind)
         self.assertIn("GameManager.UnsafeInstance", bind)
         self.assertIn("HeroController.UnsafeInstance", capture)
         self.assertIn("GameManager.UnsafeInstance", capture)
+        self.assertNotIn("new SkinDeathFrame", capture)
+        self.assertIn("DetailedSampleRequired", death)
+        self.assertLess(
+            capture.index("if (!detailed || h == null || m == null"),
+            capture.index("m.GetCurrentMapZone()"),
+        )
 
     def test_h2_adapter_bootstrap_is_registered_as_an_entrypoint(self):
         entrypoints = json.loads(read(ENTRYPOINTS))["entryPoints"]

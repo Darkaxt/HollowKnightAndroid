@@ -53,4 +53,10 @@
     <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightFlashPolicyCore.cs" Link="HollowKnight\HollowKnightFlashPolicyCore.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightFlashPolicyCore.cs')" />
     <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightModsSession.cs" Link="HollowKnight\HollowKnightModsSession.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightModsSession.cs')" />
   </ItemGroup>
+  <Target Name="GenerateHollowKnightPauseFixture" BeforeTargets="CoreCompile">
+    <Exec Command="python &quot;$(MSBuildProjectDirectory)/generate_hk_pause_fixture.py&quot; &quot;$(IntermediateOutputPath)HollowKnightPauseFixture.g.cs&quot;" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)HollowKnightPauseFixture.g.cs" />
+    </ItemGroup>
+  </Target>
 </Project>

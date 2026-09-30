@@ -156,9 +156,23 @@ public partial class HKDualScreen
         return hudFadedInGameplay;
     }
 
-    // [B1] The companion SHOW gate. Pause and Inventory keep the resident lower-display page visible. A native HUD
-    // fade suppresses the companion only during active gameplay, while a routed lore/tutorial popup always owns
-    // the lower surface until it is gone.
+    // [B1] Gameplay pause gate, before the gameplay render/update branch. Preserve the existing unpaused
+    // HUD-then-tutorial routing order; park the paused live HUD on ATTR so hudCam2 draws only its separate logo.
+    // Never alter role-camera enables or resident pages: normal policy restores them on the first unpaused Tick.
+    void ApplyLowerPauseGate(GameCameras gc, bool paused)
+    {
+        RelayerHud(gc, false, paused);
+        if (promptCam != null) promptCam.cullingMask = paused ? 0 : 1 << tutLayer;
+        if (!paused) return;
+        if (hudCam2 != null) hudCam2.cullingMask = 1 << hudLayer;
+        if (attrCam != null) attrCam.cullingMask = 0;
+        bgShow = false;
+        if (bgCaptureCam != null) bgCaptureCam.enabled = false;
+        if (clearCam != null) clearCam.clearFlags = CameraClearFlags.SolidColor;
+    }
+
+    // [B1] Pause hides gameplay while retaining its resident page. Native Inventory keeps that page visible.
+    // A gameplay HUD fade or a routed lore/tutorial popup still suppresses the companion as before.
     bool CompanionVisible(
         bool companionOn,
         bool paused,
@@ -167,7 +181,7 @@ public partial class HKDualScreen
         bool popupAny)
     {
         bool gameplayHudFaded = hudFaded && !paused && !inventoryOpen;
-        return companionOn && !gameplayHudFaded && !popupAny;
+        return companionOn && !paused && !gameplayHudFaded && !popupAny;
     }
 
     // [B1] True while the opening attribution ("Team Cherry presents" / the title card) actually draws on the

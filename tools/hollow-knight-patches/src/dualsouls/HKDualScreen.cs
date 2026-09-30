@@ -541,15 +541,15 @@ public partial class HKDualScreen : MonoBehaviour
         bool companionOn = dsOn && (compOn >= 0 ? compOn : cfg.companion) == 1;
 
         bool presentationOverlay = paused || invOpen;
-        // Pause and Inventory suppress only the captured gameplay backdrop. The resident companion/page UI and
-        // native HUD remain visible on the lower display; they are part of that display's persistent product UI.
+        // Pause suppresses lower gameplay roles; native Inventory retains its existing HUD/page policy.
+        // Both overlays suppress the captured gameplay backdrop so the intended logo can draw on black.
         bgShow = gc != null && gc.hudCanvas != null && gc.hudCanvas.transform.gameObject.activeInHierarchy && !presentationOverlay;
         bool hudFadedInGameplay = HudFadedInGameplay(gc);   // B1: HK faded its HUD (lore tablet / cutscene) -> hide companion
 
         // Session boundary: QUIT-TO-MENU tears the companion down and re-arms the startup tab, so the next game
         // load starts fresh on cfg.compTab (Map) with re-cloned panes — the new save's data and any language
-        // changed in the menu included. Pause and Inventory keep the existing clones live and visible; the menu
-        // is the one real reset point. Without this the old tab + stale-language clones survived.
+        // changed in the menu included. Pause hides the resident clones without resetting them; Inventory
+        // keeps them visible. The menu is the one real reset point. Without this the old tab + stale-language clones survived.
         bool atMenu = false; try { atMenu = gm.gameState == GlobalEnums.GameState.MAIN_MENU; } catch { }
         if (atMenu && !wasAtMenu && (mapClone != null || invCloneCache != null || charmCloneCache != null || tab.built != -1))
         {
@@ -559,14 +559,13 @@ public partial class HKDualScreen : MonoBehaviour
         }
         wasAtMenu = atMenu;
 
-        if (gc != null && gc.hudCamera != null)
+        ApplyLowerPauseGate(gc, paused); // B1: route HUD before tutorial hooks; paused gameplay roles stay hidden
+        if (!paused && gc != null && gc.hudCamera != null)
         {
             var src = gc.hudCamera;
-            // Reaching this point means the product and transport are active. Keep HUD ownership on the
-            // private lower-display layer through Pause and Inventory; RestoreReferenceRouting is the only
-            // path that hands it back to the upper UI layer when product/transport ownership ends.
+            // Active transport keeps HUD ownership below; the pause gate selects its render role.
+            // RestoreReferenceRouting hands it back to the upper UI only when product/transport ownership ends.
             bool dsOff = cfg.dualScreen == 0;
-            RelayerHud(gc, false);   // M : active direct display always owns HK's HUD subtree on hudLayer
             if (dsOff)
             {
                 if (routedLayers.Count > 0) { RestoreRoutedLayers(); RestoreNameCard(); Dbg("HKDS dual-screen OFF -> routed objects returned to the main screen"); }
@@ -693,19 +692,22 @@ public partial class HKDualScreen : MonoBehaviour
     // [M] Move the whole top-left HUD anchor (Anchor TL, two levels above Hud Canvas) onto the
     // private lower-display HUD layer while direct display owns it. Product/transport teardown explicitly
     // requests restoration to the original upper UI layer.
-    void RelayerHud(GameCameras gc, bool restoreToUpperDisplay)
+    void RelayerHud(GameCameras gc, bool restoreToUpperDisplay, bool suppressForPause = false)
     {
         if (gc.hudCanvas != null)
         {
             var hudRoot = gc.hudCanvas.transform;
             if (hudRoot.parent != null && hudRoot.parent.parent != null)
                 hudRoot = hudRoot.parent.parent;   // Anchor TL (fallback: Hud Canvas)
-            // Pause and Inventory are presentation overlays, not ownership or visibility boundaries: the resident
-            // lower-display page UI and masks/soul/geo remain visible. Only an explicit product/transport restore
-            // returns this subtree to the upper UI layer.
+            // A replaced live root belongs to native upper UI again, not the lower role it last used.
+            if (hudRootApplied != null && hudRootApplied != hudRoot)
+                SetLayerRecursive(hudRootApplied, UI_LAYER);
+            // While paused, park only the live HUD on the suppressed companion role. The separately
+            // parented logo stays on hudLayer; native Inventory alone does not change HUD visibility.
+            // Product/transport restoration still returns this subtree to the original upper UI layer.
             // PERF: the recursive walk over the whole HUD subtree ran EVERY frame; now on change / root change /
             // every 10 frames (catches HUD children HK spawns later, e.g. new mask/soul pieces) — invisible delay.
-            int wantLayer = restoreToUpperDisplay ? UI_LAYER : hudLayer;
+            int wantLayer = restoreToUpperDisplay ? UI_LAYER : suppressForPause ? ATTR_LAYER : hudLayer;
             if (wantLayer != hudLayerApplied || hudRoot != hudRootApplied || (Time.frameCount % 10) == 0)
             { SetLayerRecursive(hudRoot, wantLayer); hudLayerApplied = wantLayer; hudRootApplied = hudRoot; }
         }

@@ -149,8 +149,8 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         self.assertLess(converter.index("verifyFinalSilksongNormalDeath(context, root)"),
                         converter.index("prepareTool(deploy)"))
         for token in ("HeroesFieldName", "ManagersFieldName", "TokensFieldName",
-                      "tokens[index] != occurrence", "MaxPendingOccurrences = 32",
-                      "PendingCancellations", "AcknowledgeCancellation"):
+                      "tokens[index] == occurrence && heroes[index] != null && managers[index] != null",
+                      "MaxPendingOccurrences = 32", "PendingCancellations", "AcknowledgeCancellation"):
             self.assertIn(token, adapter)
         self.assertIn('Bridge.CallStatic<bool>("cancelDeath", run, occurrence)', library)
         self.assertIn("fun cancelDeath(run: String, occurrence: Long)", runtime_bridge)
@@ -179,7 +179,12 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
     def test_skin_result_decoration_preserves_restored_visual_authority(self):
         runtime = read(SILKSONG_SKIN_RUNTIME)
         session = read(SKIN_RUNTIME_SESSION)
-        self.assertIn("LastResult = Publish(result, omissions);", runtime)
+        self.assertIn("ownerRefresh.Publish(Publish(result, omissions));", runtime)
+        self.assertIn("public SkinApplyResult LastResult => ownerRefresh.LastResult;", runtime)
+        owner = read(SILKSONG_SKIN_RUNTIME.with_name("SilksongOwnerRefreshState.cs"))
+        publish = csharp_method_body(owner, r"public\s+SkinApplyResult\s+Publish\s*\([^)]*\)")
+        self.assertTrue(publish, "missing current visual-result owner")
+        self.assertIn("LastResult = result;", publish)
         self.assertIn("result.UnsupportedTargets, result.PreviousVisualsRestored", runtime)
         self.assertIn("result.UnsupportedTargets,\n                result.PreviousVisualsRestored", session)
 
