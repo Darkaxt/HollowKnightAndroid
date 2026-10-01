@@ -229,7 +229,9 @@ public partial class HKDualScreen
                 dragLastValid = false;
                 return;
             }
-            if (tc >= 2)
+            var mapBody=MapBodyRect();
+            if (tc >= 2 && mapBody.Contains(new Vector2(transport.T0X*BOTTOM_W,transport.T0Y*BOTTOM_H)) &&
+                           mapBody.Contains(new Vector2(transport.T1X*BOTTOM_W,transport.T1Y*BOTTOM_H)))
             {
                 float ax = transport.T0X, ay = transport.T0Y;
                 float bx = transport.T1X, by = transport.T1Y;
@@ -253,7 +255,7 @@ public partial class HKDualScreen
             else if (tc == 1 && mapUserZoom > 1.01f)
             {
                 float nx = transport.T0X, ny = transport.T0Y;
-                if (LowerGeometry().InBody(nx * BOTTOM_W, ny * BOTTOM_H))   // never pan from the tab band
+                if (mapBody.Contains(new Vector2(nx * BOTTOM_W, ny * BOTTOM_H)))   // Map pads, HUD and tabs never pan.
                 {
                     // Pan from SCREEN-space finger deltas converted by the current world-per-viewport factor. The
                     // earlier world-point delta went through the camera THAT THE PAN ITSELF MOVES each frame — a

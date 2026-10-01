@@ -323,7 +323,11 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
 
         self.assertIn("sealed class MapActionButton", source)
-        self.assertIn("LineRenderer mapZoomTrack", source)
+        self.assertIn("SpriteRenderer mapZoomTrack, mapZoomThumb, mapEdgeFade", source)
+        self.assertIn("SpriteDrawMode.Sliced", source)
+        self.assertIn('DecodeMapArt(MapTrackPng,"MapSliderTrack",25)', source)
+        self.assertIn("mapControlRetry.Due(Time.frameCount)", source)
+        self.assertIn("mapStripRetry.Due(Time.frameCount)", source)
         self.assertIn("mapContentVisible && !mapNeedsSetup", source)
         self.assertIn("void PositionMapControls(", source)
         self.assertIn("bool MapControlTouchTick(", source)
@@ -344,7 +348,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("SetMapMarkerMode(false)", update)
         self.assertLess(
             pinch.index("MapControlTouchTick(tc)"),
-            pinch.index("if (tc >= 2)"),
+            pinch.index("if (tc >= 2 && mapBody.Contains"),
         )
         self.assertLess(
             pinch.index("HandleMapControlTap(world)"),
@@ -430,8 +434,13 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("mapViewAction", controls)
         self.assertIn('"FULL MAP"', build)
         self.assertIn('mapWorldMode ? "AREA MAP" : "FULL MAP"', position)
-        self.assertIn("showViewSwitch = onMap && !mapMarkerMode", position)
-        self.assertIn("SetMapAction(mapViewAction, showViewSwitch", position)
+        self.assertIn("view=onMap && !mapMarkerMode && mapAnyAvailable", position)
+        self.assertIn("SetMapAction(mapViewAction,view", position)
+        self.assertIn("MapBodyRect()", frame_tick)
+        self.assertIn("body.width / geometry.Height", frame_tick)
+        self.assertIn("body.height / geometry.Height", frame_tick)
+        self.assertNotIn("cfg.compSepTopY", frame_tick)
+        self.assertNotIn("cfg.compTabY", frame_tick)
         self.assertLess(
             handle_tap.index("mapViewAction.Hit.Contains(world)"),
             handle_tap.index("if (!mapAvailable"),
@@ -953,8 +962,13 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         hud = strip_csharp_comments(
             read(REFERENCE_ROOT / "HKDualScreen.Bottom.Hud.cs")
         )
+        no_map = method_body(hud, r"void\s+BuildNoMapLabel\s*\([^)]*\)")
+        self.assertIn('candidate.name == "No_Map_symbol"', no_map)
+        self.assertIn('ShellSprite("F_NoMap", frameRoot.transform, sprite, 9000)', no_map)
+        self.assertIn("noMapRetry.Due(Time.frameCount)", no_map)
+        for forbidden in ("Instantiate(", "CopyPaneLabel(", "noMapTmp", "Map not acquired yet"):
+            self.assertNotIn(forbidden, no_map)
         for source, signature, minimum_calls in (
-            (hud, r"void\s+BuildNoMapLabel\s*\([^)]*\)", 1),
             (hud, r"void\s+EnsureNameClone\s*\(\s*\)", 1),
         ):
             body = method_body(source, signature)
@@ -987,9 +1001,13 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("foreach(var r in label.ClipRenderers)", clip)
         self.assertIn("SetVector(TMP_CLIP_RECT,bounds)", clip)
         self.assertIn("r.SetPropertyBlock(label.ClipBlock)", clip)
+        refresh_header = method_body(hud, r"void\s+RefreshHeaderRenderers\s*\(\s*\)")
+        self.assertIn("GetComponentsInChildren<Renderer>(true)", refresh_header)
+        self.assertIn("sortingOrder = 30090", refresh_header)
+        self.assertIn("headerSortUntil=Time.frameCount+2", position_hud)
+        self.assertIn("toast != shellTitleToast", position_hud)
         for clone in (
             "areaNameT.gameObject",
-            "noMapT.gameObject",
         ):
             call = f"NeutralizeDetachedTmpClip({clone})"
             starts = [m.start() for m in re.finditer(re.escape(call), position_hud)]

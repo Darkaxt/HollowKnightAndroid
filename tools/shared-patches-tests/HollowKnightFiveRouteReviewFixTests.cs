@@ -126,7 +126,7 @@ public class HollowKnightFiveRouteReviewFixTests
     public void Reset_action_is_built_available_in_current_map_and_dispatches_without_marker_writes()
     {
         var f=SwitchFixture(0);f.BuildActionsStep(); Assert.NotNull(f.mapResetAction);
-        f.mapAnyAvailable=f.mapAvailable=f.mapContentVisible=true; f.mapGm=new object();
+        f.mapAnyAvailable=f.mapAvailable=f.mapContentVisible=true; f.mapGm=new GameMap();
         f.PositionActionsStep();Assert.True(f.mapResetAction.Root.gameObject.activeSelf);
         Assert.True(f.MapActionTap(f.mapResetAction.Hit.center)); Assert.Equal(1,f.AnimatedResets);Assert.Equal(0,f.MarkerWrites);
         f.mapMarkerMode=true;f.PositionActionsStep(); Assert.False(f.mapResetAction.Root.gameObject.activeSelf);

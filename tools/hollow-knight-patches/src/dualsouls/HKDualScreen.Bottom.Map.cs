@@ -503,6 +503,7 @@ public partial class HKDualScreen
                 m.SetupMap();                                      // reveal pins/rooms data (needs refs)
                 SetupQuickMap(m);                                  // show the current-zone quick-map (LB view)
                 SetLayerRecursive(mapClone.transform, ATTR_LAYER); // re-apply: QuickMapX activates area sprites
+                RequestMapRenderRoles();                           // A21: native setup/activation can recreate annotations
                 mapNeedsSetup = false; mapContentVisible = true; mapSetupFails = 0;
                 mapAreaBTries = 3;   // (re)measure the area's full extent over the next frames (title TMP mesh may build late)
                 ResetMapView();      // new area -> discard any pinch zoom/pan from the previous one
@@ -688,6 +689,7 @@ public partial class HKDualScreen
                 try { m.SetupMap(true); } catch (Exception e) { WarnOnce("map SetupMap pins", e); }
                 try { m.SetupMapMarkers(); } catch (Exception e) { WarnOnce("map SetupMapMarkers", e); }
                 try { GateMarkers(mapClone); } catch (Exception e) { WarnOnce("map GateMarkers", e); }   // light re-gate: no QuickMapX re-activate (that would re-hide unexplored rooms)
+                RequestMapRenderRoles();   // A21: bounded event refresh, not healthy per-frame discovery
                 Dbg("HKDS map pin/marker watch -> markers re-placed + re-gated");
             }
         }
@@ -726,19 +728,13 @@ public partial class HKDualScreen
         mapFitIsArea = mapAreaBValid && mapAreaBFor == area;
         if (mapFitIsArea)
         {
-            // Inner rect in ortho fracs (cam-relative): x = the view sides; y = bottom edge of the top context-box fleur
-            // (the separator ornament) .. top edge of the tab row's top fleur — both measured by PositionFrame each frame
-            // (line position / a rough estimate on the very first frame). Frame off -> whole view.
-            float asp = attrCam != null ? attrCam.aspect : (float)BOTTOM_W / BOTTOM_H;
-            float yt = 1f, yb = -1f;
-            if (cfg.compFrame == 1)
-            {
-                yt = float.IsNaN(frameInnerTopFrac) ? cfg.compSepTopY : frameInnerTopFrac;
-                yb = float.IsNaN(frameInnerBotFrac) ? cfg.compTabY + 0.4f : frameInnerBotFrac;
-            }
+            // DsShell owns the body rectangle even before PositionFrame and when
+            // the legacy frame switch is off. Fit and clipping share one geometry.
+            var body = MapBodyRect(); var geometry = LowerGeometry();
             float mgn = Mathf.Max(0f, cfg.compMapMargin);
-            float hw = Mathf.Max(0.05f, asp - mgn), hh = Mathf.Max(0.05f, (yt - yb) * 0.5f - mgn);
-            mapInnerYc = (yt + yb) * 0.5f;
+            float hw = Mathf.Max(0.05f, body.width / geometry.Height - mgn);
+            float hh = Mathf.Max(0.05f, body.height / geometry.Height - mgn);
+            mapInnerYc = 1f - 2f * (body.y + body.height * 0.5f) / geometry.Height;
             var tr = mapClone.transform;
             Vector3 c = tr.TransformPoint(mapAreaB.center);
             Vector3 e = Vector3.Scale(mapAreaB.extents, tr.lossyScale);

@@ -46,13 +46,12 @@ internal partial class HKDualScreen
     }
     string InvItemKey(Transform root) => root.name; // Localization key owner, not hit testing/geometry.
     SpriteRenderer ctrlMyGlyph,mapResetPillSR,benchPillSR;
-    Transform mapResetT,benchPillT;Component mapResetTmp,noMapTmp;Renderer noMapR;
+    Transform mapResetT,benchPillT;Component mapResetTmp;Renderer noMapR;
     int tabColorCol,tabFleurMoveCol,lastEquipStamp,lastNotchTotal,lastNotchUsed,invStamp,charmStamp;
     float tabFleurMoveT,frameInnerBotFrac,frameInnerTopFrac,notchScanT,nudgedFocusAmt;
     bool mapAreaBValid,ctrlPlaced,ctrlGlyphPending,prewarmDone;
-    object mapAreaBFor,mapSrcRef,paneSrcRef;GameObject nudgedFocusFor;
+    string mapAreaBFor;object mapSrcRef,paneSrcRef;GameObject nudgedFocusFor;
     void DestroyOwnedAssets() { } // Native asset disposal ABI, no geometry/owner policy.
-    void TeardownMapControls() { } // Map controls are outside native pane scope.
     void ReleaseLowerHudFixtureInputLock() { } // No live menu input owner in host tests.
     internal void NativeDetailStep(int kind,Transform item,int charm=0)
     { sel.kind=kind;sel.item=item;sel.invKey=item?.name;sel.charmN=charm;RefreshSelectedDetail(paneClone); }

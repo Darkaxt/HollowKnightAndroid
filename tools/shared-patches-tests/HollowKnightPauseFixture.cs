@@ -65,6 +65,11 @@ internal partial class HKDualScreen
     internal readonly Transform compRoot = new GameObject().transform;
     internal void SlideStep() => TabSlideTick();
     internal readonly HKLowerLayout.Retry iconRetry = new();
+    readonly HKLowerLayout.Retry frameRetry = new(),noMapRetry=new();
+    bool noMapReady,shellTitleToast;string shellToastText;
+    int headerSortUntil=-1,headerSortFrame=-1;
+    Bounds shellTitleInk;
+    SpriteRenderer noMapSymbol;
     readonly Sprite[] tabIcons = new Sprite[5];
     readonly SpriteRenderer[] frameTabs = new SpriteRenderer[5];
     internal readonly PaneRun invRun = new(), charmRun = new();
@@ -92,7 +97,8 @@ internal partial class HKDualScreen
         mapMaskTopR=mask.AddComponent<MeshRenderer>();mapMaskTopR.sharedMaterial=new object();
         transport.Owner=this;
         cfg.compTab=1;
-        GameManager.instance = Manager; PlayerData.instance = new(); InitializeOwnership();
+        GameManager.instance = Manager;Manager.FixtureOwner=this; PlayerData.instance = new(); InitializeOwnership();
+        var donor = TextDonor(Vector3.one,false);donor.gameObject.name="Pane Name";donor.SetParent(Manager.inventoryFSM.transform);
         HkStageHooks.SkinStamp = 0;
         GameObject anchor = new();
         GameObject middle = new();
@@ -150,7 +156,7 @@ internal partial class HKDualScreen
     internal static string[] NativeGuideConditions => GuideConditions;
     internal static string[] NativeGuideStates => GuideStates;
     internal static string[] NativeGuideVariables => GuideVariables;
-    internal int BuildAttempts, BuildWarnings;
+    internal int BuildAttempts, BuildWarnings,ShellWarnings;
     internal bool ThrowPartialBuild;
     internal GameObject BuildStep(int id) => BuildSupplementaryPane(id);
     GameObject BuildJournalPane() => PartialBuild(3,journalRetry);
@@ -167,6 +173,7 @@ internal partial class HKDualScreen
     void WarnOnce(string key, Exception error)
     {
         if(key=="read-only pane build") { BuildWarnings++; return; }
+        if(key=="frame build" || key=="map action build") { ShellWarnings++; return; }
         throw error;
     }
     internal readonly HKLowerLayout.Retry journalRetry = new(), guideRetry = new();
@@ -182,8 +189,6 @@ internal partial class HKDualScreen
     void LayoutGuide() { GuideLayouts++; LayoutGuideBody(); }
     internal void LayoutStep(int id) { if(id==3) LayoutJournal(); else LayoutGuide(); }
     static string LocalizedLabel(string fallback,string key) => NativeText(key,"UI");
-    SpriteRenderer ShellSprite(string name,Transform parent,Sprite sprite,int order=30080)
-    { var renderer=new SpriteRenderer();renderer.gameObject.name=name;renderer.sprite=sprite;renderer.sortingLayerName="Inventory";renderer.sortingOrder=order;renderer.gameObject.layer=ATTR_LAYER;renderer.transform.SetParent(parent);return renderer; }
     internal static readonly Dictionary<string,string> NativeLabels=new();
     static string NativeText(string key,string sheet) => string.IsNullOrEmpty(key) || string.IsNullOrEmpty(sheet) ? "" : NativeLabels.TryGetValue(sheet+"/"+key,out var text) ? text : key;
     internal sealed class NativePaneLabel
@@ -196,10 +201,10 @@ internal partial class HKDualScreen
     }
     internal void BindJournalStep(JournalRecord record) => BindJournalLabels(record,new Rect(20,256,380,668),new Rect(890,256,330,56),new Rect(890,322,330,320),new Rect(890,630,330,294));
     static System.Reflection.PropertyInfo TmpProp(Component tmp,string name) => tmp.GetType().GetProperty(name);
-    static void SetTmpColor(Component tmp,Color color) { }
+    static void SetTmpColor(Component tmp,Color color) { tmp.color=color; }
     static void TcSetSize(Component container,Vector2 size) { container.size=size; }
     const int TMP_CLIP_RECT=1;
-    static readonly Color ShellInk=new(),ShellMuted=new();
+    internal static readonly Color ShellInk=new(.93f,.91f,.86f,1),ShellMuted=new(.62f,.60f,.58f,1);
     internal sealed class PaneGraphics
     {
         internal SpriteRenderer RuleLeft=new(),RuleRight=new(),TL=new(),BR=new(),Glow=new();
@@ -260,45 +265,46 @@ internal partial class HKDualScreen
     void SyncBottomFade() { }
     void PrewarmTick() => Prewarms++;
     void EnsureCompRoot() => Updates++;
-    void SetMapMarkerMode(bool value) => mapMarkerMode=value;
     Selection sel=new(){kind=-1};
     int mapStowStamp,compFrameTick; internal bool mapAnyAvailable; bool paneNeedsFit;
-    internal object mapGm; internal bool mapContentVisible,mapNeedsSetup;
-    internal MapActionButton mapResetAction; MapActionButton mapViewAction,mapMarkerAction,mapMarkerTypeAction;
-    object mapControlPill;
-    internal sealed class MapActionButton
-    {
-        internal Transform Root;internal Component Label;internal Renderer LabelRenderer;internal SpriteRenderer Plate;
-        internal Bounds Hit;
-    }
+    internal GameMap mapGm; internal bool mapContentVisible,mapNeedsSetup;
     internal int AnimatedResets,MarkerWrites;
-    internal void BuildActionsStep() => BuildMapControlsFixture(Manager.inventoryFSM.transform.root);
-    internal void PositionActionsStep() => PositionMapControlsFixture(attrCam.orthographicSize,attrCam.aspect,.5f,-.5f,tab.cur==0);
+    internal void BuildActionsStep() => BuildMapControls(Manager.inventoryFSM.transform.root);
+    internal void PositionActionsStep() => PositionMapControls(attrCam.orthographicSize,attrCam.aspect,.5f,-.5f,tab.cur==0);
     internal bool MapActionTap(Vector3 p) => HandleMapControlTap(p);
-    object MakePillSprite() => new();
-    MapActionButton BuildMapActionButton(Transform root,string name,string text)
-    {
-        var label=new NativePaneLabel();var plate=new SpriteRenderer();
-        return new MapActionButton { Root=label.Root,Label=label.Tmp,LabelRenderer=label.Renderer,Plate=plate };
-    }
-    void SetMapAction(MapActionButton button,bool show,string text,Vector3 center,float zf,Color plate,Color ink)
-    {
-        if(!ValidButton(button)) return;button.Root.gameObject.SetActive(show);
-        button.Hit=new Bounds(center,new Vector3(.2f,.2f,20));
-    }
-    bool AnyMarkerUnlocked() => true;
-    void SetWorldMapMode(bool value) => mapWorldMode=value;
-    void CycleMarkerType() { }
-    bool PlaceOrRemoveMarker(Vector3 world) { MarkerWrites++;return true; }
     void ResetMapViewAnimated() => AnimatedResets++;
     Renderer mapResetR;
-    float mapControlLeftX=-1000,mapControlRightX=1000,mapControlTopY=1000,mapControlBottomY=-1000;
+    void ResetMapView() { }
+    int mapAreaBTries,lastPinStamp;
+    internal int NativePinStamp;
+    int PinStamp() => NativePinStamp;
+    int lastCleanTapSeq;float resetAnimT=1,pinchLastDist=-1,resetStartZoom;bool dragLastValid;
+    Vector2 dragLastN,resetStartPan;
+    void BenchPinTap(Vector3 world) { } // Existing native bench-travel owner, not Map presentation.
+    readonly List<UnityEngine.Object> frameAssets=new();
+    T Own<T>(T asset) where T:UnityEngine.Object { frameAssets.Add(asset);return asset; }
+    internal int OwnedAssetCount => frameAssets.Count;
+    internal int DestroyedAssetCount;
+    void Destroy(UnityEngine.Object asset) { DestroyedAssetCount++; }
+    internal Sprite DecodeInvalidMapArt() => DecodeMapArt("bm90IGEgcG5n","invalid",0);
+    float benchToastUntil;string benchToastText;
+    void UpdateNotchRow(float s,float asp,int id) { }
+    void UpdateEquipCharmRow(float s,float asp) { }
     void HideControlPrompt(GameObject go) { }
     void BuildCompanionTab(int id) { paneClone=id==0 ? null : (id==3 || id==4) ? BuildSupplementaryPane(id) : CloneForTab(id); }
     int MapContentStamp() => 0;
     void MapTick() { }
-    void MapFrameTick(ref Vector3 center) { }
-    void MapPinchTick() { }
+    Bounds mapAreaB; string lastMapZone="CROSSROADS";
+    internal int MapMeasurements;
+    // Native area/world measurement ABI supplies authored clone-local extents.
+    bool TryAreaBounds(GameMap m,string zone,out Bounds b) { MapMeasurements++;b=mapAreaB;return true; }
+    bool TryWorldBounds(GameMap m,out Bounds b) { MapMeasurements++;b=mapAreaB;return true; }
+    bool TryMapBounds(GameObject go,out Vector3 center,out float size) { center=default;size=0;return false; }
+    internal void PrimeMapFit(Bounds b,bool world=false) { mapAreaB=b;mapWorldMode=world;mapAreaBValid=true;mapAreaBFor=world ? "__WORLD__" : "CROSSROADS";mapAreaBTries=0; }
+    internal void MapFitStep() { Vector3 center=default;MapFrameTick(ref center); }
+    internal bool MapTouchStep(int count,float x,float y) { transport.T0X=x;transport.T0Y=y;return MapControlTouchTick(count); }
+    internal int CleanTapConsumed => lastCleanTapSeq;
+    internal void MapPinchStep(int count,float x,float y,float x1=0,float y1=0) { transport.contacts=count;transport.T0X=x;transport.T0Y=y;transport.T1X=x1;transport.T1Y=y1;MapPinchTick(); }
     PaneRun RunFor(bool charms) => charms ? charmRun : invRun;
     void PaneSettleTick(GameObject go,PaneRun run,bool inventory,bool active) { }
     void CharmsTick() { }
@@ -316,25 +322,48 @@ internal partial class HKDualScreen
     void BuildFrame() => EnsureNativeShellAssets();
     internal int NoMapBuilds;
     internal void FrameBuildStep() => BuildFrameBody();
-    Sprite CreateShellRule() => new();
+    internal SpriteRenderer NativeTab(int col) => frameTabs[col];
+    internal SpriteRenderer NativeTabBr => tabBR;
+    internal void ClearShellCursorDonors() { tabTL=tabBR=tabGlow=null; }
+    internal NativePaneLabel MarkerCount(int id) => mapStripCounts[id];
+    internal void MissingMarkerCount(int id) { mapStripCounts[id]=null; }
+    internal void BuildHeaderStep() => BuildAreaName(Manager.inventoryFSM.transform.root);
+    internal void HeaderTickStep(int id) => PositionHeaderFixture(attrCam.orthographicSize,attrCam.aspect,1,id);
+    internal void SetBenchToast(string text,float until) { benchToastText=text;benchToastUntil=until; }
+    internal void BuildNoMapStep() => BuildNoMapLabel(Manager.inventoryFSM.transform.root);
+    internal SpriteRenderer NoMapSymbol => noMapT?.GetComponent<SpriteRenderer>();
+    internal Renderer MapClipMask(int side) => side==0 ? mapMaskTopR : side==1 ? mapMaskBotR : side==2 ? mapMaskLeftR : mapMaskRightR;
+    internal Rect MapBody => MapBodyRect();
+    internal Vector3 SliderEndpoints => new(mapZoomX,mapZoomTopY,mapZoomBottomY);
+    internal bool WorldMapMode => mapWorldMode;
+    internal bool MarkerErasing => mapMarkerErase;
+    internal Bounds HeaderGlyphBounds { get { TryTmpGlyphBoundsWorld(shellTitle.Root,out var min,out var max);return new Bounds((min+max)*.5f,max-min); } }
+    internal void MissingSliderSprite() => mapZoomTrack.sprite=null;
+    internal Sprite SliderSprite => mapZoomTrack.sprite;
+    internal void ResolveAllShellDonors() { BuildTabRow(Manager.inventoryFSM.transform.root);iconRetry.Resolved(); }
+    internal void ResolveShellStep() => ResolveTabDonors(null);
+    internal bool ThrowShellRule;
+    Sprite CreateShellRule() { if(ThrowShellRule) throw new InvalidOperationException("injected cold shell failure after root assignment"); return CreateShellRuleBody(); }
     internal void RetryNoMapStep(bool missing=false) { if(missing) noMapT=null; Time.frameCount+=120;ResolveTabDonors(null); }
     static Transform FindDeep(Transform root,string name)
     {
+        DiscoveryCounters.Hierarchy++;
         if(root==null) return null;
         if(root.name==name) return root;
         foreach(var child in root.Children) { var found=FindDeep(child,name);if(found!=null) return found; }
         return null;
     }
-    void BuildAreaName(Transform root) { }
-    void BuildNoMapLabel(Transform root) { NoMapBuilds++;noMapT=new GameObject().transform; }
-    void BuildMapControls(Transform root) { }
+    void BuildNoMapLabel(Transform root) { NoMapBuilds++;BuildNoMapLabelBody(root); }
     Transform mapMaskBotT; Renderer mapMaskBotR;
-    Transform BuildMapMask(string name) { var go=new GameObject();go.AddComponent<Renderer>();return go.transform; }
+    internal bool ThrowMapMask;
+    Transform BuildMapMask(string name) { if(ThrowMapMask)throw new InvalidOperationException("injected after header/no-map/control build");return BuildMapMaskBody(name); }
     static bool IsTextMeshProGraphic(Component c) => c != null && c.GetType()==typeof(Component);
     static Component TmpOn(Transform root) => root?.TextComponents.FirstOrDefault(c=>IsTextMeshProGraphic(c));
     void DestroyImmediate(Component c) { c.transform?.TextComponents.Remove(c);if(c is TextContainer && c.transform!=null) foreach(var tmp in c.transform.TextComponents) if(tmp.Container==c) tmp.Container=null; }
+    internal bool ThrowNextLabelClone;
     static GameObject Instantiate(GameObject source,Transform parent)
     {
+        if(GameManager.instance?.FixtureOwner?.ThrowNextLabelClone == true) { GameManager.instance.FixtureOwner.ThrowNextLabelClone=false;throw new InvalidOperationException("injected native TMP clone failure"); }
         var go=new GameObject();go.transform.SetParent(parent);go.transform.localScale=source.transform.localScale;
         var renderer=go.AddComponent<Renderer>(); var original=TmpOn(source.transform);
         if(original != null)
@@ -348,11 +377,17 @@ internal partial class HKDualScreen
         return go;
     }
     void PositionFrame() { }
+    internal void FramePositionStep() => PositionFrameBody();
+    void PositionHudStrip(float s,float asp,float zf,int tab) => PositionHeaderFixture(s,asp,zf,tab);
+    float tabFleurMoveFromX,tabFleurMoveX;
+    const float TabCaretMoveSeconds=.15f;
+    internal SpriteRenderer MapFade => FindDeep(frameRoot.transform,"F_MapEdgeFade")?.GetComponent<SpriteRenderer>();
+    internal SpriteRenderer MarkerStripIcon(int id) => FindDeep(frameRoot.transform,"F_MapMarker"+id)?.GetComponent<SpriteRenderer>();
     void ReassertControlPrompt() { }
     internal int TouchPollsRecorded, JournalTaps, GuideTaps, ItemTaps;
     readonly HKLowerLayout.TabGesture lowerTabGesture = new();
     int lastSimTapN, lastTapSeq, lowerCleanTabSeq; bool lowerTouchDownBody;
-    internal bool mapMarkerMode;
+    internal bool MapMarkerMode { get => mapMarkerMode; set => SetMapMarkerMode(value); }
     float supplementaryDragY; int supplementaryDragRegion;
     internal void TouchStep() { TouchPollsRecorded++; PollTouch(); }
     void JournalTap(float x,float y) { JournalTaps++; JournalTapBody(x,y); }
@@ -422,7 +457,7 @@ internal sealed class Transport
 {
     internal int TargetDisplayIndex = 1;
     internal int contacts, Polls, TapSequence, CleanTapSequence;
-    internal float TouchX, TouchY, CleanTapX, CleanTapY, T0Y;
+    internal float TouchX, TouchY, CleanTapX, CleanTapY, T0Y,T0X,T1X,T1Y;
     internal int TouchCount { get { Polls++; return contacts; } }
     internal HKDualScreen Owner;
     internal int ProductChanges;
@@ -438,6 +473,13 @@ internal sealed class PlayerData
 {
     internal static PlayerData instance;
     internal bool hasJournal;
+    internal bool equippedCharm_2,equippedCharm_40,hasDreamGate,mapAllRooms;
+    internal string shadeScene,dreamGateScene;
+    internal float dreamGateX;
+    internal readonly List<string> scenesMapped=new();
+    internal bool hasMarker_b=true,hasMarker_r=true,hasMarker_y=true,hasMarker_w=true;
+    internal int spareMarkers_b=6,spareMarkers_r=6,spareMarkers_y=6,spareMarkers_w=6;
+    internal readonly List<Vector3> placedMarkers_b=new(),placedMarkers_r=new(),placedMarkers_y=new(),placedMarkers_w=new();
     internal readonly Dictionary<string,bool> Bools = new();
     internal readonly Dictionary<string,int> Ints = new();
     internal int Reads;
@@ -447,8 +489,12 @@ internal sealed class PlayerData
 internal sealed class GameManager
 {
     internal static GameManager instance;
+    internal HKDualScreen FixtureOwner;
     internal dynamic inventoryFSM = new NativeOwner(); internal UnityEngine.Object gameMap = new UnityEngine.Object();
-    internal string GetCurrentMapZone() => "";
+    internal string Zone="";internal string GetCurrentMapZone() => Zone;
+    internal string sceneName="";
+    internal bool IsInSceneTransition;
+    internal object tilemap=new object();
     internal GlobalEnums.GameState gameState = GlobalEnums.GameState.PLAYING;
     internal string MenuState = "GAMEPLAY";
     // Exact HK pause authority: Options changes menu state, not GameState.PAUSED.
@@ -458,20 +504,25 @@ internal static class GlobalEnums { internal enum GameState { PLAYING, PAUSED, M
 internal static class HkStageHooks
 {
     internal static int SkinStamp;
-    internal static bool BlackBackground;
+    internal static bool BlackBackground,TweaksAvailable,TweaksMenuVisible;
     internal static void ClearLegacyFlashMode() { }
     internal static void Tick(HKLayout cfg, bool debug) { }
 }
-internal static class Time { internal static int frameCount; internal static float unscaledDeltaTime = .1f; }
+internal static class Time { internal static int frameCount; internal static float unscaledDeltaTime = .1f,unscaledTime; }
 internal static class Mathf
 {
     internal static float Clamp01(float value) => Math.Clamp(value,0,1);
+    internal static float Log(float value) => MathF.Log(value);
+    internal static float Exp(float value) => MathF.Exp(value);
+    internal static float Sqrt(float value) => MathF.Sqrt(value);
     internal static int Max(int a,int b) => Math.Max(a,b);
     internal static float Abs(float value) => Math.Abs(value);
     internal static int FloorToInt(float value) => (int)Math.Floor(value);
     internal static int Clamp(int value,int min,int max) => Math.Clamp(value,min,max);
     internal static float Lerp(float from,float to,float t) => from+(to-from)*t;
+    internal static float MoveTowards(float from,float to,float step) => Math.Abs(to-from)<=step ? to : from+Math.Sign(to-from)*step;
     internal static float Max(float a, float b) => Math.Max(a, b);
+    internal static int Min(int a,int b) => Math.Min(a,b);
     internal static float Min(float a, float b) => Math.Min(a, b);
     internal static float Pow(float a, float b) => MathF.Pow(a,b);
     internal static float Clamp(float v, float min, float max) => Math.Clamp(v, min, max);
@@ -485,6 +536,11 @@ internal struct Rect
 internal struct Vector2
 {
     internal float x, y;
+    internal float sqrMagnitude => x*x+y*y;
+    public static Vector2 operator -(Vector2 a,Vector2 b) => new(a.x-b.x,a.y-b.y);
+    internal static Vector2 zero => default;
+    internal static Vector2 Lerp(Vector2 a,Vector2 b,float t) => new(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t);
+    public static Vector2 operator +(Vector2 a,Vector2 b) => new(a.x+b.x,a.y+b.y);
     internal Vector2(float x, float y) { this.x = x; this.y = y; }
 }
 internal struct Quaternion
@@ -496,7 +552,7 @@ internal struct Quaternion
     internal Vector3 Inverse(Vector3 p) => new Quaternion{Angle=-Angle}.Apply(p);
 }
 internal enum CameraClearFlags { SolidColor, Depth }
-internal struct Color { internal static readonly Color black = new(),white=new(); internal Color(float r,float g,float b,float a) { } }
+internal struct Color { internal float r,g,b,a;internal static readonly Color black = new(0,0,0,1),white=new(1,1,1,1); internal Color(float r,float g,float b,float a) { this.r=r;this.g=g;this.b=b;this.a=a; } }
 internal struct Vector3
 {
     internal float sqrMagnitude => x*x+y*y+z*z;
@@ -507,9 +563,11 @@ internal struct Vector3
     public static Vector3 operator +(Vector3 a, Vector3 b) => new(a.x + b.x, a.y + b.y, a.z + b.z);
     public static Vector3 operator -(Vector3 a, Vector3 b) => new(a.x - b.x, a.y - b.y, a.z - b.z);
     public static Vector3 operator *(Vector3 a,float scale) => new(a.x*scale,a.y*scale,a.z*scale);
+    internal static Vector3 Scale(Vector3 a,Vector3 b) => new(a.x*b.x,a.y*b.y,a.z*b.z);
     internal static Vector3 one => new(1,1,1);
     internal static Vector3 zero => new();
     internal static Vector3 Lerp(Vector3 a,Vector3 b,float t) => a+(b-a)*t;
+    internal string ToString(string format) => $"({x.ToString(format)},{y.ToString(format)},{z.ToString(format)})";
 }
 internal sealed class Camera
 {
@@ -541,7 +599,8 @@ internal sealed class GameObject
         if(component is Renderer renderer) { renderer.transform=transform;transform.Renderers.Add(renderer); }
         return component;
     }
-    internal T GetComponent<T>() where T:class => Components.TryGetValue(typeof(T),out var component) ? component as T : Components.Values.OfType<T>().FirstOrDefault() ?? transform.TextComponents.OfType<T>().FirstOrDefault();
+    internal void SetComponent<T>(T component) where T:class => Components[typeof(T)]=component;
+    internal T GetComponent<T>() where T:class => Components.TryGetValue(typeof(T),out var component) ? component as T : Components.Values.OfType<T>().FirstOrDefault() ?? transform.TextComponents.OfType<T>().FirstOrDefault() ?? transform.Renderers.OfType<T>().FirstOrDefault();
     internal Component GetComponent(string name) => transform.TextComponents.FirstOrDefault(c=>c.GetType().Name==name);
     internal T GetComponentInChildren<T>(bool inactive=true) where T:class => transform.GetComponentInChildren<T>(inactive);
     internal void RemoveRenderer() { foreach(var key in Components.Where(p=>p.Value is Renderer).Select(p=>p.Key).ToArray()) Components.Remove(key);transform.Renderers.Clear(); }
@@ -565,7 +624,7 @@ internal sealed class Transform
     internal Vector3 InverseTransformPoint(Vector3 point) {var q=localRotation.Inverse((parent!=null ? parent.InverseTransformPoint(point) : point)-localPosition);return new(q.x/localScale.x,q.y/localScale.y,q.z/localScale.z);}
     internal Quaternion rotation,localRotation;
     internal readonly List<Renderer> Renderers=new();
-    internal T[] GetComponentsInChildren<T>(bool inactive=true) where T:class => GetComponents<T>().Concat(Children.Where(c=>inactive || c.gameObject.activeInHierarchy).SelectMany(c=>c.GetComponentsInChildren<T>(inactive))).ToArray();
+    internal T[] GetComponentsInChildren<T>(bool inactive=true) where T:class { DiscoveryCounters.Hierarchy++;return GetComponents<T>().Concat(Children.Where(c=>inactive || c.gameObject.activeInHierarchy).SelectMany(c=>c.GetComponentsInChildren<T>(inactive))).ToArray(); }
     internal Transform(GameObject go = null) { gameObject = go; }
     internal readonly List<PlayMakerFSM> FsMs=new();
     internal readonly List<Component> TextComponents=new();
@@ -611,26 +670,66 @@ internal class Renderer
     internal object sharedMaterial;
     internal GameObject gameObject => transform.gameObject;
     internal bool enabled=true; internal string sortingLayerName="Inventory"; internal int sortingOrder=10000,ClipWrites;
+    internal int sortingLayerID { get => SortingLayer.NameToID(sortingLayerName);set => sortingLayerName=SortingLayer.IDToName(value); }
     internal Vector4 Clip;
     public Renderer() : this(null) { }
     internal Renderer(Transform owner) { transform=owner ?? new GameObject().transform; }
     internal Vector3 BoundsSize=Vector3.one;
     internal virtual Bounds LocalBounds => new(Vector3.zero,BoundsSize);
     internal Bounds bounds { get {var b=LocalBounds;var lo=new Vector3(float.PositiveInfinity,float.PositiveInfinity,0);var hi=new Vector3(float.NegativeInfinity,float.NegativeInfinity,0);for(int i=0;i<4;i++){var p=transform.TransformVector(new(i%2==0 ? b.min.x : b.max.x,i<2 ? b.min.y : b.max.y,0));lo=Vector3.Min(lo,p);hi=Vector3.Max(hi,p);}return new Bounds(transform.position+(lo+hi)*.5f,hi-lo);} }
+    internal T GetComponent<T>() where T:class => gameObject.GetComponent<T>();
     internal void GetPropertyBlock(MaterialPropertyBlock block) => block.Value=Clip;
     internal void SetPropertyBlock(MaterialPropertyBlock block) { Clip=block.Value;ClipWrites++; }
     internal bool InClip(Vector2 p) => p.x>=Clip.x && p.y>=Clip.y && p.x<=Clip.z && p.y<=Clip.w;
 }
-internal sealed class LineRenderer:Renderer { }
-internal sealed class MeshFilter { public MeshFilter() { } internal object sharedMesh; }
+internal sealed class LineRenderer:Renderer
+{
+    internal bool useWorldSpace;internal int positionCount,numCapVertices;
+    internal Color startColor,endColor;internal float startWidth,endWidth;internal Material material;
+    internal readonly Vector3[] points=new Vector3[2];internal void SetPosition(int index,Vector3 point) => points[index]=point;
+}
+internal sealed class Shader { internal static Shader Find(string name) => new(); }
+internal sealed class Material:UnityEngine.Object { internal Color color;internal Material(Shader shader) { } }
+internal sealed partial class GameMap
+{
+    internal GameObject areaAncientBasin,areaCity,areaCliffs,areaCrossroads,areaCrystalPeak,areaDeepnest,areaFogCanyon,areaFungalWastes,areaGreenpath,areaKingdomsEdge,areaQueensGardens,areaRestingGrounds,areaDirtmouth,areaWaterways;
+    internal GameObject compassIcon,flamePins,dreamerPins,shadeMarker,dreamGateMarker;
+    internal GameObject[] mapMarkersBlue=Slots(),mapMarkersRed=Slots(),mapMarkersYellow=Slots(),mapMarkersWhite=Slots();
+    internal int Setups; internal bool ThrowSetup;
+    internal void SetupMapMarkers() { if(ThrowSetup)throw new InvalidOperationException("native redraw failure");Setups++; }
+    static GameObject[] Slots() => Enumerable.Range(0,6).Select(i=>{var go=new GameObject();go.AddComponent<SpriteRenderer>();return go;}).ToArray();
+}
+internal sealed class Mesh:UnityEngine.Object { internal string name;internal Vector3[] vertices;internal Vector2[] uv;internal Color[] colors;internal int[] triangles;internal void RecalculateBounds() { } }
+internal sealed class MeshFilter { public MeshFilter() { } internal object sharedMesh;internal Mesh mesh { get => sharedMesh as Mesh;set => sharedMesh=value; } }
 internal sealed class MeshRenderer:Renderer { public MeshRenderer() { } }
+internal enum SpriteDrawMode { Simple,Sliced }
 internal sealed class SpriteRenderer:Renderer
 {
+    internal SpriteDrawMode drawMode;internal Vector2 size;internal bool flipX,flipY;
     public SpriteRenderer() { sortingLayerName="Default";sortingOrder=0; }
     internal Sprite sprite=new(); internal Color color;
-    internal override Bounds LocalBounds => sprite?.bounds ?? default;
+    internal override Bounds LocalBounds => drawMode==SpriteDrawMode.Sliced ? new(Vector3.zero,new(size.x,size.y,0)) : sprite?.bounds ?? default;
 }
-internal sealed class Sprite { internal string name;internal Rect rect=new(0,0,1,1); internal Bounds bounds=new(Vector3.zero,Vector3.one); }
+internal sealed class Sprite:UnityEngine.Object
+{
+    internal string name;internal Rect rect=new(0,0,1,1);internal Vector4 border;internal Texture2D texture;
+    internal Bounds bounds=new(Vector3.zero,Vector3.one);
+    internal static Sprite Create(Texture2D t,Rect rect,Vector2 pivot,float pixels=100,uint extrude=0,SpriteMeshType mesh=SpriteMeshType.FullRect,Vector4 border=default)
+      => new(){texture=t,rect=rect,border=border,bounds=new(Vector3.zero,new(rect.width/pixels,rect.height/pixels,0))};
+}
+internal enum SpriteMeshType { FullRect }
+internal enum TextureFormat { RGBA32 }
+internal enum TextureWrapMode { Clamp }
+internal enum FilterMode { Bilinear }
+internal struct Color32 { internal byte r,g,b,a;internal Color32(byte r,byte g,byte b,byte a){this.r=r;this.g=g;this.b=b;this.a=a;} }
+internal sealed class Texture2D:UnityEngine.Object
+{
+    internal int width,height;internal string name;internal TextureWrapMode wrapMode;internal FilterMode filterMode;internal Color32[] Pixels;
+    internal Texture2D(int w,int h,TextureFormat format,bool mipmap) { width=w;height=h; }
+    internal void SetPixels32(Color32[] pixels) => Pixels=pixels;
+    internal void Apply(bool update=true) { }
+    internal bool LoadImage(byte[] png) { if(png.Length<24 || png[0]!=137 || png[1]!=80)return false;width=System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16,4));height=System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20,4));return true; }
+}
 internal sealed class InvNailSprite { internal Sprite level1; }
 internal sealed class CharmIconList { internal static CharmIconList Instance;internal Sprite[] spriteList;internal Sprite GetSprite(int n) => spriteList?[n]; }
 internal sealed class JournalList { internal GameObject[] list; }
@@ -640,6 +739,7 @@ internal struct Bounds
     internal Vector3 center,size;
     internal Bounds(Vector3 center,Vector3 size) { this.center=center;this.size=size; }
     internal Vector3 min => center-size*.5f;
+    internal Vector3 extents => size*.5f;
     internal Vector3 max => center+size*.5f;
     internal void Encapsulate(Bounds other)
     {
@@ -660,7 +760,7 @@ internal struct Vector4
     internal float x,y,z,w;
     internal Vector4(float x,float y,float z,float w) { this.x=x;this.y=y;this.z=z;this.w=w; }
 }
-internal class Component
+internal class Component:UnityEngine.Object
 {
     readonly Renderer renderer;
     internal Component(Renderer renderer=null) { this.renderer=renderer; }
@@ -669,6 +769,9 @@ internal class Component
     internal T[] GetComponentsInChildren<T>(bool inactive=true) where T:class => transform.GetComponentsInChildren<T>(inactive);
     internal T GetComponent<T>() where T:class => renderer as T;
     public string text { get;set; }
+    public Color color { get;set; }
+    internal bool SpawnFallbackOnMesh;
+    internal Renderer LastFallback;
     public bool enableAutoSizing { get;set; }=true;
     public bool enableWordWrapping { get;set; }
     public float fontSize { get;set; }=40;
@@ -679,8 +782,9 @@ internal class Component
     internal Vector2 LastMeshSize;
     internal float InkHeight=1;
     internal float? MeasuredTextHeight; // TMP mesh owner supplies measured localized prose ink, not a layout algorithm.
-    public Bounds textBounds => new(Vector3.zero,new Vector3(1,MeasuredTextHeight ?? InkHeight,1));
-    public void ForceMeshUpdate() { LastMeshSize=Container?.size ?? size; }
+    internal Vector3 InkCenter;
+    public Bounds textBounds => new(InkCenter,new Vector3(1,MeasuredTextHeight ?? InkHeight,1));
+    public void ForceMeshUpdate() { LastMeshSize=Container?.size ?? size;if(SpawnFallbackOnMesh) { var go=new GameObject("TMP fallback submesh");go.transform.SetParent(transform);LastFallback=go.AddComponent<Renderer>();LastFallback.sortingOrder=0;SpawnFallbackOnMesh=false; } }
 }
 internal enum TextAlignment { TopLeft }
 internal enum TextOverflow { Overflow }
@@ -689,8 +793,14 @@ internal class TextContainer:MonoBehaviour { internal TextContainer(Renderer own
 internal sealed class GameplayLabelDriver:MonoBehaviour { internal GameplayLabelDriver(Renderer owner):base(owner) { } }
 internal class MonoBehaviour:Component { internal bool enabled=true; internal MonoBehaviour(Renderer owner=null):base(owner) { } }
 internal sealed class NativeOwner:UnityEngine.Object { public Transform transform=new GameObject().transform; }
-internal static class Resources { internal static T[] FindObjectsOfTypeAll<T>() => Array.Empty<T>(); }
-internal static class TMProOld { internal sealed class TextContainer:HkPauseContracts.TextContainer { internal TextContainer(Renderer owner):base(owner) { } } internal sealed class TMP_FontAsset { internal string name;internal object material; } }
+internal static class DiscoveryCounters { internal static int Hierarchy; }
+internal static class Resources
+{
+    internal static int Discoveries;
+    internal static Sprite[] Sprites = new[]{new Sprite{name="No_Map_symbol",rect=new(0,0,194,256),bounds=new(Vector3.zero,new(1.94f,2.56f,0))},new Sprite{name="map_mark_0000_scarab"},new Sprite{name="map_mark_0001_pill"},new Sprite{name="map_mark_0002_chit"},new Sprite{name="map_mark_0003_shell"}};
+    internal static T[] FindObjectsOfTypeAll<T>() { Discoveries++;return typeof(T)==typeof(Sprite) ? (T[])(object)Sprites : Array.Empty<T>(); }
+}
+internal static partial class TMProOld { internal sealed class TextContainer:HkPauseContracts.TextContainer { internal TextContainer(Renderer owner):base(owner) { } } internal sealed class TMP_FontAsset { internal string name;internal object material; } }
 internal static class TeamCherry
 {
     internal static class Localization

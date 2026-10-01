@@ -3,22 +3,23 @@ using System.Collections.Generic;
 using UnityEngine;
 
 // [B3] BOTTOM SCREEN — persistent HUD. HK's own Hud Canvas (masks / soul / geo) is re-layered onto hudLayer and
-// mirrored by hudCam2 (FrameHudCams). This file adds the always-on widgets: map-zone name,
-// the equipped-charm icon row, and the "Map not acquired yet" label (built once under frameRoot; positioned per frame).
+// mirrored by hudCam2 (FrameHudCams). This file owns the centered native pane/area
+// header, equipped-charms row and native no-map symbol under frameRoot.
 public partial class HKDualScreen
 {
     NativePaneLabel shellTitle; int shellTitleTab = -1, shellTitleLanguage = -1;
+    bool shellTitleToast; string shellToastText;
+    int headerSortUntil = -1, headerSortFrame = -1;
+    SpriteRenderer noMapSymbol;
+    readonly HKLowerLayout.Retry noMapRetry = new HKLowerLayout.Retry();
+    bool noMapReady;
     float shellTitleWidth, shellTitleHeight;
-    Component areaNameTmp;            // TMP label showing the current map-zone name (top-right, Map tab only)
+    Bounds shellTitleInk;
+    Component areaNameTmp;            // Native centered pane/area title; temporarily owns bench toast.
 
-    Transform areaNameT;
+    Transform areaNameT, noMapT;
 
-    Component noMapTmp;              // fix4: grey "Map not acquired yet" label (Map tab, no-map zones)
-
-    Transform noMapT;
-
-    bool noMapTextSet; string noMapShownText;   // bench-toast text + one-shot text/color init for the no-map label
-    SpriteRenderer benchPillSR; Transform benchPillT;   // fix#2(164-fb): white pill behind the bench toast
+    SpriteRenderer benchPillSR; Transform benchPillT;
     readonly List<SpriteRenderer> notchSRs = new List<SpriteRenderer>();   // fix#3(164-fb): Charms-tab notch row
     Texture2D notchTexLit, notchTexEmpty; int lastNotchTotal = -1, lastNotchUsed = -1;
     Sprite notchSprLitFb, notchSprEmptyFb;   // fix(1.0.0/B6): cached procedural fallback sprites
@@ -33,9 +34,8 @@ public partial class HKDualScreen
     const float HeaderActionRightMarginPixels = 40f;
     Transform equipRowRoot; readonly List<SpriteRenderer> equipCharmSRs = new List<SpriteRenderer>(); int lastEquipStamp = int.MinValue;   // equipped-charm icon row (top of the box)
 
-    // Map-zone title (e.g. "Forgotten Crossroads") — the name HK flashes at the top when you hold LB.
-    // We clone the same "Pane Name" TMP, park it TOP-RIGHT (inline with the HUD), and only show it while
-    // the Map tab is active (set text + visibility each frame in PositionFrame).
+    // Native Pane Name donor owns the centered localized header on every route.
+    // The Map area title and bench toast share this single header label.
     void BuildAreaName(Transform root)
     {
         if(areaNameT != null || root == null) return;
@@ -43,8 +43,20 @@ public partial class HKDualScreen
         shellTitle=CopyPaneLabel(donor,frameRoot.transform,"F_AreaName",52,true);
         if(shellTitle == null) return;
         areaNameT=shellTitle.Root; areaNameTmp=shellTitle.Tmp; areaNameR=shellTitle.Renderer;
-        areaNameR.sortingLayerName="Inventory"; areaNameR.sortingOrder=30090;
-        shellTitleTab=-1; shellTitleLanguage=-1;
+        RefreshHeaderRenderers();
+        shellTitleTab=-1; shellTitleLanguage=-1; shellTitleToast=false; shellToastText=null;
+    }
+    void RefreshHeaderRenderers()
+    {
+        if (shellTitle == null || areaNameT == null) return;
+        NeutralizeDetachedTmpClip(areaNameT.gameObject);
+        shellTitle.ClipRenderers = areaNameT.GetComponentsInChildren<Renderer>(true);
+        for (int i = 0; i < shellTitle.ClipRenderers.Length; i++)
+        {
+            var r = shellTitle.ClipRenderers[i]; if (r == null) continue;
+            r.sortingLayerName = "Inventory"; r.sortingOrder = 30090;
+        }
+        headerSortFrame = Time.frameCount;
     }
 
     // ---- Equipped-charms icon row (top of the box, every tab) --------------------------------------------------
@@ -108,45 +120,37 @@ public partial class HKDualScreen
         }
     }
 
-    // fix4: subtle grey "Map not acquired yet" label — shown centred in the box when the current zone has no
-    // map. Same TMP-clone approach as BuildAreaName; positioned + toggled live in PositionFrame.
+    // Native no-map art, independently retried; never a replacement caption.
     void BuildNoMapLabel(Transform root)
     {
+        if (frameRoot == null) return;
+        if (noMapT != null && noMapSymbol != null && noMapSymbol.sprite != null) return;
+        if (noMapReady) { noMapReady = false; noMapRetry.Reset(); }
+        if (!noMapRetry.Due(Time.frameCount)) return;
         try
         {
-            var src = FindDeep(root, "Pane Name");
-            if (src == null) return;
-            var go = Instantiate(src.gameObject, frameRoot.transform);
-            go.name = "F_NoMap";
-            SanitizeDetachedTmpClone(go);
-            SetLayerRecursive(go.transform, ATTR_LAYER);
-            go.SetActive(true);
-            foreach (var r in go.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = true; }
-            foreach (var c in go.GetComponentsInChildren<Component>(true))
-            {
-                if (!IsTextMeshProGraphic(c)) continue;
-                noMapTmp = c;
-                try { c.GetType().GetProperty("text")?.SetValue(c, "", null); } catch { }
-                break;
-            }
-            noMapT = go.transform;
-            float s = attrCam.orthographicSize;
-            var rr = go.GetComponentsInChildren<Renderer>();
-            Bounds b = new Bounds(); bool hv = false;
-            foreach (var r in rr) { var rb = r.bounds; if (float.IsNaN(rb.center.x) || rb.size.sqrMagnitude < 1e-8f) continue; if (!hv) { b = rb; hv = true; } else b.Encapsulate(rb); }
-            float nd = hv ? Mathf.Max(0.001f, b.size.y) : 1f;
-            go.transform.localScale *= (0.045f * 2f * s) / nd;   // slightly smaller than the area name
-            frameBase[go.transform] = go.transform.localScale;
-            noMapTextSet = false;
+            Sprite sprite = null;
+            var native = root != null ? FindDeep(root, "No_Map_symbol") : null;
+            var renderer = native != null ? native.GetComponent<SpriteRenderer>() : null;
+            if (renderer != null && renderer.sprite != null && renderer.sprite.name == "No_Map_symbol") sprite = renderer.sprite;
+            if (sprite == null)
+                foreach (var candidate in Resources.FindObjectsOfTypeAll<Sprite>())
+                    if (candidate != null && candidate.name == "No_Map_symbol" && candidate.rect.width > 0 && candidate.rect.height > 0)
+                    { sprite = candidate; break; }
+            if (sprite == null) return;
+            if (noMapT != null) Destroy(noMapT.gameObject);
+            noMapSymbol = ShellSprite("F_NoMap", frameRoot.transform, sprite, 9000);
+            noMapT = noMapSymbol.transform; noMapR = noMapSymbol; noMapSymbol.color = Color.white;
+            noMapReady = true; noMapRetry.Resolved();
         }
-        catch (Exception e) { Dbg($"HKDS nomap label err {e.Message}"); }
+        catch (Exception e) { WarnOnce("no-map symbol", e); }
     }
 
-    // [B3] Persistent HUD strip widgets (every tab): map-zone title (Map tab), equipped-charm
-    // icon row, "Map not acquired yet" label. Layout locals threaded from PositionFrame: s = attrCam ortho, asp =
-    // aspect, zf = frame zoom factor, effectiveTab = the tab being shown.
+    // Centered header/temporary toast, native corner widgets and no-map symbol.
+    // s/asp/zf retain the existing caller ABI; geometry comes from DsShell metrics.
     void PositionHudStrip(float s, float asp, float zf, int effectiveTab)
     {
+        bool toast = benchToastUntil > Time.unscaledTime && effectiveTab == COMP_MAP && !creditNow;
         if(areaNameT != null && areaNameTmp != null)
         {
             var g=LowerGeometry();
@@ -154,12 +158,13 @@ public partial class HKDualScreen
             string raw="";
             if(effectiveTab == COMP_MAP && !mapWorldMode)
                 try { raw=GameManager.instance != null ? GameManager.instance.GetCurrentMapZone() : ""; } catch { }
-            if(effectiveTab != shellTitleTab || raw != lastAreaZoneRaw || language != shellTitleLanguage || shellTitleWidth != g.Width || shellTitleHeight != g.Height)
+            if(effectiveTab != shellTitleTab || raw != lastAreaZoneRaw || language != shellTitleLanguage || shellTitleWidth != g.Width || shellTitleHeight != g.Height || toast != shellTitleToast || (toast && shellToastText != benchToastText))
             {
                 shellTitleWidth=g.Width; shellTitleHeight=g.Height;
                 if(shellTitle.Container != null) TcSetSize(shellTitle.Container,
                     new Vector2((g.Width-40)/Mathf.Max(.001f,shellTitle.UnitScale),g.HudHeight/Mathf.Max(.001f,shellTitle.UnitScale)));
                 shellTitleTab=effectiveTab; lastAreaZoneRaw=raw; shellTitleLanguage=language;
+                shellTitleToast=toast; shellToastText=benchToastText;
                 string title;
                 switch(effectiveTab)
                 {
@@ -169,95 +174,54 @@ public partial class HKDualScreen
                     case COMP_GUIDE: title=LocalizedLabel("Map Key","PANE_MAP_KEY"); break;
                     default: title=!string.IsNullOrEmpty(raw) ? ZoneName(raw) : LocalizedLabel("Map","PANE_MAP"); break;
                 }
-                lastAreaName=title.ToUpperInvariant();
+                // One header owner, never two overlapping labels. Expiry is an
+                // event-cache edge even when the ordinary zone/title is unchanged.
+                lastAreaName=(toast ? benchToastText ?? "" : title).ToUpperInvariant();
                 TmpProp(areaNameTmp,"text")?.SetValue(areaNameTmp,lastAreaName,null);
+                TmpProp(areaNameTmp,"enableWordWrapping")?.SetValue(areaNameTmp,false,null);
                 areaNameTmp.GetType().GetMethod("ForceMeshUpdate",Type.EmptyTypes)?.Invoke(areaNameTmp,null);
-                NeutralizeDetachedTmpClip(areaNameT.gameObject); SetTmpColor(areaNameTmp,ShellInk);
+                NeutralizeDetachedTmpClip(areaNameT.gameObject); SetTmpColor(areaNameTmp,toast ? Color.black : ShellInk);
+                RefreshHeaderRenderers(); shellTitleInk=MapLabelInk(shellTitle); headerSortUntil=Time.frameCount+2;
             }
+            // TMP can create a fallback submesh in the following LateUpdate.
+            // Two event-bounded settle frames, no healthy renderer discovery.
+            if (Time.frameCount <= headerSortUntil && headerSortFrame != Time.frameCount) RefreshHeaderRenderers();
             areaNameT.localScale=Vector3.one*shellTitle.UnitScale*ShellPixel;
             areaNameT.position=ShellPoint(g.Width/2,g.HudHeight-6);
-            var bounds=areaNameR.bounds;
+            var bounds=MapLabelWorldInk(shellTitle,shellTitleInk);
             if(bounds.size.x>(g.Width-40)*ShellPixel) areaNameT.localScale *= (g.Width-40)*ShellPixel/bounds.size.x;
-            bounds=areaNameR.bounds;
+            bounds=MapLabelWorldInk(shellTitle,shellTitleInk);
             Vector3 target=ShellPoint(g.Width/2,g.HudHeight-6);
             areaNameT.position += new Vector3(target.x-bounds.center.x,target.y-bounds.min.y,0);
-            areaNameR.enabled=lastAreaName.Length>0;
+            var renderers=shellTitle.ClipRenderers;
+            if(renderers != null) for(int i=0;i<renderers.Length;i++) if(renderers[i] != null) renderers[i].enabled=lastAreaName.Length>0;
+            if(toast)
+            {
+                if(benchPillSR == null)
+                {
+                    benchPillSR=ShellSprite("F_BenchToastPlate",frameRoot.transform,CreateMapRounded(),30085);
+                    benchPillT=benchPillSR.transform;
+                }
+                var ink=MapLabelWorldInk(shellTitle,shellTitleInk);
+                PositionMapPlate(benchPillSR,ink.center,ink.size.x/ShellPixel+60,ink.size.y/ShellPixel+20);
+                benchPillSR.enabled=true; benchPillSR.color=Color.white;
+            }
         }
-        UpdateNotchRow(s, asp, effectiveTab);      // fix#3(164-fb): Charms tab: notch icons where the area name sits
-        UpdateEquipCharmRow(s, asp);   // equipped-charm icon row across the top (every tab)
-        // fix4: grey "Map not acquired yet" label — centred in the box, shown only on the Map tab when the
-        // zone has no map (mutually exclusive with the area name, which requires mapAvailable).
-        if (noMapT != null && noMapTmp != null)
+        if(!toast && benchPillSR != null) benchPillSR.enabled=false;
+        UpdateNotchRow(s, asp, effectiveTab);
+        if (effectiveTab != COMP_MAP) UpdateEquipCharmRow(s, asp);
+        else
         {
-            bool showNoMap = cfg.compNoMapMsg == 1 && effectiveTab == COMP_MAP && !mapAvailable && !creditNow;
-            // Bench-teleport toast borrows this label (only shows on an AVAILABLE map, so no clash).
-            bool toast = benchToastUntil > Time.unscaledTime && effectiveTab == COMP_MAP && !creditNow;
-            // fix#2(164-fb): toast = BLACK text on a WHITE PILL (reset-button style) centred on the
-            // TOP strip row (where the area name / charm row live) — was overlapping the top fleur.
-            if (toast)
-            {
-                // fix(171): RIGHT-ANCHOR the toast to the same margin as the area name / charm row
-                // [user: "should be in top right area of current equipped charms and area name"] —
-                // it was centred on the frame. Same formula as the area name (compAreaNameX is the
-                // right edge; subtract the rendered half-width so the text grows leftward), and
-                // frameRoot is identity-scaled under attrCam so local == world offsets here.
-                if (noMapR == null) { try { noMapR = (noMapTmp as Component).GetComponent<Renderer>(); } catch { } }
-                float toastHalfW = noMapR != null ? noMapR.bounds.extents.x : 0f;
-                float toastY = areaNameT != null ? areaNameT.localPosition.y : cfg.compAreaNameY * s;
-                noMapT.localPosition = new Vector3(cfg.compAreaNameX * s * asp - toastHalfW, toastY, 4f);
-            }
-            else noMapT.localPosition = new Vector3(0f, cfg.compNoMapY * s, 4f);
-            if (toast)
-            {
-                if (noMapShownText != benchToastText)
-                {
-                    noMapShownText = benchToastText;
-                    try { noMapTmp.GetType().GetProperty("text")?.SetValue(noMapTmp, benchToastText, null); } catch { }
-                    try { noMapTmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(noMapTmp, null); } catch { }
-                    NeutralizeDetachedTmpClip(noMapT.gameObject);
-                    try { noMapTmp.GetType().GetProperty("color")?.SetValue(noMapTmp, new Color(0.08f, 0.08f, 0.08f, 1f), null); } catch { }   // BLACK on the white pill
-                    try { if (noMapR != null) noMapR.sortingOrder = 30052; } catch { }
-                }
-                // white pill sized to the text, just underneath it
-                if (benchPillSR == null)
-                {
-                    var pgo = new GameObject("F_BenchToastPill");
-                    pgo.transform.SetParent(frameRoot.transform, false);
-                    pgo.layer = ATTR_LAYER;
-                    benchPillSR = pgo.AddComponent<SpriteRenderer>();
-                    benchPillSR.sprite = MakePillSprite();
-                    benchPillSR.color = Color.white;
-                    benchPillSR.sortingLayerName = "Inventory"; benchPillSR.sortingOrder = 30046;
-                    benchPillT = pgo.transform;
-                }
-                try
-                {
-                    if (noMapR != null)
-                    {
-                        var tb = noMapR.bounds;
-                        benchPillT.position = new Vector3(tb.center.x, tb.center.y, noMapT.position.z + 0.5f);
-                        var pb = benchPillSR.bounds; var cs2 = benchPillT.localScale;
-                        if (pb.size.x > 1e-4f && pb.size.y > 1e-4f)
-                            benchPillT.localScale = new Vector3(cs2.x * (tb.size.x * 1.18f) / pb.size.x,
-                                                                cs2.y * (tb.size.y * 1.85f) / pb.size.y, 1f);
-                        benchPillSR.enabled = true;
-                    }
-                }
-                catch { }
-                noMapTextSet = false;   // restore the standard text after the toast
-            }
-            else if (!noMapTextSet)
-            {
-                noMapTextSet = true; noMapShownText = null;
-                try { noMapTmp.GetType().GetProperty("text")?.SetValue(noMapTmp, "Map not acquired yet", null); } catch { }
-                try { noMapTmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(noMapTmp, null); } catch { }
-                NeutralizeDetachedTmpClip(noMapT.gameObject);
-                try { noMapTmp.GetType().GetProperty("color")?.SetValue(noMapTmp, new Color(0.72f, 0.72f, 0.72f, 0.55f), null); } catch { }
-            }
-            if (noMapR == null) { try { noMapR = (noMapTmp as Component).GetComponent<Renderer>(); } catch { } }   // PERF: cached
-            if (noMapR != null) noMapR.enabled = showNoMap || toast;
-            if (!toast && benchPillSR != null && benchPillSR.enabled) benchPillSR.enabled = false;
-            if (showNoMap && frameBase.TryGetValue(noMapT, out var nmbs)) noMapT.localScale = nmbs * zf * Mathf.Max(0.1f, cfg.compNoMapScale);
+            // Map header actions exclusively own the right-hand header column.
+            for(int i=0;i<equipCharmSRs.Count;i++) if(equipCharmSRs[i] != null) equipCharmSRs[i].enabled=false;
+            lastEquipStamp=int.MinValue;
+        }
+        if(noMapT == null || noMapSymbol == null || noMapSymbol.sprite == null) BuildNoMapLabel(null);
+        if(noMapSymbol != null)
+        {
+            var rect=MapBodyRect();
+            noMapSymbol.enabled=cfg.compNoMapMsg == 1 && effectiveTab == COMP_MAP && !mapAvailable && !creditNow;
+            FitSprite(noMapSymbol,ShellPoint(rect.x+rect.width/2,rect.y+rect.height/2),260*ShellPixel,260*ShellPixel);
         }
     }
 

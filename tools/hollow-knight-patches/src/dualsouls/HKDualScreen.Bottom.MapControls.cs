@@ -2,9 +2,8 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-// [B6] MAP CONTROLS — visible zoom plus native marker placement/removal. This uses Hollow Knight's
-// own PlayerData marker lists and spare counts, then asks the cloned GameMap to redraw them. Touch
-// remains the lower display's only input authority; controller input continues to belong to gameplay.
+// Canonical production DsShell Map presentation on HK's existing native map.
+// Typed PlayerData/GameMap actions stay below; controller input stays in game.
 public partial class HKDualScreen
 {
     sealed class MapActionButton
@@ -13,253 +12,329 @@ public partial class HKDualScreen
         public Component Label;
         public Renderer LabelRenderer;
         public SpriteRenderer Plate;
-        public Vector3 BaseScale;
-        public Bounds Hit;
+        public NativePaneLabel Graphic;
+        public Bounds Hit, Ink;
         public string Text;
-        public bool Normalized;
+        public float Alpha = -1f;
+        public int SortUntil = -1, SortFrame = -1;
     }
-
-    MapActionButton mapViewAction, mapMarkerAction, mapMarkerTypeAction, mapResetAction;
-    LineRenderer mapZoomTrack;
-    SpriteRenderer mapZoomThumb;
+    MapActionButton mapViewAction, mapMarkerAction, mapResetAction;
+    SpriteRenderer mapZoomTrack, mapZoomThumb, mapEdgeFade;
+    Transform mapMaskLeftT, mapMaskRightT;
+    Renderer mapMaskLeftR, mapMaskRightR;
     Sprite mapControlPill;
-
-    bool mapMarkerMode;
+    readonly HKLowerLayout.Retry mapControlRetry = new HKLowerLayout.Retry();
+    readonly HKLowerLayout.Retry mapStripRetry = new HKLowerLayout.Retry();
+    bool mapControlsReady, mapStripReady;
+    bool mapMarkerMode, mapMarkerErase;
     int mapMarkerType = -1;
     bool mapZoomHeld;
+    int mapControlContacts, mapMarkerDownCell=-1;
     float mapZoomGrabY, mapZoomGrabPosition;
     float mapZoomX, mapZoomTopY, mapZoomBottomY, mapZoomHitHalfWidth;
     float mapControlLeftX, mapControlRightX, mapControlTopY, mapControlBottomY;
-
-    static readonly string[] MAP_MARKER_NAMES = { "BLUE", "RED", "YELLOW", "WHITE" };
-    static readonly Color[] MAP_MARKER_COLORS = {
-        new Color(0.20f, 0.55f, 1f, 1f),
-        new Color(0.88f, 0.18f, 0.15f, 1f),
-        new Color(1f, 0.78f, 0.12f, 1f),
-        Color.white,
-    };
+    float mapControlsTouched;
+    bool mapControlsShown;
+    readonly SpriteRenderer[] mapStripIcons = new SpriteRenderer[5];
+    readonly NativePaneLabel[] mapStripCounts = new NativePaneLabel[4];
+    readonly Bounds[] mapStripInk = new Bounds[4];
+    readonly int[] mapStripSpare = { -1, -1, -1, -1 };
+    readonly string[] mapMarkerSpriteNames = { "map_mark_0000_scarab", "map_mark_0001_pill", "map_mark_0002_chit", "map_mark_0003_shell" };
+    // Existing commissioned production SS art, byte-identical reuse, not new art.
+    const string MapTrashPng = "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";
+    const string MapTrackPng = "iVBORw0KGgoAAAANSUhEUgAAAB0AAAKeCAYAAABZKBBQAAAFqElEQVR42u3XTagVZRzH8e+517C6WgSlCVJkRWRItTAMLAi3CdHCLpQkFWGbokWv5MaVFbUJeoGkFmUQ0qJFQkQgahqIpVSQUeSFCl8gtBeUvP7azIHTaWbuzNx7avP9w3CZZ+Z5Pvd5+89zeknoEKuBQ8CpLpXH6BZPAhs71qXXoadXAt8Dx4GrgNP/RU8fBsaBy4EN/0VP5wNTwKLi/gfgOuDsKHt69wAIsAxY17qrSdpcu/LvOJik16adNuCKVMedbdA2w/tIzbOnR7GQFgI/FX+r4jZg91wupPtmAAGemeuFdCgzx7kkN87VnK4GVjSZKuCpuerptjSPs0munm1PFxcJoWmMA0/MdiE9WKS+NrEBWNIVHS+Se1l8Aeyryc+Pd53TtRXzNp3kliSrihVbFqeSXNIlDe6oaPD1hovsubbosqJHw3F0qAdXJPmzAj2W5MI2q3djxXw/Afw6cD8FvFzRxmXAQ03ndH6S4yX/+c6KT9iCJD9X9PZIkvOaDO/6kspnkiyvmf8HauZ2w/D7ZV+Zz4Bbh8q2AK8Ak8A1Rdk0cAD4pPgC7QduLhnMb4o0eq5qeG+qSOS7ixRXFd8m2Vfz/K664X0jo4l9VcN7cTFME4wm1gCfDqfB+0cI/uNI0+9pD/gauL4oPwycLL4ySzscVU8A3wE3ABcNlK8E9vfH+Y5i7L9KMplkbGAO1hTZpUlsTXLpQN3zk9yTZG/xfPvgQnovyaYk4xX7cGmSPTOAL9Scf3tJ7k0yleRaioyxssEJ4oKazLO54VlrQZKJtif8x0rAP9qe8Nv+gJoAfq84lI3092lmi47xP4SoqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKio6FyhE/8H+lBFea9VK0nOS7IyCTNcFyT5OeWxuUF9kixIMtG/eS/JpiTjFS8vTbIn9fFCkl5F/V6Se5NMJbm2X3hHUfGrJJNJxgYqrElyLM1ia5JLB+qen+SeJHuL59uT0EvSn5OvgeuLUT8MnAQWA0s7zP0J4DvgBuCigfKVwP7BIXg0o42P+1a/pwAXAz/N1bYoiTXAp8Nb5iTw7ojAz/tg2T59rWxXAXuA6ZpGDxcNV8WWwZt5Qw+/BPYCtw5t/F3AOmASuKYonwYOAJ8U07K/AvwG+HA4OQxf60sWwZkky2s2/QM1C2jD8PtlDcxPcryk8s6Kzb+gJlMdKTLeP+qU7b8zwFsl5bcD60vKnwaWVAztS8BfZbm37FqWZLrkPz+a5JKB965I8mdFL48lubCs/brkvKOisdcH3tlWM5fPVbVdh66taGw6yS1JViU5V/HOqaERaYyOJ/mxotEDA0m86otDF5Qkz3bIsaeTLKlrd6avx9ZiNbeJt4FfZnNcOQp80AKcBl6cizPSqy3Q94Hvm5yRmlyHGszluSQ3Nmmv6YngtQbv7AAONmls8CNeFwuLL8nCmnduA3bP5bn3N+Cdmud7moJt5pQkK2rm884W7bRCSbKrBDxYc96d1UKq2z7PF0eaxtF0IfVjPjAFLCrufwCuA86O8gfUGeDNgfsX24JdegpwZZF1jgNXAafbNjCvwxn2CPBRsUVOd6jfqacAq4FDwKkulf8Gd8LOWD3dXaAAAAAASUVORK5CYII=";
+    const string MapThumbPng = "iVBORw0KGgoAAAANSUhEUgAAACgAAAAPCAYAAACWV43jAAAAtElEQVR42tXVQUoCUBCA4e+9TWh4irCoVUiXENq18AxCnsZFRxDBfcdQV5LSKSLT1bh5gieQ6T/Bx8DMlIjQusUEb3hC13XbY4MFpviF0oB3+ERfjnYY4rtERBerRLhzXxhUvCfEwQMmJSKWeJazdYmIA26SAo8lLtY4Y1Xy/gXwkNh3rO16Z21TMUsMnJ0/yRL32aaHl9qe9BDbRLgdXrEvF2ewgzFGeETvyqifNrU5PvAHJ+zOOCKybEshAAAAAElFTkSuQmCC";
 
     void BuildMapControls(Transform nativeRoot)
     {
-        if (frameRoot == null || nativeRoot == null) return;
-        if (mapControlPill == null) mapControlPill = MakePillSprite();
-        if (mapViewAction == null)
-            mapViewAction = BuildMapActionButton(nativeRoot, "F_MapView", "FULL MAP");
-        if (mapMarkerAction == null)
-            mapMarkerAction = BuildMapActionButton(nativeRoot, "F_MapMarkers", "MARKERS");
-        if (mapMarkerTypeAction == null)
-            mapMarkerTypeAction = BuildMapActionButton(nativeRoot, "F_MapMarkerType", "BLUE 0");
-        if (mapResetAction == null)
-            mapResetAction = BuildMapActionButton(nativeRoot, "F_MapReset", "RESET");
-        if (mapZoomTrack == null)
+        if (frameRoot == null) return;
+        BuildMapMarkerStrip(nativeRoot);
+        bool ready = ValidButton(mapViewAction) && ValidButton(mapMarkerAction) && ValidButton(mapResetAction) && mapZoomTrack != null && mapZoomTrack.sprite != null && mapZoomThumb != null && mapZoomThumb.sprite != null;
+        if (ready) return;
+        if (mapControlsReady) { mapControlRetry.Reset(); mapControlsReady = false; }
+        if (!mapControlRetry.Due(Time.frameCount)) return;
+        if (nativeRoot == null)
         {
-            var track = new GameObject("F_MapZoomTrack");
-            track.transform.SetParent(frameRoot.transform, false);
-            track.layer = ATTR_LAYER;
-            mapZoomTrack = track.AddComponent<LineRenderer>();
-            mapZoomTrack.useWorldSpace = true;
-            mapZoomTrack.positionCount = 2;
-            mapZoomTrack.numCapVertices = 4;
-            mapZoomTrack.startColor = mapZoomTrack.endColor = new Color(1f, 1f, 1f, 0.82f);
-            mapZoomTrack.sortingLayerName = "Inventory";
-            mapZoomTrack.sortingOrder = 30040;
-            var shader = Shader.Find("Sprites/Default") ?? Shader.Find("Sprites/Default-ColorFlash") ??
-                         Shader.Find("Unlit/Color") ?? Shader.Find("UI/Default");
-            if (shader != null) mapZoomTrack.material = Own(new Material(shader) { color = Color.white });
+            var inv = GameManager.instance != null ? GameManager.instance.inventoryFSM : null;
+            nativeRoot = inv != null ? inv.transform.root : null;
         }
-        if (mapZoomThumb == null)
-        {
-            var thumb = new GameObject("F_MapZoomThumb");
-            thumb.transform.SetParent(frameRoot.transform, false);
-            thumb.layer = ATTR_LAYER;
-            mapZoomThumb = thumb.AddComponent<SpriteRenderer>();
-            mapZoomThumb.sprite = mapControlPill;
-            mapZoomThumb.color = Color.white;
-            mapZoomThumb.sortingLayerName = "Inventory";
-            mapZoomThumb.sortingOrder = 30050;
-        }
+        if (nativeRoot == null) return;
+        if (mapControlPill == null) mapControlPill = CreateMapRounded();
+        if (!ValidButton(mapViewAction)) mapViewAction = RetryMapAction(mapViewAction, nativeRoot, "F_MapView", "FULL MAP");
+        if (!ValidButton(mapMarkerAction)) mapMarkerAction = RetryMapAction(mapMarkerAction, nativeRoot, "F_MapMarkers", "MARKERS");
+        if (!ValidButton(mapResetAction)) mapResetAction = RetryMapAction(mapResetAction, nativeRoot, "F_MapReset", "RESET");
+        if (mapZoomTrack == null) mapZoomTrack = ShellSprite("F_MapZoomTrack",frameRoot.transform,null,30040);
+        if (mapZoomTrack.sprite == null) mapZoomTrack.sprite=DecodeMapArt(MapTrackPng,"MapSliderTrack",25);
+        if (mapZoomThumb == null) mapZoomThumb = ShellSprite("F_MapZoomThumb",frameRoot.transform,null,30050);
+        if (mapZoomThumb.sprite == null) mapZoomThumb.sprite=DecodeMapArt(MapThumbPng,"MapSliderThumb",0);
+        mapControlsReady = ValidButton(mapViewAction) && ValidButton(mapMarkerAction) && ValidButton(mapResetAction) && mapZoomTrack != null && mapZoomTrack.sprite != null && mapZoomThumb != null && mapZoomThumb.sprite != null;
+        if (mapControlsReady) mapControlRetry.Resolved();
     }
-
+    MapActionButton RetryMapAction(MapActionButton failed, Transform root, string name, string text)
+    {
+        if (failed != null) { if (failed.Root != null) Destroy(failed.Root.gameObject); if(failed.Plate != null) Destroy(failed.Plate.gameObject); }
+        return BuildMapActionButton(root,name,text);
+    }
     MapActionButton BuildMapActionButton(Transform nativeRoot, string name, string text)
     {
+        NativePaneLabel label = null; SpriteRenderer plate = null;
         try
         {
-            var donor = FindDeep(nativeRoot, "Pane Name");
-            if (donor == null) return null;
-            var go = Instantiate(donor.gameObject, frameRoot.transform);
-            go.name = name;
-            SanitizeDetachedTmpClone(go);
-            SetLayerRecursive(go.transform, ATTR_LAYER);
-            go.SetActive(true);
-            foreach (var r in go.GetComponentsInChildren<Renderer>(true))
-            {
-                r.gameObject.SetActive(true);
-                r.enabled = true;
-                r.sortingLayerName = "Inventory";
-                r.sortingOrder = 30050;
-            }
-            Component tmp = null;
-            foreach (var c in go.GetComponentsInChildren<Component>(true))
-                if (IsTextMeshProGraphic(c)) { tmp = c; break; }
-            if (tmp == null) { Destroy(go); return null; }
-            try { tmp.GetType().GetProperty("text")?.SetValue(tmp, text, null); } catch { }
-            try { tmp.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(tmp, null); } catch { }
-            NeutralizeDetachedTmpClip(go);
-
-            var plateGo = new GameObject("plate");
-            plateGo.transform.SetParent(go.transform, false);
-            plateGo.layer = ATTR_LAYER;
-            var plate = plateGo.AddComponent<SpriteRenderer>();
-            plate.sprite = mapControlPill;
-            plate.color = Color.white;
-            plate.sortingLayerName = "Inventory";
-            plate.sortingOrder = 30045;
-
-            return new MapActionButton {
-                Root = go.transform,
-                Label = tmp,
-                LabelRenderer = (tmp as Component).GetComponent<Renderer>(),
-                Plate = plate,
-                Text = text,
-            };
+            label = CopyPaneLabel(FindDeep(nativeRoot,"Pane Name"),frameRoot.transform,name,34,true);
+            if (label == null) return null;
+            plate = ShellSprite(name+"Plate",frameRoot.transform,mapControlPill,30045);
+            return new MapActionButton { Root=label.Root, Label=label.Tmp, LabelRenderer=label.Renderer, Graphic=label, Plate=plate };
         }
-        catch (Exception e) { WarnOnce("map action build", e); return null; }
+        catch(Exception e)
+        {
+            if(label != null && label.Root != null) Destroy(label.Root.gameObject);
+            if(plate != null) Destroy(plate.gameObject);
+            WarnOnce("map action build",e); return null;
+        }
     }
-
     static bool ValidButton(MapActionButton button)
     {
-        return button != null && button.Root != null && button.Label != null &&
-               button.LabelRenderer != null && button.Plate != null;
+        return button != null && button.Root != null && button.Label != null && button.LabelRenderer != null && button.Plate != null && button.Plate.sprite != null;
     }
-
-    void SetMapAction(MapActionButton button, bool show, string text, Vector3 center,
-                      float zf, Color plateColor, Color textColor)
+    Bounds MapLabelInk(NativePaneLabel label)
+    {
+        Vector3 min, max;
+        if (label == null || !TryTmpGlyphBoundsWorld(label.Root, out min, out max)) return default;
+        min=label.Root.InverseTransformPoint(min);max=label.Root.InverseTransformPoint(max);
+        return new Bounds((min+max)*.5f,max-min);
+    }
+    Bounds MapLabelWorldInk(NativePaneLabel label, Bounds ink)
+    {
+        var min=label.Root.TransformPoint(ink.min);var max=label.Root.TransformPoint(ink.max);
+        return new Bounds((min+max)*.5f,max-min);
+    }
+    void SortMapAction(MapActionButton button)
+    {
+        NeutralizeDetachedTmpClip(button.Root.gameObject);
+        var renderers=button.Root.GetComponentsInChildren<Renderer>(true);
+        button.Graphic.ClipRenderers=renderers;
+        for(int i=0;i<renderers.Length;i++) if(renderers[i] != null) { renderers[i].sortingLayerName="Inventory";renderers[i].sortingOrder=30050; }
+        button.SortFrame=Time.frameCount;
+    }
+    void SetMapAction(MapActionButton button, bool show, string text, Vector3 right, float alpha)
     {
         if (!ValidButton(button)) return;
-        if (button.Root.gameObject.activeSelf != show) button.Root.gameObject.SetActive(show);
-        if (!show) return;
-
-        if (button.Text != text)
+        if(button.Root.gameObject.activeSelf != show) button.Root.gameObject.SetActive(show);
+        button.Plate.enabled=show;
+        if(!show) return;
+        if(button.Text != text)
         {
-            button.Text = text;
-            try { button.Label.GetType().GetProperty("text")?.SetValue(button.Label, text, null); } catch { }
-            try { button.Label.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(button.Label, null); } catch { }
+            button.Text=text;
+            if(button.Graphic.Container != null) TcSetSize(button.Graphic.Container,new Vector2((LowerGeometry().Width-80)/Mathf.Max(.001f,button.Graphic.UnitScale),54/Mathf.Max(.001f,button.Graphic.UnitScale)));
+            TmpProp(button.Label,"text")?.SetValue(button.Label,text,null);
+            TmpProp(button.Label,"enableWordWrapping")?.SetValue(button.Label,false,null);
+            button.Label.GetType().GetMethod("ForceMeshUpdate",Type.EmptyTypes)?.Invoke(button.Label,null);
             NeutralizeDetachedTmpClip(button.Root.gameObject);
+            SortMapAction(button);button.Ink=MapLabelInk(button.Graphic);button.SortUntil=Time.frameCount+2;
         }
-        button.LabelRenderer.enabled = true;
-        if (!button.Normalized)
+        if(Time.frameCount<=button.SortUntil && button.SortFrame != Time.frameCount) SortMapAction(button);
+        button.Root.localScale=Vector3.one*button.Graphic.UnitScale*ShellPixel;
+        var glyph=MapLabelWorldInk(button.Graphic,button.Ink);
+        float width=Mathf.Max(130,glyph.size.x/ShellPixel+60);
+        Vector3 center=right-new Vector3(width*ShellPixel/2,0,0);
+        button.Root.position += center-glyph.center;
+        if(button.Alpha != alpha) { button.Alpha=alpha;SetTmpColor(button.Label,new Color(0,0,0,alpha));button.Plate.color=new Color(1,1,1,alpha); }
+        button.LabelRenderer.enabled=true;
+        PositionMapPlate(button.Plate,center,width,54);
+        button.Hit=new Bounds(center,new Vector3(width*ShellPixel,54*ShellPixel,100));
+    }
+    void PositionMapPlate(SpriteRenderer plate,Vector3 center,float width,float height)
+    {
+        if(plate == null || plate.sprite == null) return;
+        plate.drawMode=SpriteDrawMode.Sliced;
+        plate.transform.localScale=Vector3.one*(100*ShellPixel);
+        plate.size=new Vector2(width/100,height/100);
+        plate.transform.position=center;
+    }
+    Rect MapBodyRect()
+    {
+        var g=LowerGeometry();return new Rect(20,g.HudHeight+20,Mathf.Max(1,g.Width-40),Mathf.Max(1,g.BodyHeight-24));
+    }
+    void PositionMapControls(float s,float asp,float innerTop,float innerBottom,bool onMap)
+    {
+        bool view=onMap && !mapMarkerMode && mapAnyAvailable && mapClone != null && mapGm != null;
+        bool map=onMap && mapAvailable && mapClone != null && mapGm != null && mapContentVisible && !mapNeedsSetup;
+        if(!map) SetMapMarkerMode(false);
+        bool markers=map && AnyMarkerUnlocked();
+        if(map && !mapControlsShown) mapControlsTouched=Time.unscaledTime;
+        mapControlsShown=map;
+        float alpha=MapControlsAlpha();
+        var g=LowerGeometry();var rect=MapBodyRect();
+        int headerCount=mapMarkerMode ? 1 : (view ? 1 : 0)+(markers ? 1 : 0);
+        float gap=headerCount>0 ? Mathf.Max(10,(g.HudHeight-headerCount*54)/(headerCount+1)) : 0;
+        SetMapAction(mapViewAction,view,mapWorldMode ? "AREA MAP" : "FULL MAP",ShellPoint(g.Width-40,gap+27,3.4f),1);
+        SetMapAction(mapMarkerAction,markers,mapMarkerMode ? "EXIT" : "MARKERS",ShellPoint(g.Width-40,mapMarkerMode ? gap+27 : gap*2+81,3.4f),1);
+        SetMapAction(mapResetAction,map && !mapMarkerMode && alpha>0,"RESET",ShellPoint(rect.x+rect.width-14,rect.y+rect.height-12-27,3.4f),alpha);
+        PositionMapMarkerStrip(markers && mapMarkerMode);
+        mapControlLeftX=ShellPoint(rect.x,rect.y).x;mapControlRightX=ShellPoint(rect.x+rect.width,rect.y).x;
+        mapControlTopY=ShellPoint(rect.x,rect.y).y;mapControlBottomY=ShellPoint(rect.x,rect.y+rect.height).y;
+        mapZoomX=ShellPoint(rect.x+rect.width-10-29f/2,rect.y).x;
+        mapZoomTopY=ShellPoint(0,rect.y+12).y;mapZoomBottomY=ShellPoint(0,rect.y+rect.height-12).y;
+        mapZoomHitHalfWidth=29f/2*ShellPixel;
+        bool slider=map && alpha>0;
+        if(mapZoomTrack != null)
         {
-            Bounds first = button.LabelRenderer.bounds;
-            if (first.size.y > 0.001f)
+            mapZoomTrack.enabled=slider;mapZoomTrack.color=new Color(1,1,1,alpha);
+            PositionMapPlate(mapZoomTrack,new Vector3(mapZoomX,(mapZoomTopY+mapZoomBottomY)/2,attrCam.transform.position.z+3.5f),29,rect.height-24);
+        }
+        if(mapZoomThumb != null)
+        {
+            mapZoomThumb.enabled=slider;mapZoomThumb.color=new Color(1,1,1,alpha);
+            FitSprite(mapZoomThumb,new Vector3(mapZoomX,Mathf.Lerp(mapZoomBottomY,mapZoomTopY,MapZoomPosition(mapUserZoom,Mathf.Max(1.5f,cfg.compMapZoomMax))),attrCam.transform.position.z+3.35f),40*ShellPixel,15*ShellPixel);
+        }
+        if(!map) mapZoomHeld=false;
+    }
+    float MapControlsAlpha()
+    {
+        return 1-Mathf.Clamp01((Time.unscaledTime-mapControlsTouched-3)/.6f);
+    }
+    void BuildMapEdges()
+    {
+        mapEdgeFade=ShellSprite("F_MapEdgeFade",frameRoot.transform,CreateMapEdgeFade(),MapArtFadeOrder);
+        mapMaskLeftT=BuildMapMask("HKDS MapMaskLeft");mapMaskRightT=BuildMapMask("HKDS MapMaskRight");
+        mapMaskLeftR=mapMaskLeftT.GetComponent<Renderer>();mapMaskRightR=mapMaskRightT.GetComponent<Renderer>();
+    }
+    void PositionMapEdges()
+    {
+        MapRenderRolesTick();
+        bool map=tab.cur==COMP_MAP;var g=LowerGeometry();var r=MapBodyRect();float pixel=ShellPixel;
+        if(mapEdgeFade != null) { mapEdgeFade.enabled=map;PositionMapPlate(mapEdgeFade,ShellPoint(r.x+r.width/2,r.y+r.height/2),r.width,r.height); }
+        if(mapMaskLeftR != null) { mapMaskLeftR.enabled=map;mapMaskLeftT.position=ShellPoint(r.x/2,r.y+r.height/2,4.5f);mapMaskLeftT.localScale=new Vector3(r.x*pixel,r.height*pixel,1); }
+        if(mapMaskRightR != null) { mapMaskRightR.enabled=map;mapMaskRightT.position=ShellPoint(r.x+r.width+(g.Width-r.x-r.width)/2,r.y+r.height/2,4.5f);mapMaskRightT.localScale=new Vector3((g.Width-r.x-r.width)*pixel,r.height*pixel,1); }
+        if(!map) return;
+        if(mapMaskTopT != null) { mapMaskTopT.position=ShellPoint(g.Width/2,r.y/2,4.5f);mapMaskTopT.localScale=new Vector3(g.Width*pixel,r.y*pixel,1); }
+        if(mapMaskBotT != null) { mapMaskBotT.position=ShellPoint(g.Width/2,r.y+r.height+(g.Height-r.y-r.height)/2,4.5f);mapMaskBotT.localScale=new Vector3(g.Width*pixel,(g.Height-r.y-r.height)*pixel,1); }
+    }
+    Sprite DecodeMapArt(string png,string name,float cap)
+    {
+        var tex=new Texture2D(2,2,TextureFormat.RGBA32,false);
+        try
+        {
+            if(!tex.LoadImage(Convert.FromBase64String(png))) { Destroy(tex);return null; }
+            tex.name=name;tex.wrapMode=TextureWrapMode.Clamp;tex.filterMode=FilterMode.Bilinear;
+            var sprite=Sprite.Create(tex,new Rect(0,0,tex.width,tex.height),new Vector2(.5f,.5f),100,0,SpriteMeshType.FullRect,new Vector4(0,cap,0,cap));
+            sprite.name=name;Own(tex);return Own(sprite);
+        }
+        catch { Destroy(tex);return null; }
+    }
+    Sprite CreateMapRounded()
+    {
+        // DsTheme.Rounded: fixed 10px radius, 12px nine-slice borders.
+        const int size=48;const float radius=10;
+        var tex=Own(new Texture2D(size,size,TextureFormat.RGBA32,false));var px=new Color32[size*size];
+        for(int y=0;y<size;y++) for(int x=0;x<size;x++)
+        {
+            float dx=Mathf.Max(Mathf.Max(radius-(x+.5f),(x+.5f)-(size-radius)),0);
+            float dy=Mathf.Max(Mathf.Max(radius-(y+.5f),(y+.5f)-(size-radius)),0);
+            px[y*size+x]=new Color32(255,255,255,(byte)(Mathf.Clamp01(radius-Mathf.Sqrt(dx*dx+dy*dy))*255));
+        }
+        tex.SetPixels32(px);tex.Apply(false);tex.wrapMode=TextureWrapMode.Clamp;
+        return Own(Sprite.Create(tex,new Rect(0,0,size,size),new Vector2(.5f,.5f),100,0,SpriteMeshType.FullRect,new Vector4(12,12,12,12)));
+    }
+    Sprite CreateMapEdgeFade()
+    {
+        // DsTheme.EdgeFade exactly: 40px cubic ramp on all edges/corners,
+        // transparent 2px core stretched by nine-slicing, never a map-wide tint.
+        const int fade=40,size=82;var tex=Own(new Texture2D(size,size,TextureFormat.RGBA32,false));var px=new Color32[size*size];
+        for(int y=0;y<size;y++) for(int x=0;x<size;x++)
+        {
+            int d=Mathf.Min(Mathf.Min(x,y),Mathf.Min(size-1-x,size-1-y));
+            float t=Mathf.Clamp01(1-d/(float)fade);
+            px[y*size+x]=new Color32(0,0,0,(byte)(Mathf.Pow(t,3)*255));
+        }
+        tex.SetPixels32(px);tex.Apply(false);tex.wrapMode=TextureWrapMode.Clamp;
+        return Own(Sprite.Create(tex,new Rect(0,0,size,size),new Vector2(.5f,.5f),100,0,SpriteMeshType.FullRect,new Vector4(fade,fade,fade,fade)));
+    }
+    void BuildMapMarkerStrip(Transform root)
+    {
+        bool ready=mapStripIcons[4] != null && mapStripIcons[4].sprite != null;
+        for(int i=0;i<4;i++) ready &= mapStripIcons[i] != null && mapStripIcons[i].sprite != null && mapStripCounts[i] != null;
+        if(ready) return;
+        if(mapStripReady) { mapStripReady=false;mapStripRetry.Reset(); }
+        if(!mapStripRetry.Due(Time.frameCount)) return;
+        if(root == null) { var inv=GameManager.instance != null ? GameManager.instance.inventoryFSM : null;root=inv != null ? inv.transform.root : null; }
+        var sprites=Resources.FindObjectsOfTypeAll<Sprite>();
+        for(int i=0;i<4;i++)
+        {
+            if(mapStripIcons[i] == null) mapStripIcons[i]=ShellSprite("F_MapMarker"+i,frameRoot.transform,null);
+            if(mapStripIcons[i].sprite == null)
+                foreach(var sp in sprites) if(sp != null && sp.name==mapMarkerSpriteNames[i]) { mapStripIcons[i].sprite=sp;break; }
+            if(mapStripCounts[i] == null && root != null)
             {
-                button.Root.localScale *= (0.045f * 2f * frameRefOrtho) / first.size.y;
-                button.BaseScale = button.Root.localScale;
-                button.Normalized = true;
+                mapStripCounts[i]=CopyPaneLabel(FindDeep(root,"Pane Name"),frameRoot.transform,"F_MapMarkerCount"+i,24);
+                mapStripSpare[i]=-1;mapStripInk[i]=default;
             }
         }
-        if (button.Normalized) button.Root.localScale = button.BaseScale * zf;
-        button.Root.position = center;
-        Bounds glyph = button.LabelRenderer.bounds;
-        if (glyph.size.y > 0.001f)
+        if(mapStripIcons[4] == null) mapStripIcons[4]=ShellSprite("F_MapMarker4",frameRoot.transform,null);
+        if(mapStripIcons[4].sprite == null) mapStripIcons[4].sprite=DecodeMapArt(MapTrashPng,"DsTrash",0);
+        mapStripReady=mapStripIcons[4] != null && mapStripIcons[4].sprite != null;
+        for(int i=0;i<4;i++) mapStripReady &= mapStripIcons[i] != null && mapStripIcons[i].sprite != null && mapStripCounts[i] != null;
+        if(mapStripReady) mapStripRetry.Resolved();
+    }
+    void PositionMapMarkerStrip(bool show)
+    {
+        var g=LowerGeometry();int count=1;for(int i=0;i<4;i++) if(MarkerUnlocked(i)) count++;
+        float cell=g.Width/count;int col=0;EnsureSelectedMarkerType();
+        for(int i=0;i<5;i++)
         {
-            button.Root.position += center - glyph.center;
-            glyph = button.LabelRenderer.bounds;
+            bool on=show && (i==4 || MarkerUnlocked(i));
+            var sr=mapStripIcons[i];if(sr != null) sr.enabled=on && sr.sprite != null;
+            var label=i<4 ? mapStripCounts[i] : null;
+            if(label != null) SetPaneLabelVisible(label,on);
+            if(!on) continue;
+            Vector3 center=ShellPoint((col+.5f)*cell,g.TabTop+g.TabHeight/2,3.8f);col++;
+            if(sr != null) { FitSprite(sr,center,88*ShellPixel,88*ShellPixel);sr.color=(i==4 ? mapMarkerErase : !mapMarkerErase && i==mapMarkerType) ? ShellInk : ShellMuted; }
+            if(label != null)
+            {
+                int spare=MarkerSpare(i);
+                if(mapStripSpare[i] != spare)
+                {
+                    mapStripSpare[i]=spare;label.Text=spare.ToString();TmpProp(label.Tmp,"text")?.SetValue(label.Tmp,label.Text,null);
+                    label.Tmp.GetType().GetMethod("ForceMeshUpdate",Type.EmptyTypes)?.Invoke(label.Tmp,null);
+                    NeutralizeDetachedTmpClip(label.Root.gameObject);
+                    label.ClipRenderers=label.Root.GetComponentsInChildren<Renderer>(true);
+                    for(int n=0;n<label.ClipRenderers.Length;n++) { label.ClipRenderers[n].sortingLayerName="Inventory";label.ClipRenderers[n].sortingOrder=30090; }
+                    SetTmpColor(label.Tmp,ShellInk);SetPaneLabelVisible(label,true);mapStripInk[i]=MapLabelInk(label);
+                }
+                label.Root.localScale=Vector3.one*label.UnitScale*ShellPixel;
+                label.Root.position+=center+new Vector3(56*ShellPixel,-32*ShellPixel,0)-MapLabelWorldInk(label,mapStripInk[i]).center;
+            }
+            bool selected=i==4 ? mapMarkerErase : !mapMarkerErase && i==mapMarkerType;
+            if(selected && sr != null && sr.sprite != null)
+            {
+                var b=sr.bounds;
+                if(tabTL != null) { tabTL.enabled=true;FitSprite(tabTL,center+new Vector3(-b.extents.x-6*ShellPixel,b.extents.y+6*ShellPixel,0),22*ShellPixel,22*ShellPixel); }
+                if(tabBR != null) { tabBR.enabled=true;FitSprite(tabBR,center+new Vector3(b.extents.x+6*ShellPixel,-b.extents.y-6*ShellPixel,0),22*ShellPixel,22*ShellPixel); }
+                if(tabGlow != null) { tabGlow.enabled=true;FitSprite(tabGlow,center,110*ShellPixel,110*ShellPixel); }
+            }
         }
-        SetTmpColor(button.Label, textColor);
-        button.Plate.color = plateColor;
-        button.Plate.enabled = true;
-        PositionPill(button.Plate, glyph, Mathf.Max(0.12f, glyph.size.y * 0.58f));
-        button.Hit = button.Plate.bounds;
-        button.Hit.Expand(new Vector3(glyph.size.y * 0.45f, glyph.size.y * 0.45f, 10f));
     }
-
-    static void PositionPill(SpriteRenderer plate, Bounds glyph, float pad)
+    int MapMarkerCell(Vector3 world)
     {
-        if (plate == null || plate.sprite == null) return;
-        var t = plate.transform;
-        t.position = new Vector3(glyph.center.x, glyph.center.y, glyph.center.z + 0.05f);
-        t.rotation = Quaternion.identity;
-        Vector3 size = plate.sprite.bounds.size;
-        float worldW = Mathf.Max(0.1f, glyph.size.x + pad * 2f);
-        float worldH = Mathf.Max(0.1f, glyph.size.y + pad * 1.45f);
-        Vector3 lossy = t.lossyScale;
-        Vector3 local = t.localScale;
-        t.localScale = new Vector3(
-            worldW / Mathf.Max(0.001f, size.x) * local.x / Mathf.Max(0.001f, Mathf.Abs(lossy.x)),
-            worldH / Mathf.Max(0.001f, size.y) * local.y / Mathf.Max(0.001f, Mathf.Abs(lossy.y)),
-            1f);
+        if(!mapMarkerMode || attrCam == null) return -1;
+        var g=LowerGeometry();Vector3 top=ShellPoint(0,g.TabTop),bottom=ShellPoint(g.Width,g.Height);
+        if(world.x<top.x || world.x>=bottom.x || world.y>top.y || world.y<=bottom.y) return -1;
+        int count=1;for(int i=0;i<4;i++) if(MarkerUnlocked(i)) count++;
+        return (int)((world.x-top.x)/(g.Width*ShellPixel/count));
     }
-
-    void PositionMapControls(float s, float asp, float innerTop, float innerBottom, bool onMap)
+    bool MapMarkerStripTap(Vector3 world)
     {
-        bool showViewSwitch = onMap && !mapMarkerMode && mapAnyAvailable &&
-                              mapClone != null && mapGm != null;
-        bool showMap = onMap && mapAvailable && mapClone != null && mapGm != null &&
-                       mapContentVisible && !mapNeedsSetup;
-        if (!showMap) SetMapMarkerMode(false);
-        bool haveMarkers = showMap && AnyMarkerUnlocked();
-        float zf = (s / Mathf.Max(0.01f, frameRefOrtho)) * cfg.compFrameScale;
-        var cam = attrCam != null ? attrCam.transform : null;
-        if (cam == null) return;
-
-        float topY = cam.position.y + innerTop * s;
-        float bottomY = cam.position.y + innerBottom * s;
-        float actionX = cam.position.x + 0.68f * s * asp;
-        SetMapAction(mapViewAction, showViewSwitch,
-            mapWorldMode ? "AREA MAP" : "FULL MAP",
-            new Vector3(actionX, topY - 0.10f * s, cam.position.z + 3.4f), zf,
-            Color.white, new Color(0.08f, 0.08f, 0.1f, 1f));
-        SetMapAction(mapMarkerAction, haveMarkers,
-            mapMarkerMode ? "DONE" : "MARKERS",
-            new Vector3(actionX, topY - (mapMarkerMode ? 0.10f : 0.23f) * s,
-                        cam.position.z + 3.4f), zf,
-            Color.white, new Color(0.08f, 0.08f, 0.1f, 1f));
-
-        SetMapAction(mapResetAction, showMap && !mapMarkerMode, "RESET",
-            new Vector3(actionX, bottomY + 0.10f * s, cam.position.z + 3.4f), zf,
-            Color.white, new Color(0.08f, 0.08f, 0.1f, 1f));
-        EnsureSelectedMarkerType();
-        int spare = mapMarkerType >= 0 ? MarkerSpare(mapMarkerType) : 0;
-        Color markerColor = mapMarkerType >= 0 ? MAP_MARKER_COLORS[mapMarkerType] : Color.white;
-        Color markerText = mapMarkerType == 2 || mapMarkerType == 3
-            ? new Color(0.08f, 0.08f, 0.1f, 1f) : Color.white;
-        string markerLabel = mapMarkerType >= 0
-            ? MAP_MARKER_NAMES[mapMarkerType] + "  " + spare : "NO MARKERS";
-        SetMapAction(mapMarkerTypeAction, haveMarkers && mapMarkerMode,
-            markerLabel,
-            new Vector3(actionX, topY - 0.23f * s, cam.position.z + 3.4f), zf,
-            markerColor, markerText);
-
-        bool showSlider = showMap;
-        if (mapZoomTrack != null) mapZoomTrack.enabled = showSlider;
-        if (mapZoomThumb != null) mapZoomThumb.enabled = showSlider;
-        if (!showSlider) { mapZoomHeld = false; return; }
-
-        mapZoomX = cam.position.x + 0.90f * s * asp;
-        float sliderTopOffset = haveMarkers ? 0.38f : 0.24f;
-        mapZoomTopY = topY - sliderTopOffset * s;
-        mapZoomBottomY = bottomY + 0.12f * s;
-        if (mapZoomTopY <= mapZoomBottomY + 0.15f * s)
-            mapZoomTopY = mapZoomBottomY + 0.15f * s;
-        mapZoomHitHalfWidth = 0.075f * s;
-        mapControlLeftX = cam.position.x - s * asp;
-        mapControlRightX = cam.position.x + s * asp;
-        mapControlTopY = topY;
-        mapControlBottomY = bottomY;
-
-        mapZoomTrack.startWidth = mapZoomTrack.endWidth = 0.012f * s;
-        mapZoomTrack.SetPosition(0, new Vector3(mapZoomX, mapZoomBottomY, cam.position.z + 3.5f));
-        mapZoomTrack.SetPosition(1, new Vector3(mapZoomX, mapZoomTopY, cam.position.z + 3.5f));
-
-        float position = MapZoomPosition(mapUserZoom, Mathf.Max(1.5f, cfg.compMapZoomMax));
-        float thumbY = Mathf.Lerp(mapZoomBottomY, mapZoomTopY, position);
-        mapZoomThumb.transform.position = new Vector3(mapZoomX, thumbY, cam.position.z + 3.35f);
-        Vector3 spriteSize = mapZoomThumb.sprite != null ? mapZoomThumb.sprite.bounds.size : Vector3.one;
-        mapZoomThumb.transform.localScale = new Vector3(
-            0.12f * s / Mathf.Max(0.001f, spriteSize.x),
-            0.035f * s / Mathf.Max(0.001f, spriteSize.y), 1f);
+        int column=MapMarkerCell(world), down=mapMarkerDownCell;
+        mapMarkerDownCell=-1;
+        if(column<0) return false;
+        if(column!=down) return true; // Strip owns rejected taps; never switch tabs/place a marker.
+        int seen=0;
+        for(int i=0;i<4;i++) if(MarkerUnlocked(i))
+        {
+            if(seen++==column) { mapMarkerType=i;mapMarkerErase=false;return true; }
+        }
+        mapMarkerErase=true;return true;
     }
-
     static float MapZoomPosition(float zoom, float maxZoom)
     {
         if (zoom <= 1f || maxZoom <= 1f) return 0f;
@@ -273,14 +348,17 @@ public partial class HKDualScreen
 
     bool MapControlTouchTick(int touchCount)
     {
+        bool down = touchCount == 1 && mapControlContacts == 0;
+        mapControlContacts = touchCount;
         if (transport == null || attrCam == null || tab.cur != COMP_MAP || !mapAvailable ||
-            !mapContentVisible || mapNeedsSetup || mapGm == null)
+            !mapContentVisible || mapNeedsSetup || mapGm == null || slideT < 1f)
         {
-            mapZoomHeld = false;
+            mapZoomHeld = false;mapMarkerDownCell=-1;
             return false;
         }
         if (touchCount != 1)
         {
+            if(touchCount>=2) mapMarkerDownCell=-1;
             bool released = mapZoomHeld && touchCount == 0;
             mapZoomHeld = false;
             if (released)
@@ -292,9 +370,13 @@ public partial class HKDualScreen
         }
 
         Vector3 world = TouchToWorld(transport.T0X, transport.T0Y);
+        if(down) mapMarkerDownCell=MapMarkerCell(world);
+        bool inMap=world.x>=mapControlLeftX && world.x<=mapControlRightX && world.y>=mapControlBottomY && world.y<=mapControlTopY;
+        bool wasVisible=MapControlsAlpha()>0;
+        if(inMap) mapControlsTouched=Time.unscaledTime;
         bool over = Mathf.Abs(world.x - mapZoomX) <= mapZoomHitHalfWidth &&
                     world.y >= mapZoomBottomY && world.y <= mapZoomTopY;
-        if (!mapZoomHeld && !over) return false;
+        if (!mapZoomHeld && (!down || !over || !wasVisible)) return false;
         if (!mapZoomHeld)
         {
             mapZoomHeld = true;
@@ -313,7 +395,8 @@ public partial class HKDualScreen
 
     bool HandleMapControlTap(Vector3 world)
     {
-        if (tab.cur != COMP_MAP || !mapAnyAvailable || mapGm == null) return false;
+        if (tab.cur != COMP_MAP || slideT < 1f || !mapAnyAvailable || mapGm == null) return false;
+        if (MapMarkerStripTap(world)) return true;
         if (ValidButton(mapViewAction) && mapViewAction.Root.gameObject.activeSelf &&
             mapViewAction.Hit.Contains(world))
         {
@@ -330,12 +413,6 @@ public partial class HKDualScreen
             mapMarkerAction.Hit.Contains(world))
         {
             SetMapMarkerMode(!mapMarkerMode);
-            return true;
-        }
-        if (mapMarkerMode && ValidButton(mapMarkerTypeAction) &&
-            mapMarkerTypeAction.Root.gameObject.activeSelf && mapMarkerTypeAction.Hit.Contains(world))
-        {
-            CycleMarkerType();
             return true;
         }
         if (!mapMarkerMode) return false;
@@ -366,7 +443,7 @@ public partial class HKDualScreen
     {
         mapMarkerMode = active && AnyMarkerUnlocked();
         if (mapMarkerMode && !mapWorldMode) SetWorldMapMode(true);
-        if (mapMarkerMode) EnsureSelectedMarkerType();
+        if (mapMarkerMode) { EnsureSelectedMarkerType(); mapMarkerErase=false; }
     }
 
     bool AnyMarkerUnlocked()
@@ -381,17 +458,6 @@ public partial class HKDualScreen
         mapMarkerType = -1;
         for (int i = 0; i < 4; i++)
             if (MarkerUnlocked(i)) { mapMarkerType = i; break; }
-    }
-
-    void CycleMarkerType()
-    {
-        EnsureSelectedMarkerType();
-        if (mapMarkerType < 0) return;
-        for (int step = 1; step <= 4; step++)
-        {
-            int candidate = (mapMarkerType + step) % 4;
-            if (MarkerUnlocked(candidate)) { mapMarkerType = candidate; return; }
-        }
     }
 
     static bool MarkerUnlocked(int type)
@@ -488,6 +554,7 @@ public partial class HKDualScreen
             return true;
         }
 
+        if (mapMarkerErase) return true;
         EnsureSelectedMarkerType();
         if (mapMarkerType < 0 || !MarkerUnlocked(mapMarkerType)) return true;
         List<Vector3> selected = MarkerList(pd, mapMarkerType);
@@ -507,6 +574,7 @@ public partial class HKDualScreen
         try
         {
             mapGm.SetupMapMarkers();
+            RequestMapRenderRoles();
             lastPinStamp = PinStamp();
         }
         catch (Exception e) { WarnOnce("map marker refresh", e); }
@@ -514,14 +582,12 @@ public partial class HKDualScreen
 
     void TeardownMapControls()
     {
-        mapViewAction = null;
-        mapResetAction = null;
-        mapMarkerAction = null;
-        mapMarkerTypeAction = null;
-        mapZoomTrack = null;
-        mapZoomThumb = null;
-        mapControlPill = null;
-        mapZoomHeld = false;
-        mapMarkerMode = false;
+        mapViewAction=mapResetAction=mapMarkerAction=null;
+        mapZoomTrack=mapZoomThumb=mapEdgeFade=null;mapControlPill=null;
+        mapMaskLeftT=mapMaskRightT=null;mapMaskLeftR=mapMaskRightR=null;
+        mapZoomHeld=mapMarkerMode=mapMarkerErase=mapControlsShown=false;mapControlContacts=0;mapMarkerDownCell=-1;
+        mapControlsReady=mapStripReady=false;mapControlRetry.Reset();mapStripRetry.Reset();
+        for(int i=0;i<5;i++) mapStripIcons[i]=null;
+        for(int i=0;i<4;i++) { mapStripCounts[i]=null;mapStripInk[i]=default;mapStripSpare[i]=-1; }
     }
 }

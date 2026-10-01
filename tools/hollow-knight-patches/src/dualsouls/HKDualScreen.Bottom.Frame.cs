@@ -103,19 +103,47 @@ public partial class HKDualScreen
         tex.wrapMode = TextureWrapMode.Clamp; tex.filterMode = FilterMode.Bilinear;
         return Own(Sprite.Create(tex, new Rect(0,0,tex.width,tex.height),new Vector2(.5f,.5f),100f));
     }
+    readonly HKLowerLayout.Retry frameRetry = new HKLowerLayout.Retry();
     void BuildFrame()
     {
-        if (frameRoot != null || attrCam == null) return;
-        frameRoot = new GameObject("HKCompFrame"); frameRoot.transform.SetParent(attrCam.transform, false);
-        frameRefOrtho = attrCam.orthographicSize;
-        shellRule = ShellSprite("F_HeaderRule", frameRoot.transform, CreateShellRule(), 30040);
-        var inv = GameManager.instance != null ? GameManager.instance.inventoryFSM : null;
-        var root = inv != null ? inv.transform.root : null;
-        BuildTabRow(root);
-        if (root != null) { BuildAreaName(root); if (noMapT == null) BuildNoMapLabel(root); BuildMapControls(root); }
-        BuildEquipCharmRow();
-        mapMaskTopT = BuildMapMask("HKDS BodyMaskTop"); mapMaskBotT = BuildMapMask("HKDS BodyMaskBottom");
-        mapMaskTopR = mapMaskTopT.GetComponent<Renderer>(); mapMaskBotR = mapMaskBotT.GetComponent<Renderer>();
+        if (frameRoot != null || attrCam == null || !frameRetry.Due(Time.frameCount)) return;
+        int assetsBefore = frameAssets.Count;
+        try
+        {
+            frameRoot = new GameObject("HKCompFrame"); frameRoot.transform.SetParent(attrCam.transform, false);
+            frameRefOrtho = attrCam.orthographicSize;
+            shellRule = ShellSprite("F_HeaderRule", frameRoot.transform, CreateShellRule(), 30040);
+            var inv = GameManager.instance != null ? GameManager.instance.inventoryFSM : null;
+            var root = inv != null ? inv.transform.root : null;
+            BuildTabRow(root);
+            if (root != null) { BuildAreaName(root); if (noMapT == null) BuildNoMapLabel(root); BuildMapControls(root); }
+            BuildEquipCharmRow();
+            mapMaskTopT = BuildMapMask("HKDS BodyMaskTop"); mapMaskBotT = BuildMapMask("HKDS BodyMaskBottom");
+            mapMaskTopR = mapMaskTopT.GetComponent<Renderer>(); mapMaskBotR = mapMaskBotT.GetComponent<Renderer>();
+            BuildMapEdges();
+            frameRetry.Resolved();
+        }
+        catch (Exception e)
+        {
+            // A cold shell failure must not publish its partial root as ready,
+            // or tear down healthy content caches/materials belonging to siblings.
+            DiscardPartialFrame();
+            for (int i = frameAssets.Count - 1; i >= assetsBefore; i--)
+            { if (frameAssets[i] != null) Destroy(frameAssets[i]); frameAssets.RemoveAt(i); }
+            WarnOnce("frame build", e);
+        }
+    }
+    void DiscardPartialFrame()
+    {
+        if (frameRoot != null) Destroy(frameRoot);
+        frameRoot = null; shellRule = tabTL = tabBR = tabGlow = null;
+        for (int i = 0; i < 5; i++) frameTabs[i] = null;
+        iconRetry.Reset();
+        mapMaskTopT = mapMaskBotT = null; mapMaskTopR = mapMaskBotR = null;
+        areaNameT = null; areaNameTmp = null; areaNameR = null; shellTitle = null;
+        noMapT = null; noMapR = null; noMapSymbol = null;
+        equipRowRoot = null; equipCharmSRs.Clear(); lastEquipStamp = int.MinValue;
+        TeardownMapControls();
     }
     void BuildTabRow(Transform root)
     {
@@ -123,8 +151,16 @@ public partial class HKDualScreen
             frameTabs[col] = ShellSprite("F_Tab" + col, frameRoot.transform, null);
         ResolveTabDonors(root);
     }
+    void CopyShellSpriteOrientation(SpriteRenderer target, SpriteRenderer donor)
+    {
+        target.transform.localRotation = donor.transform.localRotation;
+        target.flipX = donor.flipX != (donor.transform.lossyScale.x < 0);
+        target.flipY = donor.flipY != (donor.transform.lossyScale.y < 0);
+    }
     void ResolveTabDonors(Transform root)
     {
+        // Control readiness is independent of icon/header readiness.
+        if (frameRoot != null) BuildMapControls(root);
         if (!iconRetry.Due(Time.frameCount)) return;
         if (root == null)
         {
@@ -157,9 +193,9 @@ public partial class HKDualScreen
             var tl = cursor != null ? FindDeep(cursor,"TL") : null;
             var br = cursor != null ? FindDeep(cursor,"BR") : null;
             var glow = cursor != null ? FindDeep(cursor,"Glow") : null;
-            if (tabTL == null && tl != null) { var donor = tl.GetComponentInChildren<SpriteRenderer>(true); if(donor != null) tabTL = ShellSprite("F_TabTL",frameRoot.transform,donor.sprite,30100); }
-            if (tabBR == null && br != null) { var donor = br.GetComponentInChildren<SpriteRenderer>(true); if(donor != null) { tabBR = ShellSprite("F_TabBR",frameRoot.transform,donor.sprite,30100); tabBR.transform.localRotation = donor.transform.localRotation; } }
-            if (tabGlow == null && glow != null) { var donor = glow.GetComponentInChildren<SpriteRenderer>(true); if(donor != null) tabGlow = ShellSprite("F_TabGlow",frameRoot.transform,donor.sprite,30070); }
+            if (tabTL == null && tl != null) { var donor = tl.GetComponentInChildren<SpriteRenderer>(true); if(donor != null) { tabTL = ShellSprite("F_TabTL",frameRoot.transform,donor.sprite,30100); CopyShellSpriteOrientation(tabTL,donor); } }
+            if (tabBR == null && br != null) { var donor = br.GetComponentInChildren<SpriteRenderer>(true); if(donor != null) { tabBR = ShellSprite("F_TabBR",frameRoot.transform,donor.sprite,30100); CopyShellSpriteOrientation(tabBR,donor); } }
+            if (tabGlow == null && glow != null) { var donor = glow.GetComponentInChildren<SpriteRenderer>(true); if(donor != null) { tabGlow = ShellSprite("F_TabGlow",frameRoot.transform,donor.sprite,30070); CopyShellSpriteOrientation(tabGlow,donor); tabGlow.color=donor.color; } }
             if (areaNameT == null) BuildAreaName(root);
             if (noMapT == null) BuildNoMapLabel(root);
             if (mapViewAction == null) BuildMapControls(root);
@@ -227,6 +263,7 @@ public partial class HKDualScreen
         float hudH=g.HudHeight*unit, tabsH=g.TabHeight*unit;
         if(mapMaskTopT != null){ mapMaskTopR.enabled=true; mapMaskTopT.position=ShellPoint(g.Width/2,g.HudHeight/2,4.5f); mapMaskTopT.localScale=new Vector3(g.Width*unit,hudH,1); }
         if(mapMaskBotT != null){ mapMaskBotR.enabled=true; mapMaskBotT.position=ShellPoint(g.Width/2,g.TabTop+g.TabHeight/2,4.5f); mapMaskBotT.localScale=new Vector3(g.Width*unit,tabsH,1); }
+        PositionMapEdges();
         PositionMapControls(attrCam.orthographicSize,attrCam.aspect,frameInnerTopFrac,frameInnerBotFrac,tab.cur==COMP_MAP);
     }
     void TeardownFrame()
@@ -236,7 +273,7 @@ public partial class HKDualScreen
         if(frameRoot != null){ Destroy(frameRoot); frameRoot=null; }
         DestroyOwnedAssets(); frameEdge.Clear(); frameBase.Clear();
         for(int i=0;i<5;i++){ frameTabs[i]=null; tabIcons[i]=null; }
-        iconRetry.Reset(); tabTL=tabBR=tabGlow=shellRule=null;
+        iconRetry.Reset(); frameRetry.Reset(); tabTL=tabBR=tabGlow=shellRule=null;
         mapMaskTopT=mapMaskBotT=null; mapMaskTopR=mapMaskBotR=null; mapResetT=null; mapResetTmp=null; mapResetR=null; mapResetPillSR=null;
         tabColorCol=-1; tabFleurMoveCol=-1; tabFleurMoveT=1f; frameInnerBotFrac=frameInnerTopFrac=float.NaN;
         selBox=null; sel.Clear(); paneCursor=null; paneCursorFor=null;
@@ -244,7 +281,9 @@ public partial class HKDualScreen
         nativeCharmGrid=null;nativeCharmGridRenderers=null;nativeCharmRetired=null;nativeCharmName=nativeCharmDesc=null;
         nativeCharmNameSource=nativeCharmDescSource=null;nativeCharmGraphics=null;nativeCharmPortrait=null;equippedCharmNative=null;
         areaNameT=null; areaNameTmp=null; areaNameR=null; lastAreaZoneRaw="\u0001"; lastAreaName="\u0001";
-        noMapT=null; noMapTmp=null; noMapR=null; benchPillSR=null; benchPillT=null;
+        noMapT=null; noMapR=null; noMapSymbol=null; noMapReady=false; noMapRetry.Reset();
+        shellTitle=null; shellTitleToast=false; shellToastText=null; headerSortUntil=headerSortFrame=-1;
+        benchPillSR=null; benchPillT=null;
         equipRowRoot=null; equipCharmSRs.Clear(); lastEquipStamp=int.MinValue;
         notchSRs.Clear(); notchTexLit=notchTexEmpty=null; notchSprLitFb=notchSprEmptyFb=null;
         lastNotchTotal=lastNotchUsed=-1; notchSprFull=notchSprEmpty=null; notchScanT=0;
@@ -983,6 +1022,7 @@ public partial class HKDualScreen
     void RetireCompanionCaches()
     {
         StowSlideClone();
+        TeardownMapRenderRoles();
         if (mapClone != null) { Destroy(mapClone); mapClone = null; }
         if (invCloneCache != null) { Destroy(invCloneCache); invCloneCache = null; }
         if (charmCloneCache != null) { Destroy(charmCloneCache); charmCloneCache = null; }
