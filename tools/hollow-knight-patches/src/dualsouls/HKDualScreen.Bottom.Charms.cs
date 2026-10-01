@@ -92,7 +92,7 @@ public partial class HKDualScreen
     // instead of rebuilding the clone (the rebuild path broke the render). Fires only on an equip change.
     void CharmsTick()
     {
-        if (tab.cur == COMP_CHARM && cfg.compCharmsRedesign == 1)
+        if (tab.cur == COMP_CHARM)
         {
             int eh = Charms().hash;   // frame-cached (was a 40x string-concat + GetBool loop EVERY frame on this tab)
             if (eh != lastCharmEquipHash) { lastCharmEquipHash = eh; try { ApplyFit(LayoutCharmsRedesign(paneClone)); } catch { } }   // re-darken IMMEDIATELY on equip/unequip (direct call, not via a flag another block may consume)
@@ -189,138 +189,102 @@ public partial class HKDualScreen
                     sr.enabled = n > 0; sr.color = Color.white;
                 }
             }
-            if (cfg.compCharmsRedesign == 1) { var fr = LayoutCharmsRedesign(pane); if (pane == paneClone) { ApplyFit(fr); paneNeedsFit = true; } }   // re-lay now + once more next tick (fresh TMP bounds can be a frame stale -> the second pass pins the inline pips to the SETTLED name width)
+            if(nativeCharmDesc!=null) nativeCharmDesc.ScrollOffset=0;
+            { var fr=LayoutCharmsRedesign(pane);if(pane==paneClone) { ApplyFit(fr);paneNeedsFit=true; } }
         }
         catch (Exception e) { Dbg($"HKDS charm detail err {e.Message}"); }
     }
 
-    // Charms REDESIGN (user: "detail on top full width, below it full width charms list"). HK's authored pane is
-    // grid-LEFT / detail-RIGHT; here we WORLD-position the objects into: a detail band across the TOP (name with the
-    // cost pips INLINE after it, wrapped description below) and the charm backboards as a full-width grid BELOW,
-    // replicating HK's exact honeycomb via each board's cached NATIVE position. Positions persist (the clone is
-    // pinned static at compRoot); PopulateCharmDetail swaps text in place and re-calls this. All per-item lookups
-    // come from the EnsureCharmRefs cache — no reflection here.
+    PaneGraphics nativeCharmGraphics; NativePaneLabel nativeCharmName,nativeCharmDesc;
+    Component nativeCharmNameSource,nativeCharmDescSource;
+    Transform nativeCharmGrid,equippedCharmNative; Renderer[] nativeCharmGridRenderers;
+    SpriteRenderer nativeCharmPortrait; Renderer[] nativeCharmRetired;
+
+    // Canonical Loadout hierarchy with HK's own honeycomb content. The occupied
+    // grid alone fits the chooser; selection/prose/legacy JSON never move its target.
     FitResult LayoutCharmsRedesign(GameObject pane)
     {
-        FitResult fitOut = default;   // invalid unless the layout completes
-        if (pane == null || compRoot == null || cfg.compCharmsRedesign != 1) return fitOut;
+        if(pane == null || compRoot == null) return default;
         try
         {
-            var pd = PlayerData.instance;
             EnsureCharmRefs(pane);
-            int n = charmBoards.Count;
-            if (n == 0) return fitOut;
-            // GRID: rigid-translate the native cluster into the region below the detail band. Backboards forced
-            // active + their renderer on (EQUIPPED charms: HK hides the slot as "worn"; we show it darkened + tappable).
-            Vector3 c = compRoot.position;
-            float cell = 0f;
-            Vector3 oMin = new Vector3(1e9f, 1e9f, 0f), oMax = new Vector3(-1e9f, -1e9f, 0f);
-            foreach (var b in charmBoards)
+            if(charmBoards.Count == 0) return default;
+            var pd=PlayerData.instance;var cs=Charms();
+            if(nativeCharmGrid == null || nativeCharmGrid.parent != pane.transform)
             {
-                oMin = Vector3.Min(oMin, b.natPos); oMax = Vector3.Max(oMax, b.natPos);
-                if (cell < 0.3f && b.br != null && b.br.bounds.size.x > 0.1f) cell = Mathf.Max(b.br.bounds.size.x, b.br.bounds.size.y);
-            }
-            if (cell < 0.3f) cell = 0.75f;
-            float pitch = cell * 1.18f;                              // detail-band Y offsets are still expressed in pitch units
-            Vector3 oC = (oMin + oMax) * 0.5f;
-            float natW = Mathf.Max(0.1f, oMax.x - oMin.x);
-            float scale = Mathf.Max(0.2f, cfg.compCharmsCellScale);  // uniform cluster scale (1 = HK native size)
-            float gridW = natW * scale;                              // grid width = native span * scale
-            float gridTopY = c.y + cfg.compCharmsGridTopY * pitch;   // native TOP row lands here; grid grows downward
-            var cs = Charms();                                       // frame-cached equip set
-            foreach (var b in charmBoards)
-            {
-                if (!b.t.gameObject.activeSelf) b.t.gameObject.SetActive(true);
-                if (b.br != null) b.br.enabled = true;               // slot bg (DOT when un-obtained) + tap target
-                var bpos = new Vector3(c.x + (b.natPos.x - oC.x) * scale, gridTopY + (b.natPos.y - oMax.y) * scale, c.z);
-                b.t.position = bpos;
-                b.t.localScale = b.s0 * scale;
-                if (b.icon == null) continue;
-                // the charm ICON is a sibling "charmObject": move it onto the slot, scale it, dim ONLY if equipped.
-                bool got = pd == null || b.n <= 0 || CharmGot(pd, b.n);
-                if (got)
+                nativeCharmRetired=pane.GetComponentsInChildren<Renderer>(true);
+                var root=new GameObject("CanonicalCharmChooser");root.transform.SetParent(pane.transform,false);nativeCharmGrid=root.transform;
+                var renderers=new List<Renderer>();
+                foreach(var b in charmBoards)
                 {
-                    if (!b.icon.activeSelf) b.icon.SetActive(true);
-                    var cr = b.icon.GetComponentInChildren<Renderer>(true); if (cr != null) cr.enabled = true;
-                    b.icon.transform.position = new Vector3(bpos.x, bpos.y, bpos.z - 0.02f);
-                    b.icon.transform.localScale = b.iconS0 * Mathf.Max(0.1f, cfg.compCharmsIconScale) * scale;
-                    float dim = cs.Has(b.n) ? Mathf.Clamp01(cfg.compCharmsDimEquip) : 1f;   // EQUIPPED -> darkened
-                    foreach (var sr in b.icon.GetComponentsInChildren<SpriteRenderer>(true)) if (sr != null) sr.color = new Color(dim, dim, dim, 1f);   // reset ALL so unequipped are NEVER left dark
-                }
-                else if (b.icon.activeSelf) b.icon.SetActive(false);   // UN-OBTAINED: icon hidden -> the backboard DOT shows
-            }
-            // DETAIL BAND on top: name (cost pips inline after it), wrapped description below.
-            int detN = lastDetailCharmN;                             // 0 = nothing selected -> band stays empty
-            float detailCy = c.y + cfg.compCharmsDetailBandY * pitch;
-            var tn = charmNameT; var td = charmDescT;
-            // A detached clone can leave HK's detail PANEL parent inactive (no cursor), hiding name/desc even though
-            // their text is set — force the parent chains active...
-            for (Transform p = tn; p != null && p != pane.transform; p = p.parent) if (!p.gameObject.activeSelf) p.gameObject.SetActive(true);
-            for (Transform p = td; p != null && p != pane.transform; p = p.parent) if (!p.gameObject.activeSelf) p.gameObject.SetActive(true);
-            // ...and FORCE THE TEXT RENDERERS ON: HK's idling FSMs can disable them during the clone's settle window,
-            // and nothing else re-enables them — THE "charms tab only renders the icons, name/detail gone" bug.
-            if (charmNameR != null) charmNameR.enabled = true;
-            if (charmDescR != null) charmDescR.enabled = true;
-            SetTmpFont(tn, cfg.compCharmsNameFont);
-            SetTmpFont(td, cfg.compCharmsDescFont);
-            WrapTmp(td, cfg.compCharmsDescWidth);
-            SetTmpLineSpacing(td, cfg.compCharmsLineSpacing);   // tighten the description's line + paragraph gaps
-            float nameLeftX = c.x + gridW * cfg.compCharmsNameX;             // shared LEFT edge for name + description
-            float nameY = detailCy + pitch * cfg.compCharmsNameDY;          // name sits ABOVE the description
-            if (tn != null) { var r = charmNameR; float leftOff = r != null ? tn.position.x - r.bounds.min.x : 0f; float topOff = r != null ? r.bounds.max.y - tn.position.y : 0f; tn.position = new Vector3(nameLeftX + leftOff, nameY - topOff, c.z - 0.1f); }
-            if (td != null) { var r = charmDescR; float leftOff = r != null ? td.position.x - r.bounds.min.x : 0f; float topOff = r != null ? r.bounds.max.y - td.position.y : 0f; td.position = new Vector3(nameLeftX + leftOff, detailCy - topOff, c.z - 0.1f); }
-            // COST pips drawn OURSELVES from HK's real notch sprite (HK's own "Notches" renders invisibly even when
-            // layered — kept off). INLINE: the row starts right AFTER the name's rendered edge, vertically centred on
-            // the name line (user: "cost notches right after charm name"). Zero pips when nothing is selected.
-            {
-                if (hkNotchRs != null) foreach (var rr in hkNotchRs) if (rr != null && rr.enabled) rr.enabled = false;
-                int cost = 0;
-                if (detN > 0) { cost = 1; try { int cc = pd != null ? pd.GetInt("charmCost_" + detN) : 1; if (cc > 0) cost = cc; } catch { } }
-                if (notchSprite == null) foreach (var srr in pane.GetComponentsInChildren<SpriteRenderer>(true)) { if (srr != null && srr.gameObject.name == "Sprite Full" && srr.sprite != null) { notchSprite = srr.sprite; break; } }
-                if (notchSprite != null && cost > 0 && charmNameR != null)
-                {
-                    if (costPipRoot == null) { var g = new GameObject("HKDS CostPips"); g.transform.SetParent(pane.transform, false); costPipRoot = g.transform; }
-                    while (costPipRoot.childCount < 6) { var pg = new GameObject("pip"); pg.transform.SetParent(costPipRoot, false); pg.AddComponent<SpriteRenderer>(); }
-                    float pw = 0.5f * Mathf.Max(0.1f, cfg.compCharmsNotchScale);   // pip world width
-                    float gap = pw * 1.2f, sw = Mathf.Max(0.01f, notchSprite.bounds.size.x);
-                    // Anchor to the GLYPHS, not the renderer bounds: HK's Text Name TMP mesh bounds span the whole
-                    // authored text RECT (much taller than the visible line), so bounds.center.y sat the pips down in
-                    // the description. TMP.textBounds is tight to the drawn glyphs -> its right edge + line centre.
-                    float pipX0, pipY;
-                    Vector3 gMin, gMax;
-                    if (TryTmpGlyphBoundsWorld(tn, out gMin, out gMax))
-                    { pipX0 = gMax.x + pw * 0.9f; pipY = (gMin.y + gMax.y) * 0.5f + cfg.compCharmsNotchDY * pitch; }
-                    else
-                    { var nb = charmNameR.bounds; pipX0 = nb.max.x + pw * 0.9f; pipY = nameY - pw * 0.6f + cfg.compCharmsNotchDY * pitch; }   // fallback: just under the name TOP (which we placed at nameY)
-                    for (int i = 0; i < costPipRoot.childCount; i++)
+                    b.t.SetParent(nativeCharmGrid,true);
+                    renderers.AddRange(b.t.GetComponentsInChildren<Renderer>(true));
+                    if(b.icon != null)
                     {
-                        var pt = costPipRoot.GetChild(i); var sr = pt.GetComponent<SpriteRenderer>();
-                        bool show = i < cost; sr.enabled = show; pt.gameObject.SetActive(show); if (!show) continue;
-                        sr.sprite = notchSprite; sr.color = Color.white; sr.sortingOrder = 60;
-                        pt.gameObject.layer = ATTR_LAYER;
-                        float ps = pw / sw; pt.localScale = new Vector3(ps, ps, 1f);
-                        pt.position = new Vector3(pipX0 + i * gap + pw * 0.5f, pipY, c.z - 0.2f);   // left-aligned row, growing right
-                        float dy = pipY - sr.bounds.center.y; pt.position += new Vector3(0f, dy, 0f);   // pip's VISUAL centre on the name line (notch sprite pivot is off-centre)
+                        b.icon.transform.position=b.t.position-new Vector3(0,0,.02f);
+                        b.icon.transform.SetParent(nativeCharmGrid,true);renderers.AddRange(b.icon.GetComponentsInChildren<Renderer>(true));
                     }
-                    if (cfg.debug == 1) Dbg($"HKDS costpips inline cn={detN} cost={cost} pipX0={pipX0:F2} pipY={pipY:F2}");
                 }
-                else if (costPipRoot != null)   // no selection (or no sprite yet) -> hide every pip
-                    for (int i = 0; i < costPipRoot.childCount; i++) costPipRoot.GetChild(i).gameObject.SetActive(false);
+                nativeCharmGridRenderers=renderers.ToArray();
+                nativeCharmNameSource=TmpOn(charmNameT);nativeCharmDescSource=TmpOn(charmDescT);
+                nativeCharmName=CopyPaneLabel(charmNameT,pane.transform,"CanonicalCharmName",37.44f);
+                nativeCharmDesc=CopyPaneLabel(charmDescT,pane.transform,"CanonicalCharmDescription",28.08f);
+                nativeCharmGraphics=BuildNativePaneGraphics(pane);
+                var portrait=FindDeep(pane.transform,"Detail Sprite");nativeCharmPortrait=portrait != null ? portrait.GetComponent<SpriteRenderer>() : null;
+                equippedCharmNative=FindDeep(pane.transform,"Equipped Charms");
+                notchSprite=null;
+                foreach(var sr in pane.GetComponentsInChildren<SpriteRenderer>(true))
+                    if(sr != null && sr.gameObject.name=="Sprite Full" && sr.sprite != null) { notchSprite=sr.sprite;break; }
             }
-            var eqc = FindDeep(pane.transform, "Equipped Charms");   // HK's in-pane equipped row -> hidden (top-right compEquipRow covers it)
-            if (eqc != null && eqc.gameObject.activeSelf) eqc.gameObject.SetActive(false);
-            // FIXED framing (decoupled): centre + zoom depend ONLY on compRoot, the grid WIDTH, and the config —
-            // moving the name/desc/grid via config does not re-centre the whole view. Grid fills ~compCharmsGridPct.
-            float aspect = attrCam != null ? attrCam.aspect : (float)BOTTOM_W / BOTTOM_H;
-            fitOut = new FitResult
+            if(nativeCharmName == null) nativeCharmName=CopyPaneLabel(charmNameT,pane.transform,"CanonicalCharmName",37.44f);
+            if(nativeCharmDesc == null) nativeCharmDesc=CopyPaneLabel(charmDescT,pane.transform,"CanonicalCharmDescription",28.08f);
+            if(nativeCharmGraphics == null) nativeCharmGraphics=BuildNativePaneGraphics(pane);
+            if(nativeCharmName == null || nativeCharmDesc == null || nativeCharmGraphics == null) return default;
+            foreach(var b in charmBoards)
             {
-                center = new Vector3(c.x, c.y + cfg.compCharmsCenterY * pitch, c.z),
-                ortho = ((gridW * 0.5f) / aspect / Mathf.Clamp(cfg.compCharmsGridPct, 0.3f, 1f)) * 1.06f / Mathf.Max(0.3f, cfg.compCharmsZoom),
-                valid = true,
-            };
-            if (cfg.debug == 1) Dbg($"HKDS charms redesign n={n} natW={natW:F2} scale={scale:F2} fit={fitOut.ortho:F2} detN={detN}");
+                b.t.gameObject.SetActive(true);if(b.br != null) b.br.enabled=true;
+                if(b.icon == null) continue;
+                bool got=pd == null || b.n<=0 || CharmGot(pd,b.n);b.icon.SetActive(got);
+                if(got)
+                {
+                    float dim=cs.Has(b.n) ? Mathf.Clamp01(cfg.compCharmsDimEquip) : 1;
+                    // Cached renderer array is shared by the whole grid; only equip-change/populate reaches here.
+                    foreach(var sr in nativeCharmGridRenderers)
+                        if(sr is SpriteRenderer sprite && (sprite.transform==b.icon.transform || sprite.transform.IsChildOf(b.icon.transform)))
+                        { sprite.enabled=true;sprite.color=new Color(dim,dim,dim,1); }
+                }
+            }
+            var g=LowerGeometry();var p=HKLowerLayout.NativeColumns(g,true);
+            // The chooser shares the exact padded column bounds with its masks.
+            FitOccupiedNative(nativeCharmGrid,nativeCharmGridRenderers,new Rect(p.ChooserX,p.Top,p.ChooserWidth,p.Height));
+            if(nativeCharmRetired!=null) foreach(var r in nativeCharmRetired)
+                if(r!=null && r!=nativeCharmPortrait && !r.transform.IsChildOf(nativeCharmGrid) && !IsUnderNamed(r.transform,"Cursor")) r.enabled=false;
+            if(charmNameR != null) charmNameR.enabled=false;if(charmDescR != null) charmDescR.enabled=false;
+            if(hkNotchRs != null) foreach(var r in hkNotchRs) if(r != null) r.enabled=false;
+            if(equippedCharmNative != null) equippedCharmNative.gameObject.SetActive(false);
+            PositionNativePaneGraphics(nativeCharmGraphics,true);
+            LayoutNativeDetail(nativeCharmName,nativeCharmDesc,nativeCharmNameSource,nativeCharmDescSource,true);
+            if(nativeCharmPortrait != null)
+            {
+                for(var ancestor=nativeCharmPortrait.transform.parent;ancestor!=null && ancestor!=pane.transform;ancestor=ancestor.parent)
+                    if(!ancestor.gameObject.activeSelf) ancestor.gameObject.SetActive(true);
+                nativeCharmPortrait.enabled=lastDetailCharmN>0 && nativeCharmPortrait.sprite != null;
+                FitSprite(nativeCharmPortrait,PanePixel(p.SubjectX+p.SubjectWidth/2,g.BodyCenterY),p.SubjectWidth*.88f,p.Height*.88f);
+            }
+            int cost=lastDetailCharmN>0 ? Mathf.Max(0,pd != null ? pd.GetInt("charmCost_"+lastDetailCharmN) : 1) : 0;
+            if(notchSprite != null && cost>0 && costPipRoot == null)
+            {
+                var root=new GameObject("HKDS CostPips");root.transform.SetParent(pane.transform,false);costPipRoot=root.transform;
+                for(int i=0;i<6;i++) ShellSprite("pip",costPipRoot,notchSprite,100);
+            }
+            if(costPipRoot != null)
+                for(int i=0;i<costPipRoot.childCount;i++)
+                {
+                    var t=costPipRoot.GetChild(i);t.gameObject.SetActive(i<cost);
+                    if(i<cost) FitSprite(t.GetComponent<SpriteRenderer>(),PanePixel(p.DetailX+12+i*26,p.Top+76),20,20);
+                }
+            return new FitResult { center=compRoot.position,ortho=BOTTOM_H/2f,valid=true };
         }
-        catch (Exception e) { Dbg($"HKDS charms redesign err {e.Message}"); }
-        return fitOut;
+        catch(Exception e) { Dbg("HKDS canonical charms: "+e.Message);return default; }
     }
 }

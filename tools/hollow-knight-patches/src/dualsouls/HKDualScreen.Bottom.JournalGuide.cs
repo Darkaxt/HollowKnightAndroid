@@ -151,7 +151,7 @@ public partial class HKDualScreen
         {
             go=Instantiate(donor.gameObject,staging.transform); go.SetActive(false); go.name=name;
             foreach(var driver in go.GetComponentsInChildren<MonoBehaviour>(true))
-                if(driver != null && !IsTextMeshProGraphic(driver)) DestroyImmediate(driver);
+                if(driver != null && !IsTextMeshProGraphic(driver) && !(driver is TMProOld.TextContainer)) DestroyImmediate(driver);
             SanitizeDetachedTmpClone(go); SetLayerRecursive(go.transform,ATTR_LAYER);
             go.transform.SetParent(parent,false);
             go.transform.localPosition=Vector3.zero; go.transform.localRotation=Quaternion.identity; go.transform.localScale=Vector3.one;

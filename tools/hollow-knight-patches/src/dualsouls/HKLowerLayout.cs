@@ -28,6 +28,20 @@ public static class HKLowerLayout
             BodyHeight = height - hud - tabs, TabHeight = tabs, TabTop = height - tabs,
             BodyCenterY = (hud + height - tabs) / 2, CellWidth = width / 5, IconMax = 88 * scale };
     }
+    public struct NativePaneColumns
+    {
+        public float SubjectX,SubjectWidth,ChooserX,ChooserWidth,DetailX,DetailWidth;
+        public float LeftGutter,RightGutter,Top,Height,Cell,Gap;
+    }
+    public static NativePaneColumns NativeColumns(Geometry g,bool charms)
+    {
+        float sx=g.Width/1240f, width=(charms ? 350 : 400)*sx, gap=10*sx;
+        return new NativePaneColumns { SubjectX=20*sx,SubjectWidth=(charms ? 470 : 420)*sx,
+            ChooserX=(charms ? 520 : 470)*sx,ChooserWidth=width,DetailX=900*sx,DetailWidth=320*sx,
+            LeftGutter=(charms ? 505 : 455)*sx,RightGutter=885*sx,
+            Top=g.HudHeight+(charms ? 16 : 20),Height=Math.Max(1,g.BodyHeight-(charms ? 36 : 40)),
+            Cell=(width-2*gap)/3,Gap=gap };
+    }
     public sealed class TabGesture
     {
         int origin = -1;

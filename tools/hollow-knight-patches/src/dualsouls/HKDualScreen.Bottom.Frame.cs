@@ -84,10 +84,15 @@ public partial class HKDualScreen
     static void FitSprite(SpriteRenderer sr, Vector3 center, float maxWidth, float maxHeight)
     {
         if (sr == null || sr.sprite == null) return;
-        var b = sr.sprite.bounds;
-        float scale = Mathf.Min(maxWidth / Mathf.Max(.001f, b.size.x), maxHeight / Mathf.Max(.001f, b.size.y));
-        sr.transform.localScale = new Vector3(scale, scale, 1f);
-        sr.transform.position = center - new Vector3(b.center.x * scale, b.center.y * scale, 0f);
+        var parent=sr.transform.parent != null ? sr.transform.parent.lossyScale : Vector3.one;
+        sr.transform.localScale = new Vector3(1f/Mathf.Max(.001f,Mathf.Abs(parent.x)),1f/Mathf.Max(.001f,Mathf.Abs(parent.y)),1f);
+        // Measure after native rotation/reflection, then center the rendered ink,
+        // not the sprite's untransformed pivot offset.
+        var b=sr.bounds;
+        float scale=Mathf.Min(maxWidth/Mathf.Max(.001f,b.size.x),maxHeight/Mathf.Max(.001f,b.size.y));
+        var local=sr.transform.localScale;
+        sr.transform.localScale=new Vector3(local.x*scale,local.y*scale,local.z);
+        sr.transform.position += center-sr.bounds.center;
     }
     // Commissioned production SS divider, copied verbatim; not game/placeholder art.
     const string ShellRulePng = "iVBORw0KGgoAAAANSUhEUgAABEwAAAACCAYAAABCHEm1AAAACXBIWXMAAAsTAAALEwEAmpwYAAABoklEQVRoge1Yy47DMAjEUbX//717iPfQWoumMICTw1bLSFYTmAH8UGN7zDkf8sSUX+hnSdh3MMj7IDaPMxxb1occyyYicjic1Y4gxxFoGV/UuxUniu3ZMrrDiSXK5sWJfKwGVttVf1aLc5Jpei5R760hlgd9Gb0QnQQ2jIF8pre4FU6kY1zUMD3apjzn5uvVGo1Go9H4b/h+tVPev5GIafjYGQJ9lp5xkV/hYEyWw4vj2ay4FsfTISfSn6RO9GXa0kda5r+iZf4z4c/4xMkVxY841THRsbyaMnPJ1kBU14qNmszas353fGK8WxzGv4r0GeLhEHewOuAlZ3zUzEKcTP41Yd7BSQ9+NS/iFPvSxAJOutYOg+P1DZ+rc1Adb6yJ1Zrtxydgtw94AZEdbytfRnvXWHtxcAO1kwPXRXV8LP1Ofnz/1LXZaDQajcZd0PsW/M5WDyy4l4j0Op8+cGX1UUys6a4DmHcgZNz1jP3MaKPLLKav5PuLwD7odeH5dvu9o/MuKaLYen1aFx4esP8n4WbB8mZq2l1jqLH+BypxbtnX/wDHRTzww1ZPywAAAABJRU5ErkJggg==";
@@ -236,6 +241,8 @@ public partial class HKDualScreen
         tabColorCol=-1; tabFleurMoveCol=-1; tabFleurMoveT=1f; frameInnerBotFrac=frameInnerTopFrac=float.NaN;
         selBox=null; sel.Clear(); paneCursor=null; paneCursorFor=null;
         costPipRoot=null; charmBoardsFor=null;
+        nativeCharmGrid=null;nativeCharmGridRenderers=null;nativeCharmRetired=null;nativeCharmName=nativeCharmDesc=null;
+        nativeCharmNameSource=nativeCharmDescSource=null;nativeCharmGraphics=null;nativeCharmPortrait=null;equippedCharmNative=null;
         areaNameT=null; areaNameTmp=null; areaNameR=null; lastAreaZoneRaw="\u0001"; lastAreaName="\u0001";
         noMapT=null; noMapTmp=null; noMapR=null; benchPillSR=null; benchPillT=null;
         equipRowRoot=null; equipCharmSRs.Clear(); lastEquipStamp=int.MinValue;
@@ -716,14 +723,25 @@ public partial class HKDualScreen
             PaneSettleTick(paneClone, RunFor(tab.cur == COMP_CHARM), tab.cur == COMP_INV, true);   // B4: open-kicks + settle/freeze window (INV finalize; charms detail re-assert)
             CharmsTick();       // B7: equip/unequip watch -> re-darken the charm grid in place
             if (tab.cur == COMP_INV && invRun.finalized && (Time.frameCount % 30) == 0) RefreshInvCounters(paneClone);   // B4: geo/relic/ore/egg/key numbers stay live (~2x/s)
-            if (tab.cur == COMP_INV && invRun.finalized && equipGridDirty) ReassertEquipment(paneClone);
+            if (tab.cur == COMP_INV && invRun.finalized && equipGridDirty) { ReassertEquipment(paneClone);paneNeedsFit=true; }
+            if(RunFor(tab.cur==COMP_CHARM).finalized && Time.frameCount%30==0)
+            {
+                var refs=Refs(paneClone);int language=(int)TeamCherry.Localization.Language.CurrentLanguage();
+                if(refs.width!=BOTTOM_W || refs.height!=BOTTOM_H || refs.language!=language)
+                {
+                    if(refs.language!=language && sel.item!=null) RefreshSelectedDetail(paneClone);
+                    paneNeedsFit=true;refs.width=BOTTOM_W;refs.height=BOTTOM_H;refs.language=language;
+                }
+                if(Time.frameCount%120==0 && ((tab.cur==COMP_INV && !refs.canonicalReady) ||
+                    (tab.cur==COMP_CHARM && (nativeCharmName==null || nativeCharmDesc==null || nativeCharmGraphics==null)))) paneNeedsFit=true;
+            }
             compFrameTick++;
             if (paneNeedsFit)
             {
                 paneNeedsFit = false;
-                if (tab.cur == COMP_CHARM && cfg.compCharmsRedesign == 1)
-                    ApplyFit(LayoutCharmsRedesign(paneClone));   // re-lays detail-top/grid-below AND returns the fit
-                else { Vector3 c; float s; if (TryPaneBounds(paneClone, out c, out s, tab.cur == COMP_CHARM)) fit = new FitResult { center = c, ortho = s, valid = true }; }
+                if (tab.cur == COMP_CHARM)
+                    ApplyFit(LayoutCharmsRedesign(paneClone));
+                else if(invRun.finalized) { LayoutNativeInventory(paneClone);fit=new FitResult { center=compRoot.position,ortho=BOTTOM_H/2f,valid=true }; }
             }
             if (fit.valid) frameCenter = fit.center;
         }
@@ -744,6 +762,15 @@ public partial class HKDualScreen
         attrCam.orthographic = true;
         attrCam.rect = new Rect(0f,0f,1f,1f);
         attrCam.aspect = (float)BOTTOM_W / Mathf.Max(1,BOTTOM_H);
+        if(tab.cur == COMP_INV || tab.cur == COMP_CHARM)
+        {
+            // Native occupied contents are placed in measured pixel regions;
+            // legacy camera/grid nudges and whole-pane zoom are not fit authority.
+            attrCam.orthographicSize=BOTTOM_H/2f;
+            attrCam.transform.position=compRoot.position-new Vector3(0,0,10);
+            attrCam.transform.rotation=Quaternion.identity;
+            return;
+        }
         if(tab.cur == COMP_JOURNAL || tab.cur == COMP_GUIDE)
         {
             attrCam.orthographicSize = BOTTOM_H / 2f;

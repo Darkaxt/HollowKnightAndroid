@@ -29,7 +29,13 @@ public partial class HKDualScreen
         public Transform eq; public Transform[] eqItems; public Transform t1, t2, t4;   // Equipment root + EQUIP_ORDER-aligned items + trinket anchors
         public MonoBehaviour[] amountMbs; public Component[][] amountTmps; public Renderer[][] amountRs;   // DisplayItemAmount + their TMPs/renderers
         public string[] amountKeys;                                              // each DisplayItemAmount's PlayerData int name (its `playerDataInt`), for live counter refresh
+        public Transform subject; public Renderer[] subjectRenderers;
+        public readonly List<NativeInventorySlot> slots = new List<NativeInventorySlot>();
+        public NativePaneLabel nameLabel,descLabel; public Component sourceName,sourceDesc;
+        public Renderer[] sourceDetail; public PaneGraphics graphics;
+        public bool canonicalReady; public int scrollRow,language=-1; public float width,height;
     }
+    sealed class NativeInventorySlot { public Transform Root; public Renderer[] Renderers; }
     PaneRefs refsInv, refsCharm;   // one slot per cached clone, so a tab switch doesn't re-scan (Unity's == is false for a destroyed pane -> rebuilt)
     readonly List<Transform> _eqOrder = new List<Transform>(24);   // reused scratch for ReassertEquipment (no per-call alloc)
     PaneRefs Refs(GameObject pane, bool rebuild = false)
@@ -298,6 +304,7 @@ public partial class HKDualScreen
             SetTmpTextByName(pane.transform, "Text Desc", "");
             SetTmpTextByName(pane.transform, "Text Desc Low", "");
             HideControlPrompt(pane);
+            if(pane==invCloneCache && invRun.finalized) LayoutNativeInventory(pane);
         }
         catch (Exception e) { Dbg($"HKDS clear-detail err {e.Message}"); }
     }
@@ -460,6 +467,121 @@ public partial class HKDualScreen
             }
         }
         return true;
+    }
+
+    // Fit only admitted occupied renderers into a fixed column. Empty/selected
+    // detail, cursor, divider and inactive authored containers never enter this fit.
+    bool FitOccupiedNative(Transform root,Renderer[] renderers,Rect target)
+    {
+        if(root == null || renderers == null) return false;
+        Bounds bounds=default; bool have=false;
+        foreach(var r in renderers)
+        {
+            if(r == null || !r.enabled || !r.gameObject.activeInHierarchy) continue;
+            var b=r.bounds;
+            if(b.size.x<=.001f || b.size.y<=.001f || float.IsNaN(b.size.x) || float.IsInfinity(b.size.x)) continue;
+            if(!have) { bounds=b;have=true; } else bounds.Encapsulate(b);
+        }
+        if(!have) return false;
+        float scale=Mathf.Min(target.width/Mathf.Max(.001f,bounds.size.x),target.height/Mathf.Max(.001f,bounds.size.y));
+        Vector3 offset=bounds.center-root.position;
+        root.localScale=new Vector3(root.localScale.x*scale,root.localScale.y*scale,root.localScale.z);
+        root.position=PanePixel(target.x+target.width/2,target.y+target.height/2,root.position.z-compRoot.position.z)-offset*scale;
+        return true;
+    }
+    PaneGraphics BuildNativePaneGraphics(GameObject pane)
+    {
+        BuildFrame();
+        if(shellRule == null || shellRule.sprite == null || mapMaskTopT == null || mapMaskTopR == null) return null;
+        var v=new PaneGraphics();
+        v.RuleLeft=ShellSprite("NativeGutterLeft",pane.transform,shellRule.sprite,110);
+        v.RuleRight=ShellSprite("NativeGutterRight",pane.transform,shellRule.sprite,110);
+        // Native pane cursor continues to own selected art; these are only clips/rules.
+        v.Top=CopyPaneMask(pane.transform,"NativeClipTop");v.Bottom=CopyPaneMask(pane.transform,"NativeClipBottom");
+        v.Left=CopyPaneMask(pane.transform,"NativeClipLeft");v.Right=CopyPaneMask(pane.transform,"NativeClipRight");
+        return v;
+    }
+    void PositionNativePaneGraphics(PaneGraphics v,bool charms)
+    {
+        if(v == null) return;
+        var g=LowerGeometry();var p=HKLowerLayout.NativeColumns(g,charms);
+        PositionPaneRule(v.RuleLeft,p.LeftGutter,p.Top,p.Height);PositionPaneRule(v.RuleRight,p.RightGutter,p.Top,p.Height);
+        PositionPaneMask(v.Top,new Rect(0,0,g.Width,p.Top));
+        PositionPaneMask(v.Bottom,new Rect(0,p.Top+p.Height,g.Width,g.Height-p.Top-p.Height));
+        PositionPaneMask(v.Left,new Rect(0,p.Top,p.SubjectX,p.Height));
+        PositionPaneMask(v.Right,new Rect(p.DetailX+p.DetailWidth,p.Top,g.Width-p.DetailX-p.DetailWidth,p.Height));
+    }
+    bool EnsureNativeInventory(GameObject pane,PaneRefs r)
+    {
+        if(r.canonicalReady) return true;
+        r.subject=FindDeep(pane.transform,"Inv_Items");
+        r.subjectRenderers=r.subject != null ? r.subject.GetComponentsInChildren<Renderer>(true) : null;
+        if(r.eq != null)
+        {
+            r.slots.Clear();
+            foreach(var item in r.eqItems) if(item != null) r.slots.Add(new NativeInventorySlot { Root=item,Renderers=item.GetComponentsInChildren<Renderer>(true) });
+            foreach(var name in new[]{"Trinket1","Trinket2","Trinket3","Trinket4"})
+            { var item=r.eq.Find(name);if(item != null) r.slots.Add(new NativeInventorySlot { Root=item,Renderers=item.GetComponentsInChildren<Renderer>(true) }); }
+        }
+        var nameT=FindDeep(pane.transform,"Text Name");var descT=FindDeep(pane.transform,"Text Desc");
+        r.sourceName=TmpOn(nameT);r.sourceDesc=TmpOn(descT);
+        if(r.nameLabel == null) r.nameLabel=CopyPaneLabel(nameT,pane.transform,"CanonicalInventoryName",37.44f);
+        if(r.descLabel == null) r.descLabel=CopyPaneLabel(descT,pane.transform,"CanonicalInventoryDescription",28.08f);
+        if(r.graphics == null) r.graphics=BuildNativePaneGraphics(pane);
+        if(r.nameLabel == null || r.descLabel == null || r.graphics == null || r.subject == null) return false;
+        var hidden=new List<Renderer>();
+        foreach(var name in new[]{"Text Name","Text Desc","Text Desc Low","Text Completion","Percentage","Divider L","Divider R"})
+        { var t=FindDeep(pane.transform,name);if(t != null) hidden.AddRange(t.GetComponentsInChildren<Renderer>(true)); }
+        r.sourceDetail=hidden.ToArray();r.canonicalReady=true;return true;
+    }
+    void LayoutNativeInventory(GameObject pane)
+    {
+        if(pane == null || !invRun.finalized) return;
+        var r=Refs(pane);if(!EnsureNativeInventory(pane,r)) return;
+        var g=LowerGeometry();var p=HKLowerLayout.NativeColumns(g,false);
+        foreach(var hidden in r.sourceDetail) if(hidden != null) hidden.enabled=false;
+        FitOccupiedNative(r.subject,r.subjectRenderers,new Rect(p.SubjectX,p.Top,p.SubjectWidth,p.Height));
+        int count=0;foreach(var slot in r.slots) if(slot.Root.gameObject.activeSelf) count++;
+        int rows=Mathf.Max(1,Mathf.FloorToInt((p.Height+p.Gap)/(p.Cell+p.Gap)));
+        r.scrollRow=Mathf.Clamp(r.scrollRow,0,Mathf.Max(0,(count+2)/3-rows));
+        int index=0;
+        foreach(var slot in r.slots)
+        {
+            if(!slot.Root.gameObject.activeSelf) continue;
+            int row=index/3-r.scrollRow,col=index%3;index++;
+            bool shown=row>=0 && row<rows;
+            foreach(var renderer in slot.Renderers) if(renderer != null) renderer.enabled=shown;
+            if(shown) FitOccupiedNative(slot.Root,slot.Renderers,new Rect(p.ChooserX+col*(p.Cell+p.Gap)+p.Cell*.06f,
+                p.Top+row*(p.Cell+p.Gap)+p.Cell*.06f,p.Cell*.88f,p.Cell*.88f));
+        }
+        PositionNativePaneGraphics(r.graphics,false);LayoutNativeDetail(r.nameLabel,r.descLabel,r.sourceName,r.sourceDesc,false);
+        r.width=BOTTOM_W;r.height=BOTTOM_H;r.language=(int)TeamCherry.Localization.Language.CurrentLanguage();
+    }
+    void ScrollNativePane(float delta)
+    {
+        if(Mathf.Abs(delta)<.04f) return;
+        if(tab.cur==COMP_INV)
+        {
+            var r=Refs(paneClone);
+            if(supplementaryDragRegion==1 && r.descLabel!=null)
+            { r.descLabel.ScrollOffset=Mathf.Clamp(r.descLabel.ScrollOffset-delta*BOTTOM_H,0,r.descLabel.ScrollMax);LayoutNativeDetail(r.nameLabel,r.descLabel,r.sourceName,r.sourceDesc,false); }
+            else if(supplementaryDragRegion==0) { r.scrollRow+=delta<0 ? 1 : -1;LayoutNativeInventory(paneClone); }
+        }
+        else if(tab.cur==COMP_CHARM && supplementaryDragRegion==1 && nativeCharmDesc!=null)
+        {
+            nativeCharmDesc.ScrollOffset=Mathf.Clamp(nativeCharmDesc.ScrollOffset-delta*BOTTOM_H,0,nativeCharmDesc.ScrollMax);
+            LayoutNativeDetail(nativeCharmName,nativeCharmDesc,nativeCharmNameSource,nativeCharmDescSource,true);
+        }
+        supplementaryDragY=transport.T0Y;
+    }
+    void LayoutNativeDetail(NativePaneLabel name,NativePaneLabel desc,Component sourceName,Component sourceDesc,bool charms)
+    {
+        var p=HKLowerLayout.NativeColumns(LowerGeometry(),charms);
+        string n=sourceName != null ? TmpProp(sourceName,"text")?.GetValue(sourceName,null) as string : "";
+        string d=sourceDesc != null ? TmpProp(sourceDesc,"text")?.GetValue(sourceDesc,null) as string : "";
+        SetPaneLabel(name,n,new Rect(p.DetailX,p.Top,p.DetailWidth,56),ShellInk);
+        // A dedicated notch/control row follows the name; prose never inherits an old full-width band.
+        SetPaneLabel(desc,d,new Rect(p.DetailX,p.Top+100,p.DetailWidth,Mathf.Max(1,p.Height-100)),ShellInk);
     }
 
     // [B4] INV clone init. Soul VESSEL (InvVesselFragments): its self/piece1/piece2/full sprite renderers are left

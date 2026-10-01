@@ -19,11 +19,11 @@ public sealed class HollowKnightLowerLayoutContractsTests
         lower.cfg.compCharmOffY = y;
         lower.fit = new() { valid = true, ortho = 10 };
         lower.FramePane(new(120, 240, 0));
-        Assert.Equal(120, lower.attrCam.transform.position.x);
-        // Camera centers the pane in the canonical body, not the whole display.
-        float bodyCenter = HKLowerLayout.Measure(lower.BOTTOM_W,lower.BOTTOM_H).BodyCenterY;
-        float expected = 240 - (1 - 2 * bodyCenter / lower.BOTTOM_H) * lower.attrCam.orthographicSize;
-        Assert.Equal(expected, lower.attrCam.transform.position.y);
+        Assert.Equal(lower.compRoot.position.x, lower.attrCam.transform.position.x);
+        Assert.Equal(lower.compRoot.position.y, lower.attrCam.transform.position.y);
+        Assert.Equal(lower.BOTTOM_H/2f,lower.attrCam.orthographicSize);
+        // Occupied native contents now own their fixed measured body placement;
+        // neither selected text nor any legacy camera fit is camera authority.
     }
 
     [Fact]

@@ -1168,8 +1168,12 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("(col+.5f)*g.CellWidth", position)
         self.assertIn("g.IconMax*unit,g.IconMax*unit", position)
         self.assertIn("Mathf.Min(maxWidth", fit)
-        self.assertIn("b.center.x * scale", fit)
-        self.assertIn("b.center.y * scale", fit)
+        self.assertIn("var b=sr.bounds", fit)
+        self.assertIn("center-sr.bounds.center", fit)
+        self.assertLess(fit.index("var b=sr.bounds"), fit.index("Mathf.Min(maxWidth"))
+        self.assertLess(fit.index("local.x*scale"), fit.index("center-sr.bounds.center"))
+        self.assertNotIn("b.center.x * scale", fit)
+        self.assertNotIn("b.center.y * scale", fit)
 
     def test_tmp_glyph_bounds_world_encapsulates_every_rotated_corner(self):
         charms = strip_csharp_comments(

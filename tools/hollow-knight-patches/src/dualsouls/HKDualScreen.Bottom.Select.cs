@@ -14,7 +14,13 @@ public partial class HKDualScreen
     // tap-to-select-item state (Inventory/Charms): the picked item's identity + its transform (for the highlight box)
     // The tapped-item selection (Inventory/Charms): the item transform (for the cursor), its kind (0 inv / 1 charm /
     // 2 spell / 4 equip / 5 geo -> drives the detail populate + control-prompt line), the charm number, the INV key.
-    struct Selection { public Transform item; public int kind, charmN; public string invKey; public void Clear() { item = null; kind = -1; charmN = 0; invKey = null; } }
+    struct Selection
+    {
+        public Transform item,graphicsFor; public GameObject graphicsPane;
+        public Renderer direct,icon; public Renderer[] children;
+        public int kind,charmN; public string invKey;
+        public void Clear() { item=graphicsFor=null;graphicsPane=null;direct=icon=null;children=null;kind=-1;charmN=0;invKey=null; }
+    }
     Selection sel = new Selection { kind = -1 };
     LineRenderer selBox;
 
@@ -35,6 +41,7 @@ public partial class HKDualScreen
     Transform paneCursor; GameObject paneCursorFor;   // HK's own selection cursor in the current pane clone
 
     Transform selCurTL, selCurTR, selCurBL, selCurBR, selCurFor;   // cached cursor corners + the item they were wired for (event-gated setup; per-frame only repositions)
+    SpriteRenderer nativeSelectionTL,nativeSelectionBR,nativeSelectionGlow;
 
     const float SelectionMoveSeconds = 0.15f;   // Hollow Knight's InventoryCursor.moveTime
     Transform selectionMoveTarget;
@@ -71,11 +78,51 @@ public partial class HKDualScreen
         selectionMoveTarget = null;
         selectionMoveT = 1f;
         selectionMoveShown = false;
+        if(sel.item == null) { sel.graphicsFor=null;sel.graphicsPane=null;sel.direct=sel.icon=null;sel.children=null; }
     }
 
     // [B5] Selected-item highlight box (5-pt rectangle loop, placed around the tapped item in PositionSelection) — the
     // fallback when the pane clone has no HK "Cursor" object. Parented under frameRoot so TeardownFrame frees it.
     void BuildSelBox() { }
+
+    static bool VisibleItemRenderer(Renderer renderer)
+    { return renderer != null && renderer.enabled && renderer.gameObject.activeInHierarchy; }
+
+    bool TrySelectionBounds(out Bounds bounds)
+    {
+        bounds=default;
+        if(sel.item == null || !sel.item.gameObject.activeInHierarchy) return false;
+        if(sel.graphicsFor != sel.item || sel.graphicsPane != paneClone)
+        {
+            sel.graphicsFor=sel.item;sel.graphicsPane=paneClone;
+            sel.direct=sel.item.GetComponent<Renderer>();
+            sel.children=sel.item.GetComponentsInChildren<Renderer>(true);
+            sel.icon=null;
+            if(sel.charmN>0)
+            {
+                var board=sel.item.GetComponent("InvCharmBackboard");
+                var field=board != null ? board.GetType().GetField("charmObject") : null;
+                var icon=field != null ? field.GetValue(board) as GameObject : null;
+                sel.icon=icon != null ? icon.GetComponentInChildren<Renderer>(true) : null;
+            }
+        }
+        if(sel.charmN>0)
+        { if(!VisibleItemRenderer(sel.icon)) return false;bounds=sel.icon.bounds; }
+        else
+        {
+            if(VisibleItemRenderer(sel.direct)) bounds=sel.direct.bounds;
+            if(bounds.size.x<.05f || sel.invKey=="GEO")
+            {
+                bool any=false;
+                foreach(var renderer in sel.children)
+                {
+                    if(!VisibleItemRenderer(renderer) || renderer.bounds.size.x<.02f) continue;
+                    if(!any) { bounds=renderer.bounds;any=true; } else bounds.Encapsulate(renderer.bounds);
+                }
+            }
+        }
+        return bounds.size.x>.05f;
+    }
 
     // [B5] Selected-item highlight — HK's OWN corner-bracket cursor (Inv_0014_selection_cursor + Glow) moved and
     // scaled onto the tapped item, with the LineRenderer selBox as the fallback when the clone has no Cursor.
@@ -85,24 +132,8 @@ public partial class HKDualScreen
         // scaled onto the tapped item (just like the real menu). A LineRenderer box is the fallback if the clone
         // has no Cursor object.
         bool showSel = cfg.compSelHighlight == 1 && sel.item != null && (tab.cur == COMP_INV || tab.cur == COMP_CHARM);
-        Renderer selR = null; Bounds selBB = new Bounds();
-        if (showSel)
-        {
-            try
-            {
-                selR = sel.item.GetComponent<Renderer>();
-                // charms: the backboard's OWN sprite is blank (bounds ~0), so frame the ICON (charmObject) instead
-                if (sel.charmN > 0) { var bbc = sel.item.GetComponent("InvCharmBackboard"); if (bbc != null) { var fi = bbc.GetType().GetField("charmObject"); var ico = fi != null ? fi.GetValue(bbc) as GameObject : null; var ir = ico != null ? ico.GetComponentInChildren<Renderer>(true) : null; if (ir != null && ir.bounds.size.x > 0.05f) selR = ir; } }
-                if (selR != null) selBB = selR.bounds;
-                // Items whose graphic lives on CHILD objects have NO direct renderer -> selBB stays empty -> no fleur.
-                // Encapsulate all child renderers so the cursor frames them. Covers the soul vessel (InvVesselFragments
-                // self/piece/full), the mask shards (Heart Pieces), and Geo (coin icon + amount number).
-                if (selBB.size.x < 0.05f || sel.invKey == "GEO")
-                { bool any = false; foreach (var rr in sel.item.GetComponentsInChildren<Renderer>(true)) { if (rr == null || !rr.enabled || rr.bounds.size.x < 0.02f) continue; if (!any) { selBB = rr.bounds; any = true; } else selBB.Encapsulate(rr.bounds); } }
-            }
-            catch { }
-        }
-        bool selOk = showSel && selBB.size.x > 0.05f;
+        Bounds selBB=default;
+        bool selOk=showSel && TrySelectionBounds(out selBB);
         if (selOk) selBB = AnimateSelectionBounds(selBB, sel.item);
         else ResetSelectionAnimation();
         if (paneClone != null)
@@ -123,13 +154,16 @@ public partial class HKDualScreen
                         foreach (var r in paneCursor.GetComponentsInChildren<Renderer>(true)) r.enabled = true;
                         if(selCurTR != null) selCurTR.gameObject.SetActive(false);
                         if(selCurBL != null) selCurBL.gameObject.SetActive(false);
+                        nativeSelectionTL=selCurTL!=null ? selCurTL.GetComponentInChildren<SpriteRenderer>(true) : null;
+                        nativeSelectionBR=selCurBR!=null ? selCurBR.GetComponentInChildren<SpriteRenderer>(true) : null;
+                        var glow=FindDeep(paneCursor,"Glow");nativeSelectionGlow=glow!=null ? glow.GetComponentInChildren<SpriteRenderer>(true) : null;
                         selCurFor = sel.item;
                     }
                     var bb = selBB; var pl = paneCursor.parent != null ? paneCursor.parent.lossyScale : Vector3.one;
                     float z = bb.center.z - 0.2f;
                     // Keep each corner ornament at a UNIFORM native size (no stretch): frame the item by MOVING the
                     // four corners to its bbox corners — how HK's own menu cursor works.
-                    float k = Mathf.Max(0.01f, cfg.compSelCursorScale) / Mathf.Max(1e-3f, pl.x);
+                    float k = 1f / Mathf.Max(1e-3f, pl.x);
                     paneCursor.localRotation = Quaternion.identity;
                     paneCursor.position = new Vector3(bb.center.x, bb.center.y, z);
                     paneCursor.localScale = new Vector3(k, k, 1f);
@@ -141,13 +175,15 @@ public partial class HKDualScreen
                         selCurTL.position = new Vector3(bb.center.x - hx, bb.center.y + hy, z);
                         selCurTR.position = new Vector3(bb.center.x + hx, bb.center.y + hy, z);
                         selCurBL.position = new Vector3(bb.center.x - hx, bb.center.y - hy, z);
-                        selCurBR.position = new Vector3(bb.center.x + hx, bb.center.y - hy, z);
+                        FitSprite(nativeSelectionTL,new Vector3(bb.center.x-hx,bb.center.y+hy,z),22*ShellPixel,22*ShellPixel);
+                        FitSprite(nativeSelectionBR,new Vector3(bb.center.x+hx,bb.center.y-hy,z),22*ShellPixel,22*ShellPixel);
                     }
                     else   // fallback: no named corners -> at least keep it UNIFORM (still no stretch)
                     {
                         float side = Mathf.Max(bb.size.x, bb.size.y) * (1f + Mathf.Max(0f, cfg.compSelInset));
                         paneCursor.localScale = new Vector3(side / Mathf.Max(1e-3f, pl.x), side / Mathf.Max(1e-3f, pl.y), 1f);
                     }
+                    FitSprite(nativeSelectionGlow,new Vector3(bb.center.x,bb.center.y,z),110*ShellPixel,110*ShellPixel);
                 }
                 else if (paneCursor.gameObject.activeSelf) { paneCursor.gameObject.SetActive(false); selCurFor = null; }
             }
@@ -291,8 +327,14 @@ public partial class HKDualScreen
                 float x=transport.TouchX*g.Width, y=transport.TouchY*g.Height;
                 lowerTabGesture.Down(g.HitColumn(x,y));
                 lowerTouchDownBody=g.InBody(x,y);
-                supplementaryDragValid=lowerTouchDownBody && (tab.cur == COMP_JOURNAL || tab.cur == COMP_GUIDE);
+                supplementaryDragValid=lowerTouchDownBody && tab.cur!=COMP_MAP;
                 supplementaryDragRegion=0;
+                if(tab.cur==COMP_INV || tab.cur==COMP_CHARM)
+                {
+                    var p=HKLowerLayout.NativeColumns(g,tab.cur==COMP_CHARM);
+                    supplementaryDragRegion=x>=p.DetailX ? 1 : x>=p.ChooserX && x<p.ChooserX+p.ChooserWidth ? 0 : -1;
+                    supplementaryDragValid &= supplementaryDragRegion>=0;
+                }
                 if(tab.cur == COMP_JOURNAL)
                 {
                     supplementaryDragRegion=x<400*g.Width/1240f ? 0 : -1;
@@ -304,7 +346,11 @@ public partial class HKDualScreen
             }
             if(contacts>=2 || slideT < 1f || (mapMarkerMode && tab.cur == COMP_MAP))
             { lowerTabGesture.Cancel(); lowerTouchDownBody=false; supplementaryDragValid=false; }
-            if(contacts==1 && supplementaryDragValid) ScrollSupplementary(transport.T0Y-supplementaryDragY);
+            if(contacts==1 && supplementaryDragValid)
+            {
+                if(tab.cur==COMP_INV || tab.cur==COMP_CHARM) ScrollNativePane(transport.T0Y-supplementaryDragY);
+                else ScrollSupplementary(transport.T0Y-supplementaryDragY);
+            }
             int clean=transport.CleanTapSequence;
             if(clean != lowerCleanTabSeq)
             {
@@ -377,7 +423,8 @@ public partial class HKDualScreen
                     var bbc = go.GetComponent("InvCharmBackboard"); GameObject ico = null;
                     if (bbc != null) { var fi = bbc.GetType().GetField("charmObject"); ico = fi != null ? fi.GetValue(bbc) as GameObject : null; }
                     var ir = ico != null ? ico.GetComponentInChildren<Renderer>(true) : null;
-                    b = ir != null ? ir.bounds : new Bounds(t.position, new Vector3(0.7f, 0.7f, 0.2f));
+                    if(!VisibleItemRenderer(ir)) continue;
+                    b = ir.bounds;
                     b.Expand(new Vector3(0.35f, 0.35f, 0f));   // generous hit region across the slot
                 }
                 else
@@ -407,6 +454,11 @@ public partial class HKDualScreen
     // absolute fontSize (compDetailFont>0) and ForceMeshUpdate so TMP regenerates the SDF at that size = crisp+bigger.
     void SetDetailFont(GameObject pane)
     {
+        if(pane==invCloneCache && invRun.finalized)
+        {
+            var refs=Refs(pane);if(refs.descLabel!=null) refs.descLabel.ScrollOffset=0;
+            LayoutNativeInventory(pane);return;
+        }
         if (cfg.compDetailFont <= 0f) return;
         // "Text Name" (the item name) gets its own larger size; "Text Desc" (the body) uses compDetailFont.
         foreach (var nm in new[] { "Text Name", "Text Desc" })
@@ -604,6 +656,8 @@ public partial class HKDualScreen
     // positions, and only THEN shows the renderers — the line appears complete and never adjusts afterwards.
     void LayoutCtrlPrompt()
     {
+        if(tab.cur==COMP_INV && paneClone!=null && Refs(paneClone).canonicalReady)
+        { LayoutCanonicalControlPrompt();return; }
         try
         {
             // verb metrics from the settled mesh
@@ -659,6 +713,28 @@ public partial class HKDualScreen
             if (cfg.debug == 1) Dbg($"HKDS ctrlprompt placed kind={ctrlVerbKind} glyph={haveGlyph} spr='{(haveGlyph ? ctrlMyGlyph.sprite.name : "")}' lineY={lineY:F2} verbY={verbY:F2} glyphY={ctrlGlyphFinal.y:F2}");
         }
         catch (Exception e) { Dbg($"HKDS ctrlprompt layout err {e.Message}"); }
+    }
+
+    void LayoutCanonicalControlPrompt()
+    {
+        if(ctrlMyVerbT==null || ctrlMyVerbTmp==null) return;
+        SetTmpFont(ctrlMyVerbT,40);
+        Vector3 min,max;if(!TryTmpGlyphBoundsWorld(ctrlMyVerbT,out min,out max) || max.y-min.y<=.001f) return;
+        float scale=24/(max.y-min.y);ctrlMyVerbT.localScale=ctrlMyVerbT.localScale*scale;
+        TryTmpGlyphBoundsWorld(ctrlMyVerbT,out min,out max);
+        var p=HKLowerLayout.NativeColumns(LowerGeometry(),false);
+        bool glyph=ctrlMyGlyph!=null && !ctrlGlyphPending && ctrlMyGlyph.sprite!=null;
+        float width=max.x-min.x,seq=width+(glyph ? 44 : 0);
+        var center=PanePixel(p.DetailX+p.DetailWidth/2,p.Top+76,-.2f);
+        ctrlMyVerbT.position+=new Vector3(center.x-seq/2-min.x,center.y-(min.y+max.y)/2,0);
+        ctrlVerbFinal=ctrlMyVerbT.position;
+        var renderer=ctrlMyVerbTmp.GetComponent<Renderer>();if(renderer!=null) renderer.enabled=true;
+        if(ctrlMyGlyph!=null)
+        {
+            ctrlMyGlyph.enabled=glyph;
+            if(glyph) { FitSprite(ctrlMyGlyph,center+new Vector3(seq/2-16,0,0),32,32);ctrlGlyphFinal=ctrlMyGlyph.transform.position; }
+        }
+        ctrlPlaced=true;
     }
 
     // Show the control-prompt glyph+verb for the selected item on `pane`. Idempotent (absolute positions/scales),

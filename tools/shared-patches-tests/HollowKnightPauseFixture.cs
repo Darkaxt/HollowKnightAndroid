@@ -142,7 +142,7 @@ internal partial class HKDualScreen
     void PollCompanionCombo() { }
     void StripPrivateLayers() { }
     bool HudFadedInGameplay(GameCameras gc) => HudFaded;
-    void TeardownCompanion() { Teardowns++; RetireCompanionCaches(); slideOutClone = null; slideT = 1f; slideCamValid = false; }
+    void TeardownCompanion() { Teardowns++;TeardownCompanionBody(); }
     internal readonly List<GameObject> Destroyed = new();
     void Destroy(GameObject go) { AssertSingleDestroy(go); Destroyed.Add(go); go.SetActive(false); }
     void AssertSingleDestroy(GameObject go) { if (Destroyed.Contains(go)) throw new InvalidOperationException("duplicate owned destruction"); }
@@ -183,7 +183,7 @@ internal partial class HKDualScreen
     internal void LayoutStep(int id) { if(id==3) LayoutJournal(); else LayoutGuide(); }
     static string LocalizedLabel(string fallback,string key) => NativeText(key,"UI");
     SpriteRenderer ShellSprite(string name,Transform parent,Sprite sprite,int order=30080)
-    { var renderer=new SpriteRenderer();renderer.sprite=sprite;renderer.sortingLayerName="Inventory";renderer.sortingOrder=order;renderer.gameObject.layer=ATTR_LAYER;renderer.transform.SetParent(parent);return renderer; }
+    { var renderer=new SpriteRenderer();renderer.gameObject.name=name;renderer.sprite=sprite;renderer.sortingLayerName="Inventory";renderer.sortingOrder=order;renderer.gameObject.layer=ATTR_LAYER;renderer.transform.SetParent(parent);return renderer; }
     internal static readonly Dictionary<string,string> NativeLabels=new();
     static string NativeText(string key,string sheet) => string.IsNullOrEmpty(key) || string.IsNullOrEmpty(sheet) ? "" : NativeLabels.TryGetValue(sheet+"/"+key,out var text) ? text : key;
     internal sealed class NativePaneLabel
@@ -261,8 +261,7 @@ internal partial class HKDualScreen
     void PrewarmTick() => Prewarms++;
     void EnsureCompRoot() => Updates++;
     void SetMapMarkerMode(bool value) => mapMarkerMode=value;
-    internal sealed class Selection { internal string invKey; internal int charmN,kind; internal Transform item; }
-    readonly Selection sel=new();
+    Selection sel=new(){kind=-1};
     int mapStowStamp,compFrameTick; internal bool mapAnyAvailable; bool paneNeedsFit;
     internal object mapGm; internal bool mapContentVisible,mapNeedsSetup;
     internal MapActionButton mapResetAction; MapActionButton mapViewAction,mapMarkerAction,mapMarkerTypeAction;
@@ -295,7 +294,6 @@ internal partial class HKDualScreen
     Renderer mapResetR;
     float mapControlLeftX=-1000,mapControlRightX=1000,mapControlTopY=1000,mapControlBottomY=-1000;
     void HideControlPrompt(GameObject go) { }
-    void ClearInvDetail(GameObject go) { }
     void BuildCompanionTab(int id) { paneClone=id==0 ? null : (id==3 || id==4) ? BuildSupplementaryPane(id) : CloneForTab(id); }
     int MapContentStamp() => 0;
     void MapTick() { }
@@ -306,24 +304,35 @@ internal partial class HKDualScreen
     void CharmsTick() { }
     void RefreshInvCounters(GameObject go) { }
     void ApplyFit(FitResult value) { if(value.valid) fit=value; }
-    FitResult LayoutCharmsRedesign(GameObject go) => default;
+    internal void FitOccupiedStep(Transform root,Renderer[] renderers,Rect target) => FitOccupiedNative(root,renderers,target);
+    internal int NativeInventoryLayouts,NativeCharmLayouts;
+    internal void NativeLayoutRouteStep(int id) { tab.tap=id;tab.cur=id;tab.built=id;paneClone=CloneForTab(id);paneNeedsFit=true;UpdateCompanion(Cameras.hudCamera); }
+    internal PaneRefs refsInv,refsCharm;
+    internal NativePaneLabel nativeCharmName,nativeCharmDesc;internal PaneGraphics nativeCharmGraphics;
+    void LayoutNativeInventory(GameObject pane) { NativeInventoryLayouts++;LayoutNativeInventoryBody(pane); }
+    FitResult LayoutCharmsRedesign(GameObject go) { NativeCharmLayouts++;return LayoutCharmsRedesignBody(go); }
     bool TryPaneBounds(GameObject go,out Vector3 center,out float size,bool charms) { center=default;size=0;return false; }
     internal void SupplementaryStep() => SupplementaryTick();
-    void BuildFrame() { }
+    void BuildFrame() => EnsureNativeShellAssets();
     internal int NoMapBuilds;
     internal void FrameBuildStep() => BuildFrameBody();
     Sprite CreateShellRule() => new();
     internal void RetryNoMapStep(bool missing=false) { if(missing) noMapT=null; Time.frameCount+=120;ResolveTabDonors(null); }
-    static Transform FindDeep(Transform root,string name) => null;
+    static Transform FindDeep(Transform root,string name)
+    {
+        if(root==null) return null;
+        if(root.name==name) return root;
+        foreach(var child in root.Children) { var found=FindDeep(child,name);if(found!=null) return found; }
+        return null;
+    }
     void BuildAreaName(Transform root) { }
     void BuildNoMapLabel(Transform root) { NoMapBuilds++;noMapT=new GameObject().transform; }
     void BuildMapControls(Transform root) { }
     Transform mapMaskBotT; Renderer mapMaskBotR;
     Transform BuildMapMask(string name) { var go=new GameObject();go.AddComponent<Renderer>();return go.transform; }
     static bool IsTextMeshProGraphic(Component c) => c != null && c.GetType()==typeof(Component);
-    static Component TmpOn(Transform root) => root.TextComponents.FirstOrDefault(c=>IsTextMeshProGraphic(c));
-    void SanitizeDetachedTmpClone(GameObject go) { }
-    void DestroyImmediate(Component c) { }
+    static Component TmpOn(Transform root) => root?.TextComponents.FirstOrDefault(c=>IsTextMeshProGraphic(c));
+    void DestroyImmediate(Component c) { c.transform?.TextComponents.Remove(c);if(c is TextContainer && c.transform!=null) foreach(var tmp in c.transform.TextComponents) if(tmp.Container==c) tmp.Container=null; }
     static GameObject Instantiate(GameObject source,Transform parent)
     {
         var go=new GameObject();go.transform.SetParent(parent);go.transform.localScale=source.transform.localScale;
@@ -333,7 +342,8 @@ internal partial class HKDualScreen
             var copy=new Component(renderer) { enableAutoSizing=original.enableAutoSizing,InkHeight=original.InkHeight };
             renderer.BoundsSize=original.GetComponent<Renderer>().BoundsSize;
             go.transform.TextComponents.Add(copy);
-            var container=new TextContainer();copy.Container=container;go.transform.TextComponents.Add(container);
+            var container=new TMProOld.TextContainer(renderer);copy.Container=container;go.transform.TextComponents.Add(container);
+            if(source.transform.TextComponents.OfType<GameplayLabelDriver>().Any()) go.transform.TextComponents.Add(new GameplayLabelDriver(renderer));
         }
         return go;
     }
@@ -348,18 +358,20 @@ internal partial class HKDualScreen
     void JournalTap(float x,float y) { JournalTaps++; JournalTapBody(x,y); }
     void GuideTap(float x,float y) { GuideTaps++; GuideTapBody(x,y); }
     internal void SelectionTap(int id,float x,float y) { if(id==3) JournalTap(x,y);else GuideTap(x,y); }
-    void PollItemTap(float x,float y) => ItemTaps++;
+    void PollItemTap(float x,float y) { ItemTaps++;PollItemTapBody(x,y); }
     void ScrollSupplementary(float delta) => ScrollSupplementaryBody(delta);
+    internal void NativeScrollStep(int region,float delta) { supplementaryDragRegion=region;ScrollNativePane(delta); }
     internal void ScrollStep(float delta) => ScrollSupplementary(delta);
     void CenterAttribution() { }
     void ApplyHalo() { }
     void SetupLogo() => throw new InvalidOperationException("unexpected logo rebake");
     void TryBakeTabFleurs() => throw new InvalidOperationException("unexpected fleur rebake");
-    void TeardownFrame() { FrameTeardowns++; RetireSupplementaryPanes(); if(frameRoot != null) Destroy(frameRoot); frameRoot = null; }
+    void TeardownFrame() { FrameTeardowns++;TeardownFrameBody(); }
     void PushToBottom() { }
     void CenterDialogue() { }
     void CenterTutorial() { }
-    void Dbg(string text) { }
+    internal string LastDiagnostic;
+    void Dbg(string text) { LastDiagnostic=text; }
     void SetLayerRecursive(Transform root, int layer)
     {
         root.gameObject.layer = layer;
@@ -453,6 +465,7 @@ internal static class HkStageHooks
 internal static class Time { internal static int frameCount; internal static float unscaledDeltaTime = .1f; }
 internal static class Mathf
 {
+    internal static float Clamp01(float value) => Math.Clamp(value,0,1);
     internal static int Max(int a,int b) => Math.Max(a,b);
     internal static float Abs(float value) => Math.Abs(value);
     internal static int FloorToInt(float value) => (int)Math.Floor(value);
@@ -474,7 +487,14 @@ internal struct Vector2
     internal float x, y;
     internal Vector2(float x, float y) { this.x = x; this.y = y; }
 }
-internal static class Quaternion { internal static readonly object identity = new(); internal static object Euler(float x,float y,float z) => identity; }
+internal struct Quaternion
+{
+    internal float Angle;
+    internal static Quaternion identity => default;
+    internal static Quaternion Euler(float x,float y,float z) => new(){Angle=z*MathF.PI/180};
+    internal Vector3 Apply(Vector3 p) {float c=MathF.Cos(Angle),s=MathF.Sin(Angle);return new(c*p.x-s*p.y,s*p.x+c*p.y,p.z);}
+    internal Vector3 Inverse(Vector3 p) => new Quaternion{Angle=-Angle}.Apply(p);
+}
 internal enum CameraClearFlags { SolidColor, Depth }
 internal struct Color { internal static readonly Color black = new(),white=new(); internal Color(float r,float g,float b,float a) { } }
 internal struct Vector3
@@ -489,6 +509,7 @@ internal struct Vector3
     public static Vector3 operator *(Vector3 a,float scale) => new(a.x*scale,a.y*scale,a.z*scale);
     internal static Vector3 one => new(1,1,1);
     internal static Vector3 zero => new();
+    internal static Vector3 Lerp(Vector3 a,Vector3 b,float t) => a+(b-a)*t;
 }
 internal sealed class Camera
 {
@@ -501,6 +522,7 @@ internal sealed class Camera
     internal CameraClearFlags clearFlags;
     internal readonly Transform transform = new();
     internal void CopyFrom(Camera source) { }
+    internal Vector3 ViewportToWorldPoint(Vector3 p) => transform.position+new Vector3((p.x-.5f)*orthographicSize*2*aspect,(p.y-.5f)*orthographicSize*2,p.z);
 }
 internal sealed class GameObject
 {
@@ -519,7 +541,10 @@ internal sealed class GameObject
         if(component is Renderer renderer) { renderer.transform=transform;transform.Renderers.Add(renderer); }
         return component;
     }
-    internal T GetComponent<T>() where T:class => Components.TryGetValue(typeof(T),out var component) ? component as T : null;
+    internal T GetComponent<T>() where T:class => Components.TryGetValue(typeof(T),out var component) ? component as T : Components.Values.OfType<T>().FirstOrDefault() ?? transform.TextComponents.OfType<T>().FirstOrDefault();
+    internal Component GetComponent(string name) => transform.TextComponents.FirstOrDefault(c=>c.GetType().Name==name);
+    internal T GetComponentInChildren<T>(bool inactive=true) where T:class => transform.GetComponentInChildren<T>(inactive);
+    internal void RemoveRenderer() { foreach(var key in Components.Where(p=>p.Value is Renderer).Select(p=>p.Key).ToArray()) Components.Remove(key);transform.Renderers.Clear(); }
     internal void SetActive(bool active) => activeSelf = active;
 }
 internal sealed class Transform
@@ -530,26 +555,39 @@ internal sealed class Transform
     internal Vector3 localPosition,localScale=Vector3.one;
     internal Vector3 position
     {
-        get { var p=parent!=null ? parent.position : Vector3.zero;var s=parent!=null ? parent.lossyScale : Vector3.one;return p+new Vector3(localPosition.x*s.x,localPosition.y*s.y,localPosition.z*s.z); }
-        set { var p=parent!=null ? parent.position : Vector3.zero;var s=parent!=null ? parent.lossyScale : Vector3.one;localPosition=new Vector3((value.x-p.x)/s.x,(value.y-p.y)/s.y,(value.z-p.z)/s.z); }
+        get => parent!=null ? parent.TransformPoint(localPosition) : localPosition;
+        set => localPosition=parent!=null ? parent.InverseTransformPoint(value) : value;
     }
     internal Vector3 lossyScale { get { var p=parent!=null ? parent.lossyScale : Vector3.one;return new Vector3(localScale.x*p.x,localScale.y*p.y,localScale.z*p.z); } }
-    internal Vector3 TransformPoint(Vector3 p) { var s=lossyScale;return position+new Vector3(p.x*s.x,p.y*s.y,p.z*s.z); }
+    internal Vector3 TransformVector(Vector3 p) {var q=localRotation.Apply(new(p.x*localScale.x,p.y*localScale.y,p.z*localScale.z));return parent!=null ? parent.TransformVector(q) : q;}
+    internal Vector3 TransformPoint(Vector3 p) {var q=localRotation.Apply(new(p.x*localScale.x,p.y*localScale.y,p.z*localScale.z))+localPosition;return parent!=null ? parent.TransformPoint(q) : q;}
     internal Transform root => parent!=null ? parent.root : this;
-    internal Vector3 InverseTransformPoint(Vector3 point) { var p=point-position;var s=lossyScale;return new Vector3(p.x/s.x,p.y/s.y,p.z/s.z); }
-    internal object rotation,localRotation;
+    internal Vector3 InverseTransformPoint(Vector3 point) {var q=localRotation.Inverse((parent!=null ? parent.InverseTransformPoint(point) : point)-localPosition);return new(q.x/localScale.x,q.y/localScale.y,q.z/localScale.z);}
+    internal Quaternion rotation,localRotation;
     internal readonly List<Renderer> Renderers=new();
-    internal T[] GetComponentsInChildren<T>(bool inactive) where T:class => Renderers.Cast<object>().Concat(TextComponents).OfType<T>().ToArray();
+    internal T[] GetComponentsInChildren<T>(bool inactive=true) where T:class => GetComponents<T>().Concat(Children.Where(c=>inactive || c.gameObject.activeInHierarchy).SelectMany(c=>c.GetComponentsInChildren<T>(inactive))).ToArray();
     internal Transform(GameObject go = null) { gameObject = go; }
     internal readonly List<PlayMakerFSM> FsMs=new();
     internal readonly List<Component> TextComponents=new();
-    internal T[] GetComponents<T>() where T:class => FsMs.Cast<object>().Concat(TextComponents).OfType<T>().ToArray();
+    internal T[] GetComponents<T>() where T:class => (typeof(T)==typeof(Transform) ? new object[]{this} : Array.Empty<object>()).Concat(FsMs.Cast<object>()).Concat(TextComponents).Concat(Renderers).OfType<T>().ToArray();
     internal T GetComponentInChildren<T>(bool inactive) where T:class => GetComponentsInChildren<T>(inactive).FirstOrDefault();
     internal T GetComponent<T>() where T:class => gameObject.GetComponent<T>();
-    internal void SetParent(Transform value,bool worldPositionStays=false) { parent = value; value.Children.Add(this); }
+    internal Component GetComponent(string name) => gameObject.GetComponent(name);
+    internal string name => gameObject?.name;
+    internal int childCount => Children.Count;
+    internal Transform GetChild(int index) => Children[index];
+    internal Transform Find(string name) => Children.FirstOrDefault(c=>c.name==name);
+    internal bool IsChildOf(Transform owner) { for(var t=parent;t!=null;t=t.parent) if(t==owner) return true;return false; }
+    internal void SetParent(Transform value,bool worldPositionStays=false)
+    {
+        var p=position;var s=lossyScale;
+        parent?.Children.Remove(this);parent=value;value?.Children.Add(this);
+        if(worldPositionStays) { position=p;var ps=value?.lossyScale ?? Vector3.one;localScale=new(s.x/ps.x,s.y/ps.y,s.z/ps.z); }
+    }
 }
 internal sealed class PlayMakerFSM
 {
+    internal bool enabled=true;
     internal string FsmName="Control";
     internal readonly FsmVariables FsmVariables=new();
     internal FsmState[] FsmStates=Array.Empty<FsmState>();
@@ -577,21 +615,24 @@ internal class Renderer
     public Renderer() : this(null) { }
     internal Renderer(Transform owner) { transform=owner ?? new GameObject().transform; }
     internal Vector3 BoundsSize=Vector3.one;
-    internal Bounds bounds { get { var s=transform.lossyScale;return new Bounds(transform.position,new Vector3(BoundsSize.x*s.x,BoundsSize.y*s.y,BoundsSize.z*s.z)); } }
+    internal virtual Bounds LocalBounds => new(Vector3.zero,BoundsSize);
+    internal Bounds bounds { get {var b=LocalBounds;var lo=new Vector3(float.PositiveInfinity,float.PositiveInfinity,0);var hi=new Vector3(float.NegativeInfinity,float.NegativeInfinity,0);for(int i=0;i<4;i++){var p=transform.TransformVector(new(i%2==0 ? b.min.x : b.max.x,i<2 ? b.min.y : b.max.y,0));lo=Vector3.Min(lo,p);hi=Vector3.Max(hi,p);}return new Bounds(transform.position+(lo+hi)*.5f,hi-lo);} }
     internal void GetPropertyBlock(MaterialPropertyBlock block) => block.Value=Clip;
     internal void SetPropertyBlock(MaterialPropertyBlock block) { Clip=block.Value;ClipWrites++; }
     internal bool InClip(Vector2 p) => p.x>=Clip.x && p.y>=Clip.y && p.x<=Clip.z && p.y<=Clip.w;
 }
+internal sealed class LineRenderer:Renderer { }
 internal sealed class MeshFilter { public MeshFilter() { } internal object sharedMesh; }
 internal sealed class MeshRenderer:Renderer { public MeshRenderer() { } }
 internal sealed class SpriteRenderer:Renderer
 {
     public SpriteRenderer() { sortingLayerName="Default";sortingOrder=0; }
     internal Sprite sprite=new(); internal Color color;
+    internal override Bounds LocalBounds => sprite?.bounds ?? default;
 }
 internal sealed class Sprite { internal string name;internal Rect rect=new(0,0,1,1); internal Bounds bounds=new(Vector3.zero,Vector3.one); }
 internal sealed class InvNailSprite { internal Sprite level1; }
-internal sealed class CharmIconList { internal static CharmIconList Instance;internal Sprite[] spriteList; }
+internal sealed class CharmIconList { internal static CharmIconList Instance;internal Sprite[] spriteList;internal Sprite GetSprite(int n) => spriteList?[n]; }
 internal sealed class JournalList { internal GameObject[] list; }
 internal sealed class JournalEntryStats { internal Sprite sprite; }
 internal struct Bounds
@@ -600,6 +641,11 @@ internal struct Bounds
     internal Bounds(Vector3 center,Vector3 size) { this.center=center;this.size=size; }
     internal Vector3 min => center-size*.5f;
     internal Vector3 max => center+size*.5f;
+    internal void Encapsulate(Bounds other)
+    {
+        var lo=Vector3.Min(min,other.min);var hi=Vector3.Max(max,other.max);
+        center=(lo+hi)*.5f;size=hi-lo;
+    }
     internal void Expand(Vector3 extra) { size+=extra; }
     internal bool Contains(Vector3 p) => p.x>=min.x && p.x<=max.x && p.y>=min.y && p.y<=max.y && p.z>=min.z && p.z<=max.z;
 }
@@ -618,6 +664,9 @@ internal class Component
 {
     readonly Renderer renderer;
     internal Component(Renderer renderer=null) { this.renderer=renderer; }
+    internal Transform transform => renderer?.transform;
+    internal GameObject gameObject => transform?.gameObject;
+    internal T[] GetComponentsInChildren<T>(bool inactive=true) where T:class => transform.GetComponentsInChildren<T>(inactive);
     internal T GetComponent<T>() where T:class => renderer as T;
     public string text { get;set; }
     public bool enableAutoSizing { get;set; }=true;
@@ -629,16 +678,19 @@ internal class Component
     internal Component Container;
     internal Vector2 LastMeshSize;
     internal float InkHeight=1;
-    public Bounds textBounds => new(Vector3.zero,new Vector3(1,InkHeight,1));
+    internal float? MeasuredTextHeight; // TMP mesh owner supplies measured localized prose ink, not a layout algorithm.
+    public Bounds textBounds => new(Vector3.zero,new Vector3(1,MeasuredTextHeight ?? InkHeight,1));
     public void ForceMeshUpdate() { LastMeshSize=Container?.size ?? size; }
 }
 internal enum TextAlignment { TopLeft }
 internal enum TextOverflow { Overflow }
-internal sealed class TextContainer:Component { }
-internal class MonoBehaviour:Component { }
+// Exact HK ABI: TMProOld.TextContainer -> UnityEngine.EventSystems.UIBehaviour -> MonoBehaviour.
+internal class TextContainer:MonoBehaviour { internal TextContainer(Renderer owner=null):base(owner) { } }
+internal sealed class GameplayLabelDriver:MonoBehaviour { internal GameplayLabelDriver(Renderer owner):base(owner) { } }
+internal class MonoBehaviour:Component { internal bool enabled=true; internal MonoBehaviour(Renderer owner=null):base(owner) { } }
 internal sealed class NativeOwner:UnityEngine.Object { public Transform transform=new GameObject().transform; }
 internal static class Resources { internal static T[] FindObjectsOfTypeAll<T>() => Array.Empty<T>(); }
-internal static class TMProOld { internal sealed class TMP_FontAsset { internal string name;internal object material; } }
+internal static class TMProOld { internal sealed class TextContainer:HkPauseContracts.TextContainer { internal TextContainer(Renderer owner):base(owner) { } } internal sealed class TMP_FontAsset { internal string name;internal object material; } }
 internal static class TeamCherry
 {
     internal static class Localization
