@@ -62,7 +62,13 @@ internal partial class HKDualScreen
     { var tmp=TmpOn(FindDeep(pane,name));if(tmp!=null) tmp.text=text;DetailRefreshes++; }
     void PopulateControlPrompt(GameObject pane,int kind,string name) => ControlRefreshes++;
     static bool IsUnderNamed(Transform t,string name) { for(;t!=null;t=t.parent) if(t.name==name) return true;return false; }
-    sealed class CharmState { internal bool Has(int n) => PlayerData.instance?.GetBool("equippedCharm_"+n) ?? false; }
+    sealed class CharmState { internal int hash=int.MinValue,count;internal bool Has(int n) => PlayerData.instance?.GetBool("equippedCharm_"+n) ?? false; }
+    internal void SetEquipState(params int[] ids)
+    {
+        for(int n=1;n<=40;n++) PlayerData.instance.Bools["equippedCharm_"+n]=ids.Contains(n);
+        nativeCharmState.count=ids.Length;
+        nativeCharmState.hash=17;foreach(int n in ids) nativeCharmState.hash=unchecked(nativeCharmState.hash*31+n);
+    }
     readonly CharmState nativeCharmState=new();
     CharmState Charms() => nativeCharmState;
     static bool CharmGot(PlayerData pd,int n) => pd.GetBool("gotCharm_"+n);

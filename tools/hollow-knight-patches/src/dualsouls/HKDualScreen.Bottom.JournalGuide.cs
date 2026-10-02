@@ -212,8 +212,12 @@ public partial class HKDualScreen
         v.RuleLeft=ShellSprite("BodyGutterLeft",go.transform,shellRule.sprite,110);
         if(id==COMP_JOURNAL) v.RuleRight=ShellSprite("BodyGutterRight",go.transform,shellRule.sprite,110);
         v.TL=ShellSprite("BodyCursorTL",go.transform,tabTL.sprite,150);
-        v.BR=ShellSprite("BodyCursorBR",go.transform,tabBR.sprite,150); v.BR.transform.localRotation=tabBR.transform.localRotation;
+        v.TL.transform.localRotation=tabTL.transform.localRotation; v.TL.flipX=tabTL.flipX; v.TL.flipY=tabTL.flipY;
+        v.BR=ShellSprite("BodyCursorBR",go.transform,tabBR.sprite,150);
+        v.BR.transform.localRotation=tabBR.transform.localRotation; v.BR.flipX=tabBR.flipX; v.BR.flipY=tabBR.flipY;
         v.Glow=ShellSprite("BodyCursorGlow",go.transform,tabGlow.sprite,90);
+        v.Glow.transform.localRotation=tabGlow.transform.localRotation; v.Glow.flipX=tabGlow.flipX; v.Glow.flipY=tabGlow.flipY;
+        v.Glow.color=tabGlow.color;
         v.Top=CopyPaneMask(go.transform,"BodyClipTop"); v.Bottom=CopyPaneMask(go.transform,"BodyClipBottom");
         v.Left=CopyPaneMask(go.transform,"BodyClipLeft"); v.Right=CopyPaneMask(go.transform,"BodyClipRight");
         PositionPaneGraphics(v,id); SetPaneSelection(v,default,false,-1); PaneCursorTick(v);
@@ -251,7 +255,7 @@ public partial class HKDualScreen
         if(v == null) return;
         var target=new Vector2(rect.x+rect.width/2,rect.y+rect.height/2);
         if(show && (!v.Selected || v.SelectedId<0)) { v.Center=target; v.Travel=1; }
-        else if(show && (v.SelectedId!=selected || v.Target.x!=rect.x || v.Target.y!=rect.y || v.Target.width!=rect.width || v.Target.height!=rect.height))
+        else if(show && v.SelectedId!=selected)
         { v.From=v.Center; v.Travel=0; }
         v.Selected=show; v.SelectedId=show ? selected : -1; v.Target=rect;
     }
@@ -439,7 +443,7 @@ public partial class HKDualScreen
             int item=journalScrollRow*3+slot;
             var sr=journalCells[slot]; bool shown=slot<count && item<journalVisible.Count;
             sr.sprite=shown ? journalRecords[journalVisible[item]].Sprite : null; sr.enabled=shown && sr.sprite != null;
-            sr.color=shown && journalVisible[item]==journalSelected ? ShellInk : ShellMuted;
+            sr.color=Color.white; // Native content art; the cursor owns selected treatment.
             if(shown)
             {
                 FitSprite(sr,PanePixel(20*sx+(slot%3)*pitch+cell/2,top+(slot/3)*pitch+cell/2),cell*.9f,cell*.9f);

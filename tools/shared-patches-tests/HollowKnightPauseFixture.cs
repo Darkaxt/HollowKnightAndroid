@@ -289,7 +289,10 @@ internal partial class HKDualScreen
     internal Sprite DecodeInvalidMapArt() => DecodeMapArt("bm90IGEgcG5n","invalid",0);
     float benchToastUntil;string benchToastText;
     void UpdateNotchRow(float s,float asp,int id) { }
-    void UpdateEquipCharmRow(float s,float asp) { }
+    internal int equipRowN;
+    const float HeaderActionRightMarginPixels=40f;
+    internal void EquipUpdateStep() => UpdateEquipCharmRow(attrCam.orthographicSize,attrCam.aspect);
+    internal IReadOnlyList<SpriteRenderer> JournalCells => journalCells;
     void HideControlPrompt(GameObject go) { }
     void BuildCompanionTab(int id) { paneClone=id==0 ? null : (id==3 || id==4) ? BuildSupplementaryPane(id) : CloneForTab(id); }
     int MapContentStamp() => 0;
@@ -707,11 +710,16 @@ internal sealed class SpriteRenderer:Renderer
 {
     internal SpriteDrawMode drawMode;internal Vector2 size;internal bool flipX,flipY;
     public SpriteRenderer() { sortingLayerName="Default";sortingOrder=0; }
-    internal Sprite sprite=new(); internal Color color;
+    internal Sprite sprite=new(); internal Color color=Color.white;
     internal override Bounds LocalBounds => drawMode==SpriteDrawMode.Sliced ? new(Vector3.zero,new(size.x,size.y,0)) : sprite?.bounds ?? default;
 }
 internal sealed class Sprite:UnityEngine.Object
 {
+    internal bool Destroyed;
+    public static bool operator ==(Sprite a,Sprite b) => ReferenceEquals(a,b) || ((ReferenceEquals(a,null) || a.Destroyed) && (ReferenceEquals(b,null) || b.Destroyed));
+    public static bool operator !=(Sprite a,Sprite b) => !(a==b);
+    public override bool Equals(object value) => ReferenceEquals(this,value);
+    public override int GetHashCode() => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this);
     internal string name;internal Rect rect=new(0,0,1,1);internal Vector4 border;internal Texture2D texture;
     internal Bounds bounds=new(Vector3.zero,Vector3.one);
     internal static Sprite Create(Texture2D t,Rect rect,Vector2 pivot,float pixels=100,uint extrude=0,SpriteMeshType mesh=SpriteMeshType.FullRect,Vector4 border=default)
@@ -731,7 +739,18 @@ internal sealed class Texture2D:UnityEngine.Object
     internal bool LoadImage(byte[] png) { if(png.Length<24 || png[0]!=137 || png[1]!=80)return false;width=System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16,4));height=System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20,4));return true; }
 }
 internal sealed class InvNailSprite { internal Sprite level1; }
-internal sealed class CharmIconList { internal static CharmIconList Instance;internal Sprite[] spriteList;internal Sprite GetSprite(int n) => spriteList?[n]; }
+internal sealed class CharmIconList:UnityEngine.Object
+{
+    internal static int InstanceReads,SpriteReads;
+    static CharmIconList instance;
+    internal static CharmIconList Instance { get { InstanceReads++;return instance; } set => instance=value; }
+    internal bool Destroyed;internal Sprite[] spriteList;
+    internal Sprite GetSprite(int n) { SpriteReads++;return spriteList?[n]; }
+    public static bool operator ==(CharmIconList a,CharmIconList b) => ReferenceEquals(a,b) || ((ReferenceEquals(a,null) || a.Destroyed) && (ReferenceEquals(b,null) || b.Destroyed));
+    public static bool operator !=(CharmIconList a,CharmIconList b) => !(a==b);
+    public override bool Equals(object value) => ReferenceEquals(this,value);
+    public override int GetHashCode() => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this);
+}
 internal sealed class JournalList { internal GameObject[] list; }
 internal sealed class JournalEntryStats { internal Sprite sprite; }
 internal struct Bounds

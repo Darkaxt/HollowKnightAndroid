@@ -10,7 +10,7 @@ methods = {
     "HKDualScreen.cs": ("Tick", "LoadConfig", "RelayerHud", "LogoTick", "SyncBgCapture"),
     "HKDualScreen.Bottom.Layering.cs": (
         "CompanionVisible", "ApplyDualScreenToggle", "ApplyLowerPauseGate"),
-    "HKDualScreen.Bottom.Hud.cs": ("FrameHudCams", "BuildEquipCharmRow", "BuildAreaName", "RefreshHeaderRenderers", "BuildNoMapLabel", "PositionHudStrip"),
+    "HKDualScreen.Bottom.Hud.cs": ("FrameHudCams", "BuildEquipCharmRow", "UpdateEquipCharmRow", "BuildAreaName", "RefreshHeaderRenderers", "BuildNoMapLabel", "PositionHudStrip"),
     "HKDualScreen.Util.cs": ("SetTmpFont", "NeutralizeDetachedTmpClip", "ItemBounds", "SanitizeDetachedTmpClone"),
     "HKDualScreen.Bottom.Inventory.cs": ("Refs", "FitOccupiedNative", "BuildNativePaneGraphics", "PositionNativePaneGraphics", "EnsureNativeInventory", "LayoutNativeInventory", "ScrollNativePane", "LayoutNativeDetail", "PopulateInvDetail", "PopulateSpellDetail", "PopulateEquipDetail", "PopulateGeoDetail", "PopulateGodfinderDetail", "ClearInvDetail", "ClearInvDetailLocal"),
     "HKDualScreen.Bottom.Charms.cs": ("TryTmpGlyphBoundsWorld", "CharmNumOf", "EnsureCharmRefs", "LayoutCharmsRedesign", "PopulateCharmDetail"),
@@ -66,6 +66,18 @@ for filename, names in methods.items():
                          "source_file_sha256": hashlib.sha256((root / filename).read_bytes()).hexdigest(),
                          "body_utf8_lf_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
                          "body_identical": True, "signature_only_redirect": original != extracted})
+    if filename == "HKDualScreen.Bottom.Hud.cs":
+        # Optional on the immutable original; candidate retry/cache declarations
+        # come from their owning source, not fixture update orchestration.
+        for name in ("equipRowDonor", "equipRowRetry", "equipRowReady"):
+            declaration = re.search(r"^    (?:readonly )?[^\n;]+\b" + name + r"\b[^\n]*;\s*$", source, re.M)
+            if declaration is not None:
+                text = declaration.group()
+                parts.append(text)
+                identity.append({"source": str(root / filename), "declaration": name,
+                                 "source_file_sha256": hashlib.sha256((root / filename).read_bytes()).hexdigest(),
+                                 "declaration_utf8_lf_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                                 "declaration_identical": True})
     if filename == "HKDualScreen.Bottom.MapControls.cs":
         declaration = source.index("    sealed class MapActionButton")
         end = source.index("    void ", declaration)

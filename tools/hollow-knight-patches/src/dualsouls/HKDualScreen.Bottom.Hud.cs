@@ -76,29 +76,48 @@ public partial class HKDualScreen
     }
 
     int equipRowN;   // icons currently shown in the equipped-charm row (set on change; the layout below uses it every frame)
+    CharmIconList equipRowDonor;
+    readonly HKLowerLayout.Retry equipRowRetry = new HKLowerLayout.Retry();
+    bool equipRowReady;
     void UpdateEquipCharmRow(float s, float asp)
     {
         if (equipRowRoot == null) return;
-        if (cfg.compEquipRow != 1 || benchToastUntil > Time.unscaledTime) { foreach (var sr in equipCharmSRs) if (sr != null) sr.enabled = false; if (benchToastUntil > Time.unscaledTime) lastEquipStamp = int.MinValue; return; }   // fix#5(163-fb): clear the top strip while the toast shows
+        if (cfg.compEquipRow != 1 || benchToastUntil > Time.unscaledTime) { foreach (var sr in equipCharmSRs) if (sr != null) sr.enabled = false; lastEquipStamp = int.MinValue; return; }   // hidden row rebinds on its next visible edge
         var cs = Charms();   // frame-cached bitmask (no per-frame string allocs / GetBool)
         int stamp = cs.hash;
         if (stamp != lastEquipStamp)
         {
-            lastEquipStamp = stamp;
-            var eq = new List<int>(cs.count); for (int i = 1; i <= 40; i++) if (cs.Has(i)) eq.Add(i);   // only on change
+            lastEquipStamp = stamp; equipRowReady = false; equipRowRetry.Reset();
+        }
+        else if (equipRowReady && equipRowN > 0)
+        {
+            // Unity lifetime checks only: no healthy singleton/sprite discovery.
+            bool alive = equipRowDonor != null;
+            for (int i = 0; alive && i < equipRowN && i < equipCharmSRs.Count; i++)
+            {
+                var sr = equipCharmSRs[i]; if (sr == null || sr.sprite == null) alive = false;
+            }
+            if (!alive) { equipRowReady = false; equipRowRetry.Reset(); }
+        }
+        if (!equipRowReady && equipRowRetry.Due(Time.frameCount))
+        {
+            var eq = new List<int>(cs.count); for (int i = 1; i <= 40; i++) if (cs.Has(i)) eq.Add(i);   // state change or bounded pending donor retry only
             equipRowN = eq.Count;
             CharmIconList cil = null; try { cil = CharmIconList.Instance; } catch { }
+            equipRowDonor = cil; equipRowReady = eq.Count == 0 || cil != null;
             if (cfg.debug == 1) Dbg($"HKDS equiprow n={eq.Count} charms=[{string.Join(",", eq)}] cil={(cil != null ? "ok" : "NULL")}");
             for (int i = 0; i < equipCharmSRs.Count; i++)
             {
-                var sr = equipCharmSRs[i]; if (sr == null) continue;
+                var sr = equipCharmSRs[i]; if (sr == null) { if (i < eq.Count) equipRowReady = false; continue; }
                 if (i < eq.Count && cil != null)
                 {
                     Sprite sp = null; try { sp = cil.GetSprite(eq[i]); } catch { }
                     sr.sprite = sp; sr.enabled = sp != null; sr.color = Color.white;
+                    if (sp == null) equipRowReady = false;
                 }
                 else { sr.sprite = null; sr.enabled = false; }
             }
+            if (equipRowReady) equipRowRetry.Resolved();
         }
         int n = equipRowN; if (n == 0) return;
         float targetH = 54f * ShellPixel;       // icon world height (∝ ortho => constant apparent size)
