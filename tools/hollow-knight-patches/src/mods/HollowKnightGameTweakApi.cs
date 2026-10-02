@@ -42,6 +42,8 @@ namespace DualSouls.Mods.HollowKnight
         int _stateSlot = 1;
         readonly TweakDeferredOperation _benchOperation =
             new TweakDeferredOperation("bench_teleport", 120f);
+        long _benchRequestToken;
+        int _benchBindingGeneration;
         readonly TweakDeferredOperation _stateLoadOperation =
             new TweakDeferredOperation("load_from_slot", 30f);
         readonly System.Collections.Generic.Queue<TweakAdapterCompletion> _completedOperations =
@@ -124,7 +126,7 @@ namespace DualSouls.Mods.HollowKnight
             _completedOperations.Clear();
             Enqueue(_benchOperation.Cancel(
                 "Hollow Knight Bench Teleport was canceled by baseline restoration."));
-            global::HkStageHooks.CancelBenchTeleport();
+            RetireBenchChooserAuthority();
             Enqueue(_stateLoadOperation.Cancel(
                 "Hollow Knight save-state load was canceled by baseline restoration."));
             HollowKnightGameplayHooks.Reset();
@@ -226,15 +228,22 @@ namespace DualSouls.Mods.HollowKnight
         public void OpenBenchTeleport(long operationToken)
         {
             _benchOperation.Begin(operationToken, UnityEngine.Time.unscaledTime);
+            _benchRequestToken = operationToken;
             try
             {
-                global::HkStageHooks.OpenBenchTeleport(
-                    result => Enqueue(_benchOperation.Complete(
-                        operationToken,
-                        result)));
+                _benchBindingGeneration = global::HkStageHooks.OpenBenchTeleport(
+                    operationToken,
+                    result => {
+                        Enqueue(_benchOperation.Complete(operationToken, result));
+                        if (_benchRequestToken == operationToken) {
+                            _benchRequestToken = 0;
+                            _benchBindingGeneration = 0;
+                        }
+                    });
             }
             catch
             {
+                RetireBenchChooserAuthority();
                 _benchOperation.Cancel(
                     "Hollow Knight Bench Teleport failed before it was accepted.");
                 throw;
@@ -396,8 +405,17 @@ namespace DualSouls.Mods.HollowKnight
                 UnityEngine.Time.unscaledTime,
                 "Hollow Knight Bench Teleport timed out before a destination completed.");
             if (completion.HasValue)
-                global::HkStageHooks.CancelBenchTeleport();
+                RetireBenchChooserAuthority();
             return completion;
+        }
+
+        void RetireBenchChooserAuthority()
+        {
+            long token = _benchRequestToken;
+            int generation = _benchBindingGeneration;
+            _benchRequestToken = 0;
+            _benchBindingGeneration = 0;
+            global::HkStageHooks.CancelBenchTeleport(token, generation);
         }
 
         void Enqueue(TweakAdapterCompletion? completion)

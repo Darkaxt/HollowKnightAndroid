@@ -16,6 +16,9 @@ static class HkStageHooks
     static float? _legacyFlashAlpha;
     static bool benchLoaded;
     static Action<DualSouls.Mods.TweakActionResult> pendingBenchCompletion;
+    static long pendingBenchToken;
+    static int pendingBenchGeneration;
+    static float pendingBenchDeadline;
     static bool lastAtBench;
     static readonly Dictionary<string, BenchRecord> benches =
         new Dictionary<string, BenchRecord>(StringComparer.Ordinal);
@@ -135,28 +138,62 @@ static class HkStageHooks
         }
     }
 
-    internal static void OpenBenchTeleport(
+    internal static int OpenBenchTeleport(long operationToken,
         Action<DualSouls.Mods.TweakActionResult> completed)
     {
+        if (operationToken <= 0) throw new ArgumentOutOfRangeException(nameof(operationToken));
         if (completed == null) throw new ArgumentNullException(nameof(completed));
         if (pendingBenchCompletion != null)
             throw new InvalidOperationException(
                 "Hollow Knight Bench Teleport already has a pending operation.");
+        int generation = HollowKnightNativeModsMenu.BenchBindingGeneration;
+        pendingBenchToken = operationToken;
+        pendingBenchGeneration = generation;
+        pendingBenchDeadline = Time.unscaledTime + 120f;
         pendingBenchCompletion = completed;
         try
         {
-            HKDualScreen.OpenBenchTeleportRoute();
+            HollowKnightNativeModsMenu.OpenBenchTeleportRoute(operationToken, generation);
+            return generation;
         }
         catch
         {
-            pendingBenchCompletion = null;
+            CancelBenchTeleport(operationToken, generation);
             throw;
         }
     }
 
-    internal static void CancelBenchTeleport()
+    internal static void CancelBenchTeleport(long operationToken, int generation)
     {
-        pendingBenchCompletion = null;
+        if (BenchOperationMatches(operationToken, generation)) RetireBenchOperation();
+        // The callback may already be claimed by a typed native call. Reset or
+        // timeout must still retire that exact presenter's chooser, never a retry.
+        HollowKnightNativeModsMenu.RetireBenchTeleportRoute(operationToken, generation);
+    }
+
+    internal static bool BenchOperationMatches(long operationToken, int generation)
+    {
+        return operationToken > 0 && pendingBenchCompletion != null &&
+               pendingBenchToken == operationToken && pendingBenchGeneration == generation;
+    }
+
+    // Read-only identities, not mutable BenchRecord objects or fabricated destinations.
+    internal static IReadOnlyList<string> RecordedBenchScenes()
+    {
+        EnsureBenchesLoaded();
+        var scenes = new List<string>(Math.Min(benches.Count, 256));
+        foreach (KeyValuePair<string, BenchRecord> item in benches) {
+            if (string.IsNullOrEmpty(item.Key) || item.Value == null ||
+                !string.Equals(item.Key, item.Value.scene, StringComparison.Ordinal) ||
+                string.IsNullOrEmpty(item.Value.marker)) continue;
+            int index = scenes.BinarySearch(item.Key, StringComparer.Ordinal);
+            if (index >= 0) continue;
+            index = ~index;
+            if (index >= 256) continue;
+            if (scenes.Count == 256) scenes.RemoveAt(255);
+            scenes.Insert(index, item.Key);
+        }
+        return scenes.AsReadOnly();
     }
 
     internal static bool IsBenchRecorded(string scene)
@@ -165,36 +202,69 @@ static class HkStageHooks
         return !string.IsNullOrEmpty(scene) && benches.ContainsKey(scene);
     }
 
+    // Independent lower Map travel has no authority over an upper chooser callback.
     internal static void BenchWarp(string scene)
     {
+        EnsureBenchesLoaded();
+        if (string.IsNullOrEmpty(scene) || !benches.TryGetValue(scene, out BenchRecord record) ||
+            record == null || string.IsNullOrEmpty(record.marker) ||
+            !string.Equals(scene, record.scene, StringComparison.Ordinal))
+            throw new InvalidOperationException("That bench has not been recorded.");
+        GameManager game = GameManager.UnsafeInstance;
+        PlayerData player = game != null ? game.playerData : null;
+        if (game == null || player == null)
+            throw new InvalidOperationException("Hollow Knight is not ready to travel.");
+        player.SetBenchRespawn(record.marker, record.scene, record.type, record.facingRight);
+        game.ReadyForRespawn(false);
+    }
+
+    internal static bool BenchWarp(string scene, long operationToken, int generation)
+    {
+        if (!BenchOperationMatches(operationToken, generation)) return false;
+        if (Time.unscaledTime >= pendingBenchDeadline ||
+            !HollowKnightNativeModsMenu.BenchRouteIsCurrent(operationToken, generation))
+        {
+            CompleteBenchOperation(operationToken, generation,
+                DualSouls.Mods.TweakActionResult.Fail("Bench Teleport authority expired."));
+            HollowKnightNativeModsMenu.RetireBenchTeleportRoute(operationToken, generation);
+            return false;
+        }
+        Action<DualSouls.Mods.TweakActionResult> completed = pendingBenchCompletion;
+        RetireBenchOperation(); // claim once before either typed call can re-enter native menu code
         try
         {
-            EnsureBenchesLoaded();
-            if (string.IsNullOrEmpty(scene) || !benches.TryGetValue(scene, out BenchRecord record))
-                throw new InvalidOperationException("That bench has not been recorded.");
-            GameManager game = GameManager.UnsafeInstance;
-            PlayerData player = game != null ? game.playerData : null;
-            if (game == null || player == null)
-                throw new InvalidOperationException("Hollow Knight is not ready to travel.");
-            player.SetBenchRespawn(record.marker, record.scene, record.type, record.facingRight);
-            game.ReadyForRespawn(false);
-            CompleteBenchOperation(DualSouls.Mods.TweakActionResult.Ok(
-                DualSouls.Mods.TweakReadback.Text(scene)));
+            BenchWarp(scene); // recheck the live record and use the existing typed game authority
         }
         catch (Exception error)
         {
-            CompleteBenchOperation(DualSouls.Mods.TweakActionResult.Fail(
-                error.GetBaseException().Message));
+            completed(DualSouls.Mods.TweakActionResult.Fail(error.GetBaseException().Message));
             throw;
         }
+        completed(DualSouls.Mods.TweakActionResult.Ok(DualSouls.Mods.TweakReadback.Text(scene)));
+        return true; // typed calls returned; this does NOT claim post-respawn arrival
     }
 
-    static void CompleteBenchOperation(DualSouls.Mods.TweakActionResult result)
+    internal static void CancelBenchChoice(long operationToken, int generation, string reason)
     {
-        Action<DualSouls.Mods.TweakActionResult> completed =
-            pendingBenchCompletion;
+        CompleteBenchOperation(operationToken, generation,
+            DualSouls.Mods.TweakActionResult.Fail(reason));
+    }
+
+    static void CompleteBenchOperation(long operationToken, int generation,
+        DualSouls.Mods.TweakActionResult result)
+    {
+        if (!BenchOperationMatches(operationToken, generation)) return;
+        Action<DualSouls.Mods.TweakActionResult> completed = pendingBenchCompletion;
+        RetireBenchOperation(); // retire before callback, so stale/double events cannot complete twice
+        completed(result);
+    }
+
+    static void RetireBenchOperation()
+    {
         pendingBenchCompletion = null;
-        completed?.Invoke(result);
+        pendingBenchToken = 0;
+        pendingBenchGeneration = 0;
+        pendingBenchDeadline = 0f;
     }
 
     static void RecordBench()

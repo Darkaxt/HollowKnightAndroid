@@ -132,7 +132,11 @@ class HollowKnightNativeModsMenuContractTest(unittest.TestCase):
         self.assertIn(
             "source.buttonType = MenuButton.MenuButtonType.Activate;", create
         )
-        self.assertNotIn("MenuButtonType.Activate", entry)
+        self.assertIn("PrepareNativeButton(source);", entry)
+        prepare = method_body(source, "static void PrepareNativeButton(")
+        self.assertIn("MenuButton.MenuButtonType.Activate", prepare)
+        self.assertIn("CancelAction.DoNothing", prepare)
+        self.assertIn("trigger.triggers = new List<EventTrigger.Entry>()", prepare)
 
     def test_binding_waits_for_ready_authority_and_rebinds_after_loss(self):
         source = self.source()
@@ -210,7 +214,9 @@ class HollowKnightNativeModsMenuContractTest(unittest.TestCase):
         self.assertIn("TweakMenuPresenterLayout.DescriptionVisualIndex", source)
         self.assertIn("TweakMenuPresenterLayout.DescriptionHeight", source)
         cancel = method_body(source, "internal void Cancel()")
-        self.assertIn("TweakMenuPresenterLayout.CancelTarget(nestedRouteOpen: false)", cancel)
+        self.assertIn("TweakMenuPresenterLayout.CancelTarget(_benchOpen)", cancel)
+        self.assertIn("TweakMenuCancelTarget.CloseRoute", cancel)
+        self.assertIn("CloseBenchRoute();", cancel)
         on_cancel = method_body(source, "void ICancelHandler.OnCancel(BaseEventData eventData)")
         self.assertIn("Owner.Cancel();", on_cancel)
 

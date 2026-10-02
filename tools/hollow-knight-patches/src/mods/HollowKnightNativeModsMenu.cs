@@ -97,10 +97,10 @@ namespace DualSouls.Mods.HollowKnight
                 set { _textProperty.SetValue(_component, value, null); }
             }
 
-            public NativeText CloneSibling(string name)
+            public NativeText CloneSibling(string name, HollowKnightNativeModsMenu owner)
             {
-                GameObject clone = UnityObject.Instantiate(
-                    _component.gameObject, _component.transform.parent, false);
+                GameObject clone = owner.CloneOwned(
+                    _component.gameObject, _component.transform.parent);
                 clone.name = name;
                 NativeText text = Find(clone);
                 if (text == null)
@@ -208,6 +208,14 @@ namespace DualSouls.Mods.HollowKnight
             }
         }
 
+        static HollowKnightNativeModsMenu _current;
+        readonly List<string> _benchRows = new List<string>();
+        long _benchOperationToken;
+        int _benchGeneration;
+        int _benchSelected;
+        int _benchWindowStart;
+        bool _benchOpen;
+
         readonly List<OptionButton> _optionButtons = new List<OptionButton>();
         readonly List<HollowKnightNativeModsButton> _buttons =
             new List<HollowKnightNativeModsButton>();
@@ -219,6 +227,11 @@ namespace DualSouls.Mods.HollowKnight
         readonly List<GameObject> _skinButtonRoots = new List<GameObject>();
         readonly List<NativeText> _skinLabels = new List<NativeText>();
 
+        readonly List<GameObject> _ownedRoots = new List<GameObject>();
+        readonly HashSet<GameObject> _retiredRoots = new HashSet<GameObject>();
+        GameObject _stagingRoot;
+        OptionButton _gameOptionsTemplate;
+        GameObject _selectionBeforeOpen;
         NativeMenuBinding _binding;
         HollowKnightModsSession _session;
         TweakMenuModel _menu;
@@ -251,6 +264,51 @@ namespace DualSouls.Mods.HollowKnight
         bool _topologyWarningLogged;
         float _nextBindAttempt;
 
+        void Awake() { _current = this; }
+
+        internal static int BenchBindingGeneration
+        {
+            get {
+                HollowKnightNativeModsMenu current = _current;
+                if (current == null || !current._nativeOpen ||
+                    current._openRoute != NativeMenuRoute.Mods || current._transitioning ||
+                    !current.OpenTransitionStillAvailable(current._binding, current._generation))
+                    throw new InvalidOperationException("The native Hollow Knight Mods menu is not ready for Bench Teleport.");
+                return current._generation;
+            }
+        }
+
+        internal static void OpenBenchTeleportRoute(long token, int generation)
+        {
+            HollowKnightNativeModsMenu current = _current;
+            if (token <= 0 || current == null || BenchBindingGeneration != generation || current._benchOpen)
+                throw new InvalidOperationException("The Hollow Knight Bench Teleport binding is unavailable.");
+            current._benchOperationToken = token;
+            current._benchGeneration = generation;
+            current.OpenBenchRoute();
+        }
+
+        internal static bool BenchRouteIsCurrent(long token, int generation)
+        {
+            HollowKnightNativeModsMenu current = _current;
+            return token > 0 && current != null && current._benchOpen &&
+                current._benchOperationToken == token && current._benchGeneration == generation &&
+                current._nativeOpen && current._openRoute == NativeMenuRoute.Mods &&
+                !current._transitioning && current.OpenTransitionStillAvailable(current._binding, generation);
+        }
+
+        internal static void RetireBenchTeleportRoute(long token, int generation)
+        {
+            HollowKnightNativeModsMenu current = _current;
+            if (current == null || token <= 0 || current._benchOperationToken != token ||
+                current._benchGeneration != generation) return;
+            current.RetireBenchRoute();
+            if (current.BindingIsAlive() && current._nativeOpen) {
+                current.Paint();
+                current.SelectCurrentRowButton();
+            }
+        }
+
         void Update()
         {
             if (_skinTransport.Due(Time.unscaledTime)) RefreshSkinMenu();
@@ -277,6 +335,10 @@ namespace DualSouls.Mods.HollowKnight
             if (binding.SkinsEntryRoot.activeSelf != available)
                 binding.SkinsEntryRoot.SetActive(available);
             WireOptionsNavigation(available);
+            if (!available && (_nativeOpen || _transitioning)) {
+                SuspendRoutes(binding);
+                return;
+            }
 
             if (_nativeOpen)
             {
@@ -296,7 +358,10 @@ namespace DualSouls.Mods.HollowKnight
 
         bool BindingIsAlive(NativeMenuBinding binding, int generation)
         {
-            return generation == _generation && binding != null &&
+            HollowKnightModsRuntime runtime = HollowKnightModsRuntime.Current;
+            return generation == _generation && binding != null && runtime != null &&
+                   ReferenceEquals(runtime.Session, binding.Session) &&
+                   _gameOptionsTemplate != null && _gameOptionsTemplate.Button != null &&
                    ReferenceEquals(_binding, binding) && binding.Ui != null &&
                    binding.OptionsScreen != null && binding.ModsScreen != null &&
                    binding.SkinsScreen != null && binding.ModsEntryRoot != null &&
@@ -330,8 +395,10 @@ namespace DualSouls.Mods.HollowKnight
 
             try
             {
+                _generation++;
+                _retiredRoots.RemoveWhere(root => root == null);
                 Transform content = manager.optionsMenuScreen.content.transform;
-                CollectOptionButtons(content);
+                CollectOptionButtons(content, manager);
                 if (_optionButtons.Count < 2)
                     throw new InvalidOperationException(
                         "Hollow Knight Options menu has fewer than two typed route buttons.");
@@ -340,7 +407,10 @@ namespace DualSouls.Mods.HollowKnight
                 _menu = session.Menu;
                 _ui = manager;
 
-                OptionButton template = _optionButtons[0];
+                _stagingRoot = new GameObject("NativeModsMenuStaging");
+                _ownedRoots.Add(_stagingRoot);
+                _stagingRoot.SetActive(false);
+                OptionButton template = _gameOptionsTemplate;
                 float optionStep = ResolveOptionStep();
                 float rowStep = Mathf.Clamp(optionStep, MinimumRowStep, MaximumRowStep);
                 float entryY = _optionButtons[_optionButtons.Count - 1].Y - optionStep;
@@ -353,7 +423,6 @@ namespace DualSouls.Mods.HollowKnight
                 BuildSkinsScreen(manager.optionsMenuScreen.gameObject,
                                  template.Wrapper, template.Y, rowStep);
 
-                _generation++;
                 _binding = new NativeMenuBinding(
                     manager, manager.optionsMenuScreen, _modsScreen, _skinsScreen,
                     _session, _menu, _entryRoot, _skinsEntryRoot);
@@ -389,20 +458,84 @@ namespace DualSouls.Mods.HollowKnight
             return match;
         }
 
-        void CollectOptionButtons(Transform content)
+        void CollectOptionButtons(Transform content, UIManager manager)
         {
             _optionButtons.Clear();
+            _gameOptionsTemplate = null;
+            for (int i = 0; i < content.childCount; i++) {
+                GameObject direct = content.GetChild(i).gameObject;
+                if (_retiredRoots.Contains(direct)) continue;
+                if (direct.name == "MODS" || direct.name == "SKINS")
+                    throw new InvalidOperationException("Options already contains a foreign MODS or SKINS route.");
+            }
             var wrappers = new HashSet<GameObject>();
             MenuButton[] buttons = content.GetComponentsInChildren<MenuButton>(true);
             for (int i = 0; i < buttons.Length; i++)
             {
                 MenuButton button = buttons[i];
-                if (button == null || !ActiveBelow(button.transform, content)) continue;
+                if (button == null) continue;
                 GameObject wrapper = FindDirectChild(content, button.transform);
-                if (wrapper == null || !wrappers.Add(wrapper)) continue;
+                if (wrapper == null || _retiredRoots.Contains(wrapper)) continue;
+                if (HasGameOptionsAuthority(button, manager)) {
+                    if (_gameOptionsTemplate != null)
+                        throw new InvalidOperationException("Options has ambiguous native GAMEOPTIONS authority.");
+                    RequireNativeButton(wrapper);
+                    _gameOptionsTemplate = new OptionButton(button, wrapper);
+                }
+                if (!ActiveBelow(button.transform, content)) continue;
+                if (!wrappers.Add(wrapper))
+                    throw new InvalidOperationException("An Options entry has multiple native MenuButtons.");
                 _optionButtons.Add(new OptionButton(button, wrapper));
             }
+            if (_gameOptionsTemplate == null)
+                throw new InvalidOperationException("Options has no native GAMEOPTIONS route.");
             _optionButtons.Sort((left, right) => right.Y.CompareTo(left.Y));
+        }
+
+        static bool HasGameOptionsAuthority(MenuButton button, UIManager manager)
+        {
+            EventTrigger trigger = button.GetComponent<EventTrigger>();
+            if (trigger == null) return false;
+            for (int i = 0; i < trigger.triggers.Count; i++) {
+                EventTrigger.Entry entry = trigger.triggers[i];
+                if (entry == null || (entry.eventID != EventTriggerType.Submit &&
+                    entry.eventID != EventTriggerType.PointerClick) || entry.callback == null) continue;
+                for (int j = 0; j < entry.callback.GetPersistentEventCount(); j++)
+                    if (ReferenceEquals(entry.callback.GetPersistentTarget(j), manager) &&
+                        entry.callback.GetPersistentMethodName(j) == nameof(UIManager.UIGoToGameOptionsMenu))
+                        return true;
+            }
+            return false;
+        }
+
+        static MenuButton RequireNativeButton(GameObject root)
+        {
+            Selectable[] selectables = root.GetComponentsInChildren<Selectable>(true);
+            if (selectables.Length != 1 || !(selectables[0] is MenuButton))
+                throw new InvalidOperationException("Native control must contain exactly one MenuButton-derived Selectable.");
+            return (MenuButton)selectables[0];
+        }
+
+        GameObject CloneOwned(GameObject template, Transform parent, bool inactive = false)
+        {
+            // Inactive parent prevents Instantiate/OnEnable from caching or invoking
+            // inherited native routes before their handlers have been neutralized.
+            GameObject root = Instantiate(template, _stagingRoot.transform, false);
+            _ownedRoots.Add(root); // own immediately, before any fallible configuration
+            root.SetActive(false);
+            root.transform.SetParent(parent, false);
+            if (!inactive) root.SetActive(true); // nested parent is still inactive
+            return root;
+        }
+
+        static void PrepareNativeButton(MenuButton button)
+        {
+            button.enabled = false;
+            button.buttonType = MenuButton.MenuButtonType.Activate;
+            button.cancelAction = CancelAction.DoNothing;
+            EventTrigger trigger = button.GetComponent<EventTrigger>();
+            if (trigger != null) trigger.triggers = new List<EventTrigger.Entry>();
+            button.enabled = true;
         }
 
         static bool ActiveBelow(Transform child, Transform ancestor)
@@ -441,17 +574,19 @@ namespace DualSouls.Mods.HollowKnight
         void BuildEntry(Transform content, GameObject template, float y,
                              NativeMenuRoute route, string label)
         {
-            GameObject root = Instantiate(template, content, false);
+            GameObject root = CloneOwned(template, content, inactive: true);
             root.name = label;
             RectTransform wrapper = root.transform as RectTransform;
             if (wrapper != null)
                 wrapper.anchoredPosition = new Vector2(wrapper.anchoredPosition.x, y);
 
-            MenuButton source = root.GetComponentInChildren<MenuButton>(true);
+            MenuButton source = RequireNativeButton(root);
             if (source == null)
                 throw new InvalidOperationException(label + " entry template has no MenuButton.");
+            PrepareNativeButton(source);
             HollowKnightNativeModsEntryButton button =
                 source.gameObject.AddComponent<HollowKnightNativeModsEntryButton>();
+            button.Generation = _generation;
             button.Owner = this;
             button.Selectable = source;
             button.Route = (int)route;
@@ -475,7 +610,7 @@ namespace DualSouls.Mods.HollowKnight
         void BuildModsScreen(GameObject optionsScreen, GameObject rowTemplate,
                              float firstY, float rowStep)
         {
-            GameObject root = Instantiate(optionsScreen, _ui.UICanvas.transform, false);
+            GameObject root = CloneOwned(optionsScreen, _ui.UICanvas.transform, inactive: true);
             root.name = "ModsMenuScreen";
             root.SetActive(false);
 
@@ -527,7 +662,7 @@ namespace DualSouls.Mods.HollowKnight
         void BuildSkinsScreen(GameObject optionsScreen, GameObject rowTemplate,
                               float firstY, float rowStep)
         {
-            GameObject root = Instantiate(optionsScreen, _ui.UICanvas.transform, false);
+            GameObject root = CloneOwned(optionsScreen, _ui.UICanvas.transform, inactive: true);
             root.name = "SkinsMenuScreen";
             root.SetActive(false);
             _skinsScreen = root.GetComponent<MenuScreen>();
@@ -575,7 +710,7 @@ namespace DualSouls.Mods.HollowKnight
                                float firstY, float rowStep)
         {
             _descriptionRoot = CreateDescriptionRow(
-                parent, template, "ModsDescription", visualIndex,
+                this, parent, template, "ModsDescription", visualIndex,
                 firstY, rowStep, out _description);
         }
 
@@ -583,21 +718,22 @@ namespace DualSouls.Mods.HollowKnight
                                    float firstY, float rowStep)
         {
             _skinsDescriptionRoot = CreateDescriptionRow(
-                parent, template, "SkinsDescription", visualIndex,
+                this, parent, template, "SkinsDescription", visualIndex,
                 firstY, rowStep, out _skinsDescription);
         }
 
-        static GameObject CreateDescriptionRow(Transform parent, GameObject template, string name,
+        static GameObject CreateDescriptionRow(HollowKnightNativeModsMenu owner,
+                                               Transform parent, GameObject template, string name,
                                                float visualIndex, float firstY, float rowStep,
                                                out NativeText label)
         {
-            GameObject wrapper = Instantiate(template, parent, false);
+            GameObject wrapper = owner.CloneOwned(template, parent);
             wrapper.name = name;
             RectTransform rect = wrapper.transform as RectTransform;
             if (rect != null)
                 rect.anchoredPosition = new Vector2(rect.anchoredPosition.x,
                                                     firstY - rowStep * visualIndex);
-            MenuButton source = wrapper.GetComponentInChildren<MenuButton>(true);
+            MenuButton source = RequireNativeButton(wrapper);
             if (source == null)
                 throw new InvalidOperationException("Native description row has no MenuButton.");
             source.interactable = false;
@@ -612,16 +748,18 @@ namespace DualSouls.Mods.HollowKnight
         void CreateSkinButton(Transform parent, GameObject template, int visualIndex,
                               float firstY, float rowStep)
         {
-            GameObject wrapper = Instantiate(template, parent, false);
+            GameObject wrapper = CloneOwned(template, parent);
             wrapper.name = "SkinsRow" + visualIndex;
             RectTransform rect = wrapper.transform as RectTransform;
             if (rect != null)
                 rect.anchoredPosition = new Vector2(rect.anchoredPosition.x,
                                                     firstY - rowStep * visualIndex);
-            MenuButton source = wrapper.GetComponentInChildren<MenuButton>(true);
+            MenuButton source = RequireNativeButton(wrapper);
             if (source == null)
                 throw new InvalidOperationException("Native Skins row has no MenuButton.");
+            PrepareNativeButton(source);
             var button = source.gameObject.AddComponent<HollowKnightNativeSkinButton>();
+            button.Generation = _generation;
             button.Owner = this;
             button.Selectable = source;
             source.buttonType = MenuButton.MenuButtonType.Activate;
@@ -640,18 +778,20 @@ namespace DualSouls.Mods.HollowKnight
         void CreateButton(Transform parent, GameObject template, ButtonRole role,
                           float visualIndex, float firstY, float rowStep, string initialText)
         {
-            GameObject wrapper = Instantiate(template, parent, false);
+            GameObject wrapper = CloneOwned(template, parent);
             wrapper.name = "Mods" + role + visualIndex;
             RectTransform rect = wrapper.transform as RectTransform;
             if (rect != null)
                 rect.anchoredPosition = new Vector2(rect.anchoredPosition.x,
                                                     firstY - rowStep * visualIndex);
 
-            MenuButton source = wrapper.GetComponentInChildren<MenuButton>(true);
+            MenuButton source = RequireNativeButton(wrapper);
             if (source == null)
                 throw new InvalidOperationException("Native Mods row has no MenuButton.");
+            PrepareNativeButton(source);
             HollowKnightNativeModsButton button =
                 source.gameObject.AddComponent<HollowKnightNativeModsButton>();
+            button.Generation = _generation;
             button.Owner = this;
             button.Selectable = source;
             button.Role = (int)role;
@@ -668,7 +808,7 @@ namespace DualSouls.Mods.HollowKnight
             NativeText valueLabel = null;
             if (role == ButtonRole.Group || role == ButtonRole.Row)
             {
-                valueLabel = label.CloneSibling("ModsValue");
+                valueLabel = label.CloneSibling("ModsValue", this);
                 label.ConfigureColumn(rightAligned: false);
                 valueLabel.ConfigureColumn(rightAligned: true);
                 valueLabel.Text = "";
@@ -702,6 +842,8 @@ namespace DualSouls.Mods.HollowKnight
                     behaviour is HollowKnightNativeModsButton ||
                     behaviour is HollowKnightNativeSkinButton ||
                     behaviour is HollowKnightNativeModsEntryButton) continue;
+                EventTrigger trigger = behaviour as EventTrigger;
+                if (trigger != null) trigger.triggers = new List<EventTrigger.Entry>();
                 behaviour.enabled = false;
             }
         }
@@ -755,6 +897,20 @@ namespace DualSouls.Mods.HollowKnight
             selectable.navigation = navigation;
         }
 
+        internal bool DriverIsCurrent(MonoBehaviour driver, int generation)
+        {
+            if (driver == null || generation != _generation || !BindingIsAlive() ||
+                !_binding.Session.IsReady || _binding.Ui.uiState != UIState.PAUSED ||
+                !driver.gameObject.activeInHierarchy) return false;
+            HollowKnightNativeModsEntryButton entry = driver as HollowKnightNativeModsEntryButton;
+            if (entry != null) return !_nativeOpen &&
+                (ReferenceEquals(entry, _entryButton) || ReferenceEquals(entry, _skinsEntryButton));
+            HollowKnightNativeModsButton mod = driver as HollowKnightNativeModsButton;
+            if (mod != null) return _nativeOpen && _openRoute == NativeMenuRoute.Mods && _buttons.Contains(mod);
+            HollowKnightNativeSkinButton skin = driver as HollowKnightNativeSkinButton;
+            return skin != null && _nativeOpen && _openRoute == NativeMenuRoute.Skins && _skinButtons.Contains(skin);
+        }
+
         internal void Open(NativeMenuRoute route)
         {
             NativeMenuBinding binding = _binding;
@@ -762,8 +918,12 @@ namespace DualSouls.Mods.HollowKnight
                 ? binding?.ModsEntryRoot
                 : binding?.SkinsEntryRoot;
             if (_nativeOpen || !BindingIsAlive(binding, _generation) ||
-                entry == null || !entry.activeInHierarchy || _transitioning)
+                entry == null || !entry.activeInHierarchy || _transitioning ||
+                !OpenTransitionStillAvailable(binding, _generation))
                 return;
+            _selectionBeforeOpen = EventSystem.current != null
+                ? EventSystem.current.currentSelectedGameObject : null;
+            if (IsOwnedSelection(_selectionBeforeOpen)) _selectionBeforeOpen = null;
             _transitioning = true;
             _openRoute = route;
             int generation = _generation;
@@ -812,8 +972,9 @@ namespace DualSouls.Mods.HollowKnight
 
         internal void Cancel()
         {
-            if (TweakMenuPresenterLayout.CancelTarget(nestedRouteOpen: false) ==
-                TweakMenuCancelTarget.CloseMenu)
+            if (TweakMenuPresenterLayout.CancelTarget(_benchOpen) == TweakMenuCancelTarget.CloseRoute)
+                CloseBenchRoute();
+            else
                 Close();
         }
 
@@ -822,13 +983,17 @@ namespace DualSouls.Mods.HollowKnight
             if (!_nativeOpen || !BindingIsAlive(binding, _generation) || _transitioning)
                 return;
             _transitioning = true;
+            _skinTransport.Cancel();
             int generation = _generation;
             _transitionCoroutine = StartCoroutine(CloseRoutine(binding, generation, showOptions));
         }
 
         IEnumerator CloseRoutine(NativeMenuBinding binding, int generation, bool showOptions)
         {
-            if (_openRoute == NativeMenuRoute.Mods) binding.Menu.Close();
+            if (_openRoute == NativeMenuRoute.Mods) {
+                CancelBenchRoute("Bench Teleport closed before a destination completed.");
+                binding.Menu.Close();
+            }
             MenuScreen screen = _openRoute == NativeMenuRoute.Mods
                 ? binding.ModsScreen
                 : binding.SkinsScreen;
@@ -854,13 +1019,22 @@ namespace DualSouls.Mods.HollowKnight
         void CancelOpenTransition(NativeMenuBinding binding, int generation)
         {
             if (!BindingIsAlive(binding, generation)) return;
-            if (_nativeOpen && _openRoute == NativeMenuRoute.Mods) binding.Menu.Close();
+            SuspendRoutes(binding);
+        }
+
+        void SuspendRoutes(NativeMenuBinding binding)
+        {
+            CancelBenchRoute("Bench Teleport lost paused menu authority.");
+            _skinTransport.Cancel();
+            if (_transitionCoroutine != null) StopCoroutine(_transitionCoroutine);
+            _transitionCoroutine = null;
+            if (_openRoute == NativeMenuRoute.Mods && binding.Menu.IsOpen) binding.Menu.Close();
             _nativeOpen = false;
-            if (binding.ModsScreen != null)
-                binding.ModsScreen.gameObject.SetActive(false);
-            if (binding.SkinsScreen != null)
-                binding.SkinsScreen.gameObject.SetActive(false);
-            CompleteTransition(binding, generation);
+            _transitioning = false;
+            binding.ModsScreen.gameObject.SetActive(false);
+            binding.SkinsScreen.gameObject.SetActive(false);
+            RestoreOptionsNavigation();
+            RestoreSelection();
         }
 
         void CompleteTransition(NativeMenuBinding binding, int generation)
@@ -872,18 +1046,23 @@ namespace DualSouls.Mods.HollowKnight
 
         internal void Select(HollowKnightNativeModsButton button)
         {
-            if (button == null) return;
+            if (button == null || !DriverIsCurrent(button, button.Generation)) return;
             _focusedRole = (ButtonRole)button.Role;
-            if (_focusedRole == ButtonRole.Row && button.DataIndex >= 0 &&
-                button.DataIndex < _menu.CurrentRows.Count)
-                _menu.MoveRow(button.DataIndex - _menu.SelectedRowIndex);
+            if (_focusedRole == ButtonRole.Row && button.DataIndex >= 0) {
+                if (_benchOpen) {
+                    if (button.DataIndex < _benchRows.Count) _benchSelected = button.DataIndex;
+                }
+                else if (button.DataIndex < _menu.CurrentRows.Count)
+                    _menu.MoveRow(button.DataIndex - _menu.SelectedRowIndex);
+            }
             Paint();
         }
 
         internal void Submit(HollowKnightNativeModsButton button)
         {
-            if (button == null || _transitioning) return;
+            if (button == null || _transitioning || !DriverIsCurrent(button, button.Generation)) return;
             Select(button);
+            if (_benchOpen) { SubmitBench(button); return; }
             switch ((ButtonRole)button.Role)
             {
                 case ButtonRole.Group: _menu.MoveGroup(1); break;
@@ -896,7 +1075,8 @@ namespace DualSouls.Mods.HollowKnight
 
         internal void Move(HollowKnightNativeModsButton button, MoveDirection direction)
         {
-            if (button == null || _transitioning) return;
+            if (button == null || _transitioning || !DriverIsCurrent(button, button.Generation)) return;
+            if (_benchOpen) { MoveBench(button, direction); return; }
             ButtonRole role = (ButtonRole)button.Role;
             if (direction == MoveDirection.Left || direction == MoveDirection.Right)
             {
@@ -915,6 +1095,133 @@ namespace DualSouls.Mods.HollowKnight
                 direction == MoveDirection.Down ? 1 : -1,
                 _menu.CurrentRows.Count);
             Focus(next);
+        }
+
+        void OpenBenchRoute()
+        {
+            _benchRows.Clear();
+            _benchRows.AddRange(global::HkStageHooks.RecordedBenchScenes());
+            _benchSelected = _benchWindowStart = 0;
+            _benchOpen = true;
+            PaintBench();
+            if (_benchRows.Count > 0) FocusBenchRow();
+            else {
+                global::HkStageHooks.CancelBenchChoice(_benchOperationToken, _benchGeneration,
+                    "No recorded benches are available.");
+                _buttons[TweakMenuPresenterLayout.BackButtonIndex].Selectable.Select();
+            }
+        }
+
+        void SubmitBench(HollowKnightNativeModsButton button)
+        {
+            ButtonRole role = (ButtonRole)button.Role;
+            if (role == ButtonRole.Back) { CloseBenchRoute(); return; }
+            if (role != ButtonRole.Row || button.DataIndex != _benchSelected ||
+                _benchSelected < 0 || _benchSelected >= _benchRows.Count) return;
+            long token = _benchOperationToken;
+            int generation = _benchGeneration;
+            try {
+                bool succeeded = global::HkStageHooks.BenchWarp(
+                    _benchRows[_benchSelected], token, generation);
+                if (_benchOperationToken != token || _benchGeneration != generation) return;
+                RetireBenchRoute();
+                if (succeeded) BeginClose(_binding, showOptions: false);
+                else { Paint(); SelectCurrentRowButton(); }
+            }
+            catch {
+                if (_benchOperationToken != token || _benchGeneration != generation) return;
+                RetireBenchRoute();
+                Paint();
+                SelectCurrentRowButton();
+            }
+        }
+
+        void MoveBench(HollowKnightNativeModsButton button, MoveDirection direction)
+        {
+            if (direction != MoveDirection.Up && direction != MoveDirection.Down) return;
+            ButtonRole role = (ButtonRole)button.Role;
+            if (_benchRows.Count == 0) {
+                _buttons[TweakMenuPresenterLayout.BackButtonIndex].Selectable.Select();
+                return;
+            }
+            if (role == ButtonRole.Back) {
+                if (direction == MoveDirection.Up) FocusBenchRow();
+                return;
+            }
+            if (role != ButtonRole.Row) return;
+            Select(button);
+            int next = _benchSelected + (direction == MoveDirection.Down ? 1 : -1);
+            if (next >= _benchRows.Count) {
+                _buttons[TweakMenuPresenterLayout.BackButtonIndex].Selectable.Select();
+                return;
+            }
+            if (next < 0) return;
+            _benchSelected = next;
+            if (_benchSelected < _benchWindowStart) _benchWindowStart = _benchSelected;
+            else if (_benchSelected >= _benchWindowStart + VisibleRows)
+                _benchWindowStart = _benchSelected - VisibleRows + 1;
+            PaintBench();
+            FocusBenchRow();
+        }
+
+        void FocusBenchRow()
+        {
+            int index = TweakMenuPresenterLayout.ButtonIndex(
+                TweakMenuFocusTarget.Row(_benchSelected), _benchWindowStart, _benchRows.Count);
+            if (index >= TweakMenuPresenterLayout.FirstRowButtonIndex &&
+                index < TweakMenuPresenterLayout.ResetButtonIndex &&
+                _buttons[index].Selectable.gameObject.activeInHierarchy)
+                _buttons[index].Selectable.Select();
+        }
+
+        void CancelBenchRoute(string reason)
+        {
+            long token = _benchOperationToken;
+            int generation = _benchGeneration;
+            RetireBenchRoute();
+            global::HkStageHooks.CancelBenchChoice(token, generation, reason);
+        }
+
+        void RetireBenchRoute()
+        {
+            _benchOperationToken = 0;
+            _benchGeneration = 0;
+            _benchOpen = false;
+            _benchRows.Clear();
+            _benchSelected = _benchWindowStart = 0;
+        }
+
+        void CloseBenchRoute()
+        {
+            CancelBenchRoute("Bench Teleport was canceled.");
+            Paint();
+            SelectCurrentRowButton();
+        }
+
+        void PaintBench()
+        {
+            if (_labels.Count != TweakMenuPresenterLayout.ButtonCount ||
+                _valueLabels.Count != TweakMenuPresenterLayout.ButtonCount ||
+                _title == null || _description == null) return;
+            _buttonRoots[TweakMenuPresenterLayout.GroupButtonIndex].SetActive(false);
+            _buttonRoots[TweakMenuPresenterLayout.ResetButtonIndex].SetActive(false);
+            _buttonRoots[TweakMenuPresenterLayout.BackButtonIndex].SetActive(true);
+            for (int slot = 0; slot < VisibleRows; slot++) {
+                int index = TweakMenuPresenterLayout.FirstRowButtonIndex + slot;
+                int dataIndex = TweakMenuPresenterLayout.DataIndexForRowButton(index,
+                    _benchWindowStart, _benchRows.Count);
+                bool shown = dataIndex >= 0;
+                if (_buttonRoots[index].activeSelf != shown) _buttonRoots[index].SetActive(shown);
+                _buttons[index].DataIndex = shown ? dataIndex : -1;
+                if (!shown) continue;
+                _labels[index].Text = Friendly(_benchRows[dataIndex]);
+                _valueLabels[index].Text = dataIndex == _benchSelected ? ">" : "";
+            }
+            _labels[TweakMenuPresenterLayout.BackButtonIndex].Text = "BACK";
+            _title.Text = "BENCH TELEPORT";
+            _description.Text = _benchRows.Count == 0
+                ? "NO RECORDED BENCHES ARE AVAILABLE."
+                : "TRAVEL TO " + Friendly(_benchRows[_benchSelected]) + ".";
         }
 
         void MoveChoice(int delta)
@@ -983,9 +1290,16 @@ namespace DualSouls.Mods.HollowKnight
 
         void Paint()
         {
+            if (_benchOpen) { PaintBench(); return; }
             if (_menu == null || _labels.Count != TweakMenuPresenterLayout.ButtonCount ||
                 _valueLabels.Count != TweakMenuPresenterLayout.ButtonCount) return;
             _menu.RefreshOperationMessage();
+            if (!_buttonRoots[TweakMenuPresenterLayout.GroupButtonIndex].activeSelf)
+                _buttonRoots[TweakMenuPresenterLayout.GroupButtonIndex].SetActive(true);
+            if (!_buttonRoots[TweakMenuPresenterLayout.ResetButtonIndex].activeSelf)
+                _buttonRoots[TweakMenuPresenterLayout.ResetButtonIndex].SetActive(true);
+            if (!_buttonRoots[TweakMenuPresenterLayout.BackButtonIndex].activeSelf)
+                _buttonRoots[TweakMenuPresenterLayout.BackButtonIndex].SetActive(true);
             _labels[TweakMenuPresenterLayout.GroupButtonIndex].Text =
                 "< " + Friendly(_menu.Groups[_menu.SelectedGroupIndex]) + " >";
             _valueLabels[TweakMenuPresenterLayout.GroupButtonIndex].Text =
@@ -1053,14 +1367,15 @@ namespace DualSouls.Mods.HollowKnight
 
         internal void SelectSkin(HollowKnightNativeSkinButton button)
         {
-            if (button == null || _skinMenu == null) return;
+            if (button == null || _skinMenu == null || !DriverIsCurrent(button, button.Generation)) return;
             _skinMenu.SelectRow(button.DataIndex);
             PaintSkins();
         }
 
         internal void SubmitSkin(HollowKnightNativeSkinButton button)
         {
-            if (button == null || _skinMenu == null || _transitioning) return;
+            if (button == null || _skinMenu == null || _transitioning ||
+                !DriverIsCurrent(button, button.Generation)) return;
             SelectSkin(button);
             NativeSkinMenuRow row = _skinMenu.Selected;
             if (row.Kind == NativeSkinMenuRowKind.Back) { Close(); return; }
@@ -1074,7 +1389,8 @@ namespace DualSouls.Mods.HollowKnight
 
         internal void MoveSkin(HollowKnightNativeSkinButton button, MoveDirection direction)
         {
-            if (button == null || _skinMenu == null || _transitioning) return;
+            if (button == null || _skinMenu == null || _transitioning ||
+                !DriverIsCurrent(button, button.Generation)) return;
             SelectSkin(button);
             if (direction == MoveDirection.Left || direction == MoveDirection.Right)
             {
@@ -1290,6 +1606,7 @@ namespace DualSouls.Mods.HollowKnight
 
         void CancelAndClearBinding()
         {
+            CancelBenchRoute("Bench Teleport binding closed before a destination completed.");
             _skinTransport.Cancel();
             NativeMenuBinding binding = _binding;
             if (_transitionCoroutine != null)
@@ -1306,9 +1623,43 @@ namespace DualSouls.Mods.HollowKnight
             ClearBinding();
         }
 
+        bool IsOwnedSelection(GameObject selection)
+        {
+            if (selection == null) return false;
+            for (int i = 0; i < _ownedRoots.Count; i++)
+                if (_ownedRoots[i] != null && selection.transform.IsChildOf(_ownedRoots[i].transform)) return true;
+            return false;
+        }
+
+        void RestoreSelection()
+        {
+            EventSystem events = EventSystem.current;
+            if (events == null || !IsOwnedSelection(events.currentSelectedGameObject)) return;
+            GameObject target = _selectionBeforeOpen;
+            if (target == null || !target.activeInHierarchy || IsOwnedSelection(target))
+                target = _gameOptionsTemplate != null && _gameOptionsTemplate.Button != null
+                    ? _gameOptionsTemplate.Button.gameObject : null;
+            events.SetSelectedGameObject(target != null && target.activeInHierarchy ? target : null);
+        }
+
         void ClearBinding()
         {
+            if (_stagingRoot != null) _stagingRoot.SetActive(false);
+            for (int i = 0; i < _ownedRoots.Count; i++)
+                if (_ownedRoots[i] != null) _ownedRoots[i].SetActive(false);
             RestoreOptionsNavigation();
+            RestoreSelection();
+            for (int i = 0; i < _ownedRoots.Count; i++) {
+                GameObject root = _ownedRoots[i];
+                if (root == null) continue;
+                _retiredRoots.Add(root);
+                UnityObject.Destroy(root);
+            }
+            if (_stagingRoot != null) UnityObject.Destroy(_stagingRoot);
+            _ownedRoots.Clear();
+            _stagingRoot = null;
+            _gameOptionsTemplate = null;
+            _selectionBeforeOpen = null;
             if (_entryRoot != null) UnityObject.Destroy(_entryRoot);
             if (_skinsEntryRoot != null) UnityObject.Destroy(_skinsEntryRoot);
             if (_modsScreen != null) UnityObject.Destroy(_modsScreen.gameObject);
@@ -1344,6 +1695,7 @@ namespace DualSouls.Mods.HollowKnight
 
         void OnDestroy()
         {
+            if (ReferenceEquals(_current, this)) _current = null;
             CancelAndClearBinding();
             AndroidJavaClass bridge = _skinBridge;
             _skinBridge = null;
@@ -1356,11 +1708,13 @@ namespace DualSouls.Mods.HollowKnight
     {
         internal HollowKnightNativeModsMenu Owner;
         internal MenuButton Selectable;
+        internal int Generation;
         internal int Route;
 
         void ISubmitHandler.OnSubmit(BaseEventData eventData)
         {
-            if (Selectable == null || !Selectable.interactable || Owner == null) return;
+            if (Selectable == null || !Selectable.interactable || Owner == null ||
+                !Owner.DriverIsCurrent(this, Generation)) return;
             Owner.OpenEntry(Route);
         }
 
@@ -1375,31 +1729,35 @@ namespace DualSouls.Mods.HollowKnight
     {
         internal HollowKnightNativeModsMenu Owner;
         internal MenuButton Selectable;
+        internal int Generation;
         internal int Role;
         internal int DataIndex = -1;
 
         void ISubmitHandler.OnSubmit(BaseEventData eventData)
         {
-            if (Selectable == null || !Selectable.interactable || Owner == null) return;
+            if (Selectable == null || !Selectable.interactable || Owner == null ||
+                !Owner.DriverIsCurrent(this, Generation)) return;
             Owner.Submit(this);
         }
 
         void IPointerClickHandler.OnPointerClick(PointerEventData eventData)
         {
-            Owner?.Select(this);
+            if (Owner != null && Owner.DriverIsCurrent(this, Generation)) Owner.Select(this);
             ((ISubmitHandler)this).OnSubmit(eventData);
         }
 
         void IMoveHandler.OnMove(AxisEventData eventData)
         {
-            if (Selectable == null || !Selectable.interactable || Owner == null) return;
+            if (Selectable == null || !Selectable.interactable || Owner == null ||
+                !Owner.DriverIsCurrent(this, Generation)) return;
             Owner.Move(this, eventData.moveDir);
             eventData.Use();
         }
 
         void ICancelHandler.OnCancel(BaseEventData eventData)
         {
-            if (Selectable == null || !Selectable.interactable || Owner == null) return;
+            if (Selectable == null || !Selectable.interactable || Owner == null ||
+                !Owner.DriverIsCurrent(this, Generation)) return;
             Selectable.ForceDeselect();
             Owner.Cancel();
             eventData.Use();
@@ -1407,7 +1765,7 @@ namespace DualSouls.Mods.HollowKnight
 
         void ISelectHandler.OnSelect(BaseEventData eventData)
         {
-            Owner?.Select(this);
+            if (Owner != null && Owner.DriverIsCurrent(this, Generation)) Owner.Select(this);
         }
     }
 
@@ -1416,30 +1774,34 @@ namespace DualSouls.Mods.HollowKnight
     {
         internal HollowKnightNativeModsMenu Owner;
         internal MenuButton Selectable;
+        internal int Generation;
         internal int DataIndex = -1;
 
         void ISubmitHandler.OnSubmit(BaseEventData eventData)
         {
-            if (Selectable == null || !Selectable.interactable || Owner == null) return;
+            if (Selectable == null || !Selectable.interactable || Owner == null ||
+                !Owner.DriverIsCurrent(this, Generation)) return;
             Owner.SubmitSkin(this);
         }
 
         void IPointerClickHandler.OnPointerClick(PointerEventData eventData)
         {
-            Owner?.SelectSkin(this);
+            if (Owner != null && Owner.DriverIsCurrent(this, Generation)) Owner.SelectSkin(this);
             ((ISubmitHandler)this).OnSubmit(eventData);
         }
 
         void IMoveHandler.OnMove(AxisEventData eventData)
         {
-            if (Selectable == null || !Selectable.interactable || Owner == null) return;
+            if (Selectable == null || !Selectable.interactable || Owner == null ||
+                !Owner.DriverIsCurrent(this, Generation)) return;
             Owner.MoveSkin(this, eventData.moveDir);
             eventData.Use();
         }
 
         void ICancelHandler.OnCancel(BaseEventData eventData)
         {
-            if (Selectable == null || !Selectable.interactable || Owner == null) return;
+            if (Selectable == null || !Selectable.interactable || Owner == null ||
+                !Owner.DriverIsCurrent(this, Generation)) return;
             Selectable.ForceDeselect();
             Owner.Close();
             eventData.Use();
@@ -1447,7 +1809,7 @@ namespace DualSouls.Mods.HollowKnight
 
         void ISelectHandler.OnSelect(BaseEventData eventData)
         {
-            Owner?.SelectSkin(this);
+            if (Owner != null && Owner.DriverIsCurrent(this, Generation)) Owner.SelectSkin(this);
         }
     }
 }

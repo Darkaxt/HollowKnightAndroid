@@ -27,6 +27,7 @@
     <Content Include="../hollow-knight-patches/src/mods/HollowKnightGameTweakApi.cs" Link="source-contracts/HollowKnightGameTweakApi.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/dualsouls/HkStageHooks.cs" Link="source-contracts/HkStageHooks.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/dualsouls/HKDualScreen.cs" Link="source-contracts/HKDualScreen.cs" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../hollow-knight-patches/src/dualsouls/HKDualScreen.Bottom.Map.cs" Link="source-contracts/HKDualScreen.Bottom.Map.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/mods/HollowKnightNativeModsMenu.cs" Link="native-skin-contracts/HollowKnightNativeModsMenu.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../silksong-patches/src/mods/SilksongNativeModsMenu.cs" Link="native-skin-contracts/SilksongNativeModsMenu.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/mods/HollowKnightModsRuntime.cs" Link="native-skin-contracts/HollowKnightModsRuntime.cs" CopyToOutputDirectory="PreserveNewest" />
@@ -54,6 +55,21 @@
     <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightFlashPolicyCore.cs" Link="HollowKnight\HollowKnightFlashPolicyCore.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightFlashPolicyCore.cs')" />
     <Compile Include="..\hollow-knight-patches\src\mods\HollowKnightModsSession.cs" Link="HollowKnight\HollowKnightModsSession.cs" Condition="Exists('..\hollow-knight-patches\src\mods\HollowKnightModsSession.cs')" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Engine model is a per-profile generator template, not a global Unity stub. -->
+    <Compile Remove="NativeModsMenuNativeModel.cs" />
+    <!-- External intermediates must not admit historical generated obj/bin sources. -->
+    <Compile Remove="obj/**/*.cs;bin/**/*.cs" />
+  </ItemGroup>
+  <PropertyGroup>
+    <NativeModsMenuSourceRoot Condition="'$(NativeModsMenuSourceRoot)' == ''">$(MSBuildProjectDirectory)/../..</NativeModsMenuSourceRoot>
+  </PropertyGroup>
+  <Target Name="GenerateNativeModsMenuFixture" BeforeTargets="CoreCompile">
+    <Exec Command="python &quot;$(MSBuildProjectDirectory)/generate_native_mods_menu_fixture.py&quot; &quot;$(IntermediateOutputPath)native-menu-fixture&quot; --source-root &quot;$(NativeModsMenuSourceRoot)&quot;" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)native-menu-fixture/*.g.cs" />
+    </ItemGroup>
+  </Target>
   <PropertyGroup>
     <ModsRuntimeSourceRoot Condition="'$(ModsRuntimeSourceRoot)' == ''">$(MSBuildProjectDirectory)/../..</ModsRuntimeSourceRoot>
   </PropertyGroup>

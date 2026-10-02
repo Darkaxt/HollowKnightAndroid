@@ -493,11 +493,53 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
                 self.assertNotIn(token, lower)
 
         main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
-        route = method_body(
-            main,
-            r"public\s+static\s+void\s+OpenBenchTeleportRoute\s*\([^)]*\)",
+        hooks = strip_csharp_comments(read(STAGE_HOOKS))
+        native = strip_csharp_comments(read(MODS_ROOT / "HollowKnightNativeModsMenu.cs"))
+        open_operation = method_body(
+            hooks, r"internal\s+static\s+int\s+OpenBenchTeleport\s*\([^)]*\)"
         )
-        self.assertIn("tab.tap = COMP_MAP", route)
+        open_route = method_body(
+            native, r"internal\s+static\s+void\s+OpenBenchTeleportRoute\s*\([^)]*\)"
+        )
+        current_route = method_body(
+            native, r"internal\s+static\s+bool\s+BenchRouteIsCurrent\s*\([^)]*\)"
+        )
+        chooser = method_body(native, r"void\s+OpenBenchRoute\s*\([^)]*\)")
+        submit = method_body(native, r"void\s+SubmitBench\s*\([^)]*\)")
+        for body in (open_operation, open_route, current_route, chooser, submit):
+            self.assertTrue(body, "upper correlated native bench integration must exist")
+        self.assertNotIn("OpenBenchTeleportRoute", main)
+        self.assertNotIn("HKDualScreen.OpenBenchTeleportRoute", hooks)
+        for token in (
+            "HollowKnightNativeModsMenu.BenchBindingGeneration",
+            "pendingBenchToken = operationToken",
+            "pendingBenchGeneration = generation",
+            "HollowKnightNativeModsMenu.OpenBenchTeleportRoute(operationToken, generation)",
+        ):
+            self.assertIn(token, open_operation)
+        for token in (
+            "BenchBindingGeneration != generation",
+            "current._benchOperationToken = token",
+            "current._benchGeneration = generation",
+            "current.OpenBenchRoute()",
+        ):
+            self.assertIn(token, open_route)
+        for token in (
+            "current._benchOperationToken == token && current._benchGeneration == generation",
+            "current._nativeOpen && current._openRoute == NativeMenuRoute.Mods",
+            "OpenTransitionStillAvailable(current._binding, generation)",
+        ):
+            self.assertIn(token, current_route)
+        self.assertIn("global::HkStageHooks.RecordedBenchScenes()", chooser)
+        self.assertIn("PaintBench()", chooser)
+        self.assertIn("global::HkStageHooks.BenchWarp(", submit)
+        self.assertIn("_benchRows[_benchSelected], token, generation", submit)
+        for token in ("HKDualScreen", "COMP_MAP", "tab.tap", "MapTick("):
+            self.assertNotIn(token, native)
+            self.assertNotIn(token, open_operation)
+        lower_map = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Map.cs"))
+        self.assertIn("!HkStageHooks.IsBenchRecorded(scene)", lower_map)
+        self.assertIn("HkStageHooks.BenchWarp(scene)", lower_map)
 
     def test_h3_runtime_retains_failed_teardown_and_blocks_replacement(self):
         runtime = strip_csharp_comments(read(MODS_RUNTIME))

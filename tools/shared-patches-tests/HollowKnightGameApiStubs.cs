@@ -10,6 +10,8 @@ internal static class HkStageHooks
     internal static void OpenSkins() { }
     internal static void OpenBenchTeleport(Action<DualSouls.Mods.TweakActionResult> completed) { }
     internal static void CancelBenchTeleport() { }
+    internal static int OpenBenchTeleport(long token, Action<DualSouls.Mods.TweakActionResult> completed) => 1;
+    internal static void CancelBenchTeleport(long token, int generation) { }
 }
 
 public sealed class PlayerData

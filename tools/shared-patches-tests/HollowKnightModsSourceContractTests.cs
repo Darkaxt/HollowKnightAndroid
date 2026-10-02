@@ -70,6 +70,7 @@ public sealed class HollowKnightModsSourceContractTests
         string hooks = Source("HkStageHooks.cs");
         string api = Source("HollowKnightGameTweakApi.cs");
         string companion = Source("HKDualScreen.cs");
+        string lowerMap = Source("HKDualScreen.Bottom.Map.cs");
         string nativeMenu = NativeSource("HollowKnightNativeModsMenu.cs");
 
         Assert.Contains("dev.silksong.launcher.skins.ui.SkinsActivity", hooks, StringComparison.Ordinal);
@@ -79,8 +80,28 @@ public sealed class HollowKnightModsSourceContractTests
         Assert.Contains("_benchOperation.Begin(operationToken", api, StringComparison.Ordinal);
         Assert.Contains("_benchOperation.Poll(", api, StringComparison.Ordinal);
         Assert.Contains("_benchOperation.Complete(", api, StringComparison.Ordinal);
-        Assert.Contains("HKDualScreen.OpenBenchTeleportRoute()", hooks, StringComparison.Ordinal);
-        Assert.Contains("activeInstance.tab.tap = COMP_MAP", companion, StringComparison.Ordinal);
+        Assert.Contains("int generation = HollowKnightNativeModsMenu.BenchBindingGeneration", hooks, StringComparison.Ordinal);
+        Assert.Contains("pendingBenchToken = operationToken", hooks, StringComparison.Ordinal);
+        Assert.Contains("pendingBenchGeneration = generation", hooks, StringComparison.Ordinal);
+        Assert.Contains("HollowKnightNativeModsMenu.OpenBenchTeleportRoute(operationToken, generation)", hooks, StringComparison.Ordinal);
+        Assert.Contains("pendingBenchToken == operationToken && pendingBenchGeneration == generation", hooks, StringComparison.Ordinal);
+        Assert.Contains("HollowKnightNativeModsMenu.BenchRouteIsCurrent(operationToken, generation)", hooks, StringComparison.Ordinal);
+        Assert.Contains("internal static void OpenBenchTeleportRoute(long token, int generation)", nativeMenu, StringComparison.Ordinal);
+        Assert.Contains("current._benchOperationToken = token", nativeMenu, StringComparison.Ordinal);
+        Assert.Contains("current._benchGeneration = generation", nativeMenu, StringComparison.Ordinal);
+        Assert.Contains("current.OpenBenchRoute()", nativeMenu, StringComparison.Ordinal);
+        Assert.Contains("current._benchOperationToken == token && current._benchGeneration == generation", nativeMenu, StringComparison.Ordinal);
+        Assert.Contains("current._nativeOpen && current._openRoute == NativeMenuRoute.Mods", nativeMenu, StringComparison.Ordinal);
+        Assert.Contains("global::HkStageHooks.RecordedBenchScenes()", nativeMenu, StringComparison.Ordinal);
+        Assert.Contains("if (_benchOpen) { SubmitBench(button); return; }", nativeMenu, StringComparison.Ordinal);
+        Assert.Contains("global::HkStageHooks.BenchWarp(\n                    _benchRows[_benchSelected], token, generation)", nativeMenu, StringComparison.Ordinal);
+        Assert.DoesNotContain("HKDualScreen.OpenBenchTeleportRoute", hooks, StringComparison.Ordinal);
+        Assert.DoesNotContain("OpenBenchTeleportRoute", companion, StringComparison.Ordinal);
+        Assert.DoesNotContain("HKDualScreen", nativeMenu, StringComparison.Ordinal);
+        Assert.DoesNotContain("COMP_MAP", nativeMenu, StringComparison.Ordinal);
+        Assert.DoesNotContain("tab.tap", nativeMenu, StringComparison.Ordinal);
+        Assert.Contains("!HkStageHooks.IsBenchRecorded(scene)", lowerMap, StringComparison.Ordinal);
+        Assert.Contains("HkStageHooks.BenchWarp(scene)", lowerMap, StringComparison.Ordinal);
         Assert.Contains("_menu.ActivateSelected()", nativeMenu, StringComparison.Ordinal);
         Assert.DoesNotContain("IsBenchRecorded(string scene) => false", hooks, StringComparison.Ordinal);
         Assert.DoesNotContain("BenchWarp(string scene) { }", hooks, StringComparison.Ordinal);
