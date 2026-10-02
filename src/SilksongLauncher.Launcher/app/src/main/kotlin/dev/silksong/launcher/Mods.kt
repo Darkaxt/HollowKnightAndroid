@@ -567,10 +567,9 @@ object Mods {
      * the overwhelmingly common build has no plugins at all and would skip
      * [weave] entirely. See the weaver's Builtin.cs for what they do.
      *
-     * Never throws. A built-in weave that cannot be applied leaves the game
-     * exactly as Team Cherry shipped it, which is a game that works; failing a
-     * twenty-minute build over a frill would be the worse outcome by a wide
-     * margin, and the setting that depends on it says so at runtime instead.
+     * Presentation-only builds remain best-effort. A staged Hollow Knight patch
+     * requires its gameplay hooks: a missing weaver, rejected contract, or runtime
+     * failure must abort conversion before IL2CPP can publish an inert Mods row.
      */
     suspend fun weaveBuiltin(
         context: android.content.Context,
@@ -579,6 +578,7 @@ object Mods {
         assets: android.content.res.AssetManager,
         onLine: (String) -> Unit = {},
     ) {
+        val requiredHollowKnight = File(assemblies, "HollowKnightPatches.dll").isFile
         try {
             val weaver = stageWeaver(root, assets)
             val argv = arrayListOf("builtin", "--assemblies", assemblies.absolutePath)
@@ -597,9 +597,11 @@ object Mods {
                 for (line in said) LauncherLog.log("builtin weave: $line")
             }
             if (!result.ok) {
+                if (requiredHollowKnight) throw IOException("Mandatory Hollow Knight gameplay weave failed with exit ${result.code}")
                 LauncherLog.log("builtin weave: exit ${result.code}; stock behaviour kept")
             }
         } catch (t: Throwable) {
+            if (requiredHollowKnight) throw IOException("Mandatory Hollow Knight gameplay weave could not complete", t)
             LauncherLog.log("builtin weave: skipped", t)
         }
     }

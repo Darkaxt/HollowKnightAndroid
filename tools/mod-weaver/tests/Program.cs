@@ -33,6 +33,18 @@ internal static class Program
             ("builtin weave survives plugin composition", BuiltinComposition),
             ("builtin Hollow Knight one-hit prefix", HollowKnightOneHitBuiltin),
             ("builtin Hollow Knight gameplay event hooks", HollowKnightGameplayBuiltins),
+            ("builtin HK map authority uses singleton and outer finally", HollowKnightMapAuthorityBuiltin),
+            ("builtin HK missing game assembly fails closed", () => HollowKnightUnreadableGame(false)),
+            ("builtin HK unreadable game assembly fails closed", () => HollowKnightUnreadableGame(true)),
+            ("builtin HK missing required target preserves files", () => HollowKnightRequiredFailure("missing")),
+            ("builtin HK wrong hook signature preserves files", () => HollowKnightRequiredFailure("signature")),
+            ("builtin HK partial prior weave preserves files", () => HollowKnightRequiredFailure("partial")),
+            ("builtin HK malformed prior hook preserves files", () => HollowKnightRequiredFailure("malformed")),
+            ("builtin HK complete weave wrong argument rejected", () => HollowKnightMalformedComplete("argument")),
+            ("builtin HK complete weave wrong hook signature rejected", () => HollowKnightMalformedComplete("signature")),
+            ("builtin HK complete weave missing outer finally rejected", () => HollowKnightMalformedComplete("finally")),
+            ("builtin HK complete weave missing capability rejected", () => HollowKnightMalformedComplete("gate")),
+            ("builtin HK complete weave duplicate hook rejected", () => HollowKnightMalformedComplete("duplicate")),
             ("builtin Silksong gameplay hooks are exact and idempotent", SilksongGameplayBuiltins),
             ("builtin Silksong partial gameplay weave fails closed", SilksongPartialGameplayWeaveFailsClosed),
             ("builtin Silksong missing gameplay signature fails closed", SilksongMissingGameplaySignatureFailsClosed),
@@ -409,6 +421,152 @@ internal static class Program
         il.Emit(OpCodes.Ret);
     }
 
+    static void HollowKnightMapAuthorityBuiltin()
+    {
+        using var fixture = new Fixture();
+        PrepareHollowKnightRequiredFixture(fixture);
+        Builtin.Apply(fixture.Staged);
+        using var game = AssemblyDefinition.ReadAssembly(Path.Combine(fixture.Staged,"Assembly-CSharp.dll"));
+        var player = game.MainModule.GetType("PlayerData");
+        var setter = player.Methods.Single(m => m.Name == "SetBool");
+        var setterCall = setter.Body.Instructions.SingleOrDefault(i => i.Operand is MethodReference m && m.Name == "BeforeAuthoritativeMapBoolSet");
+        True(setterCall != null,"native SetBool calls typed map rebase hook");
+        True(setter.Body.Instructions[0].OpCode == OpCodes.Call && setter.Body.Instructions[0].Operand is MethodReference getter && getter.Name == "get_instance",
+            "native SetBool hook receives singleton rather than receiver");
+        var map = player.Methods.Single(m => m.Name == "UpdateGameMap");
+        True(map.Body.Instructions[1].Operand is MethodReference begin && begin.Name == "BeginAuthoritativeMapUpdate", "native map entry starts authority transaction");
+        var handler = map.Body.ExceptionHandlers.Single(e => e.HandlerType == ExceptionHandlerType.Finally);
+        True(handler.HandlerStart.Next.Operand is MethodReference end && end.Name == "EndAuthoritativeMapUpdate", "native map outer finally ends authority transaction");
+        True(handler.HandlerStart.Next.Next.OpCode == OpCodes.Endfinally,"map end runs during unwind");
+        var before = File.ReadAllBytes(Path.Combine(fixture.Staged,"Assembly-CSharp.dll"));
+        Builtin.Apply(fixture.Staged);
+        True(before.SequenceEqual(File.ReadAllBytes(Path.Combine(fixture.Staged,"Assembly-CSharp.dll"))), "complete map weave idempotent bytes");
+    }
+
+    static void HollowKnightUnreadableGame(bool corrupt)
+    {
+        using var fixture = new Fixture(); PrepareHollowKnightRequiredFixture(fixture);
+        var path = Path.Combine(fixture.Staged,"Assembly-CSharp.dll");
+        if (corrupt) File.WriteAllText(path,"invalid assembly"); else File.Move(path,path + ".missing");
+        var before = Directory.GetFiles(fixture.Staged).ToDictionary(file => file,File.ReadAllBytes);
+        Throws<InvalidOperationException>(() => Builtin.Apply(fixture.Staged),"required assembly unavailable");
+        True(before.All(pair => pair.Value.SequenceEqual(File.ReadAllBytes(pair.Key))),"unreadable assembly writes no staged bytes");
+        Equal(before.Count,Directory.GetFiles(fixture.Staged).Length,"no new staged output on failed preflight");
+    }
+
+    static void HollowKnightRequiredFailure(string defect)
+    {
+        using var fixture = new Fixture();
+        PrepareHollowKnightRequiredFixture(fixture);
+        var gamePath = Path.Combine(fixture.Staged, "Assembly-CSharp.dll");
+        var patchPath = Path.Combine(fixture.Staged, "HollowKnightPatches.dll");
+        using (var game = AssemblyDefinition.ReadAssembly(gamePath, new ReaderParameters { InMemory = true }))
+        using (var patch = AssemblyDefinition.ReadAssembly(patchPath, new ReaderParameters { InMemory = true }))
+        {
+            var hooks = patch.MainModule.GetType("DualSouls.Mods.HollowKnight.HollowKnightGameplayHooks");
+            if (defect == "missing")
+                game.MainModule.GetType("HeroController").Methods.Remove(
+                    game.MainModule.GetType("HeroController").Methods.Single(m => m.Name == "AddGeoQuietly"));
+            else if (defect == "signature")
+                hooks.Methods.Single(m => m.Name == "BeforeTakeDamage").Parameters[0].ParameterType = patch.MainModule.TypeSystem.Int32;
+            else
+            {
+                var target = game.MainModule.GetType("HeroController").Methods.Single(m => m.Name == "AddGeo");
+                var hook = hooks.Methods.Single(m => m.Name == "BeforeAddGeo");
+                var il = target.Body.GetILProcessor(); var first = target.Body.Instructions[0];
+                var reference = game.MainModule.ImportReference(hook);
+                if (defect == "malformed") reference.ReturnType = game.MainModule.TypeSystem.Int32;
+                il.InsertBefore(first, il.Create(OpCodes.Ldarga, target.Parameters[0]));
+                il.InsertBefore(first, il.Create(OpCodes.Call, reference));
+            }
+            game.Write(gamePath); patch.Write(patchPath);
+        }
+        var beforeGame = File.ReadAllBytes(gamePath); var beforePatch = File.ReadAllBytes(patchPath);
+        Throws<InvalidOperationException>(() => Builtin.Apply(fixture.Staged), "mandatory HK " + defect + " rejected");
+        True(beforeGame.SequenceEqual(File.ReadAllBytes(gamePath)), "game unchanged after " + defect);
+        True(beforePatch.SequenceEqual(File.ReadAllBytes(patchPath)), "patch unchanged after " + defect);
+    }
+
+    static void HollowKnightMalformedComplete(string defect)
+    {
+        using var fixture = new Fixture(); PrepareHollowKnightRequiredFixture(fixture);
+        Builtin.Apply(fixture.Staged);
+        var path = Path.Combine(fixture.Staged,"Assembly-CSharp.dll");
+        using (var game = AssemblyDefinition.ReadAssembly(path,new ReaderParameters { InMemory = true }))
+        {
+            var geo = game.MainModule.GetType("HeroController").Methods.Single(m => m.Name == "AddGeo");
+            if (defect == "argument") geo.Body.Instructions[0].OpCode = OpCodes.Ldarg;
+            else if (defect == "signature") ((MethodReference)geo.Body.Instructions[1].Operand).ReturnType = game.MainModule.TypeSystem.Int32;
+            else if (defect == "duplicate") geo.Body.GetILProcessor().InsertBefore(geo.Body.Instructions[2],Instruction.Create(OpCodes.Call,(MethodReference)geo.Body.Instructions[1].Operand));
+            else if (defect == "finally") game.MainModule.GetType("PlayerData").Methods.Single(m => m.Name == "UpdateGameMap").Body.ExceptionHandlers.Clear();
+            else {
+                var gate = game.MainModule.GetType("DualSoulsHollowKnightHookGate");
+                True(gate != null,"complete weave capability gate exists before corruption");
+                game.MainModule.Types.Remove(gate);
+            }
+            game.Write(path);
+        }
+        var before = File.ReadAllBytes(path);
+        Throws<InvalidOperationException>(() => Builtin.Apply(fixture.Staged),"malformed complete weave " + defect);
+        True(before.SequenceEqual(File.ReadAllBytes(path)),"malformed complete weave preserves bytes " + defect);
+    }
+
+    static void PrepareHollowKnightRequiredFixture(Fixture fixture)
+    {
+        var game = fixture.Game.MainModule;
+        TypeDefinition Type(string ns, string name) {
+            var t = game.GetType(ns.Length == 0 ? name : ns + "." + name);
+            if (t != null) return t;
+            t = new TypeDefinition(ns, name, TypeAttributes.Public, game.TypeSystem.Object); game.Types.Add(t); return t;
+        }
+        var player = Type("", "PlayerData"); var hero = Type("", "HeroController");
+        var health = Type("", "HealthManager"); var hit = Type("", "HitInstance");
+        var unityObject = Type("UnityEngine", "GameObject"); var side = Type("GlobalEnums", "CollisionSide");
+        MethodDefinition Target(TypeDefinition t, string name, TypeReference returns, params TypeReference[] ps) {
+            var method = t.Methods.SingleOrDefault(m => m.Name == name);
+            if (method != null) return method;
+            method = Fixture.Method(t, name, returns, isStatic: false);
+            for (int i = 0; i < ps.Length; i++) Fixture.Parameter(method, "arg" + i, ps[i]);
+            var il = method.Body.GetILProcessor();
+            if (returns.MetadataType == MetadataType.Boolean) il.Emit(OpCodes.Ldc_I4_0);
+            else if (returns.MetadataType != MetadataType.Void) il.Emit(OpCodes.Ldnull);
+            il.Emit(OpCodes.Ret); return method;
+        }
+        Target(health, "Hit", game.TypeSystem.Void, hit);
+        Target(hero, "TakeDamage", game.TypeSystem.Void, unityObject, side, game.TypeSystem.Int32, game.TypeSystem.Int32);
+        Target(hero, "AddGeo", game.TypeSystem.Void, game.TypeSystem.Int32);
+        Target(hero, "AddGeoQuietly", game.TypeSystem.Void, game.TypeSystem.Int32);
+        Target(hero, "Die", game.ImportReference(typeof(System.Collections.IEnumerator)));
+        Target(player, "SetInt", game.TypeSystem.Void, game.TypeSystem.String, game.TypeSystem.Int32);
+        Target(player, "SetBool", game.TypeSystem.Void, game.TypeSystem.String, game.TypeSystem.Boolean);
+        Target(player, "UpdateGameMap", game.TypeSystem.Boolean);
+        var getter = Fixture.Method(player, "get_instance", player); getter.Body.GetILProcessor().Emit(OpCodes.Ldnull); getter.Body.GetILProcessor().Emit(OpCodes.Ret);
+        fixture.Game.Write(Path.Combine(fixture.Staged, "Assembly-CSharp.dll"));
+        var patchPath = Path.Combine(fixture.Staged, "HollowKnightPatches.dll");
+        using var patches = File.Exists(patchPath) ? AssemblyDefinition.ReadAssembly(patchPath, new ReaderParameters { InMemory = true }) : Fixture.NewAssembly("HollowKnightPatches");
+        TypeDefinition PatchType(string name) {
+            var t = patches.MainModule.GetType("DualSouls.Mods.HollowKnight." + name);
+            if (t != null) return t;
+            t = new TypeDefinition("DualSouls.Mods.HollowKnight", name, TypeAttributes.Public|TypeAttributes.Abstract|TypeAttributes.Sealed, patches.MainModule.TypeSystem.Object);
+            patches.MainModule.Types.Add(t); return t;
+        }
+        void Hook(TypeDefinition t, string name, params TypeReference[] parameters) {
+            if (t.Methods.Any(m=>m.Name==name)) return;
+            var m = Fixture.Method(t,name,patches.MainModule.TypeSystem.Void);
+            for(int i=0;i<parameters.Length;i++) Fixture.Parameter(m,"arg"+i,patches.MainModule.ImportReference(parameters[i]));
+            m.Body.GetILProcessor().Emit(OpCodes.Ret);
+        }
+        var hooks = PatchType("HollowKnightGameplayHooks");
+        Hook(hooks,"BeforeTakeDamage",new ByReferenceType(game.TypeSystem.Int32));
+        Hook(hooks,"BeforeAddGeo",new ByReferenceType(game.TypeSystem.Int32));
+        Hook(hooks,"BeforeJournalSetInt",player,game.TypeSystem.String,new ByReferenceType(game.TypeSystem.Int32));
+        Hook(hooks,"BeforeDeath");
+        Hook(hooks,"BeforeAuthoritativeMapBoolSet",player,game.TypeSystem.String,game.TypeSystem.Boolean);
+        Hook(hooks,"BeginAuthoritativeMapUpdate",player); Hook(hooks,"EndAuthoritativeMapUpdate",player);
+        Hook(PatchType("HollowKnightOneHitDamagePatch"),"BeforeHit",health,new ByReferenceType(hit));
+        patches.Write(patchPath);
+    }
+
     static void HollowKnightOneHitBuiltin()
     {
         using var fixture = new Fixture();
@@ -454,6 +612,7 @@ internal static class Program
             new ByReferenceType(patches.MainModule.ImportReference(hitType)));
         beforeHit.Body.GetILProcessor().Emit(OpCodes.Ret);
         patches.Write(Path.Combine(fixture.Staged, "HollowKnightPatches.dll"));
+        PrepareHollowKnightRequiredFixture(fixture);
 
         True(Builtin.Apply(fixture.Staged).Any(n => n.Contains("one-hit", StringComparison.Ordinal)),
             "Hollow Knight one-hit builtin reports its result");
@@ -490,8 +649,11 @@ internal static class Program
         var hero = new TypeDefinition("", "HeroController", TypeAttributes.Public, game.TypeSystem.Object);
         game.Types.Add(hero);
         var takeDamage = Fixture.Method(hero, "TakeDamage", game.TypeSystem.Void, isStatic: false);
-        Fixture.Parameter(takeDamage, "source", game.TypeSystem.Object);
-        Fixture.Parameter(takeDamage, "side", game.TypeSystem.Int32);
+        var gameObject = new TypeDefinition("UnityEngine", "GameObject", TypeAttributes.Public, game.TypeSystem.Object);
+        var collisionSide = new TypeDefinition("GlobalEnums", "CollisionSide", TypeAttributes.Public, game.TypeSystem.Object);
+        game.Types.Add(gameObject); game.Types.Add(collisionSide);
+        Fixture.Parameter(takeDamage, "source", gameObject);
+        Fixture.Parameter(takeDamage, "side", collisionSide);
         Fixture.Parameter(takeDamage, "damageAmount", game.TypeSystem.Int32);
         Fixture.Parameter(takeDamage, "hazardType", game.TypeSystem.Int32);
         takeDamage.Body.GetILProcessor().Emit(OpCodes.Ret);
@@ -501,7 +663,7 @@ internal static class Program
             Fixture.Parameter(method, "amount", game.TypeSystem.Int32);
             method.Body.GetILProcessor().Emit(OpCodes.Ret);
         }
-        var die = Fixture.Method(hero, "Die", game.TypeSystem.Object, isStatic: false);
+        var die = Fixture.Method(hero, "Die", game.ImportReference(typeof(System.Collections.IEnumerator)), isStatic: false);
         die.Body.GetILProcessor().Emit(OpCodes.Ldnull);
         die.Body.GetILProcessor().Emit(OpCodes.Ret);
         fixture.Game.Write(Path.Combine(fixture.Staged, "Assembly-CSharp.dll"));
@@ -519,6 +681,7 @@ internal static class Program
             ("value", new ByReferenceType(patches.MainModule.TypeSystem.Int32)));
         AddHook("BeforeDeath");
         patches.Write(Path.Combine(fixture.Staged, "HollowKnightPatches.dll"));
+        PrepareHollowKnightRequiredFixture(fixture);
 
         var notes = Builtin.Apply(fixture.Staged);
         True(notes.Any(n => n.Contains("gameplay hooks", StringComparison.Ordinal)), "gameplay hooks report their result");

@@ -19,6 +19,9 @@ namespace DualSouls.Mods.HollowKnight
         static bool quillBaseline;
         static List<string> mapScenesBaseline;
         static MapRegionBaseline mapRegionBaseline;
+        static int mapUpdateDepth;
+        static List<string> mapScenesLive;
+        static MapRegionBaseline mapRegionsLive;
         static int[] charmCostBaseline;
         static bool charmCostsApplied;
         static int notchBaseline;
@@ -305,7 +308,13 @@ namespace DualSouls.Mods.HollowKnight
             mapBaseline = player.hasMap;
             quillBaseline = player.hasQuill;
             mapScenesBaseline = new List<string>(player.scenesMapped);
-            mapRegionBaseline = new MapRegionBaseline
+            mapRegionBaseline = CaptureMapRegions(player);
+            mapCaptured = true;
+        }
+
+        static MapRegionBaseline CaptureMapRegions(PlayerData player)
+        {
+            return new MapRegionBaseline
             {
                 Dirtmouth = player.mapDirtmouth,
                 Crossroads = player.mapCrossroads,
@@ -322,10 +331,20 @@ namespace DualSouls.Mods.HollowKnight
                 RestingGrounds = player.mapRestingGrounds,
                 Abyss = player.mapAbyss,
             };
-            mapCaptured = true;
         }
 
         static void RestoreMapBaseline(PlayerData player)
+        {
+            ApplyMapBaseline(player);
+            mapScenesBaseline = null;
+            mapRegionBaseline = null;
+            mapScenesLive = null;
+            mapRegionsLive = null;
+            mapUpdateDepth = 0;
+            mapCaptured = false;
+        }
+
+        static void ApplyMapBaseline(PlayerData player)
         {
             player.hasMap = mapBaseline;
             player.hasQuill = quillBaseline;
@@ -348,9 +367,72 @@ namespace DualSouls.Mods.HollowKnight
                 player.mapRestingGrounds = mapRegionBaseline.RestingGrounds;
                 player.mapAbyss = mapRegionBaseline.Abyss;
             }
-            mapScenesBaseline = null;
-            mapRegionBaseline = null;
-            mapCaptured = false;
+        }
+
+        // Only exact native SetBool writes to these map-owned fields are rebased.
+        // Direct mod overlays never pass through this consumer.
+        internal static void BeforeAuthoritativeMapBoolSet(PlayerData player, string field, bool value)
+        {
+            if (!mapCaptured || !ReferenceEquals(owner, player)) return;
+            switch (field)
+            {
+                case "hasMap": mapBaseline = value; break;
+                case "hasQuill": quillBaseline = value; break;
+                case "mapDirtmouth": mapRegionBaseline.Dirtmouth = value; break;
+                case "mapCrossroads": mapRegionBaseline.Crossroads = value; break;
+                case "mapGreenpath": mapRegionBaseline.Greenpath = value; break;
+                case "mapFogCanyon": mapRegionBaseline.FogCanyon = value; break;
+                case "mapFungalWastes": mapRegionBaseline.FungalWastes = value; break;
+                case "mapRoyalGardens": mapRegionBaseline.RoyalGardens = value; break;
+                case "mapCity": mapRegionBaseline.City = value; break;
+                case "mapWaterways": mapRegionBaseline.Waterways = value; break;
+                case "mapMines": mapRegionBaseline.Mines = value; break;
+                case "mapDeepnest": mapRegionBaseline.Deepnest = value; break;
+                case "mapCliffs": mapRegionBaseline.Cliffs = value; break;
+                case "mapOutskirts": mapRegionBaseline.Outskirts = value; break;
+                case "mapRestingGrounds": mapRegionBaseline.RestingGrounds = value; break;
+                case "mapAbyss": mapRegionBaseline.Abyss = value; break;
+            }
+        }
+
+        internal static void BeginAuthoritativeMapUpdate(PlayerData player)
+        {
+            if (!mapCaptured || !ReferenceEquals(owner, player)) return;
+            if (mapUpdateDepth == 0)
+            {
+                mapScenesLive = new List<string>(player.scenesMapped);
+                mapRegionsLive = CaptureMapRegions(player);
+                ApplyMapBaseline(player);
+            }
+            mapUpdateDepth++;
+        }
+
+        internal static void EndAuthoritativeMapUpdate(PlayerData player)
+        {
+            if (!mapCaptured || !ReferenceEquals(owner, player) || mapUpdateDepth == 0) return;
+            if (--mapUpdateDepth != 0) return;
+            // The native consumer ran with real quill/region ownership and no borrowed
+            // mapped rooms. Its additions (including already overlaid rooms) are genuine.
+            CaptureMapBaseline(player);
+            foreach (string scene in mapScenesLive)
+                if (!player.scenesMapped.Contains(scene)) player.scenesMapped.Add(scene);
+            player.hasMap = player.hasQuill = true;
+            player.mapDirtmouth |= mapRegionsLive.Dirtmouth;
+            player.mapCrossroads |= mapRegionsLive.Crossroads;
+            player.mapGreenpath |= mapRegionsLive.Greenpath;
+            player.mapFogCanyon |= mapRegionsLive.FogCanyon;
+            player.mapFungalWastes |= mapRegionsLive.FungalWastes;
+            player.mapRoyalGardens |= mapRegionsLive.RoyalGardens;
+            player.mapCity |= mapRegionsLive.City;
+            player.mapWaterways |= mapRegionsLive.Waterways;
+            player.mapMines |= mapRegionsLive.Mines;
+            player.mapDeepnest |= mapRegionsLive.Deepnest;
+            player.mapCliffs |= mapRegionsLive.Cliffs;
+            player.mapOutskirts |= mapRegionsLive.Outskirts;
+            player.mapRestingGrounds |= mapRegionsLive.RestingGrounds;
+            player.mapAbyss |= mapRegionsLive.Abyss;
+            mapScenesLive = null;
+            mapRegionsLive = null;
         }
 
         static void SetCurrentZoneMap(string zone, PlayerData player)

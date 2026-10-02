@@ -98,13 +98,16 @@ internal static class Builtin
     {
         var notes = new List<string>();
         var path = Path.Combine(assemblies, "Assembly-CSharp.dll");
+        bool requiresHollowKnightHooks = File.Exists(Path.Combine(assemblies, HollowKnightPatchAssembly));
         if (!File.Exists(path))
         {
+            if (requiresHollowKnightHooks)
+                throw new InvalidOperationException("Mandatory Hollow Knight hooks require Assembly-CSharp.dll");
             notes.Add("builtins: no Assembly-CSharp.dll in the staged set; skipped");
             return notes;
         }
 
-        var resolver = new StagedResolver(assemblies);
+        using var resolver = new StagedResolver(assemblies);
         AssemblyDefinition assembly;
         try
         {
@@ -117,12 +120,16 @@ internal static class Builtin
         }
         catch (Exception e)
         {
+            if (requiresHollowKnightHooks)
+                throw new InvalidOperationException("Mandatory Hollow Knight hook assembly cannot be read", e);
             notes.Add($"builtins: cannot read Assembly-CSharp.dll ({e.GetType().Name}); skipped");
             return notes;
         }
 
+        using var loadedAssembly = assembly;
         var changed = false;
         var mandatorySilksongGameplayChanged = false;
+        var mandatoryHollowKnightGameplayChanged = false;
         var silksongPatchPath = Path.Combine(assemblies, SilksongPatchAssembly);
         if (File.Exists(silksongPatchPath))
         {
@@ -153,34 +160,14 @@ internal static class Builtin
         var patchPath = Path.Combine(assemblies, HollowKnightPatchAssembly);
         if (File.Exists(patchPath))
         {
-            try
+            using var patches = AssemblyDefinition.ReadAssembly(patchPath, new ReaderParameters
             {
-                using var patches = AssemblyDefinition.ReadAssembly(patchPath, new ReaderParameters
-                {
-                    InMemory = true,
-                    AssemblyResolver = resolver,
-                });
-                try
-                {
-                    changed |= WeaveHollowKnightOneHit(assembly, patches, notes);
-                }
-                catch (Exception e)
-                {
-                    notes.Add($"one-hit damage: not applied ({e.GetType().Name}: {e.Message})");
-                }
-                try
-                {
-                    changed |= WeaveHollowKnightGameplayHooks(assembly, patches, notes);
-                }
-                catch (Exception e)
-                {
-                    notes.Add($"gameplay hooks: not applied ({e.GetType().Name}: {e.Message})");
-                }
-            }
-            catch (Exception e)
-            {
-                notes.Add($"one-hit damage: not applied ({e.GetType().Name}: {e.Message})");
-            }
+                InMemory = true,
+                AssemblyResolver = resolver,
+            });
+            mandatoryHollowKnightGameplayChanged =
+                WeaveHollowKnightRequiredHooks(assembly, patches, notes);
+            changed |= mandatoryHollowKnightGameplayChanged;
         }
 
         if (!changed) return notes;
@@ -192,9 +179,9 @@ internal static class Builtin
         }
         catch (Exception e)
         {
-            if (mandatorySilksongGameplayChanged)
+            if (mandatorySilksongGameplayChanged || mandatoryHollowKnightGameplayChanged)
                 throw new InvalidOperationException(
-                    "Mandatory Silksong gameplay hooks could not be written", e);
+                    "Mandatory gameplay hooks could not be written", e);
             notes.Add($"builtins: could not write Assembly-CSharp.dll ({e.GetType().Name}: {e.Message})");
         }
         return notes;
@@ -273,152 +260,192 @@ internal static class Builtin
         return true;
     }
 
-    static bool WeaveHollowKnightOneHit(
+    const string HollowKnightHookGate = "DualSoulsHollowKnightHookGate";
+    const int HollowKnightVerifiedMask = 63;
+
+    static bool WeaveHollowKnightRequiredHooks(
         AssemblyDefinition game, AssemblyDefinition patches, List<string> notes)
     {
-        var gameModule = game.MainModule;
-        var healthManager = gameModule.GetType(HealthManagerType);
-        var hitInstance = gameModule.GetType(HitInstanceType);
-        if (healthManager is null || hitInstance is null)
-        {
-            notes.Add("one-hit damage: HealthManager/HitInstance not found; skipped");
-            return false;
-        }
-
-        var hits = healthManager.Methods.Where(m =>
-            m.Name == HitMethod && m.HasBody && !m.IsStatic
-            && m.ReturnType.MetadataType == MetadataType.Void
-            && m.Parameters.Count == 1
-            && !m.Parameters[0].ParameterType.IsByReference
-            && m.Parameters[0].ParameterType.FullName == hitInstance.FullName).ToList();
-        if (hits.Count != 1)
-        {
-            notes.Add($"one-hit damage: expected one {HealthManagerType}.{HitMethod}"
-                      + $"({HitInstanceType}), found {hits.Count}; skipped");
-            return false;
-        }
-
-        var patchType = patches.MainModule.GetType(OneHitPatchType);
-        var prefixes = patchType?.Methods.Where(m =>
-            m.Name == OneHitPatchMethod && m.IsPublic && m.IsStatic
-            && m.ReturnType.MetadataType == MetadataType.Void
-            && m.Parameters.Count == 2
-            && m.Parameters[0].ParameterType.FullName == healthManager.FullName
-            && m.Parameters[1].ParameterType is ByReferenceType byReference
-            && byReference.ElementType.FullName == hitInstance.FullName).ToList()
-            ?? new List<MethodDefinition>();
-        if (prefixes.Count != 1)
-        {
-            notes.Add($"one-hit damage: exact {OneHitPatchType}.{OneHitPatchMethod} prefix"
-                      + $" not found; skipped");
-            return false;
-        }
-
-        var hit = hits[0];
-        if (hit.Body.Instructions.Any(i =>
-                i.OpCode == OpCodes.Call
-                && i.Operand is MethodReference called
-                && called.DeclaringType.FullName == OneHitPatchType
-                && called.Name == OneHitPatchMethod))
-        {
-            notes.Add("one-hit damage: already woven; nothing to do");
-            return false;
-        }
-
-        var processor = hit.Body.GetILProcessor();
-        var first = hit.Body.Instructions[0];
-        processor.InsertBefore(first, processor.Create(OpCodes.Ldarg_0));
-        processor.InsertBefore(first, processor.Create(OpCodes.Ldarga_S, hit.Parameters[0]));
-        processor.InsertBefore(first,
-            processor.Create(OpCodes.Call, gameModule.ImportReference(prefixes[0])));
-        notes.Add($"one-hit damage: {HealthManagerType}.{HitMethod} now calls managed prefix");
-        return true;
-    }
-
-    static bool WeaveHollowKnightGameplayHooks(
-        AssemblyDefinition game, AssemblyDefinition patches, List<string> notes)
-    {
-        const string hookTypeName =
-            "DualSouls.Mods.HollowKnight.HollowKnightGameplayHooks";
+        const string hookTypeName = "DualSouls.Mods.HollowKnight.HollowKnightGameplayHooks";
         var module = game.MainModule;
-        var hero = module.GetType("HeroController");
-        var player = module.GetType("PlayerData");
-        var hooks = patches.MainModule.GetType(hookTypeName);
-        if (hero is null || player is null || hooks is null)
+        TypeDefinition Type(ModuleDefinition owner, string name) => owner.GetType(name)
+            ?? throw new InvalidOperationException("Mandatory Hollow Knight hook type is missing: " + name);
+        MethodDefinition Exact(TypeDefinition type, string name, bool isStatic,
+            string returns, params string[] parameters)
         {
-            notes.Add("gameplay hooks: exact types are unavailable; skipped");
+            var matches = type.Methods.Where(method => method.Name == name && method.HasBody &&
+                method.Body.Instructions.Count != 0 && method.IsStatic == isStatic &&
+                !method.HasGenericParameters && method.ReturnType.FullName == returns &&
+                method.Parameters.Select(parameter => parameter.ParameterType.FullName)
+                    .SequenceEqual(parameters)).ToList();
+            return matches.Count == 1 ? matches[0] : throw new InvalidOperationException(
+                "Mandatory Hollow Knight signature is missing or ambiguous: " + type.FullName + "." + name);
+        }
+        MethodDefinition Hook(TypeDefinition type, string name, params string[] parameters)
+        {
+            var method = Exact(type, name, true, "System.Void", parameters);
+            if (!method.IsPublic)
+                throw new InvalidOperationException("Mandatory Hollow Knight hook is not public: " + name);
+            return method;
+        }
+        var hero = Type(module, "HeroController");
+        var player = Type(module, "PlayerData");
+        var health = Type(module, HealthManagerType);
+        Type(module, HitInstanceType);
+        var hooks = Type(patches.MainModule, hookTypeName);
+        var oneHit = Type(patches.MainModule, OneHitPatchType);
+        var hit = Exact(health, HitMethod, false, "System.Void", "HitInstance");
+        var damage = Exact(hero, "TakeDamage", false, "System.Void", "UnityEngine.GameObject",
+            "GlobalEnums.CollisionSide", "System.Int32", "System.Int32");
+        var geo = Exact(hero, "AddGeo", false, "System.Void", "System.Int32");
+        var quietGeo = Exact(hero, "AddGeoQuietly", false, "System.Void", "System.Int32");
+        var die = Exact(hero, "Die", false, "System.Collections.IEnumerator");
+        var journal = Exact(player, "SetInt", false, "System.Void", "System.String", "System.Int32");
+        var setBool = Exact(player, "SetBool", false, "System.Void", "System.String", "System.Boolean");
+        var map = Exact(player, "UpdateGameMap", false, "System.Boolean");
+        // The exact native SetBool implementation writes the singleton, not its receiver.
+        var currentPlayer = Exact(player, "get_instance", true, "PlayerData");
+        var beforeHit = Hook(oneHit, OneHitPatchMethod, "HealthManager", "HitInstance&");
+        var beforeDamage = Hook(hooks, "BeforeTakeDamage", "System.Int32&");
+        var beforeGeo = Hook(hooks, "BeforeAddGeo", "System.Int32&");
+        var beforeDeath = Hook(hooks, "BeforeDeath");
+        var beforeJournal = Hook(hooks, "BeforeJournalSetInt", "PlayerData", "System.String", "System.Int32&");
+        var beforeBool = Hook(hooks, "BeforeAuthoritativeMapBoolSet", "PlayerData", "System.String", "System.Boolean");
+        var beginMap = Hook(hooks, "BeginAuthoritativeMapUpdate", "PlayerData");
+        var endMap = Hook(hooks, "EndAuthoritativeMapUpdate", "PlayerData");
+        var expected = new[]
+        {
+            (hit, beforeHit), (damage, beforeDamage), (geo, beforeGeo),
+            (quietGeo, beforeGeo), (die, beforeDeath), (journal, beforeJournal),
+            (setBool, beforeBool), (map, beginMap), (map, endMap),
+        };
+        bool Same(MethodReference called, MethodDefinition hook) => called.FullName == hook.FullName &&
+            !called.HasThis && !called.HasGenericParameters &&
+            called.DeclaringType.Scope is AssemblyNameReference scope && scope.FullName == patches.Name.FullName;
+        int Count(MethodDefinition target, MethodDefinition hook) => target.Body.Instructions.Count(instruction =>
+            instruction.OpCode == OpCodes.Call && instruction.Operand is MethodReference called && Same(called, hook));
+        bool unknown = expected.Select(pair => pair.Item1).Distinct().Any(target => target.Body.Instructions.Any(instruction =>
+            instruction.Operand is MethodReference called &&
+            (called.DeclaringType.FullName == hookTypeName || called.DeclaringType.FullName == OneHitPatchType) &&
+            (instruction.OpCode != OpCodes.Call || !expected.Any(pair => pair.Item1 == target && Same(called, pair.Item2)))));
+        int woven = expected.Count(pair => Count(pair.Item1, pair.Item2) == 1);
+        bool duplicated = expected.Any(pair => Count(pair.Item1, pair.Item2) > 1);
+        var gate = module.GetType(HollowKnightHookGate);
+        var prefixes = new[]
+        {
+            (hit, beforeHit, new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldarga, hit.Parameters[0]) }),
+            (damage, beforeDamage, new[] { Instruction.Create(OpCodes.Ldarga, damage.Parameters[2]) }),
+            (geo, beforeGeo, new[] { Instruction.Create(OpCodes.Ldarga, geo.Parameters[0]) }),
+            (quietGeo, beforeGeo, new[] { Instruction.Create(OpCodes.Ldarga, quietGeo.Parameters[0]) }),
+            (die, beforeDeath, Array.Empty<Instruction>()),
+            (journal, beforeJournal, new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldarg, journal.Parameters[0]), Instruction.Create(OpCodes.Ldarga, journal.Parameters[1]) }),
+            (setBool, beforeBool, new[] { Instruction.Create(OpCodes.Call, currentPlayer), Instruction.Create(OpCodes.Ldarg, setBool.Parameters[0]), Instruction.Create(OpCodes.Ldarg, setBool.Parameters[1]) }),
+            (map, beginMap, new[] { Instruction.Create(OpCodes.Ldarg_0) }),
+        };
+        bool LoadMatches(Instruction actual, Instruction required) => actual.OpCode == required.OpCode &&
+            (actual.Operand is MethodReference called && required.Operand is MethodReference method
+                ? called.FullName == method.FullName && called.HasThis == method.HasThis
+                : Equals(actual.Operand, required.Operand));
+        if (woven == expected.Length && !unknown && !duplicated)
+        {
+            var proof = gate?.Methods.SingleOrDefault(method => method.Name == "GetVerifiedMask" &&
+                method.IsPublic && method.IsStatic && !method.HasGenericParameters &&
+                method.ReturnType.MetadataType == MetadataType.Int32 && method.Parameters.Count == 0 && method.HasBody);
+            if (proof == null || gate!.Fields.Count != 0 || gate.Methods.Count != 1 ||
+                !gate.IsPublic || !gate.IsAbstract || !gate.IsSealed ||
+                proof.Body.Instructions.Count != 2 || proof.Body.Instructions[0].OpCode != OpCodes.Ldc_I4 ||
+                !Equals(proof.Body.Instructions[0].Operand, HollowKnightVerifiedMask) || proof.Body.Instructions[1].OpCode != OpCodes.Ret)
+                throw new InvalidOperationException("Mandatory Hollow Knight weave has no exact capability proof");
+            foreach (var (target, hook, loads) in prefixes)
+            {
+                var instructions = target.Body.Instructions;
+                if (instructions.Count <= loads.Length ||
+                    loads.Where((load, index) => !LoadMatches(instructions[index], load)).Any() ||
+                    instructions[loads.Length].OpCode != OpCodes.Call ||
+                    instructions[loads.Length].Operand is not MethodReference called || !Same(called, hook))
+                    throw new InvalidOperationException("Mandatory Hollow Knight prior hook has malformed argument wiring: " + target.FullName);
+            }
+            // Count/signature alone cannot certify a finally or a reachable entry hook.
+            var epilogue = map.Body.Instructions.Last();
+            var continuation = epilogue.Previous;
+            var finalizers = map.Body.ExceptionHandlers.Where(handler =>
+                handler.HandlerType == ExceptionHandlerType.Finally && handler.TryStart == map.Body.Instructions[2] &&
+                handler.TryEnd == handler.HandlerStart && handler.HandlerEnd == continuation &&
+                handler.HandlerStart?.OpCode == OpCodes.Ldarg_0 &&
+                handler.HandlerStart.Next?.OpCode == OpCodes.Call &&
+                handler.HandlerStart.Next.Operand is MethodReference called && Same(called, endMap) &&
+                handler.HandlerStart.Next.Next?.OpCode == OpCodes.Endfinally &&
+                handler.HandlerStart.Next.Next.Next == continuation).ToList();
+            if (epilogue.OpCode != OpCodes.Ret || continuation?.OpCode != OpCodes.Ldloc ||
+                continuation.Operand is not VariableDefinition result || result.VariableType.MetadataType != MetadataType.Boolean ||
+                map.Body.Instructions.Count(instruction => instruction.OpCode == OpCodes.Ret) != 1 || finalizers.Count != 1 ||
+                !map.Body.Instructions.Any(instruction => instruction.OpCode == OpCodes.Leave && instruction.Operand == continuation &&
+                    instruction.Previous?.OpCode == OpCodes.Stloc && instruction.Previous.Operand == result))
+                throw new InvalidOperationException("Mandatory Hollow Knight map weave has no exact finally proof");
+            notes.Add("Hollow Knight one-hit/gameplay hooks: already woven; exact capability verified");
             return false;
         }
+        if (woven != 0 || unknown || duplicated || gate != null)
+            throw new InvalidOperationException("Mandatory Hollow Knight hooks contain a partial or malformed prior weave");
+        var returns = map.Body.Instructions.Where(instruction => instruction.OpCode == OpCodes.Ret).ToList();
+        if (returns.Count == 0)
+            throw new InvalidOperationException("Mandatory Hollow Knight map target has no return");
 
-        MethodDefinition? Exact(TypeDefinition type, string name, int parameterCount) =>
-            type.Methods.SingleOrDefault(m => m.Name == name && m.HasBody && !m.IsStatic &&
-                m.Parameters.Count == parameterCount);
-        MethodDefinition? Hook(string name, params string[] parameters) =>
-            hooks.Methods.SingleOrDefault(m => m.Name == name && m.IsPublic && m.IsStatic &&
-                m.ReturnType.MetadataType == MetadataType.Void &&
-                m.Parameters.Select(p => p.ParameterType.FullName).SequenceEqual(parameters));
-
-        var takeDamage = Exact(hero, "TakeDamage", 4);
-        var addGeo = Exact(hero, "AddGeo", 1);
-        var addGeoQuietly = Exact(hero, "AddGeoQuietly", 1);
-        var die = Exact(hero, "Die", 0);
-        var setInt = Exact(player, "SetInt", 2);
-        var beforeDamage = Hook("BeforeTakeDamage", "System.Int32&");
-        var beforeGeo = Hook("BeforeAddGeo", "System.Int32&");
-        var beforeJournal = Hook("BeforeJournalSetInt", "PlayerData", "System.String", "System.Int32&");
-        var beforeDeath = Hook("BeforeDeath");
-        if (takeDamage is null || takeDamage.Parameters[2].ParameterType.MetadataType != MetadataType.Int32 ||
-            addGeo is null || addGeo.Parameters[0].ParameterType.MetadataType != MetadataType.Int32 ||
-            addGeoQuietly is null || addGeoQuietly.Parameters[0].ParameterType.MetadataType != MetadataType.Int32 ||
-            die is null || setInt is null ||
-            setInt.Parameters[0].ParameterType.MetadataType != MetadataType.String ||
-            setInt.Parameters[1].ParameterType.MetadataType != MetadataType.Int32 ||
-            beforeDamage is null || beforeGeo is null || beforeJournal is null ||
-            beforeDeath is null)
+        // All target, hook and prior-weave validation is complete before mutation.
+        // Wrap the entire native map consumer, preserving its existing enumerator finally.
+        var processor = map.Body.GetILProcessor();
+        var tryStart = map.Body.Instructions[0];
+        var mapResult = new VariableDefinition(module.TypeSystem.Boolean);
+        map.Body.Variables.Add(mapResult);
+        map.Body.InitLocals = true;
+        var handlerStart = processor.Create(OpCodes.Ldarg_0);
+        var continuationLoad = processor.Create(OpCodes.Ldloc, mapResult);
+        foreach (var existing in map.Body.ExceptionHandlers)
         {
-            notes.Add("gameplay hooks: an exact target or patch signature is unavailable; skipped");
-            return false;
+            if (existing.TryEnd == null) existing.TryEnd = handlerStart;
+            if (existing.HandlerEnd == null) existing.HandlerEnd = handlerStart;
         }
-
-        bool Calls(MethodDefinition method, string hookName) => method.Body.Instructions.Any(i =>
-            i.OpCode == OpCodes.Call && i.Operand is MethodReference called &&
-            called.DeclaringType.FullName == hookTypeName && called.Name == hookName);
-        bool already = Calls(takeDamage, "BeforeTakeDamage") && Calls(addGeo, "BeforeAddGeo") &&
-            Calls(addGeoQuietly, "BeforeAddGeo") && Calls(setInt, "BeforeJournalSetInt") &&
-            Calls(die, "BeforeDeath");
-        if (already)
+        processor.Append(handlerStart);
+        processor.Append(processor.Create(OpCodes.Call, module.ImportReference(endMap)));
+        processor.Append(processor.Create(OpCodes.Endfinally));
+        processor.Append(continuationLoad);
+        processor.Append(processor.Create(OpCodes.Ret));
+        foreach (var originalReturn in returns)
         {
-            notes.Add("gameplay hooks: already woven; nothing to do");
-            return false;
+            originalReturn.OpCode = OpCodes.Stloc;
+            originalReturn.Operand = mapResult;
+            processor.InsertAfter(originalReturn, processor.Create(OpCodes.Leave, continuationLoad));
         }
-        if (Calls(takeDamage, "BeforeTakeDamage") || Calls(addGeo, "BeforeAddGeo") ||
-            Calls(addGeoQuietly, "BeforeAddGeo") || Calls(setInt, "BeforeJournalSetInt") ||
-            Calls(die, "BeforeDeath"))
+        map.Body.ExceptionHandlers.Add(new ExceptionHandler(ExceptionHandlerType.Finally)
         {
-            notes.Add("gameplay hooks: partial prior weave found; skipped");
-            return false;
-        }
-
-        void Prefix(MethodDefinition target, MethodDefinition hook, params Instruction[] loads)
+            TryStart = tryStart, TryEnd = handlerStart,
+            HandlerStart = handlerStart, HandlerEnd = continuationLoad,
+        });
+        // Added epilogues may lengthen a native short branch; preserve its target.
+        foreach (var instruction in map.Body.Instructions)
+            instruction.OpCode = instruction.OpCode.Code switch
+            {
+                Code.Br_S => OpCodes.Br, Code.Brfalse_S => OpCodes.Brfalse, Code.Brtrue_S => OpCodes.Brtrue,
+                Code.Beq_S => OpCodes.Beq, Code.Bge_S => OpCodes.Bge, Code.Bge_Un_S => OpCodes.Bge_Un,
+                Code.Bgt_S => OpCodes.Bgt, Code.Bgt_Un_S => OpCodes.Bgt_Un, Code.Ble_S => OpCodes.Ble,
+                Code.Ble_Un_S => OpCodes.Ble_Un, Code.Blt_S => OpCodes.Blt, Code.Blt_Un_S => OpCodes.Blt_Un,
+                Code.Bne_Un_S => OpCodes.Bne_Un, Code.Leave_S => OpCodes.Leave, _ => instruction.OpCode,
+            };
+        foreach (var (target, hook, loads) in prefixes)
         {
-            var processor = target.Body.GetILProcessor();
+            var il = target.Body.GetILProcessor();
             var first = target.Body.Instructions[0];
-            foreach (Instruction load in loads) processor.InsertBefore(first, load);
-            processor.InsertBefore(first, processor.Create(OpCodes.Call, module.ImportReference(hook)));
+            foreach (var load in loads) il.InsertBefore(first, load);
+            il.InsertBefore(first, il.Create(OpCodes.Call, module.ImportReference(hook)));
         }
-
-        Prefix(takeDamage, beforeDamage,
-            Instruction.Create(OpCodes.Ldarga, takeDamage.Parameters[2]));
-        Prefix(addGeo, beforeGeo,
-            Instruction.Create(OpCodes.Ldarga, addGeo.Parameters[0]));
-        Prefix(addGeoQuietly, beforeGeo,
-            Instruction.Create(OpCodes.Ldarga, addGeoQuietly.Parameters[0]));
-        Prefix(setInt, beforeJournal,
-            Instruction.Create(OpCodes.Ldarg_0),
-            Instruction.Create(OpCodes.Ldarg, setInt.Parameters[0]),
-            Instruction.Create(OpCodes.Ldarga, setInt.Parameters[1]));
-        Prefix(die, beforeDeath);
-        notes.Add("gameplay hooks: damage cap, Geo multiplier, journal, and death handling woven");
+        gate = new TypeDefinition("", HollowKnightHookGate,
+            TypeAttributes.Public | TypeAttributes.Abstract | TypeAttributes.Sealed, module.TypeSystem.Object);
+        var getter = new MethodDefinition("GetVerifiedMask", MethodAttributes.Public | MethodAttributes.Static, module.TypeSystem.Int32);
+        getter.Body.GetILProcessor().Emit(OpCodes.Ldc_I4, HollowKnightVerifiedMask);
+        getter.Body.GetILProcessor().Emit(OpCodes.Ret);
+        gate.Methods.Add(getter);
+        module.Types.Add(gate);
+        notes.Add("Hollow Knight one-hit/gameplay hooks: all nine exact sites woven; damage, Geo, journal, death, and map rebase capability verified");
         return true;
     }
 

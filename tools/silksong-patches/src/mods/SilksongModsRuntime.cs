@@ -21,6 +21,7 @@ namespace DualSouls.Mods.Silksong
         public TweakSession Session { get; private set; }
         public SilksongSkinRuntime Skins { get; private set; }
         SilksongSkinLibrary skinLibrary;
+        SilksongGameTweakApi tweakApi;
 
         public static void EnsureStarted()
         {
@@ -56,6 +57,7 @@ namespace DualSouls.Mods.Silksong
             if (ReferenceEquals(Current, this)) return;
 
             var api = new SilksongGameTweakApi();
+            tweakApi = api;
             Session = new TweakSession(
                 () => api.IsReady,
                 () => new SilksongTweakAdapter(api),
@@ -105,9 +107,12 @@ namespace DualSouls.Mods.Silksong
                     if (!session.TeardownComplete)
                     {
                         Debug.LogError("[Silksong Mods] restoration pending; retained for retry: " + session.LastError);
-                        SilksongModsRestorePump.Create(session);
+                        SilksongModsRestorePump.Create(session, tweakApi);
                     }
+                    else if (tweakApi != null) tweakApi.RetireBaseline();
                 }
+                else if (tweakApi != null) tweakApi.RetireBaseline();
+                tweakApi = null;
             }
             finally
             {
@@ -167,16 +172,18 @@ namespace DualSouls.Mods.Silksong
     {
         static SilksongModsRestorePump _owner;
         readonly PendingTweakTeardown _pending = new PendingTweakTeardown();
+        SilksongGameTweakApi tweakApi;
 
-        public static bool BlocksReplacement =>
-            _owner != null && _owner._pending.BlocksReplacement;
+        // The baseline still belongs to this pump even if another teardown tick
+        // completed its session. Only Update retires that exact API generation.
+        public static bool BlocksReplacement => _owner != null;
 
-        public static void Create(TweakSession session)
+        public static void Create(TweakSession session, SilksongGameTweakApi api)
         {
             if (session == null || session.TeardownComplete) return;
             if (_owner != null)
             {
-                _owner._pending.TryRetain(session);
+                if (_owner._pending.TryRetain(session)) _owner.tweakApi = api;
                 return;
             }
 
@@ -188,12 +195,14 @@ namespace DualSouls.Mods.Silksong
                 Destroy(restoreObject);
                 return;
             }
+            pump.tweakApi = api;
             _owner = pump;
         }
 
         void Update()
         {
             if (!_pending.Tick()) return;
+            if (tweakApi != null) { tweakApi.RetireBaseline(); tweakApi = null; }
             if (ReferenceEquals(_owner, this)) _owner = null;
             Destroy(gameObject);
         }

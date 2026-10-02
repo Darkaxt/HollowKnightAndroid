@@ -655,6 +655,8 @@ public sealed class HollowKnightTweakAdapterTests
     private sealed class RecordingApi : IHollowKnightTweakApi
     {
         public bool IsReady { get; set; } = true;
+        // This typed-dispatch fixture explicitly models a completely woven native game.
+        public bool IsHookAvailable(string id) => true;
         public bool ThrowOnMutation { get; set; }
         public List<string> Calls { get; } = new();
         public HashSet<string> ActiveGameplay { get; } = new();

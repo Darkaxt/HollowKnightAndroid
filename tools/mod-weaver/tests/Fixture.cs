@@ -463,7 +463,8 @@ internal sealed class Fixture : IDisposable
         Game.Dispose();
         _harmony.Dispose();
         _bepinex.Dispose();
-        Directory.Delete(_root, recursive: true);
+        if (Environment.GetEnvironmentVariable("MOD_WEAVER_RETAIN_FIXTURES") != "1")
+            Directory.Delete(_root, recursive: true);
     }
 }
 

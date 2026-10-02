@@ -26,7 +26,10 @@ param(
     # Unity's Android player assemblies, as fetched by `make player`.
     [string]$Player = "$env:USERPROFILE\.cache\silksong\unity-player\android\Variations\il2cpp\Managed",
     # Optional retained assembly for host-only weave validation.
-    [string]$Output
+    [string]$Output,
+    # Explicit fresh compiler directory for retained host evidence.
+    [string]$Work,
+    [switch]$RetainArtifacts
 )
 
 $ErrorActionPreference = 'Stop'
@@ -88,8 +91,14 @@ $taskTempRoot = if ($env:DUALSOULS_TEMP_ROOT) {
 } else {
     [System.IO.Path]::GetTempPath()
 }
-$work = Join-Path $taskTempRoot ("dualsouls-patch-check-{0}" -f [Guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Force -Path $work | Out-Null
+if (-not $Work) {
+    $Work = Join-Path $taskTempRoot ("dualsouls-patch-check-{0}" -f [Guid]::NewGuid().ToString('N'))
+}
+$work = [System.IO.Path]::GetFullPath($Work)
+if (Test-Path -LiteralPath $work) {
+    throw "Refusing to overwrite existing patch-check work: $work"
+}
+New-Item -ItemType Directory -Path $work | Out-Null
 
 try {
 $sources = @($src, $sharedSrc) |
@@ -234,11 +243,15 @@ if (Test-Path $ep) {
     Write-Host "[check] entry points: $count"
 }
 } finally {
-    $resolvedRoot = [System.IO.Path]::GetFullPath($taskTempRoot).TrimEnd('\', '/')
-    $resolvedWork = [System.IO.Path]::GetFullPath($work)
-    $ownedPrefix = $resolvedRoot + [System.IO.Path]::DirectorySeparatorChar
-    if (-not $resolvedWork.StartsWith($ownedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to clean work directory outside task temp root: $resolvedWork"
+    if ($RetainArtifacts) {
+        Write-Host "[check] retained compiler artifacts: $work"
+    } else {
+        $resolvedRoot = [System.IO.Path]::GetFullPath($taskTempRoot).TrimEnd('\', '/')
+        $resolvedWork = [System.IO.Path]::GetFullPath($work)
+        $ownedPrefix = $resolvedRoot + [System.IO.Path]::DirectorySeparatorChar
+        if (-not $resolvedWork.StartsWith($ownedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to clean work directory outside task temp root: $resolvedWork"
+        }
+        Remove-Item -LiteralPath $resolvedWork -Recurse -Force -ErrorAction SilentlyContinue
     }
-    Remove-Item -LiteralPath $resolvedWork -Recurse -Force -ErrorAction SilentlyContinue
 }

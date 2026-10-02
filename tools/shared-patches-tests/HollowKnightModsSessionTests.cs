@@ -262,6 +262,8 @@ public sealed class HollowKnightModsSessionTests
     private sealed class RecordingApi : IHollowKnightTweakApi
     {
         public bool IsReady { get; set; } = true;
+        // Session tests model complete native hook admission, not weaver availability.
+        public bool IsHookAvailable(string id) => true;
         public int BackdropFailuresRemaining { get; set; }
         public int RestoreFailuresRemaining { get; set; }
         public bool AlwaysFailCapture { get; set; }

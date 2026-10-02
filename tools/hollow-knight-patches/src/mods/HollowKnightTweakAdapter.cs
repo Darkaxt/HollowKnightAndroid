@@ -10,6 +10,7 @@ namespace DualSouls.Mods.HollowKnight
     public interface IHollowKnightTweakApi
     {
         bool IsReady { get; }
+        bool IsHookAvailable(string id);
         void CaptureBaseline();
         void RestoreBaseline();
         void OpenSkins();
@@ -96,11 +97,25 @@ namespace DualSouls.Mods.HollowKnight
         }
 
         readonly IHollowKnightTweakApi _api;
+        readonly IReadOnlyList<TweakDescriptor> _rows;
         readonly List<PendingChoice> _pendingChoiceReadbacks = new List<PendingChoice>();
         long _nextOperationToken;
-        public HollowKnightTweakAdapter(IHollowKnightTweakApi api) => _api = api ?? throw new ArgumentNullException(nameof(api));
+        public HollowKnightTweakAdapter(IHollowKnightTweakApi api)
+        {
+            _api = api ?? throw new ArgumentNullException(nameof(api));
+            var rows = new TweakDescriptor[Rows.Count];
+            for (int index = 0; index < rows.Length; index++)
+            {
+                TweakDescriptor row = Rows[index];
+                rows[index] = _api.IsHookAvailable(row.Id) ? row : TweakDescriptor.Unavailable(
+                    row.Id, row.ContractId, row.ControlKind, row.Group, row.Title,
+                    row.Description, row.DefaultValue, row.Values,
+                    "The required Hollow Knight native gameplay weave is unavailable.");
+            }
+            _rows = Array.AsReadOnly(rows);
+        }
         public string GameId => "hollow-knight";
-        public IReadOnlyList<TweakDescriptor> Descriptors => Rows;
+        public IReadOnlyList<TweakDescriptor> Descriptors => _rows;
         public void CaptureBaseline() => _api.CaptureBaseline();
         public void RestoreBaseline()
         {
@@ -144,6 +159,8 @@ namespace DualSouls.Mods.HollowKnight
         {
             TweakDescriptor row = Find(id);
             if (row == null) return TweakActionResult.Fail("Unknown Hollow Knight tweak: " + id);
+            if (!row.IsAvailable) return TweakActionResult.Fail(
+                row.Title + " is currently unavailable: " + row.UnavailableReason);
             if (!row.Allows(value)) return TweakActionResult.Fail("Unsupported value for " + id + ": " + value);
             if (!_api.IsReady) return TweakActionResult.Fail("Hollow Knight tweak API is not ready for " + id + ".");
             long operationToken = row.ControlKind == TweakControlKind.Choice ||
@@ -215,9 +232,9 @@ namespace DualSouls.Mods.HollowKnight
         static int Multiplier(string value) => value == "x2" ? 2 : value == "x3" ? 3 : value == "x5" ? 5 : 1;
         static TweakDescriptor Row(string id, string contract, TweakControlKind kind, string group, string title, string description, string defaultValue, params string[] values) =>
             new TweakDescriptor(id, contract, kind, group, title, description, defaultValue, values);
-        static TweakDescriptor Find(string id)
+        TweakDescriptor Find(string id)
         {
-            for (int i = 0; i < Rows.Count; i++) if (Rows[i].Id == id) return Rows[i];
+            for (int i = 0; i < _rows.Count; i++) if (_rows[i].Id == id) return _rows[i];
             return null;
         }
     }

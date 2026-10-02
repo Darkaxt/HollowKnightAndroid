@@ -5,6 +5,7 @@ namespace DualSouls.Mods.HollowKnight
 {
     public sealed class HollowKnightGameTweakApi : IHollowKnightTweakApi
     {
+        readonly bool _verifiedHooks = ReadVerifiedHookCapability();
         bool _captured;
         HollowKnightDamageMode? _damageMode;
         global::PlayerData _damagePlayer;
@@ -47,6 +48,44 @@ namespace DualSouls.Mods.HollowKnight
             new System.Collections.Generic.Queue<TweakAdapterCompletion>();
 
         public bool IsReady => true;
+
+        // The weaver publishes this immutable game-assembly proof only after all
+        // nine typed call sites pass preflight. Resolve once per API generation;
+        // no IL inspection, process scanning, or healthy-frame capability polling.
+        static bool ReadVerifiedHookCapability()
+        {
+            try
+            {
+                System.Type gate = typeof(global::PlayerData).Assembly.GetType(
+                    "DualSoulsHollowKnightHookGate", false);
+                if (gate == null || !gate.IsPublic || !gate.IsAbstract || !gate.IsSealed)
+                    return false;
+                System.Reflection.MethodInfo proof = gate.GetMethod(
+                    "GetVerifiedMask", System.Reflection.BindingFlags.Public |
+                    System.Reflection.BindingFlags.Static, null, System.Type.EmptyTypes, null);
+                return proof != null && !proof.IsGenericMethod && proof.ReturnType == typeof(int) &&
+                    (int)proof.Invoke(null, null) == 63;
+            }
+            catch { return false; }
+        }
+
+        public bool IsHookAvailable(string id)
+        {
+            switch (id)
+            {
+                case "damage_cap": case "one_hit_kills": case "keep_geo_on_death":
+                case "journal_one_kill": case "geo_multiplier": case "auto_map":
+                    return _verifiedHooks;
+                default: return true;
+            }
+        }
+
+        void RequireHook(string id)
+        {
+            if (!IsHookAvailable(id))
+                throw new System.InvalidOperationException(
+                    "The required Hollow Knight native gameplay weave is unavailable for " + id + ".");
+        }
 
         public void CaptureBaseline()
         {
@@ -141,6 +180,7 @@ namespace DualSouls.Mods.HollowKnight
 
         public void SetOneHitKills(bool enabled)
         {
+            if (enabled) RequireHook("one_hit_kills");
             _oneHitKills = enabled;
             HollowKnightOneHitDamagePatch.SetEnabled(enabled);
         }
@@ -177,7 +217,11 @@ namespace DualSouls.Mods.HollowKnight
         }
 
         public void SetFastTransitions(bool enabled) { _fastTransitions = enabled; }
-        public void SetAutoMap(bool enabled) { _autoMap = enabled; }
+        public void SetAutoMap(bool enabled)
+        {
+            if (enabled) RequireHook("auto_map");
+            _autoMap = enabled;
+        }
         public void SetInnateCompass(bool enabled) { _innateCompass = enabled; }
         public void OpenBenchTeleport(long operationToken)
         {
@@ -197,7 +241,11 @@ namespace DualSouls.Mods.HollowKnight
             }
         }
         public void SetSecretRadar(bool enabled) { _secretRadar = enabled; }
-        public void SetDamageCap(bool enabled) { HollowKnightGameplayHooks.DamageCapEnabled = enabled; }
+        public void SetDamageCap(bool enabled)
+        {
+            if (enabled) RequireHook("damage_cap");
+            HollowKnightGameplayHooks.DamageCapEnabled = enabled;
+        }
         public void SetEnemyHealthBars(bool enabled) { _healthBars = enabled; }
         public void SetDamageNumbers(bool enabled) { _damageNumbers = enabled; }
         public void SetBossRetry(bool enabled)
@@ -262,12 +310,14 @@ namespace DualSouls.Mods.HollowKnight
         public void SetGeoMagnet(bool enabled) { _geoMagnet = enabled; }
         public void SetKeepGeoOnDeath(bool enabled)
         {
+            if (enabled) RequireHook("keep_geo_on_death");
             _keepGeoOnDeath = enabled;
             HollowKnightGameplayHooks.KeepGeoEnabled = enabled;
             if (!enabled) HollowKnightGameplayHooks.CompleteDeathHandling();
         }
         public void SetJournalOneKill(bool enabled)
         {
+            if (enabled) RequireHook("journal_one_kill");
             _journalOneKill = enabled;
             HollowKnightGameplayHooks.JournalOneKillEnabled = enabled;
         }
@@ -275,12 +325,15 @@ namespace DualSouls.Mods.HollowKnight
         {
             if (multiplier != 1 && multiplier != 2 && multiplier != 3 && multiplier != 5)
                 throw new System.ArgumentOutOfRangeException(nameof(multiplier));
+            if (multiplier > 1) RequireHook("geo_multiplier");
             _geoMultiplier = multiplier;
             HollowKnightGameplayHooks.GeoMultiplier = multiplier;
         }
 
         public TweakActionResult Readback(string id)
         {
+            if (!IsHookAvailable(id)) return TweakActionResult.Fail(
+                "The required Hollow Knight native gameplay weave is unavailable for " + id + ".");
             switch (id)
             {
                 case "companion_backdrop":
@@ -548,6 +601,27 @@ namespace DualSouls.Mods.HollowKnight
         public static bool KeepGeoEnabled { get; set; }
         public static bool JournalOneKillEnabled { get; set; }
         public static int GeoMultiplier { get; set; } = 1;
+
+        public static void BeforeAuthoritativeMapBoolSet(global::PlayerData player, string field, bool value)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            HollowKnightGameplayFeatures.BeforeAuthoritativeMapBoolSet(player, field, value);
+#endif
+        }
+
+        public static void BeginAuthoritativeMapUpdate(global::PlayerData player)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            HollowKnightGameplayFeatures.BeginAuthoritativeMapUpdate(player);
+#endif
+        }
+
+        public static void EndAuthoritativeMapUpdate(global::PlayerData player)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            HollowKnightGameplayFeatures.EndAuthoritativeMapUpdate(player);
+#endif
+        }
 
         public static void BeforeTakeDamage(ref int damageAmount)
         {

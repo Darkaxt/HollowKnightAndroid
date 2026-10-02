@@ -9,14 +9,15 @@ namespace DualSouls.Mods.Silksong
     /// <summary>Silksong 1.0.29980 managed tweak implementation.</summary>
     public sealed class SilksongGameTweakApi : ISilksongTweakApi
     {
-        static bool _captured;
-        static CheatManager.InvincibilityStates _invincibility;
-        static CheatManager.NailDamageStates _nailDamage;
-        static bool _silkDrainDisabled;
-        static bool _equipAnywhere;
-        static bool _instantDialogue;
-        static bool _worldRumbleDisabled;
-        static bool _frostDisabled;
+        static SilksongGameTweakApi _baselineOwner;
+        bool _captured;
+        CheatManager.InvincibilityStates _invincibility;
+        CheatManager.NailDamageStates _nailDamage;
+        bool _silkDrainDisabled;
+        bool _equipAnywhere;
+        bool _instantDialogue;
+        bool _worldRumbleDisabled;
+        bool _frostDisabled;
         static SilksongGameTweakApi _silkGrantOwner;
 
         float _runSpeedMultiplier = 1f;
@@ -67,6 +68,8 @@ namespace DualSouls.Mods.Silksong
 
         public void CaptureBaseline()
         {
+            if (_baselineOwner != null && !ReferenceEquals(_baselineOwner, this))
+                throw new InvalidOperationException("The previous Silksong Mods owner has not retired.");
             if (!_captured)
             {
                 _invincibility = CheatManager.Invincibility;
@@ -78,13 +81,14 @@ namespace DualSouls.Mods.Silksong
                 _frostDisabled = CheatManager.IsFrostDisabled;
                 _captured = true;
             }
+            _baselineOwner = this;
             _silkGrantOwner = this;
             SilksongGameplayFeatures.SetStateTransferPreparation(PrepareForStateTransfer);
         }
 
         public void RestoreBaseline()
         {
-            if (!_captured) return;
+            if (!_captured || !ReferenceEquals(_baselineOwner, this)) return;
             RestoreDamageMode();
             RestoreOneHitKills();
             RestoreUnlimitedSilk();
@@ -507,9 +511,19 @@ namespace DualSouls.Mods.Silksong
             SilksongGameplayFeatures.RestorePlayerOwnedForStateTransfer();
         }
 
-        static void EnsureCaptured()
+        // Only the runtime/restore pump may retire a generation, after the session
+        // has completed restoration. RESET ALL MODS keeps this same baseline.
+        internal void RetireBaseline()
         {
-            if (!_captured) throw new InvalidOperationException("CaptureBaseline must run before applying Silksong tweaks.");
+            if (!ReferenceEquals(_baselineOwner, this)) return;
+            _baselineOwner = null;
+            if (ReferenceEquals(_silkGrantOwner, this)) _silkGrantOwner = null;
+        }
+
+        void EnsureCaptured()
+        {
+            if (!_captured || !ReferenceEquals(_baselineOwner, this))
+                throw new InvalidOperationException("CaptureBaseline must run for the current Silksong Mods owner before applying tweaks.");
         }
     }
 }

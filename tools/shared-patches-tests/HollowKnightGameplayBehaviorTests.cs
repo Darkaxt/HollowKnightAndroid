@@ -18,6 +18,128 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
         ResetGame();
     }
 
+    [Theory]
+    [InlineData("damage_cap", "on")]
+    [InlineData("one_hit_kills", "on")]
+    [InlineData("keep_geo_on_death", "on")]
+    [InlineData("journal_one_kill", "on")]
+    [InlineData("geo_multiplier", "x2")]
+    [InlineData("auto_map", "on")]
+    public void MissingNativeWeaveCannotAdvertiseOrAcceptRequiredRow(string id, string value)
+    {
+        DualSoulsHollowKnightHookGate.Mask = 0;
+        try
+        {
+            var api = new HollowKnightGameTweakApi();
+            var adapter = new HollowKnightTweakAdapter(api);
+            Assert.False(System.Linq.Enumerable.Single(adapter.Descriptors, r => r.Id == id).IsAvailable);
+            var result = adapter.Apply(id,value);
+            Assert.False(result.Success); Assert.False(result.Pending);
+            Assert.False(api.Readback(id).Success);
+            Assert.Empty(adapter.TickWithOutcomes());
+        }
+        finally { DualSoulsHollowKnightHookGate.Mask = 63; }
+    }
+
+    static readonly string[] RequiredRows =
+    {
+        "damage_cap", "one_hit_kills", "keep_geo_on_death",
+        "journal_one_kill", "geo_multiplier", "auto_map"
+    };
+
+    [Theory]
+    [InlineData(1)] [InlineData(2)] [InlineData(4)]
+    [InlineData(8)] [InlineData(16)] [InlineData(32)]
+    [InlineData(62)] [InlineData(61)] [InlineData(59)]
+    [InlineData(55)] [InlineData(47)] [InlineData(31)]
+    [InlineData(127)] [InlineData(-1)]
+    public void IncompleteOrUnknownProofRejectsEveryRequiredRow(int mask)
+    {
+        DualSoulsHollowKnightHookGate.Mask = mask;
+        AssertRequiredRows(new HollowKnightGameTweakApi(), false);
+        Assert.Equal(1, DualSoulsHollowKnightHookGate.Reads);
+    }
+
+    [Fact]
+    public void ThrowingProofFailsClosedAndIsNotRetriedWithinGeneration()
+    {
+        DualSoulsHollowKnightHookGate.FailRead = true;
+        var api = new HollowKnightGameTweakApi();
+        AssertRequiredRows(api, false);
+        DualSoulsHollowKnightHookGate.FailRead = false;
+        AssertRequiredRows(api, false);
+        Assert.Equal(1, DualSoulsHollowKnightHookGate.Reads);
+        AssertRequiredRows(new HollowKnightGameTweakApi(), true);
+        Assert.Equal(2, DualSoulsHollowKnightHookGate.Reads);
+    }
+
+    [Fact]
+    public void CompleteProofIsCachedExactlyOncePerApiGeneration()
+    {
+        var api = new HollowKnightGameTweakApi();
+        AssertRequiredRows(api, true);
+        DualSoulsHollowKnightHookGate.Mask = 0;
+        AssertRequiredRows(api, true);
+        Assert.Equal(1, DualSoulsHollowKnightHookGate.Reads);
+        var unavailable = new HollowKnightGameTweakApi();
+        AssertRequiredRows(unavailable, false);
+        DualSoulsHollowKnightHookGate.Mask = 63;
+        AssertRequiredRows(unavailable, false);
+        Assert.Equal(2, DualSoulsHollowKnightHookGate.Reads);
+    }
+
+    static void AssertRequiredRows(HollowKnightGameTweakApi api, bool available)
+    {
+        var adapter = new HollowKnightTweakAdapter(api);
+        foreach (string id in RequiredRows)
+        {
+            Assert.Equal(available, api.IsHookAvailable(id));
+            Assert.Equal(available, System.Linq.Enumerable.Single(
+                adapter.Descriptors, r => r.Id == id).IsAvailable);
+            Assert.Equal(available, api.Readback(id).Success);
+            if (!available)
+            {
+                var result = adapter.Apply(id, id == "geo_multiplier" ? "x2" : "on");
+                Assert.False(result.Success);
+                Assert.False(result.Pending);
+            }
+        }
+        api.TickGameplay();
+        Assert.Empty(adapter.TickWithOutcomes());
+    }
+
+    [Theory]
+    [InlineData("damage_cap")] [InlineData("one_hit_kills")]
+    [InlineData("keep_geo_on_death")] [InlineData("journal_one_kill")]
+    [InlineData("geo_multiplier")] [InlineData("auto_map")]
+    public void DirectEnableNeedsProofButOffAndBaselineCleanupRemainSafe(string id)
+    {
+        DualSoulsHollowKnightHookGate.Mask = 0;
+        var api = new HollowKnightGameTweakApi();
+        api.CaptureBaseline();
+        void Set(bool on)
+        {
+            switch (id)
+            {
+                case "damage_cap": api.SetDamageCap(on); break;
+                case "one_hit_kills": api.SetOneHitKills(on); break;
+                case "keep_geo_on_death": api.SetKeepGeoOnDeath(on); break;
+                case "journal_one_kill": api.SetJournalOneKill(on); break;
+                case "geo_multiplier": api.SetGeoMultiplier(on ? 2 : 1); break;
+                case "auto_map": api.SetAutoMap(on); break;
+            }
+        }
+        Assert.Throws<System.InvalidOperationException>(() => Set(true));
+        Set(false);
+        api.RestoreBaseline();
+        Assert.False(HollowKnightGameplayHooks.DamageCapEnabled);
+        Assert.False(HollowKnightGameplayHooks.KeepGeoEnabled);
+        Assert.False(HollowKnightGameplayHooks.JournalOneKillEnabled);
+        Assert.Equal(1, HollowKnightGameplayHooks.GeoMultiplier);
+        Assert.False(api.Readback(id).Success);
+        Assert.Equal(1, DualSoulsHollowKnightHookGate.Reads);
+    }
+
     [Fact]
     public void BenchRouteOwnerPublishesCorrelatedTimeoutInsteadOfRemainingPending()
     {
@@ -313,6 +435,9 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
 
     static void ResetGame()
     {
+        DualSoulsHollowKnightHookGate.Mask = 63;
+        DualSoulsHollowKnightHookGate.Reads = 0;
+        DualSoulsHollowKnightHookGate.FailRead = false;
         PlayerData.instance = null;
         HeroController.instance = null;
         GameManager.UnsafeInstance = null;
