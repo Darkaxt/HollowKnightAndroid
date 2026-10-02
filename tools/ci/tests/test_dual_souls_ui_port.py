@@ -2128,9 +2128,12 @@ static class Program
 
         shell_gesture = csharp_method_body(shell, r"public\s+void\s+OnGesture\s*\([^)]*\)")
         self.assertLess(
-            shell_gesture.index("if (!_operational) return;"),
-            shell_gesture.index("_gestures.Route("),
+            shell_gesture.index("if (!_operational || _paused) return;"),
+            shell_gesture.index("OnOperationalGesture(g);"),
         )
+        admitted_gesture = csharp_method_body(shell, r"void\s+OnOperationalGesture\s*\([^)]*\)")
+        self.assertIn("_gestures.Route(", admitted_gesture)
+        self.assertNotIn("_gestures.Route(", shell_gesture)
 
     def test_loadout_socket_custom_icon_uses_owned_factory_without_static_item_setter(self):
         source = read(DUALSCREEN_SOURCES / "DsPortProgress.Loadout.cs")
@@ -2653,9 +2656,10 @@ static class Program
             "bool operational = !_disposed && _visible && !_idle && !_transitioning;",
             operational,
         )
-        self.assertIn("_hud.SetVisible(operational)", operational)
+        self.assertIn("_hud.SetVisible(operational && !_paused)", operational)
         shell_tick = csharp_method_body(shell, r"public\s+void\s+Tick\s*\([^)]*\)")
-        self.assertIn("if (!_operational) return;", shell_tick)
+        self.assertIn("if (!_operational || _paused) return;", shell_tick)
+        self.assertIn("TickOperational(dt);", shell_tick)
 
     def test_page_adapters_latch_destroyed_only_after_native_retirement_returns(self):
         for file in ("DsPortProgress.cs", "DsPortProgress.Tasks.cs", "DsPortProgress.Inventory.cs", "DsPortProgress.Loadout.cs"):

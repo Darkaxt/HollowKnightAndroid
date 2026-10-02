@@ -34,7 +34,7 @@ using GlobalEnums;
 using TmpText = TMProOld.TextMeshProUGUI;
 using TmpAlign = TMProOld.TextAlignmentOptions;
 
-public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip
+public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip, IDsPresentationSuspend
 {
     enum State { Idle, NoMap, Map }
 
@@ -209,6 +209,14 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip
         // enabled deliberately: "zones active, display off" is the state the
         // game itself sits in between maps, so there is nothing to restore and
         // nothing that can be caught half-restored.
+        if (_view != null) _view.SetVisible(false);
+    }
+
+    public void SuspendPresentation()
+    {
+        // Pause is not a page switch: retain marker choices, frame, zoom and pan.
+        _sliderGesture = false;
+        if (_slider != null) _slider.Release();
         if (_view != null) _view.SetVisible(false);
     }
 

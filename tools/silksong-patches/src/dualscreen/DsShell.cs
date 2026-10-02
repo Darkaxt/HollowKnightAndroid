@@ -45,7 +45,9 @@ public class DsShell
     RectTransform _tabBar;
     RectTransform _body;
     RectTransform _header;
+    RectTransform _actionHost;
     DsHudView _hud;
+    bool _paused;
     bool _visible;
     bool _transitioning;
     bool _operational;
@@ -148,10 +150,10 @@ public class DsShell
         // fixed: after the HUD, so its labels are over the ground rather than
         // under the health's render texture, and before the tab strip and the
         // title card, so neither is ever drawn under a button.
-        var actionHost = DsWidgets.Rect(_root, "actions");
-        DsWidgets.Place(actionHost, 0f, 0f, _w, _h);
+        _actionHost = DsWidgets.Rect(_root, "actions");
+        DsWidgets.Place(_actionHost, 0f, 0f, _w, _h);
         // The header band, which its buttons are spread down.
-        _actions.Build(actionHost, _w, _layout.Hud.height);
+        _actions.Build(_actionHost, _w, _layout.Hud.height);
 
         // The screen's name, beside the silk bar. Placed per frame rather than
         // here: the space it sits in depends on the player's maximum silk and
@@ -185,10 +187,7 @@ public class DsShell
 
         // Match the initial _idle state, rather than waiting for the first
         // SetIdle to disagree with it.
-        _tabBar.gameObject.SetActive(false);
-        _body.gameObject.SetActive(false);
-        _header.gameObject.SetActive(false);
-        _title.SetVisible(true);
+        ApplyPresentation();
     }
 
     /// <summary>
@@ -210,11 +209,50 @@ public class DsShell
         EndSlide();
         if (idle) _actions.Clear();
 
-        _tabBar.gameObject.SetActive(!idle);
-        _body.gameObject.SetActive(!idle);
-        _header.gameObject.SetActive(!idle);
-        _title.SetVisible(idle);
+        ApplyPresentation();
         UpdateOperational();
+    }
+
+    public bool Paused => _paused;
+
+    /// <summary>
+    /// Hide gameplay presentation without leaving/re-entering the selected page.
+    /// Pause-owned Options/Mods/Skins retain the same resident page state.
+    /// </summary>
+    public void SetPaused(bool paused)
+    {
+        if (_disposed || paused == _paused) return;
+        if (paused)
+        {
+            _gestures.Reset();
+            // Pause settles presentation, not page lifetime. In particular the
+            // outgoing Map/Loadout must not receive destructive ordinary OnHide.
+            var outgoing = SettleSlide();
+            SuspendPresentation(outgoing);
+            _actions.Clear();
+            if (_active >= 0 && _active < _entries.Count)
+                SuspendPresentation(_entries[_active]);
+        }
+        _paused = paused;
+        ApplyPresentation();
+        if (_hud != null) _hud.SetVisible(_operational && !_paused);
+    }
+
+    void SuspendPresentation(Entry e)
+    {
+        if (e == null || e.Broken) return;
+        var suspend = e.Screen as IDsPresentationSuspend;
+        if (suspend != null) Guard(e, suspend.SuspendPresentation);
+    }
+
+    void ApplyPresentation()
+    {
+        bool gameplay = !_idle && !_paused;
+        _tabBar.gameObject.SetActive(gameplay);
+        _body.gameObject.SetActive(gameplay);
+        _header.gameObject.SetActive(gameplay);
+        _actionHost.gameObject.SetActive(gameplay);
+        _title.SetVisible(!gameplay);
     }
 
     public void SetVisible(bool visible)
@@ -252,7 +290,8 @@ public class DsShell
     void UpdateOperational()
     {
         bool operational = !_disposed && _visible && !_idle && !_transitioning;
-        if (_hud != null) _hud.SetVisible(operational);
+        // Page lifetime is deliberately independent of paused presentation.
+        if (_hud != null) _hud.SetVisible(operational && !_paused);
         if (operational == _operational) return;
         _operational = operational;
 
@@ -466,23 +505,37 @@ public class DsShell
             Shift(_entries[_slideFrom].Host, -k * _slideDir * _w);
     }
 
-    /// <summary>Put both screens where the slide was going to leave them.</summary>
+    /// <summary>End an ordinary route/transport/scene slide with page lifecycle.</summary>
     void EndSlide()
     {
-        if (!Sliding) return;
+        var outgoing = SettleSlide();
+        if (outgoing != null && _operational)
+        {
+            var prev = outgoing;
+            Guard(prev, () => prev.Screen.OnHide());
+        }
+    }
+
+    /// <summary>
+    /// Settle host geometry only, returning the outgoing capture owner. Pause
+    /// suspends it now without queuing an ordinary OnHide for unpause.
+    /// </summary>
+    Entry SettleSlide()
+    {
+        if (!Sliding) return null;
 
         int from = _slideFrom;
         _slideFrom = -1;
-
+        Entry outgoing = null;
         if (from >= 0 && from < _entries.Count)
         {
-            var prev = _entries[from];
-            Shift(prev.Host, 0f);
-            prev.Host.gameObject.SetActive(false);
-            if (_operational) Guard(prev, () => prev.Screen.OnHide());
+            outgoing = _entries[from];
+            Shift(outgoing.Host, 0f);
+            outgoing.Host.gameObject.SetActive(false);
         }
         if (_active >= 0 && _active < _entries.Count)
             Shift(_entries[_active].Host, 0f);
+        return outgoing;
     }
 
     public void Next(int direction)
@@ -537,7 +590,14 @@ public class DsShell
 
     public void Tick(float dt)
     {
-        if (!_operational) return;
+        if (!_operational || _paused) return;
+        TickOperational(dt);
+    }
+
+    // Keep capturing delegates behind admission: C# otherwise allocates their
+    // closure before the early return, even for an unchanged paused frame.
+    void TickOperational(float dt)
+    {
         if (_hud != null) _hud.SetVisible(true);
         RefreshTabArt();
         _tabCursor.Tick(dt);
@@ -863,9 +923,13 @@ public class DsShell
 
     public void OnGesture(DsGesture g)
     {
-        // Nothing to press while the transport, scene, or save is unavailable.
-        if (!_operational) return;
+        // Nothing to press while the transport, scene, save, or game is paused.
+        if (!_operational || _paused) return;
+        OnOperationalGesture(g);
+    }
 
+    void OnOperationalGesture(DsGesture g)
+    {
         // The header's buttons first, and before the shell's own routing: they
         // sit outside the body, which is the only region that routing knows
         // about, and a tap on one is not a tap on the screen beneath.

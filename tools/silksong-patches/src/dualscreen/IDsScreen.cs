@@ -64,6 +64,15 @@ public interface IDsTabStrip
     void OnStripSelect(int index);
 }
 
+/// <summary>
+/// Releases transient capture/input without changing a resident page's activation
+/// or selection. Ordinary OnHide/OnShow remain transport/scene/page lifecycle.
+/// </summary>
+public interface IDsPresentationSuspend
+{
+    void SuspendPresentation();
+}
+
 public interface IDsScreen
 {
     /// <summary>Stable identifier, used for persistence. Not shown.</summary>

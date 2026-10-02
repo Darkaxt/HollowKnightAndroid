@@ -65,7 +65,8 @@ public class DualScreenV2 : MonoBehaviour
             () => GameManager.SilentInstance,
             () => { if (_shellContent != null) _shellContent.RestoreNative(); },
             BeforeNativeUnload,
-            OnFinishedEnteringScene);
+            OnFinishedEnteringScene,
+            OnGamePauseChanged);
         BindGameManager();
         DsTouch.Stop();
 
@@ -170,6 +171,7 @@ public class DualScreenV2 : MonoBehaviour
         _shell = new DsShell(_screen.Root);
         RegisterScreens(_shell);
         _shell.Finish(preferredId ?? DsConfig.Str("screen", "map"));
+        _shell.SetPaused(NativeGamePaused());
     }
 
     static void RegisterScreens(DsShell shell)
@@ -185,6 +187,9 @@ public class DualScreenV2 : MonoBehaviour
     {
         if (_releaseState == null || !_releaseState.CanRoute) return;
         BindGameManager();
+        // Native pause/menu scalars reconcile missed callbacks and replacements
+        // before any companion input can be admitted. Gameplay stays true paused.
+        OnGamePauseChanged(NativeGamePaused());
         if (_host != null) _host.SetEnabled(ShouldRun());
         if (_host == null || !_host.IsActive || _screen == null || !_screen.Ready)
             return;
@@ -229,12 +234,6 @@ public class DualScreenV2 : MonoBehaviour
             }
         }
 
-        if (_input != null)
-        {
-            _input.Poll();
-            DispatchGestures();
-        }
-
         // Leaving gameplay gets a short grace because scene loads briefly have
         // no hero. Entering gameplay and initial title-card selection are immediate.
         bool inGame = DsGameData.InGame;
@@ -250,7 +249,30 @@ public class DualScreenV2 : MonoBehaviour
 
         bool settled = !_everInGame || Time.unscaledTime - _idleSince >= IDLE_GRACE;
         _shell.SetIdle(!inGame && settled);
+        if (_input != null && !_shell.Paused)
+        {
+            _input.Poll();
+            DispatchGestures();
+        }
         _shell.Tick(dt);
+    }
+
+    // Exact SS 1.0.29980 authority: native inventory is not a pause exception.
+    // Pause-owned Options/Mods/Skins keep UIState.PAUSED even while menus change.
+    bool NativeGamePaused()
+    {
+        // BindGameManager already reconciles the current owner; do not add a
+        // second SilentInstance discovery on manager-less startup frames.
+        var current = _gameManager;
+        return current != null && (current.isPaused ||
+            (current.ui != null && current.ui.uiState == GlobalEnums.UIState.PAUSED));
+    }
+
+    void OnGamePauseChanged(bool paused)
+    {
+        if (_shell == null) return;
+        if (paused && !_shell.Paused && _input != null) _input.Cancel();
+        _shell.SetPaused(paused);
     }
 
     void RebuildShell()
@@ -284,7 +306,7 @@ public class DualScreenV2 : MonoBehaviour
 
     void DispatchGestures()
     {
-        if (_input == null || _shell == null) return;
+        if (_input == null || _shell == null || _shell.Paused) return;
         var gestures = _input.Gestures;
         for (int i = 0; i < gestures.Count; i++) _shell.OnGesture(gestures[i]);
     }

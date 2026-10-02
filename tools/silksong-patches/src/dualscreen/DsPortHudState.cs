@@ -357,11 +357,13 @@ public sealed class DsHudManagerCallbacks
 
     readonly Func<object> _current;
     readonly Action _restore, _before, _rearm;
+    readonly Action<bool> _pause;
     object _owner;
     public bool TransitionPending { get; private set; }
 
-    public DsHudManagerCallbacks(Func<object> current, Action restore, Action before, Action rearm)
-    { _current = current; _restore = restore; _before = before; _rearm = rearm; }
+    public DsHudManagerCallbacks(Func<object> current, Action restore, Action before,
+                                 Action rearm, Action<bool> pause = null)
+    { _current = current; _restore = restore; _before = before; _rearm = rearm; _pause = pause; }
 
     public Subscription Bind(object owner, bool transition)
     {
@@ -375,7 +377,12 @@ public sealed class DsHudManagerCallbacks
                 if (!Accept(owner)) return;
                 if (boundary) Before(); else if (!playing) _restore();
             },
-            Pause = paused => { if (Accept(owner) && paused) _restore(); },
+            Pause = paused =>
+            {
+                if (!Accept(owner)) return;
+                if (_pause != null) _pause(paused);
+                if (paused) _restore();
+            },
             Unloading = () => { if (Accept(owner)) Before(); },
             Finished = () =>
             {
