@@ -241,7 +241,7 @@ public partial class HKDualScreen
         var size=rule.sprite.bounds.size;
         rule.transform.localRotation=Quaternion.Euler(0,0,90);
         rule.transform.localScale=new Vector3(height/Mathf.Max(.001f,size.x),2f/Mathf.Max(.001f,size.y),1);
-        rule.transform.position=PanePixel(x,top+height/2); rule.color=ShellMuted;
+        rule.transform.position=PanePixel(x,top+height/2); rule.color=ShellInk;
     }
     void PositionPaneMask(Renderer mask,Rect rect)
     {

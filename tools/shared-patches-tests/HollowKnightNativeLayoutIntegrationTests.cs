@@ -30,6 +30,11 @@ public sealed class HollowKnightNativeLayoutIntegrationTests
         Close(lower.compRoot.position.x+p.RightGutter-g.Width/2,v.RuleRight.transform.position.x);
         Close(lower.compRoot.position.y+g.Height/2-p.Top-p.Height/2,v.RuleLeft.transform.position.y);
         Close(p.Height,v.RuleLeft.transform.localScale.x);
+        foreach(var rule in new[]{v.RuleLeft,v.RuleRight})
+        {
+            Assert.Equal(.93f,rule.color.r);Assert.Equal(.91f,rule.color.g);
+            Assert.Equal(.86f,rule.color.b);Assert.Equal(1f,rule.color.a);
+        }
         RectAt(lower,v.Top,new(0,0,g.Width,p.Top));
         RectAt(lower,v.Bottom,new(0,p.Top+p.Height,g.Width,g.Height-p.Top-p.Height));
         RectAt(lower,v.Left,new(0,p.Top,p.SubjectX,p.Height));
