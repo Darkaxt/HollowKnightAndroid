@@ -10,7 +10,7 @@
 # build: the assembly it produces is thrown away, because the device compiles
 # the real one against the depot it already has.
 #
-# Usage:  pwsh tools/silksong-patches/check.ps1
+# Usage:  pwsh tools/silksong-patches/check.ps1 -Depot <1.0.29980 ..._Data/Managed or ..._Data>
 #
 # Run it BARE. Do not pipe its output -- not `| Select-Object -Last 5`, not
 # `| Select-String error`. It hangs, with no output, looking exactly like a
@@ -21,7 +21,7 @@
 # is nothing worth filtering.
 [CmdletBinding()]
 param(
-    # Where the game's own assemblies live. Any depot copy will do.
+    # Explicit original Linux 1.0.29980 Managed directory (or its Data parent).
     [string]$Depot,
     # Unity's Android player assemblies, as fetched by `make player`.
     [string]$Player = "$env:USERPROFILE\.cache\silksong\unity-player\android\Variations\il2cpp\Managed",
@@ -51,31 +51,44 @@ if ($titleCardSource -match 'UIManager') {
     }
 }
 
-if (-not $Depot) {
-    # The depot lives OUTSIDE the checkout -- it is 15 GB of somebody's game,
-    # and nothing in the repo should imply it belongs here. SILKSONG_DEPOT
-    # wins; otherwise a sibling of the repo is the convention, which is where
-    # `make dev` and DepotDownloader tend to leave it.
-    $roots = @()
-    if ($env:SILKSONG_DEPOT) { $roots += $env:SILKSONG_DEPOT }
-    $roots += (Join-Path (Split-Path -Parent $repo) 'silksong-install')
+if ([string]::IsNullOrWhiteSpace($Depot)) {
+    throw 'Explicit -Depot is required: pass the original Linux 1.0.29980 Managed directory or its Data parent'
+}
+if (-not (Test-Path -LiteralPath $Depot -PathType Container)) {
+    throw "Silksong Assembly-CSharp.dll is missing: depot directory $Depot"
+}
+$data = Get-Item -LiteralPath $Depot
+$Depot = if ($data.Name -eq 'Managed') { $data.FullName } else { Join-Path $data.FullName 'Managed' }
+$assembly = Join-Path $Depot 'Assembly-CSharp.dll'
+if (-not (Test-Path -LiteralPath $assembly -PathType Leaf)) {
+    throw "Silksong Assembly-CSharp.dll is missing: $assembly"
+}
 
-    $managed = $roots |
-               Where-Object { Test-Path $_ } |
-               ForEach-Object { Get-ChildItem $_ -Recurse -Directory -Filter 'Managed' -ErrorAction SilentlyContinue } |
-               Where-Object { Test-Path (Join-Path $_.FullName 'Assembly-CSharp.dll') } |
-               Select-Object -First 1
-
-    if (-not $managed) {
-        Write-Error @"
-No depot found. Looked in:
-$($roots | ForEach-Object { "  $_" } | Out-String)
-Pass -Depot <path to ..._Data\Managed>, or set SILKSONG_DEPOT to the directory
-holding your depot. Use the Linux depot: its shaders are precompiled to Vulkan
-SPIR-V, which is what the Android build needs.
-"@
+# This checker consumes ORIGINAL input, not the canonical death-bridge rewrite.
+# Reuse only the existing named original-input pins; no caller-supplied authority.
+$authorityPath = Join-Path $repo 'tools/bundle-surgery/BridgeSilksongNormalDeath.cs'
+try {
+    # Legitimate authority edits require an explicit reviewed update of this source-integrity pin.
+    if ((Get-FileHash -LiteralPath $authorityPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne 'c33c6fa2bb4c9791a6c10c8b653a68aeffecfc468d05dcc5dc2945f6c613ee7b') {
+        throw 'Trusted original-input authority bytes changed'
     }
-    $Depot = $managed.FullName
+    $authoritySource = Get-Content -LiteralPath $authorityPath -Raw
+    $versionPins = [regex]::Matches($authoritySource, '(?m)^[ \t]*internal const string PINNED_GAME_VERSION = "([^"\r\n]*)";[ \t]*\r?$')
+    $assemblyPins = [regex]::Matches($authoritySource, '(?m)^[ \t]*internal const string PINNED_ASSEMBLY_SHA256 = "([^"\r\n]*)";[ \t]*\r?$')
+    if ($versionPins.Count -ne 1 -or $assemblyPins.Count -ne 1) {
+        throw 'Expected exactly one of each named original-input pin'
+    }
+    $gameVersion = $versionPins[0].Groups[1].Value
+    $expectedHash = $assemblyPins[0].Groups[1].Value
+    if ($gameVersion -cne '1.0.29980' -or $expectedHash -cnotmatch '^[0-9a-f]{64}$') {
+        throw 'Malformed original-input pin or wrong game version'
+    }
+} catch {
+    throw "Silksong input authority is invalid: $authorityPath ($($_.Exception.Message))"
+}
+$actualHash = (Get-FileHash -LiteralPath $assembly -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actualHash -cne $expectedHash) {
+    throw "Silksong Assembly-CSharp.dll input identity mismatch for ${gameVersion}: $assembly (SHA256 $actualHash)"
 }
 if (-not (Test-Path (Join-Path $Player 'UnityEngine.CoreModule.dll'))) {
     Write-Error "No Android player assemblies at $Player. Run 'make player'."

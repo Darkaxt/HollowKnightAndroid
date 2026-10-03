@@ -147,7 +147,8 @@ player: ## Fetch Unity's Android player module (instead of installing Unity)
 # proved nothing about the rest, and the DLL it produced went unused once the
 # device started compiling the sources itself.
 check: ## Compile-check the patch sources against your depot (fast, thorough)
-	@pwsh -NoProfile -File tools/silksong-patches/check.ps1
+	$(if $(strip $(DEPOT)),,$(error usage: make check DEPOT=path/to/original/Managed))
+	@pwsh -NoProfile -File tools/silksong-patches/check.ps1 -Depot "$(DEPOT)"
 
 test: weaver ## Run host-side launcher and converter tests
 	@test -f "$(AP)/Tools/gradle/lib/gradle-launcher-8.11.jar" || { \
