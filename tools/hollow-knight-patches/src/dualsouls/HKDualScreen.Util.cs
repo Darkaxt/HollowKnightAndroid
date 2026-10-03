@@ -59,6 +59,7 @@ public partial class HKDualScreen
         _charms = cs;
         return cs;
     }
+    void InvalidateCharmsFrame() { _charmsFrame=-1;lastCharmEquipHash=int.MinValue; }
     bool CharmGot(PlayerData pd, int id)    { BuildCharmKeys(); return id > 0 && id <= 40 && pd != null && pd.GetBool(K_GOT[id]); }
     // Hollow Knight 1.5.12620 only defines brokenCharm_23..25 (the three
     // fragile charms). PlayerData.GetBool logs a full stack trace for an

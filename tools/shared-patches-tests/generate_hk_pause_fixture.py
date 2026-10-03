@@ -5,15 +5,17 @@ import sys
 import hashlib
 import json
 
-root = Path(__file__).resolve().parents[1] / "hollow-knight-patches/src/dualsouls"
+# Explicit immutable-original replay; never swap repository source files.
+root = Path(sys.argv[3]) if len(sys.argv) > 3 else Path(__file__).resolve().parents[1] / "hollow-knight-patches/src/dualsouls"
+fixture_namespace = sys.argv[4] if len(sys.argv) > 4 else "HkPauseContracts"
 methods = {
     "HKDualScreen.cs": ("Tick", "LoadConfig", "RelayerHud", "LogoTick", "SyncBgCapture"),
     "HKDualScreen.Bottom.Layering.cs": (
         "CompanionVisible", "ApplyDualScreenToggle", "ApplyLowerPauseGate"),
     "HKDualScreen.Bottom.Hud.cs": ("FrameHudCams", "BuildEquipCharmRow", "UpdateEquipCharmRow", "BuildAreaName", "RefreshHeaderRenderers", "BuildNoMapLabel", "PositionHudStrip"),
-    "HKDualScreen.Util.cs": ("SetTmpFont", "NeutralizeDetachedTmpClip", "ItemBounds", "SanitizeDetachedTmpClone"),
+    "HKDualScreen.Util.cs": ("SetTmpFont", "NeutralizeDetachedTmpClip", "ItemBounds", "SanitizeDetachedTmpClone", "BuildCharmKeys", "Charms", "CharmGot", "CharmBroken"),
     "HKDualScreen.Bottom.Inventory.cs": ("Refs", "FitOccupiedNative", "BuildNativePaneGraphics", "PositionNativePaneGraphics", "EnsureNativeInventory", "LayoutNativeInventory", "ScrollNativePane", "LayoutNativeDetail", "PopulateInvDetail", "PopulateSpellDetail", "PopulateEquipDetail", "PopulateGeoDetail", "PopulateGodfinderDetail", "ClearInvDetail", "ClearInvDetailLocal"),
-    "HKDualScreen.Bottom.Charms.cs": ("TryTmpGlyphBoundsWorld", "CharmNumOf", "EnsureCharmRefs", "LayoutCharmsRedesign", "PopulateCharmDetail"),
+    "HKDualScreen.Bottom.Charms.cs": ("TryTmpGlyphBoundsWorld", "CharmNumOf", "EnsureCharmRefs", "LayoutCharmsRedesign", "PopulateCharmDetail", "CharmsTick"),
     "HKDualScreen.Bottom.Frame.cs": ("BuildFrame", "BuildMapMask", "CreateShellRule", "ShellSprite", "MakePillSprite", "DiscardPartialFrame", "BuildTabRow", "ResolveTabDonors", "CopyShellSpriteOrientation", "ShellPoint", "AnimateTabFleurX", "PositionFrame", "OnConfigReloaded", "FitSprite", "UpdateCompanion", "ApplyCompanionCamera", "InvalidateCompanionClones", "RetireCompanionCaches", "TeardownFrame", "TeardownCompanion", "TabSlideTick", "StowSlideClone"),
     "HKDualScreen.DirectDisplay.cs": ("SetDirectDisplayActive", "SetRoleCamerasEnabled", "RestoreReferenceRouting", "TryDirectStep"),
     "HKDualScreen.Bottom.Map.cs": ("MapFrameTick", "ResolveMapArea", "MapTick"),
@@ -27,10 +29,30 @@ identity = []
 config_method = None
 for filename, names in methods.items():
     source = (root / filename).read_text(encoding="utf-8")
+    if filename == "HKDualScreen.Bottom.Charms.cs":
+        names += tuple(re.findall(r"^    (?:static )?(?:void|bool|CharmActionInputs|CharmActionResult|CharmFeedbackResult)\s+(CharmAction\w+)\s*\(", source, re.M))
+        start = source.find("    // Collection action state")
+        if start >= 0:
+            end = source.index("    // World-space bounds", start)
+            text = source[start:end]
+            parts.append(text)
+            identity.append({"source": str(root / filename), "declaration": "owning collection action state",
+                             "source_file_sha256": hashlib.sha256((root / filename).read_bytes()).hexdigest(),
+                             "declaration_utf8_lf_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                             "declaration_identical": True})
+    if filename == "HKDualScreen.Util.cs":
+        text = source[source.index("    struct CharmState"):source.index("    static void BuildCharmKeys")]
+        parts.append(text)
+        identity.append({"source": str(root / filename), "declaration": "actual frame-keyed charm cache",
+                         "source_file_sha256": hashlib.sha256((root / filename).read_bytes()).hexdigest(),
+                         "declaration_utf8_lf_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                         "declaration_identical": True})
+        if "void InvalidateCharmsFrame(" in source:
+            names += ("InvalidateCharmsFrame",)
     if filename in ("HKDualScreen.Bottom.MapControls.cs", "HKDualScreen.Bottom.MapRenderRoles.cs"):
         names = re.findall(r"^    (?:static )?(?:void|bool|float|Rect|Sprite|Bounds|MapActionButton|GameObject\[\]|List<Vector3>|int)\s+(\w+)\s*\(", source, re.M)
     for name in names:
-        match = re.search(r"\b(?:static\s+)?(?:void|bool|float|Rect|Sprite|MapActionButton|GameObject\[\]|List<Vector3>|GameObject|string|Vector3|Transform|Renderer|SpriteRenderer|NativePaneLabel|PaneRefs|PaneGraphics|FitResult|Bounds|int)\s+" + name + r"\s*\([^)]*\)\s*\{", source)
+        match = re.search(r"\b(?:static\s+)?(?:void|bool|float|Rect|Sprite|CharmState|CharmActionInputs|CharmActionResult|CharmFeedbackResult|MapActionButton|GameObject\[\]|List<Vector3>|GameObject|string|Vector3|Transform|Renderer|SpriteRenderer|NativePaneLabel|PaneRefs|PaneGraphics|FitResult|Bounds|int)\s+" + name + r"\s*\([^)]*\)\s*\{", source)
         if match is None:
             # Before the fix this gate does not exist; retain an executable RED.
             if name in ("ApplyLowerPauseGate", "ResetJournalDetailScroll"):
@@ -123,7 +145,7 @@ for filename, names in methods.items():
             parts.append(declaration.group())
 output = Path(sys.argv[1])
 output.parent.mkdir(parents=True, exist_ok=True)
-output.write_text("// Generated from production; do not edit.\nusing System.IO;\nnamespace HkPauseContracts;\n"
+output.write_text("// Generated from production; do not edit.\nusing System.IO;\nnamespace " + fixture_namespace + ";\n"
                   "internal partial class HKDualScreen {\n" + "\n".join(parts) + "\n}\n" +
                   "internal partial class HKConfigFixture {\n" + config_method + "\n}\n" +
                   (root / "HKLayout.cs").read_text(encoding="utf-8").replace("using System;", "").replace("using UnityEngine;", ""),

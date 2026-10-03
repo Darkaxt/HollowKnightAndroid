@@ -20,6 +20,39 @@ internal partial class HKDualScreen
     internal PaneGraphics CharmGraphics => nativeCharmGraphics;
     internal Transform CostPips => costPipRoot;
     internal int DetailRefreshes,ControlRefreshes;
+    internal string ActionOutcome => charmActionResult.ToString();
+    internal bool PendingCharmFit { get => paneNeedsFit; set => paneNeedsFit=value; }
+    internal int EquipWatchHash => lastCharmEquipHash;
+    internal void NativeEquipWatchStep() => CharmsTick();
+    internal void NativeCompanionStep() => UpdateCompanion(Cameras.hudCamera);
+    internal void LoseNativeCharmNameDonor() { nativeCharmName=null;charmNameT=null; }
+    internal string ThrowDetailText;
+    internal int DetailTextAttempts;
+    internal NativeCharmFeedbackInputs InstallNativeFeedback(GameObject pane)
+    {
+        // Exact serialized native state/resource shape, not a modeled dispatcher.
+        var inputs=new NativeCharmFeedbackInputs();
+        inputs.Vibration=pane.AddComponent<CharmVibrations>();
+        inputs.Vibration.enabled=false; // Detached clone scripts remain disabled.
+        var prefab=new GameObject("Audio Player UI");
+        var audio=prefab.AddComponent<AudioSource>();audio.Inputs=inputs;
+        prefab.AddComponent<PlayAudioAndRecycle>().audioSource=audio;
+        inputs.Prefab=prefab;
+        var clips=new[]{new AudioClip{name="sword_hit_reject"},new AudioClip{name="dream_damage"},
+                        new AudioClip{name="sword_hit_window_1"},new AudioClip{name="mage_lord_glass_floor_break"}};
+        inputs.Clips=clips;
+        object Sound(int clip,float pitch=1) => new HutongGames.PlayMaker.Actions.AudioPlayerOneShotSingle {
+            audioPlayer=new FsmGameObject{Value=prefab},spawnPoint=new FsmGameObject{Value=pane},
+            audioClip=new FsmObject{Value=clips[clip]},pitchMin=new FsmFloat{Value=pitch},
+            pitchMax=new FsmFloat{Value=pitch},volume=new FsmFloat{Value=1},delay=new FsmFloat{Value=0}};
+        var fsm=new PlayMakerFSM{enabled=false,FsmName="UI Charms",FsmStates=new[]{
+            new FsmState{Name="Tink",Actions=new[]{Sound(0)}},
+            new FsmState{Name="Crack 1",Actions=new[]{Sound(1),Sound(2)}},
+            new FsmState{Name="Crack 2",Actions=new[]{Sound(1,1.15f),Sound(2)}},
+            new FsmState{Name="Break",Actions=new[]{Sound(3)}}}};
+        inputs.Fsm=fsm;pane.transform.FsMs.Add(fsm);
+        return inputs;
+    }
     internal void NativeRetireStep() => TeardownCompanion();
     // Unrelated frame/map/input/asset owners consumed only by complete teardown.
     readonly Dictionary<Transform,Vector3> frameEdge=new(),frameBase=new();
@@ -59,19 +92,22 @@ internal partial class HKDualScreen
     // part of native pane layout and is not represented as layout integration.
     string CharmString(string key) => NativeLabels.TryGetValue("UI/"+key,out var s) ? s : key;
     void SetTmpTextByName(Transform pane,string name,string text)
-    { var tmp=TmpOn(FindDeep(pane,name));if(tmp!=null) tmp.text=text;DetailRefreshes++; }
+    {
+        DetailTextAttempts++;
+        if(ThrowDetailText==name) throw new InvalidOperationException("native detail text unavailable");
+        var tmp=TmpOn(FindDeep(pane,name));if(tmp!=null) tmp.text=text;DetailRefreshes++;
+    }
     void PopulateControlPrompt(GameObject pane,int kind,string name) => ControlRefreshes++;
     static bool IsUnderNamed(Transform t,string name) { for(;t!=null;t=t.parent) if(t.name==name) return true;return false; }
-    sealed class CharmState { internal int hash=int.MinValue,count;internal bool Has(int n) => PlayerData.instance?.GetBool("equippedCharm_"+n) ?? false; }
+    int lastCharmEquipHash=int.MinValue;
+    internal bool CachedCharm(int id) => Charms().Has(id);
+    internal int CachedCharmCount => Charms().count;
     internal void SetEquipState(params int[] ids)
     {
         for(int n=1;n<=40;n++) PlayerData.instance.Bools["equippedCharm_"+n]=ids.Contains(n);
-        nativeCharmState.count=ids.Length;
-        nativeCharmState.hash=17;foreach(int n in ids) nativeCharmState.hash=unchecked(nativeCharmState.hash*31+n);
+        PlayerData.instance.equippedCharms.Clear();PlayerData.instance.equippedCharms.AddRange(ids);
+        _charmsFrame=-1;
     }
-    readonly CharmState nativeCharmState=new();
-    CharmState Charms() => nativeCharmState;
-    static bool CharmGot(PlayerData pd,int n) => pd.GetBool("gotCharm_"+n);
     void EnsureNativeShellAssets()
     {
         // Shell asset owner admission only. No shell/native layout algorithm.
@@ -130,4 +166,74 @@ internal sealed class InvCharmBackboard:MonoBehaviour
     public int charmNum;public GameObject charmObject;
     internal InvCharmBackboard(Renderer owner):base(owner) { }
     public int GetCharmNum() => charmNum;
+}
+
+// Typed native audio/haptic ABI seams. Calls originate in extracted production.
+internal sealed class NativeCharmFeedbackInputs
+{
+    internal GameObject Prefab;internal AudioClip[] Clips;internal PlayMakerFSM Fsm;
+    internal CharmVibrations Vibration;
+    internal int Spawns;
+    internal bool ThrowSpawn,MissingSpawnAudio,MissingSpawnLifecycle;
+    internal string ThrowAudio;
+    internal readonly List<(string clip,float pitch,float volume)> Audio=new();
+    internal readonly List<(GameObject prefab,Vector3 position,Quaternion rotation)> SpawnCalls=new();
+}
+internal sealed class AudioClip:UnityEngine.Object { internal string name; }
+internal sealed class AudioSource
+{
+    public AudioSource() { }
+    internal NativeCharmFeedbackInputs Inputs;
+    internal float pitch=1,volume=1;
+    internal void PlayOneShot(AudioClip clip)
+    {
+        Inputs.Audio.Add((clip.name,pitch,volume));
+        if(Inputs.ThrowAudio==clip.name) throw new InvalidOperationException("native one-shot unavailable");
+    }
+}
+internal sealed class PlayAudioAndRecycle:MonoBehaviour
+{
+    public PlayAudioAndRecycle() { }
+    internal AudioSource audioSource;
+}
+internal sealed class CharmVibrations:MonoBehaviour
+{
+    public CharmVibrations() { }
+    internal bool Throw;
+    internal readonly List<string> Calls=new();
+    void Record(string name) { Calls.Add(name);if(Throw) throw new InvalidOperationException("native vibration unavailable"); }
+    internal void PlayFailedPlace() => Record("PlayFailedPlace");
+    internal void PlayOvercharmHit() => Record("PlayOvercharmHit");
+    internal void PlayOvercharmFinalHit() => Record("PlayOvercharmFinalHit");
+}
+internal static class ObjectPoolExtensions
+{
+    internal static GameObject Spawn(this GameObject prefab,Vector3 position,Quaternion rotation)
+    {
+        var inputs=prefab.GetComponent<AudioSource>().Inputs;
+        inputs.Spawns++;inputs.SpawnCalls.Add((prefab,position,rotation));
+        if(inputs.ThrowSpawn) throw new InvalidOperationException("native pool unavailable");
+        var instance=new GameObject();
+        AudioSource audio=null;
+        if(!inputs.MissingSpawnAudio) { audio=instance.AddComponent<AudioSource>();audio.Inputs=inputs; }
+        if(!inputs.MissingSpawnLifecycle) instance.AddComponent<PlayAudioAndRecycle>().audioSource=audio;
+        return instance;
+    }
+}
+internal sealed class FsmObject { internal UnityEngine.Object Value; }
+internal sealed class FsmFloat { internal float Value; }
+internal static class HutongGames
+{
+    internal static class PlayMaker
+    {
+        internal static class Actions
+        {
+            internal sealed class AudioPlayerOneShotSingle
+            {
+                internal FsmGameObject audioPlayer,spawnPoint;
+                internal FsmObject audioClip;
+                internal FsmFloat pitchMin,pitchMax,volume,delay;
+            }
+        }
+    }
 }

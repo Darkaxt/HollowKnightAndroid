@@ -14,7 +14,7 @@ internal partial class HKDualScreen
     internal readonly GameCameras Cameras = new();
     internal readonly GameManager Manager = new();
     internal Camera hudCam2 = new(), attrCam = new(), promptCam = new(), clearCam = new(), bgCaptureCam = new();
-    internal readonly Transport transport = new();
+    internal Transport transport = new();
     internal readonly Dimmer bgDimmer = new();
     internal bool directDisplayActive = true, dsWas = true, bgShow, popupBlack;
     internal readonly GameObject logoGo = new();
@@ -97,7 +97,9 @@ internal partial class HKDualScreen
         mapMaskTopR=mask.AddComponent<MeshRenderer>();mapMaskTopR.sharedMaterial=new object();
         transport.Owner=this;
         cfg.compTab=1;
-        GameManager.instance = Manager;Manager.FixtureOwner=this; PlayerData.instance = new(); InitializeOwnership();
+        GameManager.instance = Manager;Manager.FixtureOwner=this; PlayerData.instance = new();
+        Manager.playerData=PlayerData.instance;Manager.hero_ctrl=HeroController.instance=new HeroController{playerData=PlayerData.instance};
+        InitializeOwnership();
         var donor = TextDonor(Vector3.one,false);donor.gameObject.name="Pane Name";donor.SetParent(Manager.inventoryFSM.transform);
         HkStageHooks.SkinStamp = 0;
         GameObject anchor = new();
@@ -310,7 +312,6 @@ internal partial class HKDualScreen
     internal void MapPinchStep(int count,float x,float y,float x1=0,float y1=0) { transport.contacts=count;transport.T0X=x;transport.T0Y=y;transport.T1X=x1;transport.T1Y=y1;MapPinchTick(); }
     PaneRun RunFor(bool charms) => charms ? charmRun : invRun;
     void PaneSettleTick(GameObject go,PaneRun run,bool inventory,bool active) { }
-    void CharmsTick() { }
     void RefreshInvCounters(GameObject go) { }
     void ApplyFit(FitResult value) { if(value.valid) fit=value; }
     internal void FitOccupiedStep(Transform root,Renderer[] renderers,Rect target) => FitOccupiedNative(root,renderers,target);
@@ -464,6 +465,14 @@ internal sealed class Transport
     internal int TouchCount { get { Polls++; return contacts; } }
     internal HKDualScreen Owner;
     internal int ProductChanges;
+    internal bool IsTransportActive=true;
+    readonly DualSouls.DualScreen.DirectDisplayGestureTracker gestures=new();
+    internal void Feed(float now,params DualSouls.DualScreen.DirectDisplayContact[] input)
+    {
+        gestures.Update(input,now);contacts=gestures.TouchCount;TapSequence=gestures.TapSequence;CleanTapSequence=gestures.CleanTapSequence;
+        TouchX=gestures.TouchX;TouchY=gestures.TouchY;T0X=gestures.T0X;T0Y=gestures.T0Y;T1X=gestures.T1X;T1Y=gestures.T1Y;
+        CleanTapX=gestures.CleanTapX;CleanTapY=gestures.CleanTapY;
+    }
     internal void SetProductEnabled(bool requested) { ProductChanges++; Owner.DisplayStep(requested); }
 }
 internal sealed class Dimmer { internal float Brightness, BlurFactor; }
@@ -485,9 +494,15 @@ internal sealed class PlayerData
     internal readonly List<Vector3> placedMarkers_b=new(),placedMarkers_r=new(),placedMarkers_y=new(),placedMarkers_w=new();
     internal readonly Dictionary<string,bool> Bools = new();
     internal readonly Dictionary<string,int> Ints = new();
-    internal int Reads;
-    internal bool GetBool(string key) { Reads++; return Bools.TryGetValue(key,out var value) && value; }
-    internal int GetInt(string key) { Reads++; return Ints.TryGetValue(key,out var value) ? value : 0; }
+    internal int Reads,Writes;
+    internal bool atBench=true,canOvercharm,overcharmed;
+    internal int charmSlots=3,charmSlotsFilled,royalCharmState;
+    internal List<int> equippedCharms=new();
+    internal string ThrowRead,ThrowWrite;
+    internal Action<string> OnRead;
+    internal bool GetBool(string key) { Reads++;OnRead?.Invoke(key);if(ThrowRead==key) throw new InvalidOperationException("native read unavailable");return Bools.TryGetValue(key,out var value) && value; }
+    internal int GetInt(string key) { Reads++;OnRead?.Invoke(key);if(ThrowRead==key) throw new InvalidOperationException("native cost unavailable");return Ints.TryGetValue(key,out var value) ? value : 0; }
+    internal void SetBool(string key,bool value) { if(ThrowWrite==key) throw new InvalidOperationException("native bool write unavailable");Writes++;Bools[key]=value; }
 }
 internal sealed class GameManager
 {
@@ -500,9 +515,25 @@ internal sealed class GameManager
     internal object tilemap=new object();
     internal GlobalEnums.GameState gameState = GlobalEnums.GameState.PLAYING;
     internal string MenuState = "GAMEPLAY";
+    internal PlayerData playerData;
+    internal HeroController hero_ctrl;
+    internal int Equips,Unequips;
+    internal bool ThrowListMutation;
+    internal Action OnMutation;
+    internal void EquipCharm(int id) { if(ThrowListMutation) throw new InvalidOperationException("native list mutation unavailable");Equips++;playerData.equippedCharms.Add(id);OnMutation?.Invoke(); }
+    internal void UnequipCharm(int id) { if(ThrowListMutation) throw new InvalidOperationException("native list mutation unavailable");Unequips++;playerData.equippedCharms.Remove(id);OnMutation?.Invoke(); }
     // Exact HK pause authority: Options changes menu state, not GameState.PAUSED.
     internal bool IsGamePaused() => gameState == GlobalEnums.GameState.PAUSED;
 }
+internal sealed class HeroController
+{
+    internal static HeroController instance;
+    internal PlayerData playerData;
+    internal int Updates;
+    internal bool ThrowRefresh;
+    internal void CharmUpdate() { Updates++;if(ThrowRefresh) throw new InvalidOperationException("native hero refresh unavailable"); }
+}
+internal static class BossSequenceController { internal static bool BoundCharms; }
 internal static class GlobalEnums { internal enum GameState { PLAYING, PAUSED, MAIN_MENU } }
 internal static class HkStageHooks
 {
@@ -650,7 +681,10 @@ internal sealed class Transform
 internal sealed class PlayMakerFSM
 {
     internal bool enabled=true;
-    internal string FsmName="Control";
+    internal string FsmName="Control",ActiveStateName="Closed";
+    internal static readonly List<string> Broadcasts=new();
+    internal static string ThrowBroadcast;
+    internal static void BroadcastEvent(string name) { Broadcasts.Add(name);if(ThrowBroadcast==name) throw new InvalidOperationException("native completion broadcast unavailable"); }
     internal readonly FsmVariables FsmVariables=new();
     internal FsmState[] FsmStates=Array.Empty<FsmState>();
 }
@@ -811,7 +845,7 @@ internal enum TextOverflow { Overflow }
 internal class TextContainer:MonoBehaviour { internal TextContainer(Renderer owner=null):base(owner) { } }
 internal sealed class GameplayLabelDriver:MonoBehaviour { internal GameplayLabelDriver(Renderer owner):base(owner) { } }
 internal class MonoBehaviour:Component { internal bool enabled=true; internal MonoBehaviour(Renderer owner=null):base(owner) { } }
-internal sealed class NativeOwner:UnityEngine.Object { public Transform transform=new GameObject().transform; }
+internal sealed class NativeOwner:UnityEngine.Object { public Transform transform=new GameObject().transform;public string ActiveStateName="Closed"; }
 internal static class DiscoveryCounters { internal static int Hierarchy; }
 internal static class Resources
 {

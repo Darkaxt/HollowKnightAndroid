@@ -318,10 +318,12 @@ public partial class HKDualScreen
             else if(tab.cur == COMP_JOURNAL) JournalTap(cfg.compSimTapX,cfg.compSimTapY);
             else if(tab.cur == COMP_GUIDE) GuideTap(cfg.compSimTapX,cfg.compSimTapY);
         }
+        CharmActionVisibility(true);
         if(cfg.compTouch != 1 || transport == null) return;
         try
         {
             var g=LowerGeometry(); int contacts=transport.TouchCount;
+            CharmActionContact(contacts);
             int seq=transport.TapSequence;
             if(seq != lastTapSeq)
             {
@@ -345,6 +347,7 @@ public partial class HKDualScreen
                     supplementaryDragValid &= supplementaryDragRegion>=0;
                 }
                 supplementaryDragY=transport.TouchY;
+                if(tab.cur == COMP_CHARM && contacts == 1 && CharmActionDown(x,y)) supplementaryDragValid=false;
             }
             if(contacts>=2 || slideT < 1f || (mapMarkerMode && tab.cur == COMP_MAP))
             { lowerTabGesture.Cancel(); lowerTouchDownBody=false; supplementaryDragValid=false; }
@@ -359,7 +362,8 @@ public partial class HKDualScreen
                 lowerCleanTabSeq=clean;
                 float nx=transport.CleanTapX, ny=transport.CleanTapY;
                 int hit=lowerTabGesture.Tap(g.HitColumn(nx*g.Width,ny*g.Height),mapMarkerMode,slideT < 1f);
-                if(hit>=0) tab.tap=hit;
+                if(CharmActionRelease(nx,ny)) lowerTabGesture.Cancel();
+                else if(hit>=0) tab.tap=hit;
                 else if(lowerTouchDownBody && g.InBody(nx*g.Width,ny*g.Height) && slideT>=1f)
                 {
                     if(tab.cur == COMP_JOURNAL) JournalTap(nx,ny);
@@ -368,9 +372,9 @@ public partial class HKDualScreen
                 }
                 lowerTouchDownBody=false;
             }
-            if(contacts==0) supplementaryDragValid=false;
+            if(contacts==0) { supplementaryDragValid=false;CharmActionCancel(); }
         }
-        catch(Exception e){ WarnOnce("five-route touch",e); }
+        catch(Exception e){ CharmActionCancel();WarnOnce("five-route touch",e); }
     }
 
     // Convert a bottom-screen touch (nx,ny normalized 0..1, top-left) to a world point in attrCam space, hit-test
@@ -439,6 +443,7 @@ public partial class HKDualScreen
                 float area = b.size.x * b.size.y; if (area < bestArea) { bestArea = area; best = t; bestKind = kind; }   // smallest wins
             }
             if (best == null) return;
+            CharmActionCancel();
             sel.item = best; sel.kind = bestKind;
             if (bestKind == 1) { sel.charmN = CharmNumOf(best); sel.invKey = null; PopulateCharmDetail(pane); }
             else if (bestKind == 2) { sel.charmN = 0; sel.invKey = "SPELL"; PopulateSpellDetail(pane, best.name); }
@@ -534,6 +539,7 @@ public partial class HKDualScreen
     // survives the FSMs idling). Dispatches by the stored sel.kind so a spell/equip/geo detail isn't clobbered.
     void RefreshSelectedDetail(GameObject pane)
     {
+        CharmActionCancel();
         if (sel.item == null) return;
         string gn = sel.item.name;
         if (sel.kind == 2) PopulateSpellDetail(pane, gn);

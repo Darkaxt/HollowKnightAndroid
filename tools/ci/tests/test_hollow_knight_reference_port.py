@@ -642,7 +642,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         self.assertIn("ApplyLowerPauseGate(gc, paused)", tick)
         self.assertLess(
-            tick.index("if (!dsOn) return;"),
+            tick.index("if (!dsOn) { CharmActionVisibility(false);return; }"),
             tick.index("ApplyLowerPauseGate(gc, paused)"),
         )
         self.assertLess(
@@ -692,7 +692,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
         tick = method_body(source, r"void\s+Tick\s*\(\s*\)")
         apply_toggle = tick.index("bool dsOn = ApplyDualScreenToggle()")
-        inactive_gate = tick.index("if (!dsOn) return;", apply_toggle)
+        inactive_gate = tick.index("if (!dsOn) { CharmActionVisibility(false);return; }", apply_toggle)
         main_hooks = tick.index("MainGameHooks(", inactive_gate)
         self.assertLess(apply_toggle, inactive_gate)
         self.assertLess(inactive_gate, main_hooks)
@@ -1500,6 +1500,107 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             and entry.get("loadTypes") == 0
         ]
         self.assertEqual(1, len(matches), "missing unique H2 adapter Bootstrap entrypoint")
+
+
+class HollowKnightCharmActionSourceContractTest(unittest.TestCase):
+    def test_confirmation_is_a_localized_measured_prompt_not_a_chooser_toggle(self):
+        charms = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Charms.cs"))
+        select = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Select.cs"))
+        layout = method_body(charms, r"void\s+CharmActionLayout\s*\([^)]*\)")
+        choose = method_body(select, r"void\s+PollItemTap\s*\([^)]*\)")
+        poll = method_body(select, r"void\s+PollTouch\s*\(\s*\)")
+        for token in ('"CTRL_EQUIP"', '"CTRL_UNEQUIP"', "nativeCharmName.TextRect",
+                      "nativeCharmDesc.TextRect", "name.width/2", "CopyPaneLabel"):
+            self.assertIn(token, layout)
+        self.assertNotIn("CharmActionApply", choose)
+        self.assertIn("CharmActionDown(x,y)", poll)
+        self.assertIn("CharmActionRelease(nx,ny)", poll)
+        self.assertIn("contacts == 1", poll)
+
+    def test_checked_native_sequence_invalidates_cache_and_never_replays_failures(self):
+        charms = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Charms.cs"))
+        apply = method_body(charms, r"CharmActionResult\s+CharmActionApply\s*\([^)]*\)")
+        release = method_body(charms, r"bool\s+CharmActionRelease\s*\([^)]*\)")
+        read_inputs = method_body(charms, r"bool\s+CharmActionRead\s*\([^)]*\)")
+        for token in ("CharmActionRead(ref input,number)", "BossSequenceController.BoundCharms",
+                      "royalCharmState", "K_BROKEN[number]", "input.filled >= input.slots",
+                      "charmActionAttempts", "EquipCharm(number)", "UnequipCharm(number)",
+                      "input.hero.CharmUpdate()", '"CHARM INDICATOR CHECK"', '"UPDATE BLUE HEALTH"',
+                      "InvalidateCharmsFrame()", "CharmActionResult.Partial",
+                      "CharmActionResult.AppliedRefreshFailed"):
+            self.assertIn(token, apply)
+        self.assertLess(apply.index("CharmActionRead(ref input,number)"), apply.index("writesStarted=true"))
+        self.assertLess(release.index("charmActionArmed=false"), release.index("CharmActionApply(owners,number)"))
+        self.assertIn("total == input.filled", read_inputs)
+        self.assertIn("pd.GetBool(K_EQ[n])", read_inputs)
+        for forbidden in ("CalculateNotchesUsed", "MaintainInnateCharm", "SendEvent(", "PlayerPrefs", "SaveGame"):
+            self.assertNotIn(forbidden, apply)
+        util = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Util.cs"))
+        self.assertIn("_charmsFrame=-1", method_body(util, r"void\s+InvalidateCharmsFrame\s*\(\s*\)"))
+
+    def test_visibility_owns_attempt_epoch_without_native_polling_or_layout_changes(self):
+        charms = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Charms.cs"))
+        visible = method_body(charms, r"void\s+CharmActionVisibility\s*\([^)]*\)")
+        current = method_body(charms, r"bool\s+CharmActionOwnersCurrent\s*\([^)]*\)")
+        for token in ("transport.IsTransportActive", "attrCam.enabled", "attrCam.cullingMask",
+                      "charmRun.finalized", "charmActionEpoch++", "charmActionAttempts=0", "CharmActionCancel()"):
+            self.assertIn(token, visible)
+        for forbidden in ("GetBool(", "GetInt(", "GetComponents", "Resources.", "new ", "CharmUpdate("):
+            self.assertNotIn(forbidden, visible)
+        for token in ("ReferenceEquals(PlayerData.instance", "ReferenceEquals(GameManager.instance",
+                      "ReferenceEquals(HeroController.instance", 'ActiveStateName == "Closed"'):
+            self.assertIn(token, current)
+        main = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
+        tick = method_body(main, r"void\s+Tick\s*\(\s*\)")
+        self.assertIn("if(paused || atMenu) CharmActionVisibility(false)", tick)
+        self.assertIn("if(!companionVisible) CharmActionVisibility(false)", tick)
+        frame = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs"))
+        for method in ("TeardownFrame", "RetireCompanionCaches"):
+            self.assertIn("CharmActionRetire()", method_body(frame, rf"void\s+{method}\s*\(\s*\)"))
+    def test_native_feedback_uses_frozen_typed_bindings_and_not_whole_fsm_playback(self):
+        source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Charms.cs"))
+        bind = method_body(source, r"void\s+CharmActionBindFeedback\s*\([^)]*\)")
+        sound = method_body(source, r"bool\s+CharmActionBindSound\s*\([^)]*\)")
+        play = method_body(source, r"bool\s+CharmActionPlaySound\s*\([^)]*\)")
+        feedback = method_body(source, r"CharmFeedbackResult\s+CharmActionNativeFeedback\s*\([^)]*\)")
+        for token in ('"UI Charms"', 'GetComponent<CharmVibrations>()', '"Tink"', '"Crack 1"',
+                      '"Crack 2"', '"Break"', '"sword_hit_reject"', '"dream_damage"',
+                      '"sword_hit_window_1"', '"mage_lord_glass_floor_break"', '1.15f'):
+            self.assertIn(token, bind)
+        self.assertIn("HutongGames.PlayMaker.Actions.AudioPlayerOneShotSingle", sound)
+        self.assertIn("GetComponent<PlayAudioAndRecycle>()", sound)
+        self.assertIn("audioSource", sound)
+        self.assertIn(".Spawn(", play)
+        self.assertIn(".PlayOneShot(clip)", play)
+        for token in ("PlayFailedPlace()", "PlayOvercharmHit()", "PlayOvercharmFinalHit()"):
+            self.assertIn(token, feedback)
+        for body in (bind, sound, play, feedback):
+            for forbidden in ("SendEvent(", "SetState(", "OnEnter(", "Resources.", "enabled=true"):
+                self.assertNotIn(forbidden, body)
+        visibility = method_body(source, r"void\s+CharmActionVisibility\s*\([^)]*\)")
+        self.assertNotIn("CharmActionBindFeedback", visibility)
+        self.assertNotIn("CharmActionNativeFeedback", visibility)
+
+    def test_owning_refresh_observes_detail_fit_and_existing_equipped_row_readiness(self):
+        source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Charms.cs"))
+        detail = method_body(source, r"void\s+PopulateCharmDetail\s*\([^)]*\)")
+        apply = method_body(source, r"CharmActionResult\s+CharmActionApply\s*\([^)]*\)")
+        self.assertIn("charmDetailReady=false", detail)
+        self.assertIn("charmDetailReady=fr.valid", detail)
+        self.assertIn("!charmDetailReady", apply)
+        self.assertIn("!equipRowReady", apply)
+        self.assertIn("AppliedRefreshFailed", apply)
+        self.assertIn("AppliedFeedbackFailed", apply)
+        self.assertNotIn("CharmActionApply(", apply)
+
+    def test_equip_watch_coalesces_only_an_existing_pending_layout_request(self):
+        source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Charms.cs"))
+        watch = method_body(source, r"void\s+CharmsTick\s*\(\s*\)")
+        self.assertIn("lastCharmEquipHash = eh", watch)
+        self.assertRegex(watch, r"if\s*\(\s*!paneNeedsFit\s*\)")
+        self.assertIn("ApplyFit(LayoutCharmsRedesign(paneClone))", watch)
+        self.assertNotIn("paneNeedsFit=false", watch)
+        self.assertNotIn("paneNeedsFit = false", watch)
 
 
 if __name__ == "__main__":

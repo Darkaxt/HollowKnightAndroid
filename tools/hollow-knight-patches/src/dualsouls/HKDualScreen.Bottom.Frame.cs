@@ -268,6 +268,7 @@ public partial class HKDualScreen
     }
     void TeardownFrame()
     {
+        CharmActionRetire();
         // Label material sanitizer and rule assets belong to this ownership epoch.
         RetireSupplementaryPanes();
         if(frameRoot != null){ Destroy(frameRoot); frameRoot=null; }
@@ -704,6 +705,7 @@ public partial class HKDualScreen
         SyncSupplementarySource();
         if (tab.cur != prevTab)
         {
+            CharmActionVisibility(false);
             SetMapMarkerMode(false);
             // (pinch zoom/pan PERSIST across tab switches — only the RESET button / an area change clears them)
             if (slideOutClone != null) StowSlideClone();   // a switch mid-slide finishes the previous slide instantly
@@ -1021,6 +1023,7 @@ public partial class HKDualScreen
 
     void RetireCompanionCaches()
     {
+        CharmActionRetire();
         StowSlideClone();
         TeardownMapRenderRoles();
         if (mapClone != null) { Destroy(mapClone); mapClone = null; }

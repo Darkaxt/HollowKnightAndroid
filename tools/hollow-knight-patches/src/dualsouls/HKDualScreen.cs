@@ -487,8 +487,8 @@ public partial class HKDualScreen : MonoBehaviour
         LoadConfig(false);
         GameCameras gc;
         GameManager gm;
-        if (!TryResolveSceneManagers(out gc, out gm)) return;
-        if (TryRunLowerHudFixture(gc, gm)) return;
+        if (!TryResolveSceneManagers(out gc, out gm)) { CharmActionVisibility(false);return; }
+        if (TryRunLowerHudFixture(gc, gm)) { CharmActionVisibility(false);return; }
         HkStageHooks.Tick(cfg, cfg.debug == 1);
         SyncDumpHook();   // B1: RT->PNG dump hook only while compDumpRT=1
         // A touch tab-select (tab.tap) overrides cfg.compTab indefinitely; if the config tab actually
@@ -507,7 +507,7 @@ public partial class HKDualScreen : MonoBehaviour
         // SetTransportActive(false), which restores the live HUD and every
         // routed overlay. Stop here so none of the reference bottom-screen
         // hooks can route those objects again while transport is inactive.
-        if (!dsOn) return;
+        if (!dsOn) { CharmActionVisibility(false);return; }
         StripPrivateLayers();     // B1: keep the 3 private layers off every on-screen camera
         bool companionOn = dsOn && (compOn >= 0 ? compOn : cfg.companion) == 1;
 
@@ -532,6 +532,7 @@ public partial class HKDualScreen : MonoBehaviour
         wasAtMenu = atMenu;
 
         ApplyLowerPauseGate(gc, paused); // B1: route HUD before tutorial hooks; paused gameplay roles stay hidden
+        if(paused || atMenu) CharmActionVisibility(false);
         if (!paused && gc != null && gc.hudCamera != null)
         {
             var src = gc.hudCamera;
@@ -568,7 +569,9 @@ public partial class HKDualScreen : MonoBehaviour
 
             // attrCam belongs to the companion. (The opening attribution used to time-share it, but now
             // lives on tutLayer/promptCam — see ScanNode/CreditShowing.)
-            if (CompanionVisible(companionOn, paused, invOpen, hudFadedInGameplay, popupAny))
+            bool companionVisible=CompanionVisible(companionOn, paused, invOpen, hudFadedInGameplay, popupAny);
+            if(!companionVisible) CharmActionVisibility(false);
+            if (companionVisible)
             {
                 attrCam.cullingMask = 1 << ATTR_LAYER;   // show companion
                 UpdateCompanion(src);
@@ -592,6 +595,7 @@ public partial class HKDualScreen : MonoBehaviour
         }
         else
         {
+            CharmActionVisibility(false);
             hudCam2.cullingMask = 1 << hudLayer;   // menu/intro: just the logo on the bottom
             popupBlack = false;
         }

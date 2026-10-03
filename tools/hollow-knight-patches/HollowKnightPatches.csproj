@@ -19,6 +19,10 @@
       <HintPath>$(UnityManaged)/UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>$(UnityManaged)/UnityEngine.AudioModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="UnityEngine.InputLegacyModule">
       <HintPath>$(UnityManaged)/UnityEngine.InputLegacyModule.dll</HintPath>
       <Private>false</Private>
