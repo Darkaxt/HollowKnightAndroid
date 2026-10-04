@@ -49,10 +49,10 @@ public sealed class HollowKnightRemainingPresentationTests
         var f=Pane(id,false);var v=Graphics(f,id);Assert.False(v.BR.flipX);Assert.False(v.BR.flipY);
         Assert.False(v.TL.enabled);Assert.False(v.BR.enabled);Assert.False(v.Glow.enabled);
         f.SelectionStep(id,new(50,300,100,120),true,1);Assert.Equal(1,v.Travel);CursorCentered(f,id);
-        Assert.Equal(22,v.TL.bounds.size.x,3);Assert.Equal(22,v.BR.bounds.size.y,3);
-        Assert.Equal(110,v.Glow.bounds.size.x,3);
-        Assert.Equal(110*5.167613506317139f/5.843749761581421f,v.Glow.bounds.size.y,3);
-        Assert.Equal(v.Glow.transform.localScale.x,v.Glow.transform.localScale.y);
+        Assert.Equal(64,v.TL.bounds.size.x,3);Assert.Equal(64,v.TL.bounds.size.y,3);
+        Assert.Equal(64,v.BR.bounds.size.x,3);Assert.Equal(64,v.BR.bounds.size.y,3);
+        Assert.Equal(124,v.Glow.bounds.size.x,3);Assert.Equal(144,v.Glow.bounds.size.y,3);
+        Assert.Equal((v.Target.width+24)/(v.Target.height+24),v.Glow.bounds.size.x/v.Glow.bounds.size.y,3);
         f.SelectionStep(id,default,false,-1);Assert.False(v.Glow.enabled);
         f.SelectionStep(id,new(300,350,140,100),true,2);Assert.Equal(1,v.Travel);CursorCentered(f,id);
     }

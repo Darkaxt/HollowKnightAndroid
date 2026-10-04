@@ -227,8 +227,20 @@ class HollowKnightFiveRoutesContractTest(unittest.TestCase):
         self.assertIn("SetVector(TMP_CLIP_RECT,bounds)", clip)
         self.assertIn("r.SetPropertyBlock(label.ClipBlock)", clip)
         self.assertIn("ApplyPaneLabelClip(label,rect)", label)
-        for token in ("v.CursorFrame != Time.frameCount", "SelectionMoveSeconds", "22,22", "110,110"):
+        # Canonical production DsCursor defaults are 64px corners around the
+        # actual target rectangle, with bounded inset and a 12px glow pad.
+        canonical = strip_csharp_comments(read(REPO_ROOT / "tools/silksong-patches/src/dualscreen/DsCursor.cs"))
+        for token in ('DsConfig.Int("cursor_corner_px", 64)', 'DsConfig.Int("cursor_inset_px", 12)',
+                      'const float GlowPad = 12f'):
+            self.assertIn(token, canonical)
+        for token in ("v.CursorFrame != Time.frameCount", "SelectionMoveSeconds",
+                      "Mathf.Max(0,v.Target.width)", "Mathf.Max(0,v.Target.height)",
+                      "PositionShellCursor(v.TL,v.BR,v.Glow,bounds,1,64,0,ref v.TLFit,ref v.BRFit,ref v.GlowFit)"):
             self.assertIn(token, cursor)
+        shell = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs"))
+        fit_cursor = method_body(shell, r"void\s+PositionShellCursor\s*\([^)]*\)")
+        for token in ("Mathf.Min((baseInset+12)*pixel", "target.size.x+24*pixel", "target.size.y+24*pixel"):
+            self.assertIn(token, fit_cursor)
         for forbidden in ("new ", "Resources.", "FindDeep", "GetComponents", "File."):
             self.assertNotIn(forbidden, method_body(source, r"void\s+SupplementaryTick\s*\(\s*\)"))
         discard = method_body(source, r"void\s+DiscardSupplementaryPane\s*\([^)]*\)")
@@ -1256,9 +1268,14 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         position = method_body(frame, r"void\s+PositionFrame\s*\(\s*\)")
         for name in ('"F_TabTL"', '"F_TabBR"', '"F_TabGlow"'):
             self.assertIn(name, resolve)
-        self.assertIn("selected.bounds", position)
-        self.assertIn("22*unit,22*unit", position)
-        self.assertIn("110*unit,110*unit", position)
+        self.assertIn("shellTabFits[activeCol].Ink", position)
+        self.assertIn("PositionShellCursor(tabTL,tabBR,tabGlow,art,unit,64,0,ref shellTLFit,ref shellBRFit,ref shellGlowFit)", position)
+        self.assertNotIn("selected.bounds", position)
+        cursor = method_body(frame, r"static\s+void\s+PositionShellCursor\s*\([^)]*\)")
+        for token in ("target.min.x+inset", "target.max.y-inset", "target.max.x-inset",
+                      "target.min.y+inset", "corner*pixel,corner*pixel",
+                      "target.size.x+24*pixel", "target.size.y+24*pixel"):
+            self.assertIn(token, cursor)
         self.assertIn("mapMaskTopR.enabled=true", position)
         self.assertIn("mapMaskBotR.enabled=true", position)
 

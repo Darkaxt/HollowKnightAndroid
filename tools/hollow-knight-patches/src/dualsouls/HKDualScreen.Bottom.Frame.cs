@@ -81,6 +81,64 @@ public partial class HKDualScreen
         var sr = go.AddComponent<SpriteRenderer>(); sr.sprite = sprite; sr.sortingLayerName = "Inventory";
         sr.sortingOrder = order; sr.enabled = sprite != null; return sr;
     }
+    // Fixed owner slots, not a renderer registry. A fit stores its output affine
+    // state and rendered ink; moving a healthy ornament only translates that ink.
+    struct ShellSpriteFit
+    {
+        public SpriteRenderer Renderer; public Sprite Sprite;
+        public Bounds SpriteBounds, Ink;
+        public Vector3 X,Y,Position,Offset; public float Width,Height;
+        public bool Stretch,FlipX,FlipY,Valid;
+    }
+    readonly ShellSpriteFit[] shellTabFits = new ShellSpriteFit[5];
+    ShellSpriteFit shellTLFit,shellBRFit,shellGlowFit;
+    static bool SamePoint(Vector3 a,Vector3 b) { return a.x==b.x && a.y==b.y && a.z==b.z; }
+    static bool SameBounds(Bounds a,Bounds b) { return SamePoint(a.center,b.center) && SamePoint(a.size,b.size); }
+    static void FitShellSprite(SpriteRenderer sr,Vector3 center,float width,float height,ref ShellSpriteFit cache,bool stretch=false)
+    {
+        if(sr==null || sr.sprite==null) { cache=default;return; }
+        width=Mathf.Max(0,width);height=Mathf.Max(0,height);
+        var t=sr.transform;var x=t.TransformVector(new Vector3(1,0,0));var y=t.TransformVector(new Vector3(0,1,0));
+        var shape=sr.sprite.bounds;
+        bool healthy=cache.Valid && cache.Renderer==sr && cache.Sprite==sr.sprite && SameBounds(cache.SpriteBounds,shape) &&
+            cache.Width==width && cache.Height==height && cache.Stretch==stretch && cache.FlipX==sr.flipX && cache.FlipY==sr.flipY &&
+            SamePoint(cache.X,x) && SamePoint(cache.Y,y);
+        if(!healthy)
+        {
+            var parent=t.parent!=null ? t.parent.lossyScale : Vector3.one;
+            t.localScale=new Vector3(1f/Mathf.Max(.001f,Mathf.Abs(parent.x)),1f/Mathf.Max(.001f,Mathf.Abs(parent.y)),1);
+            var b=sr.bounds;
+            if(stretch)
+            {
+                // Solve projected x/y coverage without changing signed native
+                // parent scales or orientation (including quarter-turn donors).
+                x=t.TransformVector(new Vector3(shape.size.x,0,0));y=t.TransformVector(new Vector3(0,shape.size.y,0));
+                float a=Mathf.Abs(x.x),c=Mathf.Abs(x.y),d=Mathf.Abs(y.y),e=Mathf.Abs(y.x),det=a*d-e*c;
+                float sx=det!=0 ? (width*d-height*e)/det : 0,sy=det!=0 ? (height*a-width*c)/det : 0;
+                if(sx<0 || sy<0 || det==0) sx=sy=Mathf.Min(width/Mathf.Max(.001f,b.size.x),height/Mathf.Max(.001f,b.size.y));
+                var local=t.localScale;t.localScale=new Vector3(local.x*sx,local.y*sy,local.z);
+            }
+            else
+            {
+                float scale=Mathf.Min(width/Mathf.Max(.001f,b.size.x),height/Mathf.Max(.001f,b.size.y));
+                var local=t.localScale;t.localScale=new Vector3(local.x*scale,local.y*scale,local.z);
+            }
+            cache.Ink=sr.bounds;cache.Offset=cache.Ink.center-t.position;
+            cache.Renderer=sr;cache.Sprite=sr.sprite;cache.SpriteBounds=shape;cache.Width=width;cache.Height=height;cache.Stretch=stretch;
+            cache.FlipX=sr.flipX;cache.FlipY=sr.flipY;
+            cache.X=t.TransformVector(new Vector3(1,0,0));cache.Y=t.TransformVector(new Vector3(0,1,0));cache.Valid=true;
+        }
+        if(!SamePoint(cache.Ink.center,center) || !healthy || !SamePoint(cache.Position,t.position)) { t.position=center-cache.Offset;cache.Ink.center=center; }
+        cache.Position=t.position;
+    }
+    static void PositionShellCursor(SpriteRenderer tl,SpriteRenderer br,SpriteRenderer glow,Bounds target,float pixel,float corner,float baseInset,
+        ref ShellSpriteFit tlFit,ref ShellSpriteFit brFit,ref ShellSpriteFit glowFit,bool boundedInset=true)
+    {
+        float inset=boundedInset ? Mathf.Min((baseInset+12)*pixel,Mathf.Min(target.size.x,target.size.y)/3) : baseInset*pixel;
+        FitShellSprite(tl,new Vector3(target.min.x+inset,target.max.y-inset,target.center.z),corner*pixel,corner*pixel,ref tlFit);
+        FitShellSprite(br,new Vector3(target.max.x-inset,target.min.y+inset,target.center.z),corner*pixel,corner*pixel,ref brFit);
+        FitShellSprite(glow,target.center,target.size.x+24*pixel,target.size.y+24*pixel,ref glowFit,true);
+    }
     static void FitSprite(SpriteRenderer sr, Vector3 center, float maxWidth, float maxHeight)
     {
         if (sr == null || sr.sprite == null) return;
@@ -137,11 +195,12 @@ public partial class HKDualScreen
     {
         if (frameRoot != null) Destroy(frameRoot);
         frameRoot = null; shellRule = tabTL = tabBR = tabGlow = null;
-        for (int i = 0; i < 5; i++) frameTabs[i] = null;
+        for (int i = 0; i < 5; i++) { frameTabs[i] = null;shellTabFits[i]=default; }
+        shellTLFit=shellBRFit=shellGlowFit=default;
         iconRetry.Reset();
         mapMaskTopT = mapMaskBotT = null; mapMaskTopR = mapMaskBotR = null;
         areaNameT = null; areaNameTmp = null; areaNameR = null; shellTitle = null;
-        noMapT = null; noMapR = null; noMapSymbol = null;
+        noMapT = null; noMapR = null; noMapSymbol = null;noMapFit=default;
         equipRowRoot = null; equipCharmSRs.Clear(); lastEquipStamp = int.MinValue;
         TeardownMapControls();
     }
@@ -245,18 +304,18 @@ public partial class HKDualScreen
         {
             var sr=frameTabs[col]; if(sr == null) continue;
             sr.enabled = !ownsStrip && sr.sprite != null;
-            sr.color = col == activeCol ? ShellInk : ShellMuted;
-            FitSprite(sr,ShellPoint((col+.5f)*g.CellWidth,g.TabTop+g.TabHeight/2),g.IconMax*unit,g.IconMax*unit);
+            sr.color = col == activeCol ? Color.white : new Color(1,1,1,.45f);
+            FitShellSprite(sr,ShellPoint((col+.5f)*g.CellWidth,g.TabTop+g.TabHeight/2),g.IconMax*unit,g.IconMax*unit,ref shellTabFits[col]);
         }
         var selected=frameTabs[activeCol];
         bool cursorShow = !ownsStrip && selected != null && selected.sprite != null;
         float x=AnimateTabFleurX(activeCol,(activeCol+.5f)*g.CellWidth);
-        Bounds art=cursorShow ? selected.bounds : default;
-        float halfW=art.extents.x+6*unit,halfH=art.extents.y+6*unit;
-        Vector3 center=ShellPoint(x,g.TabTop+g.TabHeight/2,3.8f);
-        if(tabTL != null){ tabTL.enabled=cursorShow; FitSprite(tabTL,center+new Vector3(-halfW,halfH,0),22*unit,22*unit); }
-        if(tabBR != null){ tabBR.enabled=cursorShow; FitSprite(tabBR,center+new Vector3(halfW,-halfH,0),22*unit,22*unit); }
-        if(tabGlow != null){ tabGlow.enabled=cursorShow; FitSprite(tabGlow,center,110*unit,110*unit); }
+        Bounds art=cursorShow ? shellTabFits[activeCol].Ink : default;
+        art.center=ShellPoint(x,g.TabTop+g.TabHeight/2,3.8f);
+        if(tabTL != null) tabTL.enabled=cursorShow;
+        if(tabBR != null) tabBR.enabled=cursorShow;
+        if(tabGlow != null) tabGlow.enabled=cursorShow;
+        if(cursorShow) PositionShellCursor(tabTL,tabBR,tabGlow,art,unit,64,0,ref shellTLFit,ref shellBRFit,ref shellGlowFit);
         PositionHudStrip(attrCam.orthographicSize,attrCam.aspect,attrCam.orthographicSize/Mathf.Max(.01f,frameRefOrtho),tab.cur);
         PositionSelection(attrCam.orthographicSize);
         // Fixed HUD and strip clip every pane, including both sliding owners.
@@ -273,11 +332,13 @@ public partial class HKDualScreen
         RetireSupplementaryPanes();
         if(frameRoot != null){ Destroy(frameRoot); frameRoot=null; }
         DestroyOwnedAssets(); frameEdge.Clear(); frameBase.Clear();
-        for(int i=0;i<5;i++){ frameTabs[i]=null; tabIcons[i]=null; }
+        for(int i=0;i<5;i++){ frameTabs[i]=null; tabIcons[i]=null;shellTabFits[i]=default; }
+        shellTLFit=shellBRFit=shellGlowFit=default;
         iconRetry.Reset(); frameRetry.Reset(); tabTL=tabBR=tabGlow=shellRule=null;
         mapMaskTopT=mapMaskBotT=null; mapMaskTopR=mapMaskBotR=null; mapResetT=null; mapResetTmp=null; mapResetR=null; mapResetPillSR=null;
         tabColorCol=-1; tabFleurMoveCol=-1; tabFleurMoveT=1f; frameInnerBotFrac=frameInnerTopFrac=float.NaN;
         selBox=null; sel.Clear(); paneCursor=null; paneCursorFor=null;
+        selectionTLFit=selectionBRFit=selectionGlowFit=noMapFit=default;
         costPipRoot=null; charmBoardsFor=null;
         nativeCharmGrid=null;nativeCharmGridRenderers=null;nativeCharmRetired=null;nativeCharmName=nativeCharmDesc=null;
         nativeCharmNameSource=nativeCharmDescSource=null;nativeCharmGraphics=null;nativeCharmPortrait=null;equippedCharmNative=null;

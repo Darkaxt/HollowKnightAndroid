@@ -11,6 +11,7 @@ public partial class HKDualScreen
     bool shellTitleToast; string shellToastText;
     int headerSortUntil = -1, headerSortFrame = -1;
     SpriteRenderer noMapSymbol;
+    ShellSpriteFit noMapFit;
     readonly HKLowerLayout.Retry noMapRetry = new HKLowerLayout.Retry();
     bool noMapReady;
     float shellTitleWidth, shellTitleHeight;
@@ -240,7 +241,7 @@ public partial class HKDualScreen
         {
             var rect=MapBodyRect();
             noMapSymbol.enabled=cfg.compNoMapMsg == 1 && effectiveTab == COMP_MAP && !mapAvailable && !creditNow;
-            FitSprite(noMapSymbol,ShellPoint(rect.x+rect.width/2,rect.y+rect.height/2),260*ShellPixel,260*ShellPixel);
+            if(noMapSymbol.enabled) FitShellSprite(noMapSymbol,ShellPoint(rect.x+rect.width/2,rect.y+rect.height/2),260*ShellPixel,260*ShellPixel,ref noMapFit);
         }
     }
 

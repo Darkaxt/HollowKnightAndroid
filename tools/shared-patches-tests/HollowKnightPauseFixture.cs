@@ -96,6 +96,7 @@ internal partial class HKDualScreen
         mask.AddComponent<MeshFilter>().sharedMesh=new object();
         mapMaskTopR=mask.AddComponent<MeshRenderer>();mapMaskTopR.sharedMaterial=new object();
         transport.Owner=this;
+        tabFleurMoveCol=-1;tabFleurMoveT=1; // Exact cold production cursor state.
         cfg.compTab=1;
         GameManager.instance = Manager;Manager.FixtureOwner=this; PlayerData.instance = new();
         Manager.playerData=PlayerData.instance;Manager.hero_ctrl=HeroController.instance=new HeroController{playerData=PlayerData.instance};
@@ -207,15 +208,10 @@ internal partial class HKDualScreen
     static void TcSetSize(Component container,Vector2 size) { container.size=size; }
     const int TMP_CLIP_RECT=1;
     internal static readonly Color ShellInk=new(.93f,.91f,.86f,1),ShellMuted=new(.62f,.60f,.58f,1);
-    internal sealed class PaneGraphics
-    {
-        internal SpriteRenderer RuleLeft=new(),RuleRight=new(),TL=new(),BR=new(),Glow=new();
-        internal Renderer Top=new(),Bottom=new(),Left=new(),Right=new();
-        internal bool Selected; internal int SelectedId=-1; internal Rect Target;
-        internal Vector2 From,Center; internal float Travel=1; internal int CursorFrame=-1;
-        internal int Language=-1; internal float Width,Height;
-    }
-    internal PaneGraphics journalGraphics=new(),guideGraphics=new();
+    static PaneGraphics FixturePaneGraphics() => new() {
+        RuleLeft=new(),RuleRight=new(),TL=new(),BR=new(),Glow=new(),Top=new Renderer(),Bottom=new Renderer(),Left=new Renderer(),Right=new Renderer()
+    };
+    internal PaneGraphics journalGraphics=FixturePaneGraphics(),guideGraphics=FixturePaneGraphics();
     internal SpriteRenderer shellRule=new(),tabTL=new(),tabBR=new(),tabGlow=new();
     internal Transform mapMaskTopT; internal Renderer mapMaskTopR;
     internal bool GraphicsBuild(int id) => BuildPaneGraphics(CloneForTab(id),id);
@@ -328,6 +324,14 @@ internal partial class HKDualScreen
     internal void FrameBuildStep() => BuildFrameBody();
     internal SpriteRenderer NativeTab(int col) => frameTabs[col];
     internal SpriteRenderer NativeTabBr => tabBR;
+    internal SpriteRenderer NativeTabTl => tabTL;
+    internal SpriteRenderer NativeTabGlow => tabGlow;
+    internal void MarkerStripStep(bool show=true) => PositionMapMarkerStrip(show);
+    internal Bounds MarkerCaretBounds => mapCaretNow;
+    internal float MarkerCaretFraction => mapCaretTravel;
+    internal void MarkerControlsTeardownStep() => TeardownMapControls();
+    internal void MarkerChoose(int id) { mapMarkerType=id;mapMarkerErase=id==4; }
+    internal void SetSelectedContentDirty() { paneNeedsFit=true; }
     internal void ClearShellCursorDonors() { tabTL=tabBR=tabGlow=null; }
     internal NativePaneLabel MarkerCount(int id) => mapStripCounts[id];
     internal void MissingMarkerCount(int id) { mapStripCounts[id]=null; }
@@ -713,7 +717,7 @@ internal class Renderer
     internal Renderer(Transform owner) { transform=owner ?? new GameObject().transform; }
     internal Vector3 BoundsSize=Vector3.one;
     internal virtual Bounds LocalBounds => new(Vector3.zero,BoundsSize);
-    internal Bounds bounds { get {var b=LocalBounds;var lo=new Vector3(float.PositiveInfinity,float.PositiveInfinity,0);var hi=new Vector3(float.NegativeInfinity,float.NegativeInfinity,0);for(int i=0;i<4;i++){var p=transform.TransformVector(new(i%2==0 ? b.min.x : b.max.x,i<2 ? b.min.y : b.max.y,0));lo=Vector3.Min(lo,p);hi=Vector3.Max(hi,p);}return new Bounds(transform.position+(lo+hi)*.5f,hi-lo);} }
+    internal Bounds bounds { get {DiscoveryCounters.BoundsReads++;var b=LocalBounds;var lo=new Vector3(float.PositiveInfinity,float.PositiveInfinity,0);var hi=new Vector3(float.NegativeInfinity,float.NegativeInfinity,0);for(int i=0;i<4;i++){var p=transform.TransformVector(new(i%2==0 ? b.min.x : b.max.x,i<2 ? b.min.y : b.max.y,0));lo=Vector3.Min(lo,p);hi=Vector3.Max(hi,p);}return new Bounds(transform.position+(lo+hi)*.5f,hi-lo);} }
     internal T GetComponent<T>() where T:class => gameObject.GetComponent<T>();
     internal void GetPropertyBlock(MaterialPropertyBlock block) => block.Value=Clip;
     internal void SetPropertyBlock(MaterialPropertyBlock block) { Clip=block.Value;ClipWrites++; }
@@ -736,7 +740,7 @@ internal sealed partial class GameMap
     internal void SetupMapMarkers() { if(ThrowSetup)throw new InvalidOperationException("native redraw failure");Setups++; }
     static GameObject[] Slots() => Enumerable.Range(0,6).Select(i=>{var go=new GameObject();go.AddComponent<SpriteRenderer>();return go;}).ToArray();
 }
-internal sealed class Mesh:UnityEngine.Object { internal string name;internal Vector3[] vertices;internal Vector2[] uv;internal Color[] colors;internal int[] triangles;internal void RecalculateBounds() { } }
+internal sealed class Mesh:UnityEngine.Object { internal Bounds bounds=new(Vector3.zero,Vector3.one); internal string name;internal Vector3[] vertices;internal Vector2[] uv;internal Color[] colors;internal int[] triangles;internal void RecalculateBounds() { } }
 internal sealed class MeshFilter { public MeshFilter() { } internal object sharedMesh;internal Mesh mesh { get => sharedMesh as Mesh;set => sharedMesh=value; } }
 internal sealed class MeshRenderer:Renderer { public MeshRenderer() { } }
 internal enum SpriteDrawMode { Simple,Sliced }
@@ -846,7 +850,7 @@ internal class TextContainer:MonoBehaviour { internal TextContainer(Renderer own
 internal sealed class GameplayLabelDriver:MonoBehaviour { internal GameplayLabelDriver(Renderer owner):base(owner) { } }
 internal class MonoBehaviour:Component { internal bool enabled=true; internal MonoBehaviour(Renderer owner=null):base(owner) { } }
 internal sealed class NativeOwner:UnityEngine.Object { public Transform transform=new GameObject().transform;public string ActiveStateName="Closed"; }
-internal static class DiscoveryCounters { internal static int Hierarchy; }
+internal static class DiscoveryCounters { internal static int Hierarchy, BoundsReads; }
 internal static class Resources
 {
     internal static int Discoveries;

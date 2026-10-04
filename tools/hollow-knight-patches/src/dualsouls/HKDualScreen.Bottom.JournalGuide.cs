@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using HutongGames.PlayMaker.Actions;
+using Bounds = UnityEngine.Bounds;
 
 // Detached, read-only native Journal / Map Key adapters. Only copied TMP graphics
 // and SpriteRenderers are owned here; native list, entry and FSM drivers never run.
@@ -49,6 +50,7 @@ public partial class HKDualScreen
         public Rect Target;
         public Vector2 From,Center; public float Travel=1f; public int CursorFrame=-1;
         public int Language=-1; public float Width,Height;
+        public ShellSpriteFit TLFit,BRFit,GlowFit;
     }
     sealed class NativePaneLabel
     {
@@ -272,11 +274,8 @@ public partial class HKDualScreen
         var target=new Vector2(v.Target.x+v.Target.width/2,v.Target.y+v.Target.height/2);
         if(v.Travel<1) v.Center=new Vector2(Mathf.Lerp(v.From.x,target.x,v.Travel),Mathf.Lerp(v.From.y,target.y,v.Travel));
         else v.Center=target;
-        // Canonical fixed projected pixels; only the bounding rectangle adapts.
-        float halfW=v.Target.width/2+6,halfH=v.Target.height/2+6;
-        FitSprite(v.TL,PanePixel(v.Center.x-halfW,v.Center.y-halfH),22,22);
-        FitSprite(v.BR,PanePixel(v.Center.x+halfW,v.Center.y+halfH),22,22);
-        FitSprite(v.Glow,PanePixel(v.Center.x,v.Center.y),110,110);
+        var bounds=new Bounds(PanePixel(v.Center.x,v.Center.y),new Vector3(Mathf.Max(0,v.Target.width),Mathf.Max(0,v.Target.height),0));
+        PositionShellCursor(v.TL,v.BR,v.Glow,bounds,1,64,0,ref v.TLFit,ref v.BRFit,ref v.GlowFit);
     }
     void SetPaneLabelVisible(NativePaneLabel label,bool shown)
     {

@@ -51,8 +51,24 @@ for filename, names in methods.items():
             names += ("InvalidateCharmsFrame",)
     if filename in ("HKDualScreen.Bottom.MapControls.cs", "HKDualScreen.Bottom.MapRenderRoles.cs"):
         names = re.findall(r"^    (?:static )?(?:void|bool|float|Rect|Sprite|Bounds|MapActionButton|GameObject\[\]|List<Vector3>|int)\s+(\w+)\s*\(", source, re.M)
+    if filename == "HKDualScreen.Bottom.Frame.cs" and "struct ShellSpriteFit" in source:
+        names += ("SamePoint", "SameBounds", "FitShellSprite", "PositionShellCursor")
+        declaration = source[source.index("    struct ShellSpriteFit"):source.index("    static bool SamePoint")]
+        parts.append(declaration.replace("struct ShellSpriteFit", "internal struct ShellSpriteFit", 1))
+        identity.append({"source": str(root / filename), "declaration": "actual bounded shell fit slots",
+                         "source_file_sha256": hashlib.sha256((root / filename).read_bytes()).hexdigest(),
+                         "declaration_utf8_lf_sha256": hashlib.sha256(declaration.encode()).hexdigest(),
+                         "access_only_redirect": True})
+    if filename == "HKDualScreen.Bottom.Select.cs" and "struct SelectionMetric" in source:
+        names += ("BindSelectionMetric", "MeasureSelectionMetric")
+        declaration = source[source.index("    struct SelectionMetric"):source.index("    static SelectionMetric BindSelectionMetric")]
+        parts.append(declaration.replace("struct SelectionMetric", "internal struct SelectionMetric", 1))
+        identity.append({"source": str(root / filename), "declaration": "actual selected renderer measurement slots",
+                         "source_file_sha256": hashlib.sha256((root / filename).read_bytes()).hexdigest(),
+                         "declaration_utf8_lf_sha256": hashlib.sha256(declaration.encode()).hexdigest(),
+                         "access_only_redirect": True})
     for name in names:
-        match = re.search(r"\b(?:static\s+)?(?:void|bool|float|Rect|Sprite|CharmState|CharmActionInputs|CharmActionResult|CharmFeedbackResult|MapActionButton|GameObject\[\]|List<Vector3>|GameObject|string|Vector3|Transform|Renderer|SpriteRenderer|NativePaneLabel|PaneRefs|PaneGraphics|FitResult|Bounds|int)\s+" + name + r"\s*\([^)]*\)\s*\{", source)
+        match = re.search(r"\b(?:static\s+)?(?:void|bool|float|Rect|Sprite|SelectionMetric|CharmState|CharmActionInputs|CharmActionResult|CharmFeedbackResult|MapActionButton|GameObject\[\]|List<Vector3>|GameObject|string|Vector3|Transform|Renderer|SpriteRenderer|NativePaneLabel|PaneRefs|PaneGraphics|FitResult|Bounds|int)\s+" + name + r"\s*\([^)]*\)\s*\{", source)
         if match is None:
             # Before the fix this gate does not exist; retain an executable RED.
             if name in ("ApplyLowerPauseGate", "ResetJournalDetailScroll"):
@@ -91,7 +107,7 @@ for filename, names in methods.items():
     if filename == "HKDualScreen.Bottom.Hud.cs":
         # Optional on the immutable original; candidate retry/cache declarations
         # come from their owning source, not fixture update orchestration.
-        for name in ("equipRowDonor", "equipRowRetry", "equipRowReady"):
+        for name in ("equipRowDonor", "equipRowRetry", "equipRowReady", "noMapFit"):
             declaration = re.search(r"^    (?:readonly )?[^\n;]+\b" + name + r"\b[^\n]*;\s*$", source, re.M)
             if declaration is not None:
                 text = declaration.group()
@@ -138,6 +154,12 @@ for filename, names in methods.items():
         parts.append(declaration.group())
         parts.append(re.search(r'const string ShellRulePng = "[^"]+";', source).group())
     if filename == "HKDualScreen.Bottom.JournalGuide.cs":
+        declaration = source[source.index("    sealed class PaneGraphics"):source.index("    sealed class NativePaneLabel")]
+        parts.append(declaration.replace("sealed class PaneGraphics", "internal sealed class PaneGraphics", 1))
+        identity.append({"source": str(root / filename), "declaration": "actual PaneGraphics including owner fit slots",
+                         "source_file_sha256": hashlib.sha256((root / filename).read_bytes()).hexdigest(),
+                         "declaration_utf8_lf_sha256": hashlib.sha256(declaration.encode()).hexdigest(),
+                         "access_only_redirect": True})
         for name in ("GuideRows", "GuideConditions", "GuideStates", "GuideVariables"):
             declaration = re.search(r"static readonly string\[\] " + name + r"\s*=\s*\{[^;]+;",source)
             if declaration is None:

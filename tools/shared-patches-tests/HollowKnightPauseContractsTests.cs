@@ -449,8 +449,9 @@ public sealed class HollowKnightPauseContractsTests
         HKDualScreen lower=new(); Time.unscaledDeltaTime=.075f;
         lower.SelectionStep(3,new Rect(20,256,100,100),true,0);
         var owned=lower.journalGraphics;
-        Assert.Equal(22,owned.TL.transform.localScale.x); Assert.Equal(22,owned.BR.transform.localScale.x);
-        Assert.Equal(110,owned.Glow.transform.localScale.x);
+        Assert.Equal(64,owned.TL.bounds.size.x); Assert.Equal(64,owned.TL.bounds.size.y);
+        Assert.Equal(64,owned.BR.bounds.size.x); Assert.Equal(64,owned.BR.bounds.size.y);
+        Assert.Equal(124,owned.Glow.bounds.size.x); Assert.Equal(124,owned.Glow.bounds.size.y);
         float from=owned.Center.x;
         Time.frameCount++;
         lower.SelectionStep(3,new Rect(246,256,100,100),true,1);
@@ -459,7 +460,7 @@ public sealed class HollowKnightPauseContractsTests
         lower.SelectionStep(3,new Rect(),false,1);
         Assert.False(owned.TL.enabled); Assert.False(owned.BR.enabled); Assert.False(owned.Glow.enabled);
         lower.SelectionStep(4,new Rect(20,260,780,66),true,0);
-        Assert.Equal(22,lower.guideGraphics.TL.transform.localScale.x);
+        Assert.Equal(64,lower.guideGraphics.TL.bounds.size.x); Assert.Equal(64,lower.guideGraphics.TL.bounds.size.y);
         lower.Step(true); var before=lower.guideGraphics.Center;
         lower.Step(true); Assert.Equal(before.x,lower.guideGraphics.Center.x); Assert.Equal(before.y,lower.guideGraphics.Center.y);
         lower.Manager.inventoryFSM=new UnityEngine.Object(); lower.Step(true);

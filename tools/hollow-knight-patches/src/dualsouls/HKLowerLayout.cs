@@ -26,7 +26,8 @@ public static class HKLowerLayout
         float scale = Math.Min(1, height / 1080f), hud = 240 * scale, tabs = 140 * scale;
         return new Geometry { Width = width, Height = height, HudHeight = hud,
             BodyHeight = height - hud - tabs, TabHeight = tabs, TabTop = height - tabs,
-            BodyCenterY = (hud + height - tabs) / 2, CellWidth = width / 5, IconMax = 88 * scale };
+            BodyCenterY = (hud + height - tabs) / 2, CellWidth = width / 5,
+            IconMax = Math.Max(0, Math.Min(width / 5, Math.Min(88, tabs - 40))) };
     }
     public struct NativePaneColumns
     {

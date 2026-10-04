@@ -38,6 +38,11 @@ public partial class HKDualScreen
     readonly SpriteRenderer[] mapStripIcons = new SpriteRenderer[5];
     readonly NativePaneLabel[] mapStripCounts = new NativePaneLabel[4];
     readonly Bounds[] mapStripInk = new Bounds[4];
+    readonly ShellSpriteFit[] mapStripFits = new ShellSpriteFit[5];
+    ShellSpriteFit mapThumbFit;
+    const double MarkerCaretMoveSeconds = 0.15;
+    double mapCaretElapsed = MarkerCaretMoveSeconds;
+    Bounds mapCaretFrom,mapCaretNow; float mapCaretTravel=1; int mapCaretKey=-1; bool mapCaretShown;
     readonly int[] mapStripSpare = { -1, -1, -1, -1 };
     readonly string[] mapMarkerSpriteNames = { "map_mark_0000_scarab", "map_mark_0001_pill", "map_mark_0002_chit", "map_mark_0003_shell" };
     // Existing commissioned production SS art, byte-identical reuse, not new art.
@@ -185,7 +190,7 @@ public partial class HKDualScreen
         if(mapZoomThumb != null)
         {
             mapZoomThumb.enabled=slider;mapZoomThumb.color=new Color(1,1,1,alpha);
-            FitSprite(mapZoomThumb,new Vector3(mapZoomX,Mathf.Lerp(mapZoomBottomY,mapZoomTopY,MapZoomPosition(mapUserZoom,Mathf.Max(1.5f,cfg.compMapZoomMax))),attrCam.transform.position.z+3.35f),40*ShellPixel,15*ShellPixel);
+            if(slider) FitShellSprite(mapZoomThumb,new Vector3(mapZoomX,Mathf.Lerp(mapZoomBottomY,mapZoomTopY,MapZoomPosition(mapUserZoom,Mathf.Max(1.5f,cfg.compMapZoomMax))),attrCam.transform.position.z+3.35f),40*ShellPixel,15*ShellPixel,ref mapThumbFit);
         }
         if(!map) mapZoomHeld=false;
     }
@@ -280,6 +285,8 @@ public partial class HKDualScreen
     {
         var g=LowerGeometry();int count=1;for(int i=0;i<4;i++) if(MarkerUnlocked(i)) count++;
         float cell=g.Width/count;int col=0;EnsureSelectedMarkerType();
+        float iconSize=Mathf.Max(0,Mathf.Min(cell,Mathf.Min(96,g.TabHeight-40)));
+        Bounds caret=default;int caretKey=-1;
         for(int i=0;i<5;i++)
         {
             bool on=show && (i==4 || MarkerUnlocked(i));
@@ -288,7 +295,12 @@ public partial class HKDualScreen
             if(label != null) SetPaneLabelVisible(label,on);
             if(!on) continue;
             Vector3 center=ShellPoint((col+.5f)*cell,g.TabTop+g.TabHeight/2,3.8f);col++;
-            if(sr != null) { FitSprite(sr,center,88*ShellPixel,88*ShellPixel);sr.color=(i==4 ? mapMarkerErase : !mapMarkerErase && i==mapMarkerType) ? ShellInk : ShellMuted; }
+            if(sr != null)
+            {
+                FitShellSprite(sr,center,iconSize*ShellPixel,iconSize*ShellPixel,ref mapStripFits[i]);
+                bool chosen=i==4 ? mapMarkerErase : !mapMarkerErase && i==mapMarkerType;
+                sr.color=new Color(1,1,1,i<4 && MarkerSpare(i)<=0 ? .25f : chosen ? 1f : .45f);
+            }
             if(label != null)
             {
                 int spare=MarkerSpare(i);
@@ -306,13 +318,19 @@ public partial class HKDualScreen
             }
             bool selected=i==4 ? mapMarkerErase : !mapMarkerErase && i==mapMarkerType;
             if(selected && sr != null && sr.sprite != null)
-            {
-                var b=sr.bounds;
-                if(tabTL != null) { tabTL.enabled=true;FitSprite(tabTL,center+new Vector3(-b.extents.x-6*ShellPixel,b.extents.y+6*ShellPixel,0),22*ShellPixel,22*ShellPixel); }
-                if(tabBR != null) { tabBR.enabled=true;FitSprite(tabBR,center+new Vector3(b.extents.x+6*ShellPixel,-b.extents.y-6*ShellPixel,0),22*ShellPixel,22*ShellPixel); }
-                if(tabGlow != null) { tabGlow.enabled=true;FitSprite(tabGlow,center,110*ShellPixel,110*ShellPixel); }
-            }
+            { caret=mapStripFits[i].Ink;caretKey=i; }
         }
+        if(!show || caretKey<0) { mapCaretShown=false;mapCaretKey=-1;return; }
+        if(!mapCaretShown) { mapCaretFrom=mapCaretNow=caret;mapCaretElapsed=MarkerCaretMoveSeconds; }
+        else if(mapCaretKey!=caretKey) { mapCaretFrom=mapCaretNow;mapCaretElapsed=0; }
+        mapCaretKey=caretKey;mapCaretShown=true;
+        // Accumulate elapsed seconds, not rounded normalized frame increments.
+        // Double retains small/unequal partitions until the one float fraction.
+        mapCaretElapsed=Math.Min(MarkerCaretMoveSeconds,mapCaretElapsed+Time.unscaledDeltaTime);
+        mapCaretTravel=(float)(mapCaretElapsed/MarkerCaretMoveSeconds);
+        mapCaretNow=mapCaretTravel<1 ? new Bounds(Vector3.Lerp(mapCaretFrom.center,caret.center,mapCaretTravel),Vector3.Lerp(mapCaretFrom.size,caret.size,mapCaretTravel)) : caret;
+        if(tabTL!=null) tabTL.enabled=true;if(tabBR!=null) tabBR.enabled=true;if(tabGlow!=null) tabGlow.enabled=true;
+        PositionShellCursor(tabTL,tabBR,tabGlow,mapCaretNow,ShellPixel,52,10,ref shellTLFit,ref shellBRFit,ref shellGlowFit,false);
     }
     int MapMarkerCell(Vector3 world)
     {
@@ -587,7 +605,8 @@ public partial class HKDualScreen
         mapMaskLeftT=mapMaskRightT=null;mapMaskLeftR=mapMaskRightR=null;
         mapZoomHeld=mapMarkerMode=mapMarkerErase=mapControlsShown=false;mapControlContacts=0;mapMarkerDownCell=-1;
         mapControlsReady=mapStripReady=false;mapControlRetry.Reset();mapStripRetry.Reset();
-        for(int i=0;i<5;i++) mapStripIcons[i]=null;
+        for(int i=0;i<5;i++) { mapStripIcons[i]=null;mapStripFits[i]=default; }
+        mapThumbFit=default;mapCaretShown=false;mapCaretKey=-1;mapCaretTravel=1;mapCaretElapsed=MarkerCaretMoveSeconds;
         for(int i=0;i<4;i++) { mapStripCounts[i]=null;mapStripInk[i]=default;mapStripSpare[i]=-1; }
     }
 }

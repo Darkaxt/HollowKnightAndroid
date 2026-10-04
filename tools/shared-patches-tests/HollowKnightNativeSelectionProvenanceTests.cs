@@ -32,8 +32,9 @@ public sealed class HollowKnightNativeSelectionProvenanceTests
         var glow=native.Glow;Assert.Same(native.Cursor,lower.NativeCursor);
         Assert.Equal("light_effect_v02",glow.sprite.name);Assert.Equal("Back",glow.transform.parent.name);
         Assert.Equal(native.Cursor.position.x,glow.bounds.center.x,3);Assert.Equal(native.Cursor.position.y,glow.bounds.center.y,3);
-        Assert.Equal(110,glow.bounds.size.x,3);Assert.Equal(97.272729f,glow.bounds.size.y,3);
-        Assert.Equal(glow.sprite.bounds.size.y/glow.sprite.bounds.size.x,glow.bounds.size.y/glow.bounds.size.x,5);
+        var target=charms ? lower.nativeCharmGrid.Children.First(t=>t.name=="Icon1").GetComponent<SpriteRenderer>().bounds : lower.refsInv.slots[0].Renderers[0].bounds;
+        Assert.Equal(target.size.x+24,glow.bounds.size.x,3);Assert.Equal(target.size.y+24,glow.bounds.size.y,3);
+        Assert.Equal(.6029411554336548f,glow.color.r);Assert.Equal(.7535496950149536f,glow.color.g);Assert.Equal(1,glow.color.b);Assert.Equal(.5372549295425415f,glow.color.a);
         Assert.True(glow.enabled && glow.gameObject.activeInHierarchy);
         Assert.True(native.BR.transform.parent.localScale.x<0 && native.BR.transform.parent.localScale.y<0);
         Assert.Equal(0f,native.BR.transform.parent.localRotation.Angle);

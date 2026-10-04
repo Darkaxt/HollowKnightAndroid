@@ -18,8 +18,9 @@ public partial class HKDualScreen
     {
         public Transform item,graphicsFor; public GameObject graphicsPane;
         public Renderer direct,icon; public Renderer[] children;
+        public SelectionMetric directMetric,iconMetric; public SelectionMetric[] metrics;
         public int kind,charmN; public string invKey;
-        public void Clear() { item=graphicsFor=null;graphicsPane=null;direct=icon=null;children=null;kind=-1;charmN=0;invKey=null; }
+        public void Clear() { item=graphicsFor=null;graphicsPane=null;direct=icon=null;children=null;metrics=null;directMetric=iconMetric=default;kind=-1;charmN=0;invKey=null; }
     }
     Selection sel = new Selection { kind = -1 };
     LineRenderer selBox;
@@ -88,6 +89,42 @@ public partial class HKDualScreen
     static bool VisibleItemRenderer(Renderer renderer)
     { return renderer != null && renderer.enabled && renderer.gameObject.activeInHierarchy; }
 
+    // One measurement per selected renderer, retired with Selection. Sprite
+    // frames and native mesh geometry are actual invalidation signals; an opaque
+    // renderer or deforming skinned mesh remains live rather than becoming stale.
+    struct SelectionMetric
+    {
+        public Renderer Renderer; public SpriteRenderer SpriteRenderer; public MeshFilter Filter;
+        public Sprite Sprite; public Mesh Mesh; public Bounds Shape,World;
+        public Vector3 Position,X,Y,Z; public bool Valid,FlipX,FlipY;
+    }
+    ShellSpriteFit selectionTLFit,selectionBRFit,selectionGlowFit;
+    static SelectionMetric BindSelectionMetric(Renderer renderer)
+    {
+        return new SelectionMetric { Renderer=renderer,SpriteRenderer=renderer as SpriteRenderer,
+            Filter=renderer!=null ? renderer.GetComponent<MeshFilter>() : null };
+    }
+    static Bounds MeasureSelectionMetric(ref SelectionMetric metric)
+    {
+        var renderer=metric.Renderer;if(renderer==null) return default;
+        var sprite=metric.SpriteRenderer!=null ? metric.SpriteRenderer.sprite : null;
+        var mesh=metric.Filter!=null ? metric.Filter.sharedMesh as Mesh : null;
+        bool known=sprite!=null || mesh!=null;
+        // Mesh.bounds is the mesh owner's stored local geometry, not a hierarchy
+        // or renderer world-AABB scan. Observe it to retain in-place animation.
+        var shape=sprite!=null ? sprite.bounds : mesh!=null ? mesh.bounds : default;
+        var t=renderer.transform;var position=t.position;
+        var x=t.TransformVector(new Vector3(1,0,0));var y=t.TransformVector(new Vector3(0,1,0));var z=t.TransformVector(new Vector3(0,0,1));
+        bool flipX=metric.SpriteRenderer!=null && metric.SpriteRenderer.flipX,flipY=metric.SpriteRenderer!=null && metric.SpriteRenderer.flipY;
+        if(!known || !metric.Valid || metric.Sprite!=sprite || metric.Mesh!=mesh || !SameBounds(metric.Shape,shape) ||
+           !SamePoint(metric.Position,position) || !SamePoint(metric.X,x) || !SamePoint(metric.Y,y) || !SamePoint(metric.Z,z) ||
+           metric.FlipX!=flipX || metric.FlipY!=flipY)
+        {
+            metric.World=renderer.bounds;metric.Sprite=sprite;metric.Mesh=mesh;metric.Shape=shape;
+            metric.Position=position;metric.X=x;metric.Y=y;metric.Z=z;metric.FlipX=flipX;metric.FlipY=flipY;metric.Valid=true;
+        }
+        return metric.World;
+    }
     bool TrySelectionBounds(out Bounds bounds)
     {
         bounds=default;
@@ -97,27 +134,32 @@ public partial class HKDualScreen
             sel.graphicsFor=sel.item;sel.graphicsPane=paneClone;
             sel.direct=sel.item.GetComponent<Renderer>();
             sel.children=sel.item.GetComponentsInChildren<Renderer>(true);
-            sel.icon=null;
+            sel.directMetric=BindSelectionMetric(sel.direct);
+            sel.metrics=new SelectionMetric[sel.children.Length];
+            for(int i=0;i<sel.children.Length;i++) sel.metrics[i]=BindSelectionMetric(sel.children[i]);
+            sel.icon=null;sel.iconMetric=default;
             if(sel.charmN>0)
             {
                 var board=sel.item.GetComponent("InvCharmBackboard");
                 var field=board != null ? board.GetType().GetField("charmObject") : null;
                 var icon=field != null ? field.GetValue(board) as GameObject : null;
                 sel.icon=icon != null ? icon.GetComponentInChildren<Renderer>(true) : null;
+                sel.iconMetric=BindSelectionMetric(sel.icon);
             }
         }
         if(sel.charmN>0)
-        { if(!VisibleItemRenderer(sel.icon)) return false;bounds=sel.icon.bounds; }
+        { if(!VisibleItemRenderer(sel.icon)) return false;bounds=MeasureSelectionMetric(ref sel.iconMetric); }
         else
         {
-            if(VisibleItemRenderer(sel.direct)) bounds=sel.direct.bounds;
+            if(VisibleItemRenderer(sel.direct)) bounds=MeasureSelectionMetric(ref sel.directMetric);
             if(bounds.size.x<.05f || sel.invKey=="GEO")
             {
                 bool any=false;
-                foreach(var renderer in sel.children)
+                for(int i=0;i<sel.children.Length;i++)
                 {
-                    if(!VisibleItemRenderer(renderer) || renderer.bounds.size.x<.02f) continue;
-                    if(!any) { bounds=renderer.bounds;any=true; } else bounds.Encapsulate(renderer.bounds);
+                    var renderer=sel.children[i];if(!VisibleItemRenderer(renderer)) continue;
+                    var measured=MeasureSelectionMetric(ref sel.metrics[i]);if(measured.size.x<.02f) continue;
+                    if(!any) { bounds=measured;any=true; } else bounds.Encapsulate(measured);
                 }
             }
         }
@@ -160,30 +202,12 @@ public partial class HKDualScreen
                         selCurFor = sel.item;
                     }
                     var bb = selBB; var pl = paneCursor.parent != null ? paneCursor.parent.lossyScale : Vector3.one;
-                    float z = bb.center.z - 0.2f;
-                    // Keep each corner ornament at a UNIFORM native size (no stretch): frame the item by MOVING the
-                    // four corners to its bbox corners — how HK's own menu cursor works.
-                    float k = 1f / Mathf.Max(1e-3f, pl.x);
+                    bb.center=new Vector3(bb.center.x,bb.center.y,bb.center.z-.2f);
                     paneCursor.localRotation = Quaternion.identity;
-                    paneCursor.position = new Vector3(bb.center.x, bb.center.y, z);
-                    paneCursor.localScale = new Vector3(k, k, 1f);
-                    float grow = Mathf.Max(0.15f, 1f + cfg.compSelInset);   // negative inset pulls corners INSIDE the item bounds (closer)
-                    float hx = Mathf.Max(0.05f, bb.size.x * 0.5f * grow);
-                    float hy = Mathf.Max(0.05f, bb.size.y * 0.5f * grow);
-                    if (selCurTL != null && selCurTR != null && selCurBL != null && selCurBR != null)
-                    {
-                        selCurTL.position = new Vector3(bb.center.x - hx, bb.center.y + hy, z);
-                        selCurTR.position = new Vector3(bb.center.x + hx, bb.center.y + hy, z);
-                        selCurBL.position = new Vector3(bb.center.x - hx, bb.center.y - hy, z);
-                        FitSprite(nativeSelectionTL,new Vector3(bb.center.x-hx,bb.center.y+hy,z),22*ShellPixel,22*ShellPixel);
-                        FitSprite(nativeSelectionBR,new Vector3(bb.center.x+hx,bb.center.y-hy,z),22*ShellPixel,22*ShellPixel);
-                    }
-                    else   // fallback: no named corners -> at least keep it UNIFORM (still no stretch)
-                    {
-                        float side = Mathf.Max(bb.size.x, bb.size.y) * (1f + Mathf.Max(0f, cfg.compSelInset));
-                        paneCursor.localScale = new Vector3(side / Mathf.Max(1e-3f, pl.x), side / Mathf.Max(1e-3f, pl.y), 1f);
-                    }
-                    FitSprite(nativeSelectionGlow,new Vector3(bb.center.x,bb.center.y,z),110*ShellPixel,110*ShellPixel);
+                    paneCursor.position = bb.center;
+                    paneCursor.localScale = new Vector3(1f/Mathf.Max(.001f,Mathf.Abs(pl.x)),1f/Mathf.Max(.001f,Mathf.Abs(pl.y)),1f);
+                    PositionShellCursor(nativeSelectionTL,nativeSelectionBR,nativeSelectionGlow,bb,ShellPixel,64,0,
+                        ref selectionTLFit,ref selectionBRFit,ref selectionGlowFit);
                 }
                 else if (paneCursor.gameObject.activeSelf) { paneCursor.gameObject.SetActive(false); selCurFor = null; }
             }
