@@ -66,6 +66,12 @@ if (-not (Test-Path -LiteralPath $engine -PathType Leaf)) {
     throw "Android UnityEngine.CoreModule.dll is missing: $engine"
 }
 
+# Repository-owned, authenticated Android members for this profile, not caller pins.
+& python -B (Join-Path $repo 'tools/ci/verify_unity_player.py') --profile hollow-knight --player $Player
+if ($LASTEXITCODE -ne 0) {
+    throw "Hollow Knight Android Unity player input verification failed: $Player"
+}
+
 $taskTempRoot = if ($env:DUALSOULS_TEMP_ROOT) {
     $env:DUALSOULS_TEMP_ROOT
 } elseif (Test-Path -LiteralPath 'D:\Temp' -PathType Container) {

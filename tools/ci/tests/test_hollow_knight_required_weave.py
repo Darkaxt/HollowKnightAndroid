@@ -1,5 +1,6 @@
 """Build-consumer guardrails; executable Kotlin/native weaving gates complement these."""
 from pathlib import Path
+from contextlib import contextmanager
 import json
 import os
 import re
@@ -10,6 +11,16 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+@contextmanager
+def fixture_directory(prefix):
+    # Admitted evidence runs retain every fixture; normal test runs keep their legacy cleanup.
+    if os.environ.get("DUALSOULS_RETAIN_TEST_FIXTURES") == "1":
+        yield tempfile.mkdtemp(prefix=prefix)
+    else:
+        with tempfile.TemporaryDirectory(prefix=prefix) as tmp:
+            yield tmp
 
 
 def body(text, signature):
@@ -29,7 +40,7 @@ class HollowKnightRequiredWeaveContracts(unittest.TestCase):
         env = dict(os.environ)
         for key in ("DEPOT", "MAKEFLAGS", "MFLAGS"):
             env.pop(key, None)
-        with tempfile.TemporaryDirectory(prefix="dualsouls-check-wrapper-") as tmp:
+        with fixture_directory(prefix="dualsouls-check-wrapper-") as tmp:
             root = Path(tmp)
             (root / "Makefile").write_bytes((ROOT / "Makefile").read_bytes())
             cases = (
@@ -104,7 +115,7 @@ class ExactAssemblyInputContracts(unittest.TestCase):
     def invoke(self, profile, error, *, layout="Managed", missing=False,
                explicit=True, authority=None):
         # Isolated checker/authority fixtures; never alter the real authority or game.
-        with tempfile.TemporaryDirectory(prefix="dualsouls-input-identity-") as tmp:
+        with fixture_directory(prefix="dualsouls-input-identity-") as tmp:
             root = Path(tmp)
             script_path = f"tools/{profile}-patches/check.ps1"
             script = root / script_path
@@ -228,6 +239,24 @@ class ExactAssemblyInputContracts(unittest.TestCase):
         self.assertEqual(["1.0.29980"], re.findall(r'const string PINNED_GAME_VERSION = "([^"]+)";', source))
         self.assertEqual(["1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d"],
                          re.findall(r'const string PINNED_ASSEMBLY_SHA256 = "([^"]+)";', source))
+
+    def test_player_member_guards_precede_output_and_preserve_game_guards(self):
+        for profile in ("hollow-knight", "silksong"):
+            with self.subTest(profile=profile):
+                source = (ROOT / f"tools/{profile}-patches/check.ps1").read_text()
+                self.assertIn("tools/ci/verify_unity_player.py", source)
+                invocation = f'--profile {profile} --player $Player'
+                self.assertIn(invocation, source)
+                guard = source.index(invocation)
+                self.assertLess(source.index("Assembly-CSharp.dll input identity mismatch"), guard)
+                for marker in ("$taskTempRoot =", "New-Item -ItemType Directory",
+                               "dotnet build" if profile == "hollow-knight" else "Start-Process dotnet"):
+                    self.assertLess(guard, source.index(marker))
+                tail = source[guard:source.index("$taskTempRoot =")]
+                self.assertIn("if ($LASTEXITCODE -ne 0)", tail)
+                self.assertIn("throw", tail)
+                self.assertNotIn("[string]$PlayerManifest", source)
+                self.assertNotIn("[string]$ExpectedPlayerHash", source)
 
     def test_guards_use_named_authorities_before_engine_temp_and_compile(self):
         for profile, authority in (("hollow-knight", "hollow-knight-1.5.12620.json"),

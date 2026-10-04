@@ -94,6 +94,12 @@ if (-not (Test-Path (Join-Path $Player 'UnityEngine.CoreModule.dll'))) {
     Write-Error "No Android player assemblies at $Player. Run 'make player'."
 }
 
+# Repository-owned, authenticated Android members for this profile, not caller pins.
+& python -B (Join-Path $repo 'tools/ci/verify_unity_player.py') --profile silksong --player $Player
+if ($LASTEXITCODE -ne 0) {
+    throw "Silksong Android Unity player input verification failed: $Player"
+}
+
 Write-Host "[check] depot:  $Depot"
 Write-Host "[check] player: $Player"
 

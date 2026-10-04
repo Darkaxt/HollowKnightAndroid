@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "profiles": {
+    "hollow-knight": {
+      "unityVersion": "6000.0.61f1",
+      "provenance": {
+        "bindingSha256": "75d16f733e835071010bdbbc08680613c33da7c820836cb1dd03c82f6d778570",
+        "mainVerificationSha256": "a827004656124f333009cd94b4d785a811eb447b9e25f7405c5cf33534cbad9a",
+        "archiveSha256": "af590a00ab049870c90b164ca86c1f245c01f2c22511f2a51148c566fa22afd5",
+        "archiveSize": 675183137,
+        "componentMember": "TargetSupport.pkg.tmp/Payload",
+        "payloadSha256": "308c79b0fe408f5df2b2f1999a6e767384c6b1c7f5ceb9477a10d259bb34ba6d",
+        "payloadSize": 675072922,
+        "payloadMemberListingSha256": "2c37bf4977463d09ab4c31c604c068113b477442db684f758e3bb4293ae7289b"
+      },
+      "members": [
+        {
+          "file": "UnityEngine.CoreModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.CoreModule.dll",
+          "size": 1758720,
+          "sha256": "4cfe70da33508fc85098cc33e64b778deffc3a00050da2d0031b227652fed8aa"
+        },
+        {
+          "file": "UnityEngine.AudioModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.AudioModule.dll",
+          "size": 92160,
+          "sha256": "785746ad5c56ceba5b5a3220cce626f530ade99535951aef91036ca82210e74f"
+        },
+        {
+          "file": "UnityEngine.InputLegacyModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.InputLegacyModule.dll",
+          "size": 32256,
+          "sha256": "17ef8cc62f4faf1d1b7687dd73b2fa579182798665fe90dba67bc7f74e97f3cb"
+        },
+        {
+          "file": "UnityEngine.UIModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.UIModule.dll",
+          "size": 34816,
+          "sha256": "5ad06071846f08394f1ff5684e866d36fa5f3b57ab6205327980627cf408e874"
+        },
+        {
+          "file": "UnityEngine.TextRenderingModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.TextRenderingModule.dll",
+          "size": 34816,
+          "sha256": "c934c0c25c570ea080506b42f96d00645a6f3a805e1c55ce32a4533ac49c2d44"
+        }
+      ]
+    },
+    "silksong": {
+      "unityVersion": "6000.0.50f1",
+      "provenance": {
+        "bindingSha256": "1d1bec296ae1ffacc8139b11aadab5cc82b540aefc2c0b5136cc920be8a7cda9",
+        "mainVerificationSha256": "a827004656124f333009cd94b4d785a811eb447b9e25f7405c5cf33534cbad9a",
+        "archiveSha256": "839de4ae756852b9f2ae9e193082b6d5d790bece180d616a6f40df3acf841e7d",
+        "archiveSize": 673712656,
+        "componentMember": "TargetSupport.pkg.tmp/Payload",
+        "payloadSha256": "9cedba57219b0c5fa45a761e7a0789e59ef7e811776b0a712b952e8e5a282ec3",
+        "payloadSize": 673607455,
+        "payloadMemberListingSha256": "b7d6d069d8f553e17b9f7e3bec397ca50377812f6c49e2e30f545fef4cb1939f"
+      },
+      "members": [
+        {
+          "file": "UnityEngine.CoreModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.CoreModule.dll",
+          "size": 1757696,
+          "sha256": "618f0a5627321cd3241523257941a1fa9c686538f2548094f42a29977e63c2fd"
+        },
+        {
+          "file": "UnityEngine.InputLegacyModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.InputLegacyModule.dll",
+          "size": 32256,
+          "sha256": "e4d26c3000cda7cf5e26e9ddd25d09b5c446f9019afcc6edc675493009aa85ff"
+        },
+        {
+          "file": "UnityEngine.UIModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.UIModule.dll",
+          "size": 34816,
+          "sha256": "3a585813cddeaf2f1b3b1f5c8a1aade7b7ea5071a36d17ad76dfa36f0507494e"
+        },
+        {
+          "file": "UnityEngine.TextRenderingModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.TextRenderingModule.dll",
+          "size": 34816,
+          "sha256": "6941d9c4392550da5006bea3a1108e3b68903c719b6a5e3b3ab76f8188fe1ee1"
+        },
+        {
+          "file": "UnityEngine.IMGUIModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.IMGUIModule.dll",
+          "size": 196096,
+          "sha256": "21ed6a4154ed9968388241d2cdc0900d46b120190407f61eab04a6534074096c"
+        },
+        {
+          "file": "UnityEngine.AndroidJNIModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.AndroidJNIModule.dll",
+          "size": 112640,
+          "sha256": "28f538b72c034310d77803b125a835993a79c567da953ab5315eb8eb1639b4c1"
+        },
+        {
+          "file": "UnityEngine.Physics2DModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.Physics2DModule.dll",
+          "size": 189952,
+          "sha256": "5c87a9c316bcc54420b24fe5b9b6545257c050cd075f79d39561f98aec4913fb"
+        },
+        {
+          "file": "UnityEngine.AnimationModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.AnimationModule.dll",
+          "size": 203264,
+          "sha256": "2280d83b2da4cc2d50dc85a39c8847cd392273859aa3a82aa1ea8f3874e15071"
+        },
+        {
+          "file": "UnityEngine.ParticleSystemModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.ParticleSystemModule.dll",
+          "size": 156160,
+          "sha256": "cac14de7a1f5c26021643f0c6654aac64b3a0b91b3427eb496ba4c209cb1e98f"
+        },
+        {
+          "file": "UnityEngine.AudioModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.AudioModule.dll",
+          "size": 91648,
+          "sha256": "c9c44806a2fd4839971619c51d67d3b8c504164b71be83a4d0f259bcf9550aee"
+        },
+        {
+          "file": "UnityEngine.UnityWebRequestModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.UnityWebRequestModule.dll",
+          "size": 54784,
+          "sha256": "171f8de219f39a19940b98700c99c160345d18b31bbf33cf1b043fa4efd2310a"
+        },
+        {
+          "file": "UnityEngine.ImageConversionModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.ImageConversionModule.dll",
+          "size": 16896,
+          "sha256": "94461a5ce7513d100a3eaf2620c7a543e25e463d21d4c790793c1f019cc2e78a"
+        },
+        {
+          "file": "UnityEngine.ScreenCaptureModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.ScreenCaptureModule.dll",
+          "size": 12288,
+          "sha256": "f3b553424f1b2451abf074aebafc16dc6149b83dc84af05e5c16b4ca258392c7"
+        },
+        {
+          "file": "UnityEngine.JSONSerializeModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.JSONSerializeModule.dll",
+          "size": 12800,
+          "sha256": "6554b51a427594ed039f13f76c4c23ba0160831976b4bf1ee4356e52c4d6be0a"
+        },
+        {
+          "file": "UnityEngine.SpriteMaskModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.SpriteMaskModule.dll",
+          "size": 14336,
+          "sha256": "1c2a0fdb33337630fa192a40927ae1d0b4c87b2151f0bf20204505b227c3ee43"
+        },
+        {
+          "file": "UnityEngine.TilemapModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.TilemapModule.dll",
+          "size": 44032,
+          "sha256": "932d6c2609e24db901156141329be93ffd4da8f7247d3d77296fe7e901a16fc3"
+        },
+        {
+          "file": "UnityEngine.VideoModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.VideoModule.dll",
+          "size": 44544,
+          "sha256": "ecdee98f73fccde7f68975f02b23971636fd2baee8dd7ecde99e474b6ab57dac"
+        },
+        {
+          "file": "UnityEngine.AssetBundleModule.dll",
+          "archiveMember": "./Variations/il2cpp/Managed/UnityEngine.AssetBundleModule.dll",
+          "size": 28160,
+          "sha256": "39e2deb4c8120ebbc99db7c3bdcf253f8d6f69adc7d802fb226f03eea231f16f"
+        }
+      ]
+    }
+  }
+}
