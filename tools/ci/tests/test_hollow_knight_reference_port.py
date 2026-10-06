@@ -654,14 +654,14 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         )
         self.assertIn("ApplyLowerPauseGate(gc, paused)", tick)
         self.assertLess(
-            tick.index("if (!dsOn) { CharmActionVisibility(false);return; }"),
+            tick.index("if (!dsOn) { RestoreHudCameraState(); CharmActionVisibility(false);return; }"),
             tick.index("ApplyLowerPauseGate(gc, paused)"),
         )
         self.assertLess(
             tick.index("ApplyLowerPauseGate(gc, paused)"),
             tick.index("MainGameHooks(gc)"),
         )
-        self.assertIn("if (!paused && gc != null && gc.hudCamera != null)", tick)
+        self.assertIn("if (!paused && !atMenu && gc != null && gc.hudCamera != null)", tick)
         self.assertEqual(1, tick.count("ApplyLowerPauseGate(gc, paused)"))
         self.assertIn(
             "CompanionVisible(companionOn, paused, invOpen, hudFadedInGameplay, popupAny)",
@@ -704,7 +704,7 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
         tick = method_body(source, r"void\s+Tick\s*\(\s*\)")
         apply_toggle = tick.index("bool dsOn = ApplyDualScreenToggle()")
-        inactive_gate = tick.index("if (!dsOn) { CharmActionVisibility(false);return; }", apply_toggle)
+        inactive_gate = tick.index("if (!dsOn) { RestoreHudCameraState(); CharmActionVisibility(false);return; }", apply_toggle)
         main_hooks = tick.index("MainGameHooks(", inactive_gate)
         self.assertLess(apply_toggle, inactive_gate)
         self.assertLess(inactive_gate, main_hooks)
@@ -1049,7 +1049,14 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         copy = method_body(panes, r"NativePaneLabel\s+CopyPaneLabel\s*\([^)]*\)")
         label = method_body(panes, r"void\s+SetPaneLabel\s*\([^)]*\)")
         self.assertIn("NeutralizeDetachedTmpClip(go)", copy)
-        self.assertLess(label.index("ForceMeshUpdate"), label.index("ApplyPaneLabelClip(label,rect)"))
+        self.assertLess(label.index("TryTmpGlyphBoundsWorld"), label.index("ApplyPaneLabelClip(label,rect)"))
+        glyphs = method_body(strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Charms.cs")),
+                             r"static\s+bool\s+TryTmpGlyphBoundsWorld\s*\([^)]*\)")
+        self.assertIn('GetMethod("ForceMeshUpdate", Type.EmptyTypes)', glyphs)
+        self.assertLess(glyphs.index("generate.Invoke(component, null)"), glyphs.index("var info = tmp.textInfo"))
+        self.assertLess(label.index("TryTmpGlyphBoundsWorld"), label.index("label.ClipRenderers=label.Root.GetComponentsInChildren<Renderer>(true)"))
+        self.assertIn('label.Text=""; label.ScrollOffset=0', label)
+        self.assertIn("label.Renderer.enabled=label.Text.Length>0", label)
         clip = method_body(panes, r"void\s+ApplyPaneLabelClip\s*\([^)]*\)")
         self.assertIn("label.Root.InverseTransformPoint", clip)
         self.assertIn("foreach(var r in label.ClipRenderers)", clip)
@@ -1060,17 +1067,16 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("sortingOrder = 30090", refresh_header)
         self.assertIn("headerSortUntil=Time.frameCount+2", position_hud)
         self.assertIn("toast != shellTitleToast", position_hud)
-        for clone in (
-            "areaNameT.gameObject",
-        ):
-            call = f"NeutralizeDetachedTmpClip({clone})"
-            starts = [m.start() for m in re.finditer(re.escape(call), position_hud)]
-            self.assertTrue(starts, clone)
-            previous_neutral = -1
-            for start in starts:
-                force = position_hud.rfind("ForceMeshUpdate", 0, start)
-                self.assertGreater(force, previous_neutral, clone)
-                previous_neutral = start
+        self.assertIn("NeutralizeDetachedTmpClip(areaNameT.gameObject)", position_hud)
+        self.assertIn("shellTitleInkRetry.Due(Time.frameCount)", position_hud)
+        self.assertLess(position_hud.index("TryMapLabelInk(shellTitle,out shellTitleInk)"),
+                        position_hud.index("RefreshHeaderRenderers();headerSortUntil"))
+        self.assertIn("renderers[i].enabled=shellTitleInkReady && lastAreaName.Length>0", position_hud)
+        self.assertIn("NeutralizeDetachedTmpClip(areaNameT.gameObject)", refresh_header)
+        measure = method_body(strip_csharp_comments(read(MAP_CONTROLS)),
+                              r"bool\s+TryMapLabelInk\s*\([^)]*\)")
+        self.assertIn("!TryTmpGlyphBoundsWorld(label.Root, out min, out max)", measure)
+        self.assertNotIn("ForceMeshUpdate", position_hud)
         self.assertIn("ForceMeshUpdate", set_name)
         self.assertIn("NeutralizeDetachedTmpClip(dlgNameClone.gameObject)", set_name)
         self.assertLess(
@@ -1256,9 +1262,15 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             r"static\s+bool\s+TryTmpGlyphBoundsWorld\s*\([^)]*\)",
         )
 
-        self.assertEqual(4, bounds.count("TransformPoint("))
-        self.assertIn("new Vector3(tb.min.x, tb.max.y, tb.min.z)", bounds)
-        self.assertIn("new Vector3(tb.max.x, tb.min.y, tb.min.z)", bounds)
+        self.assertIn("for (int corner = 0; corner < 4; corner++)", bounds)
+        for vertex in ("vertex_BL.position", "vertex_TL.position", "vertex_TR.position", "vertex_BR.position"):
+            self.assertIn("character." + vertex, bounds)
+        self.assertIn("tmpT.TransformPoint(local)", bounds)
+        self.assertIn("mesh.vertices[vertex + corner]", bounds)
+        self.assertIn("local.x != buffer.x || local.y != buffer.y || local.z != buffer.z", bounds)
+        self.assertIn("!ReferenceEquals(info.textComponent, tmp)", bounds)
+        self.assertIn("if (!character.isVisible) continue", bounds)
+        self.assertNotIn("textBounds", bounds)
         self.assertIn("Vector3.Min", bounds)
         self.assertIn("Vector3.Max", bounds)
 
@@ -1526,9 +1538,16 @@ class HollowKnightCharmActionSourceContractTest(unittest.TestCase):
         layout = method_body(charms, r"void\s+CharmActionLayout\s*\([^)]*\)")
         choose = method_body(select, r"void\s+PollItemTap\s*\([^)]*\)")
         poll = method_body(select, r"void\s+PollTouch\s*\(\s*\)")
-        for token in ('"CTRL_EQUIP"', '"CTRL_UNEQUIP"', "nativeCharmName.TextRect",
-                      "nativeCharmDesc.TextRect", "name.width/2", "CopyPaneLabel"):
+        for token in ('"CTRL_EQUIP"', '"CTRL_UNEQUIP"', "HKLowerLayout.NativeColumns(LowerGeometry(),true)",
+                      "charmActionRect=new Rect(p.DetailX+14,p.Top+p.Height-78+12,p.DetailWidth-28,54)",
+                      "charmActionPlate.drawMode=SpriteDrawMode.Sliced", "CopyPaneLabel",
+                      'CharmActionSetLabel(NativeText(key,"UI"),Color.black)'):
             self.assertIn(token, layout)
+        label = method_body(charms, r"void\s+CharmActionSetLabel\s*\([^)]*\)")
+        self.assertIn("SetPaneLabel(nativeCharmAction,text,charmActionRect,color)", label)
+        self.assertIn("TryTmpGlyphBoundsWorld(nativeCharmAction.Root,out min,out max)", label)
+        self.assertIn("charmActionRect.width/2", label)
+        self.assertIn("ApplyPaneLabelClip(nativeCharmAction,charmActionRect)", label)
         self.assertNotIn("CharmActionApply", choose)
         self.assertIn("CharmActionDown(x,y)", poll)
         self.assertIn("CharmActionRelease(nx,ny)", poll)

@@ -109,7 +109,7 @@ public sealed class HollowKnightMapHeaderCanonicalTests
     [Fact]
     public void ActualMapActionsOccupyHeaderResetAndSliderBodyRight()
     {
-        var f=Map();Time.unscaledTime=0;f.PositionActionsStep();var g=f.LowerGeometry();
+        var f=Map();f.mapUserPan=new(2,0);Time.unscaledTime=0;f.PositionActionsStep();var g=f.LowerGeometry();
         float Y(Bounds b)=>g.Height/2-b.center.y;
         Assert.InRange(Y(f.mapViewAction.Hit),27,g.HudHeight-27);
         Assert.InRange(Y(f.mapMarkerAction.Hit),27,g.HudHeight-27);
@@ -123,7 +123,7 @@ public sealed class HollowKnightMapHeaderCanonicalTests
     [Fact]
     public void ActualMapResetAndSliderHoldThreeSecondsThenFadePointSix()
     {
-        var f=Map();Time.unscaledTime=0;f.PositionActionsStep();
+        var f=Map();f.mapUserPan=new(2,0);Time.unscaledTime=0;f.PositionActionsStep();
         Time.unscaledTime=3;f.PositionActionsStep();Assert.Equal(1,f.mapResetAction.Plate.color.a);
         Time.unscaledTime=3.3f;f.PositionActionsStep();Assert.Equal(.5f,f.mapResetAction.Plate.color.a,3);
         Time.unscaledTime=3.61f;f.PositionActionsStep();Assert.False(f.mapResetAction.Root.gameObject.activeSelf);
@@ -180,8 +180,8 @@ public sealed class HollowKnightMapHeaderCanonicalTests
     public void ActualMarkerCountPositionsNativeInkNotPaddedContainer()
     {
         var f=Map();f.mapMarkerMode=true;f.MarkerCount(0).Tmp.InkCenter=new(5,7,0);f.FramePositionStep();
-        var label=f.MarkerCount(0);var ink=label.Root.TransformPoint(label.Tmp.textBounds.center);
-        Assert.Equal(124+56-620,ink.x,3);Assert.Equal(540-1010-32,ink.y,3);
+        var label=f.MarkerCount(0);var ink=label.Root.TransformPoint(label.Tmp.textBounds.max);
+        Assert.Equal(248-6-620,ink.x,3);Assert.Equal(540-940-6,ink.y,3);
     }
     [Fact]
     public void ActualActionFallbackGenerationAndLateSettleSortAboveActionPlate()
@@ -391,6 +391,49 @@ public sealed class HollowKnightMapHeaderCanonicalTests
         int hierarchy=DiscoveryCounters.Hierarchy,resources=Resources.Discoveries;long before=GC.GetAllocatedBytesForCurrentThread();
         for(int i=0;i<300;i++) { Time.frameCount++;f.FramePositionStep(); }
         Assert.Equal(0,GC.GetAllocatedBytesForCurrentThread()-before);Assert.Equal(hierarchy,DiscoveryCounters.Hierarchy);Assert.Equal(resources,Resources.Discoveries);
+    }
+    [Theory]
+    [InlineData(0)] [InlineData(1)] [InlineData(2)]
+    public void T01CallerMissingGlyphsStayHiddenAndRetrySameTextAtBoundedDeadline(int owner)
+    {
+        var f=Map();f.mapMarkerMode=owner==2;
+        var tmp=owner==0 ? f.shellTitle.Tmp : owner==1 ? f.mapViewAction.Label : f.MarkerCount(0).Tmp;
+        var renderer=owner==0 ? f.shellTitle.Renderer : owner==1 ? f.mapViewAction.LabelRenderer : f.MarkerCount(0).Renderer;
+        void Tick() { if(owner==0) f.HeaderTickStep(0); else f.PositionActionsStep(); }
+        tmp.AutomaticGlyphInput=false;tmp.textInfo=null;
+        Tick();Assert.False(renderer.enabled);
+        if(owner==1) { Assert.False(f.mapViewAction.Plate.enabled);Assert.False(f.MapActionTap(f.mapViewAction.Hit.center)); }
+        string requested=tmp.text;int generations=tmp.MeshGenerations;
+        for(int i=0;i<119;i++) { Time.frameCount++;Tick();Assert.False(renderer.enabled); }
+        Assert.Equal(generations,tmp.MeshGenerations);
+        tmp.AutomaticGlyphInput=true;Time.frameCount++;Tick();
+        Assert.Equal(requested,tmp.text);Assert.True(renderer.enabled);
+        if(owner==1) Assert.True(f.mapViewAction.Plate.enabled);
+        Time.frameCount+=3;Tick();
+        int walks=DiscoveryCounters.Hierarchy;generations=tmp.MeshGenerations;
+        long before=GC.GetAllocatedBytesForCurrentThread();
+        for(int i=0;i<300;i++) { Time.frameCount++;Tick(); }
+        Assert.Equal(0,GC.GetAllocatedBytesForCurrentThread()-before);
+        Assert.Equal(generations,tmp.MeshGenerations);Assert.Equal(walks,DiscoveryCounters.Hierarchy);
+    }
+    [Theory]
+    [InlineData(0)] [InlineData(1)] [InlineData(2)]
+    public void T01CallerContentChangeRetiresPreviousGlyphDomainBeforeFailedGeneration(int owner)
+    {
+        var f=Map();f.mapMarkerMode=owner==2;
+        void Tick() { if(owner==0) f.HeaderTickStep(0); else f.PositionActionsStep(); }
+        Tick();
+        var tmp=owner==0 ? f.shellTitle.Tmp : owner==1 ? f.mapViewAction.Label : f.MarkerCount(0).Tmp;
+        var renderer=owner==0 ? f.shellTitle.Renderer : owner==1 ? f.mapViewAction.LabelRenderer : f.MarkerCount(0).Renderer;
+        Assert.True(renderer.enabled);
+        var oldHit=f.mapViewAction.Hit;
+        if(owner==0) f.Manager.Zone="GREENPATH";
+        else if(owner==1) Assert.True(f.MapActionTap(oldHit.center));
+        else HkPlayerData.instance.spareMarkers_b=3;
+        tmp.AutomaticGlyphInput=false;tmp.textInfo=null;Tick();
+        Assert.False(renderer.enabled);
+        if(owner==1) { Assert.False(f.mapViewAction.Plate.enabled);Assert.False(f.MapActionTap(oldHit.center)); }
+        tmp.AutomaticGlyphInput=true;Time.frameCount+=120;Tick();Assert.True(renderer.enabled);
     }
     static Renderer NewNativeMarker(HK f,NativeMapDonors donors)
     {

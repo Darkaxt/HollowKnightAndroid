@@ -66,6 +66,9 @@ public partial class HKDualScreen
     {
         HkStageHooks.ClearLegacyFlashMode();
         var failures = new List<Exception>();
+        // Display retirement can occur with no current scene managers. Restore the captured
+        // camera independently, before route-back and any subsequent logo/menu presentation.
+        TryDirectStep(RestoreHudCameraState, failures);
         TryDirectStep(ReleaseLowerHudFixtureInputLockOrThrow, failures);
         TryDirectStep(() =>
         {

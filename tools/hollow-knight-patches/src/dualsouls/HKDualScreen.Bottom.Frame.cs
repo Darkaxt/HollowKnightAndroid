@@ -304,7 +304,7 @@ public partial class HKDualScreen
         {
             var sr=frameTabs[col]; if(sr == null) continue;
             sr.enabled = !ownsStrip && sr.sprite != null;
-            sr.color = col == activeCol ? Color.white : new Color(1,1,1,.45f);
+            sr.color = col == activeCol ? Color.white : ShellMuted;
             FitShellSprite(sr,ShellPoint((col+.5f)*g.CellWidth,g.TabTop+g.TabHeight/2),g.IconMax*unit,g.IconMax*unit,ref shellTabFits[col]);
         }
         var selected=frameTabs[activeCol];

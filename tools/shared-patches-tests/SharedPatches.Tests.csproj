@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <Content Include="fixtures/skin-runtime-chain.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../docs/superpowers/specs/data/hollow-knight-skin-catalog-v1.txt" Link="docs/superpowers/specs/data/hollow-knight-skin-catalog-v1.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../skin-goldens/v1/launch-descriptors.json" Link="skin-goldens/v1/launch-descriptors.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../skin-goldens/v1/lifecycle.json" Link="skin-goldens/v1/lifecycle.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../skin-goldens/v1/transactions.json" Link="skin-goldens/v1/transactions.json" CopyToOutputDirectory="PreserveNewest" />

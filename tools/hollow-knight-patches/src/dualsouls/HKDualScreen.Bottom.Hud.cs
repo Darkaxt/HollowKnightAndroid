@@ -16,6 +16,8 @@ public partial class HKDualScreen
     bool noMapReady;
     float shellTitleWidth, shellTitleHeight;
     Bounds shellTitleInk;
+    bool shellTitleInkReady;
+    readonly HKLowerLayout.Retry shellTitleInkRetry = new HKLowerLayout.Retry();
     Component areaNameTmp;            // Native centered pane/area title; temporarily owns bench toast.
 
     Transform areaNameT, noMapT;
@@ -46,6 +48,7 @@ public partial class HKDualScreen
         areaNameT=shellTitle.Root; areaNameTmp=shellTitle.Tmp; areaNameR=shellTitle.Renderer;
         RefreshHeaderRenderers();
         shellTitleTab=-1; shellTitleLanguage=-1; shellTitleToast=false; shellToastText=null;
+        shellTitleInkReady=false;shellTitleInk=default;shellTitleInkRetry.Reset();
     }
     void RefreshHeaderRenderers()
     {
@@ -199,23 +202,32 @@ public partial class HKDualScreen
                 lastAreaName=(toast ? benchToastText ?? "" : title).ToUpperInvariant();
                 TmpProp(areaNameTmp,"text")?.SetValue(areaNameTmp,lastAreaName,null);
                 TmpProp(areaNameTmp,"enableWordWrapping")?.SetValue(areaNameTmp,false,null);
-                areaNameTmp.GetType().GetMethod("ForceMeshUpdate",Type.EmptyTypes)?.Invoke(areaNameTmp,null);
+                shellTitleInkReady=false;shellTitleInk=default;shellTitleInkRetry.Reset();
                 NeutralizeDetachedTmpClip(areaNameT.gameObject); SetTmpColor(areaNameTmp,toast ? Color.black : ShellInk);
-                RefreshHeaderRenderers(); shellTitleInk=MapLabelInk(shellTitle); headerSortUntil=Time.frameCount+2;
+            }
+            if(!shellTitleInkReady && lastAreaName.Length>0 && shellTitleInkRetry.Due(Time.frameCount))
+            {
+                shellTitleInkReady=TryMapLabelInk(shellTitle,out shellTitleInk);
+                RefreshHeaderRenderers();headerSortUntil=Time.frameCount+2;
+                if(shellTitleInkReady) shellTitleInkRetry.Resolved();
             }
             // TMP can create a fallback submesh in the following LateUpdate.
             // Two event-bounded settle frames, no healthy renderer discovery.
             if (Time.frameCount <= headerSortUntil && headerSortFrame != Time.frameCount) RefreshHeaderRenderers();
-            areaNameT.localScale=Vector3.one*shellTitle.UnitScale*ShellPixel;
-            areaNameT.position=ShellPoint(g.Width/2,g.HudHeight-6);
-            var bounds=MapLabelWorldInk(shellTitle,shellTitleInk);
-            if(bounds.size.x>(g.Width-40)*ShellPixel) areaNameT.localScale *= (g.Width-40)*ShellPixel/bounds.size.x;
-            bounds=MapLabelWorldInk(shellTitle,shellTitleInk);
-            Vector3 target=ShellPoint(g.Width/2,g.HudHeight-6);
-            areaNameT.position += new Vector3(target.x-bounds.center.x,target.y-bounds.min.y,0);
+            if(shellTitleInkReady)
+            {
+                areaNameT.localScale=Vector3.one*shellTitle.UnitScale*ShellPixel;
+                areaNameT.position=ShellPoint(g.Width/2,g.HudHeight-6);
+                var bounds=MapLabelWorldInk(shellTitle,shellTitleInk);
+                if(bounds.size.x>(g.Width-40)*ShellPixel) areaNameT.localScale *= (g.Width-40)*ShellPixel/bounds.size.x;
+                bounds=MapLabelWorldInk(shellTitle,shellTitleInk);
+                Vector3 target=ShellPoint(g.Width/2,g.HudHeight-6);
+                areaNameT.position += new Vector3(target.x-bounds.center.x,target.y-bounds.min.y,0);
+            }
             var renderers=shellTitle.ClipRenderers;
-            if(renderers != null) for(int i=0;i<renderers.Length;i++) if(renderers[i] != null) renderers[i].enabled=lastAreaName.Length>0;
-            if(toast)
+            if(renderers != null) for(int i=0;i<renderers.Length;i++) if(renderers[i] != null) renderers[i].enabled=shellTitleInkReady && lastAreaName.Length>0;
+            if(benchPillSR != null && !shellTitleInkReady) benchPillSR.enabled=false;
+            if(toast && shellTitleInkReady)
             {
                 if(benchPillSR == null)
                 {
@@ -359,20 +371,79 @@ public partial class HKDualScreen
         if (retex) { lastNotchTotal = total; lastNotchUsed = used; }
     }
 
+    // Camera ownership is local to the existing gameplay mirror, not a resident-fit certificate.
+    // Preserve the complete owned projection/framing tuple before its first gameplay mutation.
+    Camera hudCameraStateOwner, hudCameraStateSource;
+    Transform hudCameraStateRoot;
+    Rect hudCameraStateRect;
+    float hudCameraStateAspect, hudCameraStateSize, hudCameraStateNear, hudCameraStateFar;
+    bool hudCameraStateOrthographic;
+    Vector3 hudCameraStatePosition;
+    Quaternion hudCameraStateRotation;
+    Matrix4x4 hudCameraStateProjection;
+
+    void RestoreHudCameraState()
+    {
+        var owner = hudCameraStateOwner;
+        if (owner != null)
+        {
+            // Restore the captured camera itself, NEVER a replacement hudCam2 identity.
+            owner.rect = hudCameraStateRect; owner.aspect = hudCameraStateAspect;
+            owner.orthographic = hudCameraStateOrthographic; owner.orthographicSize = hudCameraStateSize;
+            owner.nearClipPlane = hudCameraStateNear; owner.farClipPlane = hudCameraStateFar;
+            owner.transform.position = hudCameraStatePosition; owner.transform.rotation = hudCameraStateRotation;
+            // Automatic projection regenerates from the restored inputs. Do not lock it by writing
+            // an identical matrix; an actually different owned projection is restored explicitly.
+            if (!owner.projectionMatrix.Equals(hudCameraStateProjection)) owner.projectionMatrix = hudCameraStateProjection;
+        }
+        hudCameraStateOwner = hudCameraStateSource = null; hudCameraStateRoot = null;
+    }
+
+    void ValidateHudCameraState(GameCameras cameras)
+    {
+        if (hudCameraStateOwner == null) return;
+        if (hudCameraStateOwner != hudCam2 || cameras == null || hudCameraStateSource != cameras.hudCamera ||
+            cameras.hudCanvas == null || hudCameraStateRoot != cameras.hudCanvas.transform)
+            RestoreHudCameraState();
+    }
+
+    void CaptureHudCameraState(Camera source)
+    {
+        var cameras = resolvedGameCameras;
+        ValidateHudCameraState(cameras);
+        if (hudCam2 == null || source == null || cameras == null || cameras.hudCanvas == null) return;
+        if (hudCameraStateOwner != null) return;
+        hudCameraStateRect = hudCam2.rect; hudCameraStateAspect = hudCam2.aspect;
+        hudCameraStateOrthographic = hudCam2.orthographic; hudCameraStateSize = hudCam2.orthographicSize;
+        hudCameraStateNear = hudCam2.nearClipPlane; hudCameraStateFar = hudCam2.farClipPlane;
+        hudCameraStatePosition = hudCam2.transform.position; hudCameraStateRotation = hudCam2.transform.rotation;
+        hudCameraStateProjection = hudCam2.projectionMatrix;
+        hudCameraStateSource = source; hudCameraStateRoot = cameras.hudCanvas.transform;
+        hudCameraStateOwner = hudCam2;
+    }
+
     // [B3] hudCam2 mirrors HK's OWN Hud Canvas (masks / soul / geo — the persistent HUD) at 75% top-left of the
     // bottom panel (zoom + pan tunable); promptCam is full-frame with the same view centre as HK's HUD camera.
     void FrameHudCams(Camera src, bool popupBlackNow, bool creditShowing)
     {
+        if (hudCam2 == null || src == null) { RestoreHudCameraState(); return; }
+        bool nativeHidden = HudGlobalHide.IsHidden;
+        if (nativeHidden) RestoreHudCameraState();
+        else CaptureHudCameraState(src);
         // Blank the HUD mirror while a popup/dialogue/credit draws on the bottom (compPopupBlack), so the
         // overlay reads on clean black instead of over the live HUD. The gate uses the renderer-DRAWING
         // predicate (AnyRendererDrawing, alpha-aware) — NOT activeInHierarchy, which is what made the old
         // v0.37-era auto-hide stick near the focus tablet and got the gate removed entirely.
-        hudCam2.cullingMask = popupBlackNow ? 0 : 1 << hudLayer;
+        hudCam2.cullingMask = popupBlackNow || nativeHidden ? 0 : 1 << hudLayer;
 
-        // hudCam2: HUD at 75% top-left (zoom + pan tunable)
-        hudCam2.orthographicSize = src.orthographicSize * (src.aspect / ((float)BOTTOM_W / BOTTOM_H)) * cfg.zoomMul;
-        hudCam2.transform.position = src.transform.position + new Vector3(cfg.panX, cfg.panY, 0f);
-        hudCam2.transform.rotation = src.transform.rotation;
+        // Keep native reduced position/scale perceptible: no extent-driven autozoom or source-transform writes.
+        // A hidden root is offscreen by native authority; never frame it back into view.
+        if (!nativeHidden)
+        {
+            hudCam2.orthographicSize = src.orthographicSize * (src.aspect / ((float)BOTTOM_W / BOTTOM_H)) * cfg.zoomMul;
+            hudCam2.transform.position = src.transform.position + new Vector3(cfg.panX, cfg.panY, 0f);
+            hudCam2.transform.rotation = src.transform.rotation;
+        }
 
         // promptCam: full-frame (100%), same view centre as the main HUD camera. While the opening
         // attribution draws, zoom in by creditScale (its old dedicated-camera treatment, now on this cam).

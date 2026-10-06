@@ -11,7 +11,7 @@ fixture_namespace = sys.argv[4] if len(sys.argv) > 4 else "HkPauseContracts"
 methods = {
     "HKDualScreen.cs": ("Tick", "LoadConfig", "RelayerHud", "LogoTick", "SyncBgCapture"),
     "HKDualScreen.Bottom.Layering.cs": (
-        "CompanionVisible", "ApplyDualScreenToggle", "ApplyLowerPauseGate"),
+        "CompanionVisible", "ApplyDualScreenToggle", "ApplyLowerPauseGate", "HudFadedInGameplay"),
     "HKDualScreen.Bottom.Hud.cs": ("FrameHudCams", "BuildEquipCharmRow", "UpdateEquipCharmRow", "BuildAreaName", "RefreshHeaderRenderers", "BuildNoMapLabel", "PositionHudStrip"),
     "HKDualScreen.Util.cs": ("SetTmpFont", "NeutralizeDetachedTmpClip", "ItemBounds", "SanitizeDetachedTmpClone", "BuildCharmKeys", "Charms", "CharmGot", "CharmBroken"),
     "HKDualScreen.Bottom.Inventory.cs": ("Refs", "FitOccupiedNative", "BuildNativePaneGraphics", "PositionNativePaneGraphics", "EnsureNativeInventory", "LayoutNativeInventory", "ScrollNativePane", "LayoutNativeDetail", "PopulateInvDetail", "PopulateSpellDetail", "PopulateEquipDetail", "PopulateGeoDetail", "PopulateGodfinderDetail", "ClearInvDetail", "ClearInvDetailLocal"),
@@ -21,14 +21,24 @@ methods = {
     "HKDualScreen.Bottom.Map.cs": ("MapFrameTick", "ResolveMapArea", "MapTick"),
     "HKDualScreen.Bottom.MapControls.cs": (), # all complete methods; no partial Map playback
     "HKDualScreen.Bottom.MapRenderRoles.cs": (), # complete role partition/event/lifetime bodies
-    "HKDualScreen.Bottom.Select.cs": ("MapPinchTick", "TouchToWorld", "PollTouch", "RefreshSelectedDetail", "SetDetailFont", "PositionSelection", "AnimateSelectionBounds", "ResetSelectionAnimation", "PollItemTap", "VisibleItemRenderer", "TrySelectionBounds"),
-    "HKDualScreen.Bottom.JournalGuide.cs": ("CopyPaneLabel", "ResetJournalDetailScroll", "CloneForTab", "ReadyForTab", "SyncSupplementarySource", "RetireSupplementaryPanes", "DiscardSupplementaryPane", "BuildSupplementaryPane", "GuideRowCondition", "BindJournalLabels", "SetPaneLabel", "SetPaneLabelVisible", "ApplyPaneLabelClip", "PanePixel", "BuildPaneGraphics", "CopyPaneMask", "PositionPaneGraphics", "PositionPaneRule", "PositionPaneMask", "SetPaneSelection", "PaneCursorTick", "LayoutJournal", "LayoutGuide", "JournalTap", "GuideTap", "ScrollSupplementary", "SupplementaryTick", "RefreshJournal", "RefreshGuide"),
+    "HKDualScreen.Bottom.Select.cs": ("ResetMapView", "ResetMapViewAnimated", "MapPinchTick", "TouchToWorld", "PollTouch", "RefreshSelectedDetail", "SetDetailFont", "PositionSelection", "AnimateSelectionBounds", "ResetSelectionAnimation", "PollItemTap", "VisibleItemRenderer", "TrySelectionBounds"),
+    "HKDualScreen.Bottom.JournalGuide.cs": ("BuildJournalPane", "BuildGuidePane", "CopyPaneLabel", "ResetJournalDetailScroll", "CloneForTab", "ReadyForTab", "SyncSupplementarySource", "RetireSupplementaryPanes", "DiscardSupplementaryPane", "BuildSupplementaryPane", "GuideRowCondition", "BindJournalLabels", "SetPaneLabel", "SetPaneLabelVisible", "ApplyPaneLabelClip", "PanePixel", "BuildPaneGraphics", "CopyPaneMask", "PositionPaneGraphics", "PositionPaneRule", "PositionPaneMask", "SetPaneSelection", "PaneCursorTick", "LayoutJournal", "LayoutGuide", "JournalTap", "GuideTap", "ScrollSupplementary", "SupplementaryTick", "RefreshJournal", "RefreshGuide"),
 }
 parts = []
 identity = []
 config_method = None
 for filename, names in methods.items():
     source = (root / filename).read_text(encoding="utf-8")
+    if filename == "HKDualScreen.Bottom.Hud.cs" and "void RestoreHudCameraState(" in source:
+        names += ("RestoreHudCameraState", "ValidateHudCameraState", "CaptureHudCameraState")
+        start=source.index("    Camera hudCameraStateOwner")
+        end=source.index("    void RestoreHudCameraState",start)
+        declaration=source[start:end]
+        parts.append(declaration)
+        identity.append({"source":str(root / filename),"declaration":"complete owned gameplay camera state",
+                         "source_file_sha256":hashlib.sha256((root / filename).read_bytes()).hexdigest(),
+                         "declaration_utf8_lf_sha256":hashlib.sha256(declaration.encode()).hexdigest(),
+                         "declaration_identical":True})
     if filename == "HKDualScreen.Bottom.Charms.cs":
         names += tuple(re.findall(r"^    (?:static )?(?:void|bool|CharmActionInputs|CharmActionResult|CharmFeedbackResult)\s+(CharmAction\w+)\s*\(", source, re.M))
         start = source.find("    // Collection action state")
@@ -88,9 +98,9 @@ for filename, names in methods.items():
             parts.append(source[match.start():end].replace("BuildFrame(", "BuildFrameBody(", 1))
         elif name == "LoadConfig":
             config_method = source[match.start():end]
-        elif name in ("LayoutNativeInventory", "LayoutCharmsRedesign", "TeardownFrame", "TeardownCompanion", "PollItemTap", "BuildNoMapLabel", "PositionFrame", "BuildMapMask", "CreateShellRule", "MapTick"):
+        elif name in ("ResetMapViewAnimated", "LayoutNativeInventory", "LayoutCharmsRedesign", "TeardownFrame", "TeardownCompanion", "PollItemTap", "BuildNoMapLabel", "PositionFrame", "BuildMapMask", "CreateShellRule", "MapTick"):
             parts.append(source[match.start():end].replace(name + "(", name + "Body(", 1))
-        elif name in ("LayoutJournal", "LayoutGuide", "JournalTap", "GuideTap", "ScrollSupplementary"):
+        elif name in ("BuildJournalPane", "BuildGuidePane", "LayoutJournal", "LayoutGuide", "JournalTap", "GuideTap", "ScrollSupplementary"):
             # Only the signature is redirected so the fixture can count calls;
             # the executable production body remains byte-for-byte unchanged.
             parts.append(source[match.start():end].replace(name + "(", name + "Body(", 1))
@@ -107,7 +117,7 @@ for filename, names in methods.items():
     if filename == "HKDualScreen.Bottom.Hud.cs":
         # Optional on the immutable original; candidate retry/cache declarations
         # come from their owning source, not fixture update orchestration.
-        for name in ("equipRowDonor", "equipRowRetry", "equipRowReady", "noMapFit"):
+        for name in ("equipRowDonor", "equipRowRetry", "equipRowReady", "noMapFit", "shellTitleInkReady", "shellTitleInkRetry"):
             declaration = re.search(r"^    (?:readonly )?[^\n;]+\b" + name + r"\b[^\n]*;\s*$", source, re.M)
             if declaration is not None:
                 text = declaration.group()

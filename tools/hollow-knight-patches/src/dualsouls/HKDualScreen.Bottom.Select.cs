@@ -406,6 +406,9 @@ public partial class HKDualScreen
     void PollItemTap(float nx, float ny)
     {
         var pane = paneClone; if (pane == null || attrCam == null) return;
+        var g=LowerGeometry();var columns=HKLowerLayout.NativeColumns(g,tab.cur==COMP_CHARM);
+        float px=nx*g.Width,py=ny*g.Height;
+        if(px<columns.SubjectX || px>=columns.DetailX || py<columns.Top || py>=columns.Top+columns.Height) return;
         try
         {
             Rect r = attrCam.rect;

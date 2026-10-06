@@ -126,7 +126,7 @@ public class HollowKnightFiveRouteReviewFixTests
     public void Reset_action_is_built_available_in_current_map_and_dispatches_without_marker_writes()
     {
         var f=SwitchFixture(0);f.BuildActionsStep(); Assert.NotNull(f.mapResetAction);
-        f.mapAnyAvailable=f.mapAvailable=f.mapContentVisible=true; f.mapGm=new GameMap();
+        f.mapAnyAvailable=f.mapAvailable=f.mapContentVisible=true; f.mapGm=new GameMap();f.mapUserPan=new(2,0);
         f.PositionActionsStep();Assert.True(f.mapResetAction.Root.gameObject.activeSelf);
         Assert.True(f.MapActionTap(f.mapResetAction.Hit.center)); Assert.Equal(1,f.AnimatedResets);Assert.Equal(0,f.MarkerWrites);
         f.mapMarkerMode=true;f.PositionActionsStep(); Assert.False(f.mapResetAction.Root.gameObject.activeSelf);
@@ -140,8 +140,8 @@ public class HollowKnightFiveRouteReviewFixTests
         for(int i=0;i<30;i++) { f.journalRecords.Add(new());f.journalVisible.Add(i); }
         f.journalSelected=0;f.LayoutStep(3);
         f.transport.contacts=1;f.transport.TouchX=.1f;f.transport.TouchY=.4f;f.transport.T0Y=.2f;f.transport.TapSequence++;
-        f.TouchStep();Assert.Equal(1,f.journalScrollRow);Near(0,f.journalDescription.ScrollOffset);
-        f.transport.TouchX=.5f;f.transport.TapSequence++;f.TouchStep();Assert.Equal(1,f.journalScrollRow);
+        f.TouchStep();Near(216,(float)f.journalChooserOffset);Near(0,f.journalDescription.ScrollOffset);
+        f.transport.TouchX=.5f;f.transport.TapSequence++;f.TouchStep();Near(216,(float)f.journalChooserOffset);
     }
 
     [Fact]
@@ -166,7 +166,7 @@ public class HollowKnightFiveRouteReviewFixTests
         f.journalDescription.Tmp.InkHeight=1000; f.journalNotes.Tmp.InkHeight=900;
         f.LayoutStep(3);var clip=f.journalDescription.ClipRect;
         f.transport.contacts=1;f.transport.TouchX=.9f;f.transport.TouchY=.4f;f.transport.T0Y=.2f;f.transport.TapSequence++;
-        f.TouchStep();Assert.Equal(0,f.journalScrollRow);Assert.True(f.journalDescription.ScrollOffset>0);
+        f.TouchStep();Assert.Equal(0,f.journalChooserOffset);Assert.True(f.journalDescription.ScrollOffset>0);
         Assert.Equal(clip.y,f.journalDescription.ClipRect.y);
         for(int i=0;i<30;i++) f.ScrollStep(-.2f);
         Near(f.journalDescription.ScrollMax,f.journalDescription.ScrollOffset);

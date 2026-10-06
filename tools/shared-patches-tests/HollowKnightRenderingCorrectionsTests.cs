@@ -61,7 +61,8 @@ public sealed class HollowKnightRenderingCorrectionsTests
         Assert.Equal(art.size.x+24,lower.NativeTabGlow.bounds.size.x,3);
         Assert.Equal(art.size.y+24,lower.NativeTabGlow.bounds.size.y,3);
         Assert.Equal(1,lower.NativeTab(0).color.r);Assert.Equal(1,lower.NativeTab(0).color.a);
-        Assert.Equal(1,lower.NativeTab(1).color.r);Assert.Equal(.45f,lower.NativeTab(1).color.a);
+        Assert.Equal(.62f,lower.NativeTab(1).color.r);Assert.Equal(.60f,lower.NativeTab(1).color.g);
+        Assert.Equal(.58f,lower.NativeTab(1).color.b);Assert.Equal(1,lower.NativeTab(1).color.a);
     }
     [Theory]
     [InlineData(3)] [InlineData(4)]
@@ -387,7 +388,17 @@ public sealed class HollowKnightRenderingCorrectionsTests
     {
         HK lower=new();var pane=lower.NewNativePane(false);lower.NativeLayoutRouteStep(1);var hidden=lower.refsInv.slots[0].Root;
         var old=hidden.position;lower.NativeScrollStep(0,-.2f);lower.NativeTapStep(old);
-        Assert.NotSame(hidden,lower.SelectedItem);Assert.True(ReferenceEquals(lower.refsInv.slots[3].Root,lower.SelectedItem),lower.LastDiagnostic+" camera "+lower.attrCam.orthographicSize+" rect "+lower.attrCam.rect.width);
+        Assert.All(lower.refsInv.slots[0].Renderers,r=>Assert.False(r.enabled));
+        Assert.NotSame(hidden,lower.SelectedItem);
+        // A continuous 216px scroll does not preserve the old integer-row hit.
+        // Prove a hit on the current, actually visible native slot instead.
+        var visible=lower.refsInv.slots[6];var art=visible.Renderers[0];
+        Assert.True(art.enabled);Assert.True(art.gameObject.activeInHierarchy);
+        var point=art.bounds.center;var body=HKLowerLayout.NativeColumns(lower.LowerGeometry(),false);
+        float y=lower.BOTTOM_H/2f-(point.y-lower.compRoot.position.y);
+        Assert.InRange(y,body.Top,body.Top+body.Height);
+        lower.NativeTapStep(point);
+        Assert.Same(visible.Root,lower.SelectedItem);Assert.Equal("Map and Quill",lower.SelectedItem.name);
     }
     [Fact]
     public void ActualCharmTapRejectsDisabledIconIndependentlyOfCursor()

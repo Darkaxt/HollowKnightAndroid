@@ -14,6 +14,8 @@ public partial class HKDualScreen
         public SpriteRenderer Plate;
         public NativePaneLabel Graphic;
         public Bounds Hit, Ink;
+        public bool InkReady;
+        public readonly HKLowerLayout.Retry InkRetry = new HKLowerLayout.Retry();
         public string Text;
         public float Alpha = -1f;
         public int SortUntil = -1, SortFrame = -1;
@@ -38,6 +40,8 @@ public partial class HKDualScreen
     readonly SpriteRenderer[] mapStripIcons = new SpriteRenderer[5];
     readonly NativePaneLabel[] mapStripCounts = new NativePaneLabel[4];
     readonly Bounds[] mapStripInk = new Bounds[4];
+    readonly bool[] mapStripInkReady = new bool[4];
+    readonly HKLowerLayout.Retry[] mapStripInkRetry = { new HKLowerLayout.Retry(), new HKLowerLayout.Retry(), new HKLowerLayout.Retry(), new HKLowerLayout.Retry() };
     readonly ShellSpriteFit[] mapStripFits = new ShellSpriteFit[5];
     ShellSpriteFit mapThumbFit;
     const double MarkerCaretMoveSeconds = 0.15;
@@ -101,12 +105,18 @@ public partial class HKDualScreen
     {
         return button != null && button.Root != null && button.Label != null && button.LabelRenderer != null && button.Plate != null && button.Plate.sprite != null;
     }
-    Bounds MapLabelInk(NativePaneLabel label)
+    bool TryMapLabelInk(NativePaneLabel label, out Bounds ink)
     {
+        ink=default;
         Vector3 min, max;
-        if (label == null || !TryTmpGlyphBoundsWorld(label.Root, out min, out max)) return default;
+        if (label == null || !TryTmpGlyphBoundsWorld(label.Root, out min, out max)) return false;
         min=label.Root.InverseTransformPoint(min);max=label.Root.InverseTransformPoint(max);
-        return new Bounds((min+max)*.5f,max-min);
+        ink=new Bounds((min+max)*.5f,max-min);
+        return ink.size.x>=0 && ink.size.y>0 &&
+            !float.IsNaN(ink.center.x) && !float.IsInfinity(ink.center.x) &&
+            !float.IsNaN(ink.center.y) && !float.IsInfinity(ink.center.y) &&
+            !float.IsNaN(ink.size.x) && !float.IsInfinity(ink.size.x) &&
+            !float.IsNaN(ink.size.y) && !float.IsInfinity(ink.size.y);
     }
     Bounds MapLabelWorldInk(NativePaneLabel label, Bounds ink)
     {
@@ -121,7 +131,7 @@ public partial class HKDualScreen
         for(int i=0;i<renderers.Length;i++) if(renderers[i] != null) { renderers[i].sortingLayerName="Inventory";renderers[i].sortingOrder=30050; }
         button.SortFrame=Time.frameCount;
     }
-    void SetMapAction(MapActionButton button, bool show, string text, Vector3 right, float alpha)
+    void SetMapAction(MapActionButton button, bool show, string text, Vector3 right, float alpha, float fixedWidth=0)
     {
         if (!ValidButton(button)) return;
         if(button.Root.gameObject.activeSelf != show) button.Root.gameObject.SetActive(show);
@@ -129,18 +139,25 @@ public partial class HKDualScreen
         if(!show) return;
         if(button.Text != text)
         {
-            button.Text=text;
+            button.Text=text;button.InkReady=false;button.Ink=button.Hit=default;button.InkRetry.Reset();
             if(button.Graphic.Container != null) TcSetSize(button.Graphic.Container,new Vector2((LowerGeometry().Width-80)/Mathf.Max(.001f,button.Graphic.UnitScale),54/Mathf.Max(.001f,button.Graphic.UnitScale)));
             TmpProp(button.Label,"text")?.SetValue(button.Label,text,null);
             TmpProp(button.Label,"enableWordWrapping")?.SetValue(button.Label,false,null);
-            button.Label.GetType().GetMethod("ForceMeshUpdate",Type.EmptyTypes)?.Invoke(button.Label,null);
-            NeutralizeDetachedTmpClip(button.Root.gameObject);
-            SortMapAction(button);button.Ink=MapLabelInk(button.Graphic);button.SortUntil=Time.frameCount+2;
+        }
+        if(!button.InkReady && button.InkRetry.Due(Time.frameCount))
+        {
+            button.InkReady=TryMapLabelInk(button.Graphic,out button.Ink);
+            SortMapAction(button);button.SortUntil=Time.frameCount+2;
+            if(button.InkReady) button.InkRetry.Resolved();
         }
         if(Time.frameCount<=button.SortUntil && button.SortFrame != Time.frameCount) SortMapAction(button);
+        button.LabelRenderer.enabled=button.InkReady;button.Plate.enabled=button.InkReady;
+        var renderers=button.Graphic.ClipRenderers;
+        if(renderers != null) for(int i=0;i<renderers.Length;i++) if(renderers[i] != null) renderers[i].enabled=button.InkReady;
+        if(!button.InkReady) { button.Hit=default;return; }
         button.Root.localScale=Vector3.one*button.Graphic.UnitScale*ShellPixel;
         var glyph=MapLabelWorldInk(button.Graphic,button.Ink);
-        float width=Mathf.Max(130,glyph.size.x/ShellPixel+60);
+        float width=fixedWidth>0 ? fixedWidth : Mathf.Max(130,glyph.size.x/ShellPixel+60);
         Vector3 center=right-new Vector3(width*ShellPixel/2,0,0);
         button.Root.position += center-glyph.center;
         if(button.Alpha != alpha) { button.Alpha=alpha;SetTmpColor(button.Label,new Color(0,0,0,alpha));button.Plate.color=new Color(1,1,1,alpha); }
@@ -174,13 +191,18 @@ public partial class HKDualScreen
         float gap=headerCount>0 ? Mathf.Max(10,(g.HudHeight-headerCount*54)/(headerCount+1)) : 0;
         SetMapAction(mapViewAction,view,mapWorldMode ? "AREA MAP" : "FULL MAP",ShellPoint(g.Width-40,gap+27,3.4f),1);
         SetMapAction(mapMarkerAction,markers,mapMarkerMode ? "EXIT" : "MARKERS",ShellPoint(g.Width-40,mapMarkerMode ? gap+27 : gap*2+81,3.4f),1);
-        SetMapAction(mapResetAction,map && !mapMarkerMode && alpha>0,"RESET",ShellPoint(rect.x+rect.width-14,rect.y+rect.height-12-27,3.4f),alpha);
         PositionMapMarkerStrip(markers && mapMarkerMode);
         mapControlLeftX=ShellPoint(rect.x,rect.y).x;mapControlRightX=ShellPoint(rect.x+rect.width,rect.y).x;
         mapControlTopY=ShellPoint(rect.x,rect.y).y;mapControlBottomY=ShellPoint(rect.x,rect.y+rect.height).y;
         mapZoomX=ShellPoint(rect.x+rect.width-10-29f/2,rect.y).x;
         mapZoomTopY=ShellPoint(0,rect.y+12).y;mapZoomBottomY=ShellPoint(0,rect.y+rect.height-12).y;
         mapZoomHitHalfWidth=29f/2*ShellPixel;
+        // A 220x78 action pane, inset 24 from the body. Its 192x54 plate
+        // owns the same hit rectangle and stays left of the actual slider hit.
+        float actionRight=Mathf.Min(ShellPoint(rect.x+rect.width-24,rect.y).x,mapZoomX-mapZoomHitHalfWidth)-14*ShellPixel;
+        float actionY=ShellPoint(0,rect.y+rect.height-24-78+12+27,3.4f).y;
+        bool moved=Mathf.Abs(mapUserZoom-1)>.001f || mapUserPan.sqrMagnitude>ShellPixel*ShellPixel*.25f;
+        SetMapAction(mapResetAction,map && !mapMarkerMode && moved && alpha>0,"RESET",new Vector3(actionRight,actionY,attrCam.transform.position.z+3.4f),alpha,192);
         bool slider=map && alpha>0;
         if(mapZoomTrack != null)
         {
@@ -271,8 +293,14 @@ public partial class HKDualScreen
                 foreach(var sp in sprites) if(sp != null && sp.name==mapMarkerSpriteNames[i]) { mapStripIcons[i].sprite=sp;break; }
             if(mapStripCounts[i] == null && root != null)
             {
-                mapStripCounts[i]=CopyPaneLabel(FindDeep(root,"Pane Name"),frameRoot.transform,"F_MapMarkerCount"+i,24);
-                mapStripSpare[i]=-1;mapStripInk[i]=default;
+                mapStripCounts[i]=CopyPaneLabel(FindDeep(root,"Pane Name"),frameRoot.transform,"F_MapMarkerCount"+i,34);
+                if(mapStripCounts[i] != null)
+                {
+                    var alignment=TmpProp(mapStripCounts[i].Tmp,"alignment");
+                    if(alignment != null) alignment.SetValue(mapStripCounts[i].Tmp,Enum.Parse(alignment.PropertyType,"TopRight"),null);
+                    TmpProp(mapStripCounts[i].Tmp,"enableWordWrapping")?.SetValue(mapStripCounts[i].Tmp,false,null);
+                }
+                mapStripSpare[i]=-1;mapStripInk[i]=default;mapStripInkReady[i]=false;mapStripInkRetry[i].Reset();
             }
         }
         if(mapStripIcons[4] == null) mapStripIcons[4]=ShellSprite("F_MapMarker4",frameRoot.transform,null);
@@ -292,7 +320,7 @@ public partial class HKDualScreen
             bool on=show && (i==4 || MarkerUnlocked(i));
             var sr=mapStripIcons[i];if(sr != null) sr.enabled=on && sr.sprite != null;
             var label=i<4 ? mapStripCounts[i] : null;
-            if(label != null) SetPaneLabelVisible(label,on);
+            if(label != null) SetPaneLabelVisible(label,on && mapStripInkReady[i]);
             if(!on) continue;
             Vector3 center=ShellPoint((col+.5f)*cell,g.TabTop+g.TabHeight/2,3.8f);col++;
             if(sr != null)
@@ -306,20 +334,30 @@ public partial class HKDualScreen
                 int spare=MarkerSpare(i);
                 if(mapStripSpare[i] != spare)
                 {
-                    mapStripSpare[i]=spare;label.Text=spare.ToString();TmpProp(label.Tmp,"text")?.SetValue(label.Tmp,label.Text,null);
-                    label.Tmp.GetType().GetMethod("ForceMeshUpdate",Type.EmptyTypes)?.Invoke(label.Tmp,null);
+                    mapStripSpare[i]=spare;mapStripInkReady[i]=false;mapStripInk[i]=default;mapStripInkRetry[i].Reset();
+                    label.Text=spare.ToString();TmpProp(label.Tmp,"text")?.SetValue(label.Tmp,label.Text,null);
+                    SetTmpColor(label.Tmp,Color.white);
+                }
+                if(!mapStripInkReady[i] && mapStripInkRetry[i].Due(Time.frameCount))
+                {
+                    mapStripInkReady[i]=TryMapLabelInk(label,out mapStripInk[i]);
                     NeutralizeDetachedTmpClip(label.Root.gameObject);
                     label.ClipRenderers=label.Root.GetComponentsInChildren<Renderer>(true);
                     for(int n=0;n<label.ClipRenderers.Length;n++) { label.ClipRenderers[n].sortingLayerName="Inventory";label.ClipRenderers[n].sortingOrder=30090; }
-                    SetTmpColor(label.Tmp,ShellInk);SetPaneLabelVisible(label,true);mapStripInk[i]=MapLabelInk(label);
+                    if(mapStripInkReady[i]) mapStripInkRetry[i].Resolved();
                 }
-                label.Root.localScale=Vector3.one*label.UnitScale*ShellPixel;
-                label.Root.position+=center+new Vector3(56*ShellPixel,-32*ShellPixel,0)-MapLabelWorldInk(label,mapStripInk[i]).center;
+                SetPaneLabelVisible(label,mapStripInkReady[i]);
+                if(mapStripInkReady[i])
+                {
+                    label.Root.localScale=Vector3.one*label.UnitScale*ShellPixel;
+                    label.Root.position+=ShellPoint(col*cell-6,g.TabTop+6,3.8f)-MapLabelWorldInk(label,mapStripInk[i]).max;
+                }
             }
             bool selected=i==4 ? mapMarkerErase : !mapMarkerErase && i==mapMarkerType;
             if(selected && sr != null && sr.sprite != null)
             { caret=mapStripFits[i].Ink;caretKey=i; }
         }
+        if(show && tabGlow != null) tabGlow.enabled=false;
         if(!show || caretKey<0) { mapCaretShown=false;mapCaretKey=-1;return; }
         if(!mapCaretShown) { mapCaretFrom=mapCaretNow=caret;mapCaretElapsed=MarkerCaretMoveSeconds; }
         else if(mapCaretKey!=caretKey) { mapCaretFrom=mapCaretNow;mapCaretElapsed=0; }
@@ -329,8 +367,8 @@ public partial class HKDualScreen
         mapCaretElapsed=Math.Min(MarkerCaretMoveSeconds,mapCaretElapsed+Time.unscaledDeltaTime);
         mapCaretTravel=(float)(mapCaretElapsed/MarkerCaretMoveSeconds);
         mapCaretNow=mapCaretTravel<1 ? new Bounds(Vector3.Lerp(mapCaretFrom.center,caret.center,mapCaretTravel),Vector3.Lerp(mapCaretFrom.size,caret.size,mapCaretTravel)) : caret;
-        if(tabTL!=null) tabTL.enabled=true;if(tabBR!=null) tabBR.enabled=true;if(tabGlow!=null) tabGlow.enabled=true;
-        PositionShellCursor(tabTL,tabBR,tabGlow,mapCaretNow,ShellPixel,52,10,ref shellTLFit,ref shellBRFit,ref shellGlowFit,false);
+        if(tabTL!=null) tabTL.enabled=true;if(tabBR!=null) tabBR.enabled=true;
+        PositionShellCursor(tabTL,tabBR,null,mapCaretNow,ShellPixel,52,10,ref shellTLFit,ref shellBRFit,ref shellGlowFit,false);
     }
     int MapMarkerCell(Vector3 world)
     {
@@ -415,19 +453,19 @@ public partial class HKDualScreen
     {
         if (tab.cur != COMP_MAP || slideT < 1f || !mapAnyAvailable || mapGm == null) return false;
         if (MapMarkerStripTap(world)) return true;
-        if (ValidButton(mapViewAction) && mapViewAction.Root.gameObject.activeSelf &&
+        if (ValidButton(mapViewAction) && mapViewAction.InkReady && mapViewAction.Root.gameObject.activeSelf &&
             mapViewAction.Hit.Contains(world))
         {
             SetWorldMapMode(!mapWorldMode);
             return true;
         }
         if (!mapAvailable || !mapContentVisible || mapNeedsSetup) return false;
-        if (!mapMarkerMode && ValidButton(mapResetAction) && mapResetAction.Root.gameObject.activeSelf && mapResetAction.Hit.Contains(world))
+        if (!mapMarkerMode && ValidButton(mapResetAction) && mapResetAction.InkReady && mapResetAction.Root.gameObject.activeSelf && mapResetAction.Hit.Contains(world))
         {
             ResetMapViewAnimated();
             return true;
         }
-        if (ValidButton(mapMarkerAction) && mapMarkerAction.Root.gameObject.activeSelf &&
+        if (ValidButton(mapMarkerAction) && mapMarkerAction.InkReady && mapMarkerAction.Root.gameObject.activeSelf &&
             mapMarkerAction.Hit.Contains(world))
         {
             SetMapMarkerMode(!mapMarkerMode);
@@ -607,6 +645,6 @@ public partial class HKDualScreen
         mapControlsReady=mapStripReady=false;mapControlRetry.Reset();mapStripRetry.Reset();
         for(int i=0;i<5;i++) { mapStripIcons[i]=null;mapStripFits[i]=default; }
         mapThumbFit=default;mapCaretShown=false;mapCaretKey=-1;mapCaretTravel=1;mapCaretElapsed=MarkerCaretMoveSeconds;
-        for(int i=0;i<4;i++) { mapStripCounts[i]=null;mapStripInk[i]=default;mapStripSpare[i]=-1; }
+        for(int i=0;i<4;i++) { mapStripCounts[i]=null;mapStripInk[i]=default;mapStripSpare[i]=-1;mapStripInkReady[i]=false;mapStripInkRetry[i].Reset(); }
     }
 }

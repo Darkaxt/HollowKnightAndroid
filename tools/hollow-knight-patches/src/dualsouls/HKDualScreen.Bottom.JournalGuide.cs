@@ -17,11 +17,13 @@ public partial class HKDualScreen
     float supplementaryWidth, supplementaryHeight;
     bool supplementaryDragValid, journalHadBook, journalFilled; float supplementaryDragY;
     int supplementaryDragRegion;
-    int journalScrollRow, guideScrollRow, journalSelected = -1, guideSelected = -1;
+    int journalSelected = -1, guideSelected = -1;
+    double journalChooserOffset, guideChooserOffset;
     readonly List<JournalRecord> journalRecords = new List<JournalRecord>();
     readonly List<int> journalVisible = new List<int>();
     readonly List<SpriteRenderer> journalCells = new List<SpriteRenderer>();
-    SpriteRenderer journalPortrait;
+    SpriteRenderer journalPortrait, journalHunterSymbol;
+    static readonly Color ShellFaint = new Color(.38f,.37f,.40f,1);
     NativePaneLabel journalName, journalDescription, journalNotes, journalState;
     NativePaneLabel guideDetail, guideState;
     readonly List<GuideRecord> guideRecords = new List<GuideRecord>();
@@ -119,13 +121,13 @@ public partial class HKDualScreen
         if(id == COMP_JOURNAL)
         {
             journalCloneCache=null; journalRecords.Clear(); journalVisible.Clear(); journalCells.Clear();
-            journalPortrait=null; journalName=journalDescription=journalNotes=journalState=null;
-            journalSelected=-1; journalScrollRow=0; journalGraphics=null; journalHadBook=journalFilled=false;
+            journalPortrait=journalHunterSymbol=null; journalName=journalDescription=journalNotes=journalState=null;
+            journalSelected=-1; journalChooserOffset=0; journalGraphics=null; journalHadBook=journalFilled=false;
         }
         else
         {
             guideCloneCache=null; guideRecords.Clear(); guideVisible.Clear(); guideRead=null; guideReadPlayer=null;
-            guideDetail=guideState=null; guideSelected=-1; guideScrollRow=0; guideGraphics=null;
+            guideDetail=guideState=null; guideSelected=-1; guideChooserOffset=0; guideGraphics=null;
         }
         if(tab.built == id) tab.built=-1;
     }
@@ -180,8 +182,8 @@ public partial class HKDualScreen
             tmp.GetType().GetMethod("ForceMeshUpdate",Type.EmptyTypes)?.Invoke(tmp,null);
             NeutralizeDetachedTmpClip(go);
             if(label.Renderer == null) { Destroy(go); return null; }
-            // Projected pixel metrics calibrated once against the native cap,
-            // rather than transplanting SS's incompatible TMPro sizes/ABI.
+            // Width-derived canonical pixels calibrated against this donor's generated M quad.
+            // This local generation is not a cross-profile/native optical cap-height golden.
             Vector3 inkMin,inkMax;
             if(!TryTmpGlyphBoundsWorld(go.transform,out inkMin,out inkMax) || inkMax.y-inkMin.y<=.001f)
             { Destroy(go); return null; } // exact legacy ink ABI unavailable: retry, never calibrate padded container bounds
@@ -305,32 +307,39 @@ public partial class HKDualScreen
     }
     void SetPaneLabel(NativePaneLabel label,string text,Rect rect,Color color)
     {
-        if(label == null || label.Root == null) return;
+        if(label == null || label.Root == null || label.Tmp == null || label.Renderer == null) return;
         text=text ?? "";
         float scale=label.UnitScale;
         label.Root.localScale=Vector3.one*scale;
         bool resized=label.TextRect.width!=rect.width || label.TextRect.height!=rect.height;
         label.TextRect=rect;
         if(label.Container != null && resized) TcSetSize(label.Container,new Vector2(rect.width/Mathf.Max(.001f,scale),rect.height/Mathf.Max(.001f,scale)));
-        if(label.Text != text || resized)
-        {
-            label.Text=text; TmpProp(label.Tmp,"text")?.SetValue(label.Tmp,text,null);
-            label.Tmp.GetType().GetMethod("ForceMeshUpdate",Type.EmptyTypes)?.Invoke(label.Tmp,null);
-            label.ClipRenderers=label.Root.GetComponentsInChildren<Renderer>(true);
-        }
-        SetTmpColor(label.Tmp,color); label.Renderer.enabled=text.Length>0;
+        if(label.Text != text || resized) TmpProp(label.Tmp,"text")?.SetValue(label.Tmp,text,null);
+        SetTmpColor(label.Tmp,color);
+        label.ScrollMax=0;
         if(text.Length>0)
         {
-            // Anchor the real generated glyph ink to the top-left of its column.
             label.Root.position=PanePixel(rect.x,rect.y);
             Vector3 inkMin,inkMax;
-            bool haveInk=TryTmpGlyphBoundsWorld(label.Root,out inkMin,out inkMax);
-            var b=label.Renderer.bounds;
-            if(!haveInk) { inkMin=b.min; inkMax=b.max; }
-            label.ScrollMax=Mathf.Max(0,inkMax.y-inkMin.y-rect.height);
-            label.ScrollOffset=Mathf.Clamp(label.ScrollOffset,0,label.ScrollMax);
-            label.Root.position += new Vector3(PanePixel(rect.x,rect.y).x-inkMin.x,PanePixel(rect.x,rect.y).y-inkMax.y+label.ScrollOffset,0);
+            if(TryTmpGlyphBoundsWorld(label.Root,out inkMin,out inkMax))
+            {
+                label.Text=text;
+                label.ScrollMax=Mathf.Max(0,inkMax.y-inkMin.y-rect.height);
+                label.ScrollOffset=Mathf.Clamp(label.ScrollOffset,0,label.ScrollMax);
+                label.Root.position += new Vector3(PanePixel(rect.x,rect.y).x-inkMin.x,PanePixel(rect.x,rect.y).y-inkMax.y+label.ScrollOffset,0);
+            }
+            else
+            {
+                // No generated glyph domain: suppress this label, never align/scroll a stale container.
+                // Cache only admitted text, so the SAME requested string retries on its next owning event.
+                label.Text=""; label.ScrollOffset=0;
+            }
         }
+        else { label.Text=""; label.ScrollOffset=0; }
+        // ForceMeshUpdate can create a native fallback material/submesh synchronously.
+        // Clip every current renderer after generation without replacing native bindings.
+        label.ClipRenderers=label.Root.GetComponentsInChildren<Renderer>(true);
+        label.Renderer.enabled=label.Text.Length>0;
         ApplyPaneLabelClip(label,rect);
     }
     static string NativeText(string key,string sheet)
@@ -366,7 +375,9 @@ public partial class HKDualScreen
         var list=root != null ? root.GetComponentInChildren<JournalList>(true) : null;
         var donor=root != null ? FindDeep(root,"Text Name") : null;
         var prose=root != null ? FindDeep(root,"Text Desc") : null;
-        if(list == null || list.list == null || donor == null || prose == null) return null;
+        var symbol=root != null ? FindDeep(root,"hunter_symbol") : null;
+        var symbolRenderer=symbol != null ? symbol.GetComponentInChildren<SpriteRenderer>(true) : null;
+        if(list == null || list.list == null || donor == null || prose == null || symbolRenderer == null || symbolRenderer.sprite == null) return null;
         var go=new GameObject("HKJournalReadOnly"); go.transform.SetParent(compRoot,false);
         journalCloneCache=go;
         if(!BuildPaneGraphics(go,COMP_JOURNAL)) { DiscardSupplementaryPane(COMP_JOURNAL); return null; }
@@ -380,7 +391,10 @@ public partial class HKDualScreen
                 NotesKey=HKLowerLayout.JournalNotesKey(stats.convoName) });
         }
         journalPortrait=ShellSprite("JournalPortrait",go.transform,null,100);
-        journalName=CopyPaneLabel(donor,go.transform,"JournalName",40,true);
+        journalHunterSymbol=ShellSprite("JournalHunterSymbol",go.transform,symbolRenderer.sprite,100);
+        CopyShellSpriteOrientation(journalHunterSymbol,symbolRenderer);
+        // The native prose donor owns the paired mixed-case body face/material.
+        journalName=CopyPaneLabel(prose,go.transform,"JournalName",40);
         journalDescription=CopyPaneLabel(prose,go.transform,"JournalDescription",30);
         journalNotes=CopyPaneLabel(prose,go.transform,"JournalNotes",30);
         journalState=CopyPaneLabel(donor,go.transform,"JournalState",40,true);
@@ -425,8 +439,8 @@ public partial class HKDualScreen
             NativeText("KILL_COUNT_1","Journal")+" "+Mathf.Max(0,record.Remaining)+" "+NativeText("KILL_COUNT_2","Journal");
         SetPaneLabel(journalState,state,stateRect,ShellMuted);
         SetPaneLabel(journalName,record != null ? NativeText(record.NameKey,"Journal") : "",nameRect,ShellInk);
-        SetPaneLabel(journalDescription,record != null ? NativeText(record.DescKey,"Journal") : "",descRect,ShellInk);
-        SetPaneLabel(journalNotes,noteText,notesRect,notes ? ShellInk : ShellMuted);
+        SetPaneLabel(journalDescription,record != null ? NativeText(record.DescKey,"Journal") : "",descRect,ShellMuted);
+        SetPaneLabel(journalNotes,noteText,notesRect,notes ? ShellMuted : ShellFaint);
     }
     void LayoutJournal()
     {
@@ -434,20 +448,22 @@ public partial class HKDualScreen
         float cell=(380*sx-52*sx)/3, pitch=cell+26*sx;
         PositionPaneGraphics(journalGraphics,COMP_JOURNAL);
         Rect selection=default; bool selectionShown=false;
-        int rows=Mathf.Max(1,Mathf.FloorToInt(height/pitch)), count=rows*3;
-        journalScrollRow=Mathf.Clamp(journalScrollRow,0,Mathf.Max(0,(journalVisible.Count+2)/3-rows));
+        journalChooserOffset=HKLowerLayout.ClampScroll(journalChooserOffset,(journalVisible.Count+2)/3,cell,26*sx,height);
+        int firstRow=Mathf.FloorToInt((float)journalChooserOffset/pitch);
+        int rows=Mathf.Max(1,(int)Math.Ceiling(height/pitch)+1), count=rows*3;
         while(journalCells.Count<count) journalCells.Add(ShellSprite("JournalCell"+journalCells.Count,journalCloneCache.transform,null,100));
         for(int slot=0;slot<journalCells.Count;slot++)
         {
-            int item=journalScrollRow*3+slot;
-            var sr=journalCells[slot]; bool shown=slot<count && item<journalVisible.Count;
+            int row=firstRow+slot/3,item=firstRow*3+slot;
+            float y=top+row*pitch-(float)journalChooserOffset;
+            var sr=journalCells[slot]; bool shown=slot<count && item<journalVisible.Count && y+cell>top && y<top+height;
             sr.sprite=shown ? journalRecords[journalVisible[item]].Sprite : null; sr.enabled=shown && sr.sprite != null;
             sr.color=Color.white; // Native content art; the cursor owns selected treatment.
             if(shown)
             {
-                FitSprite(sr,PanePixel(20*sx+(slot%3)*pitch+cell/2,top+(slot/3)*pitch+cell/2),cell*.9f,cell*.9f);
+                FitSprite(sr,PanePixel(20*sx+(slot%3)*pitch+cell/2,y+cell/2),cell*.9f,cell*.9f);
                 if(journalVisible[item]==journalSelected)
-                { selection=new Rect(20*sx+(slot%3)*pitch,top+(slot/3)*pitch,cell,cell); selectionShown=true; }
+                { selection=new Rect(20*sx+(slot%3)*pitch,y,cell,cell); selectionShown=true; }
             }
         }
         SetPaneSelection(journalGraphics,selection,selectionShown,journalSelected); PaneCursorTick(journalGraphics);
@@ -455,22 +471,35 @@ public partial class HKDualScreen
         var record=selected ? journalRecords[journalSelected] : null;
         journalPortrait.sprite=record != null ? record.Sprite : null; journalPortrait.enabled=selected && journalPortrait.sprite != null;
         FitSprite(journalPortrait,PanePixel(645*sx,top+height/2),382*sx,Mathf.Max(1,height-48));
-        float descTop=Mathf.Min(top+66,top+height);
-        float proseHeight=Mathf.Max(0,top+height-descTop);
-        float gap=Mathf.Min(12,proseHeight);
-        float descHeight=(proseHeight-gap)*.52f;
-        BindJournalLabels(record,new Rect((journalVisible.Count>0 ? 890 : 20)*sx,top,(journalVisible.Count>0 ? 330 : 380)*sx,height),new Rect(890*sx,top,330*sx,Mathf.Min(56,height)),
-            new Rect(890*sx,descTop,330*sx,descHeight),new Rect(890*sx,descTop+descHeight+gap,330*sx,proseHeight-descHeight-gap));
+        float descTop=Mathf.Min(top+68,top+height);
+        float available=Mathf.Max(0,top+height-descTop-18-52-18-90);
+        var stateRect=new Rect((journalVisible.Count>0 ? 890 : 20)*sx,top,(journalVisible.Count>0 ? 330 : 380)*sx,height);
+        var nameRect=new Rect(890*sx,top,330*sx,Mathf.Min(56,height));
+        // Generate at the actual width before reading the native TMP ink. A
+        // fixed percentage of the column is not the description's laid-out height.
+        BindJournalLabels(record,stateRect,nameRect,new Rect(890*sx,descTop,330*sx,available),new Rect(890*sx,descTop,330*sx,90));
+        Vector3 min,max;
+        float measured=record != null && TryTmpGlyphBoundsWorld(journalDescription.Root,out min,out max) ? Mathf.Max(0,max.y-min.y) : 0;
+        float descHeight=Mathf.Min(measured,available),notesTop=descTop+descHeight+18+52+18;
+        BindJournalLabels(record,stateRect,nameRect,new Rect(890*sx,descTop,330*sx,descHeight),
+            new Rect(890*sx,notesTop,330*sx,Mathf.Max(0,top+height-notesTop)));
+        if(journalHunterSymbol != null)
+        {
+            journalHunterSymbol.enabled=selected && journalHunterSymbol.sprite != null;
+            FitSprite(journalHunterSymbol,PanePixel(1055*sx,descTop+descHeight+18+26),330*sx,44);
+            journalHunterSymbol.color=ShellInk;
+        }
     }
     void JournalTap(float nx,float ny)
     {
         var g=LowerGeometry(); float x=nx*g.Width, y=ny*g.Height;
         float sx=g.Width/1240f, cell=(380*sx-52*sx)/3, pitch=cell+26*sx;
         float top=g.HudHeight+16,height=Mathf.Max(1,g.BodyHeight-32);
-        int rows=Mathf.Max(1,Mathf.FloorToInt(height/pitch));
-        int col=Mathf.FloorToInt((x-20*sx)/pitch), row=Mathf.FloorToInt((y-top)/pitch);
-        if(col<0 || col>=3 || row<0 || row>=rows || x>400*sx || y>=g.TabTop-16) return;
-        int item=(journalScrollRow+row)*3+col;
+        if(x<20*sx || x>=400*sx || y<top || y>=top+height) return;
+        float contentY=y-top+(float)journalChooserOffset;
+        int col=Mathf.FloorToInt((x-20*sx)/pitch), row=Mathf.FloorToInt(contentY/pitch);
+        if(col<0 || col>=3 || row<0 || x-20*sx-col*pitch>=cell || contentY-row*pitch>=cell) return;
+        int item=row*3+col;
         if(item>=journalVisible.Count) return;
         ResetJournalDetailScroll(); journalSelected=journalVisible[item]; LayoutJournal();
     }
@@ -537,7 +566,7 @@ public partial class HKDualScreen
                 Condition=condition,Key=localized.convName,Sheet=localized.sheetName });
         }
         if(prose == null || guideRecords.Count != GuideRows.Length){ DiscardSupplementaryPane(COMP_GUIDE); return null; }
-        guideDetail=CopyPaneLabel(prose,go.transform,"GuideDetail",30);
+        guideDetail=CopyPaneLabel(prose,go.transform,"GuideDetail",42);
         guideState=CopyPaneLabel(prose,go.transform,"GuideState",40,true);
         if(guideDetail == null || guideState == null){ DiscardSupplementaryPane(COMP_GUIDE); return null; }
         supplementaryNextRefresh=0; RefreshGuide(true); guideRetry.Resolved(); return go;
@@ -564,16 +593,19 @@ public partial class HKDualScreen
         const float pitch=66;
         PositionPaneGraphics(guideGraphics,COMP_GUIDE);
         Rect selection=default; bool selectionShown=false;
-        int rows=Mathf.Max(1,Mathf.FloorToInt(height/pitch));
-        guideScrollRow=Mathf.Clamp(guideScrollRow,0,Mathf.Max(0,guideVisible.Count-rows));
+        guideChooserOffset=HKLowerLayout.ClampScroll(guideChooserOffset,guideVisible.Count,pitch,0,height);
         foreach(var record in guideRecords){ record.Icon.enabled=false; SetPaneLabelVisible(record.Label,false); }
-        for(int slot=0;slot<rows && guideScrollRow+slot<guideVisible.Count;slot++)
+        for(int slot=0;slot<guideVisible.Count;slot++)
         {
-            int index=guideVisible[guideScrollRow+slot]; var record=guideRecords[index];
+            float y=top+slot*pitch-(float)guideChooserOffset;
+            if(y+pitch<=top || y>=top+height) continue;
+            int index=guideVisible[slot]; var record=guideRecords[index];
             record.Icon.enabled=true; record.Icon.color=index==guideSelected ? ShellInk : ShellMuted;
-            FitSprite(record.Icon,PanePixel(60*sx,top+slot*pitch+pitch/2),64*sx,52);
-            SetPaneLabel(record.Label,record.Text,new Rect(110*sx,top+slot*pitch+12,670*sx,54),index==guideSelected ? ShellInk : ShellMuted);
-            if(index==guideSelected) { selection=new Rect(20*sx,top+slot*pitch,780*sx,pitch); selectionShown=true; }
+            FitSprite(record.Icon,PanePixel(60*sx,y+pitch/2),64*sx,52);
+            SetPaneLabel(record.Label,record.Text,new Rect(110*sx,y+12,670*sx,54),index==guideSelected ? ShellInk : ShellMuted);
+            float clipTop=Mathf.Max(top,y+12),clipBottom=Mathf.Min(top+height,y+pitch);
+            ApplyPaneLabelClip(record.Label,new Rect(110*sx,clipTop,670*sx,Mathf.Max(0,clipBottom-clipTop)));
+            if(index==guideSelected) { selection=new Rect(20*sx,y,780*sx,pitch); selectionShown=true; }
         }
         SetPaneSelection(guideGraphics,selection,selectionShown,guideSelected); PaneCursorTick(guideGraphics);
         SetPaneLabel(guideState,guideVisible.Count==0 ? LocalizedLabel("Map Key","PANE_MAP_KEY") : "",new Rect(20*sx,top,780*sx,height),ShellMuted);
@@ -583,10 +615,8 @@ public partial class HKDualScreen
     {
         var g=LowerGeometry(); if(nx*g.Width<20*g.Width/1240f || nx*g.Width>800*g.Width/1240f) return;
         float y=ny*g.Height,top=g.HudHeight+20,height=Mathf.Max(1,g.BodyHeight-40);
-        int rows=Mathf.Max(1,Mathf.FloorToInt(height/66));
-        int slot=Mathf.FloorToInt((y-top)/66);
-        int item=guideScrollRow+slot;
-        if(slot<0 || slot>=rows || y>=g.TabTop-20 || item>=guideVisible.Count) return;
+        int item=Mathf.FloorToInt((y-top+(float)guideChooserOffset)/66);
+        if(y<top || y>=top+height || item<0 || item>=guideVisible.Count) return;
         guideSelected=guideVisible[item]; LayoutGuide();
     }
     void SupplementaryTick()
@@ -614,8 +644,7 @@ public partial class HKDualScreen
     }
     void ScrollSupplementary(float delta)
     {
-        if(Mathf.Abs(delta)<.04f) return;
-        int direction=delta<0 ? 1 : -1;
+        if(float.IsNaN(delta) || float.IsInfinity(delta) || delta==0) return;
         if(tab.cur==COMP_JOURNAL)
         {
             if(supplementaryDragRegion==1 || supplementaryDragRegion==2)
@@ -623,9 +652,9 @@ public partial class HKDualScreen
                 var label=supplementaryDragRegion==1 ? journalDescription : journalNotes;
                 if(label != null) { label.ScrollOffset=Mathf.Clamp(label.ScrollOffset-delta*BOTTOM_H,0,label.ScrollMax); LayoutJournal(); }
             }
-            else if(supplementaryDragRegion==0) { journalScrollRow+=direction; LayoutJournal(); }
+            else if(supplementaryDragRegion==0) { journalChooserOffset-=(double)delta*BOTTOM_H; LayoutJournal(); }
         }
-        else if(tab.cur==COMP_GUIDE){ guideScrollRow+=direction; LayoutGuide(); }
+        else if(tab.cur==COMP_GUIDE && supplementaryDragRegion==0){ guideChooserOffset-=(double)delta*BOTTOM_H; LayoutGuide(); }
         supplementaryDragY=transport.T0Y;
     }
 }

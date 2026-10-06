@@ -76,10 +76,30 @@ public sealed class HollowKnightRemainingPresentationTests
     public void CompleteScrollRetargetsSettledSameIdentityWithoutTravelRestart(int id)
     {
         var f=Content(id);var v=Graphics(f,id);int selected=v.SelectedId;float oldY=v.Target.y;
-        f.ScrollStep(-1);Assert.Equal(selected,v.SelectedId);Assert.NotEqual(oldY,v.Target.y);
+        // 1/64 of the canvas is exactly 16.875px here, not a whole-canvas drag.
+        // Both selected native records stay visible during this retarget.
+        f.ScrollStep(-1f/64);Assert.Equal(selected,v.SelectedId);Assert.Equal(oldY-16.875f,v.Target.y);
         Assert.Equal(1,v.Travel);CursorCentered(f,id);
         Time.frameCount++;f.CursorStep(id);CursorCentered(f,id);
-        f.ScrollStep(1);Assert.Equal(selected,v.SelectedId);Assert.Equal(1,v.Travel);CursorCentered(f,id);
+        f.ScrollStep(1f/64);Assert.Equal(selected,v.SelectedId);Assert.Equal(oldY,v.Target.y);
+        Assert.Equal(1,v.Travel);CursorCentered(f,id);
+    }
+    [Theory] [InlineData(3)] [InlineData(4)]
+    public void CompleteOffclipSuppressionPreservesNativeSelectionAndRestoresCursor(int id)
+    {
+        var f=Content(id);var v=Graphics(f,id);
+        if(id==4) { f.guideSelected=0;f.LayoutStep(id); }
+        int selected=id==3 ? f.journalSelected : f.guideSelected;
+        var old=v.Target;
+        f.ScrollStep(-1);
+        Assert.Equal(selected,id==3 ? f.journalSelected : f.guideSelected);
+        Assert.False(v.Selected);Assert.Equal(-1,v.SelectedId);
+        Assert.False(v.TL.enabled);Assert.False(v.BR.enabled);Assert.False(v.Glow.enabled);
+        f.ScrollStep(1);
+        Assert.Equal(selected,id==3 ? f.journalSelected : f.guideSelected);
+        Assert.True(v.Selected);Assert.Equal(selected,v.SelectedId);
+        Assert.True(v.TL.enabled);Assert.True(v.BR.enabled);Assert.True(v.Glow.enabled);
+        Assert.Equal(old.y,v.Target.y);Assert.Equal(1,v.Travel);CursorCentered(f,id);
     }
     [Theory] [InlineData(3)] [InlineData(4)]
     public void DifferentIdentityStartsOneCanonicalTransitionAndSameFrameDoesNotDoubleStep(int id)

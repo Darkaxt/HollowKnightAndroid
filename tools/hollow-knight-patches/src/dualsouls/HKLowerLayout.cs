@@ -63,6 +63,14 @@ public static class HKLowerLayout
         public void Resolved() { ready = true; }
         public void Reset() { ready = false; next = 0; }
     }
+    // Pixel offsets remain continuous across arbitrary gesture partitions. Extent
+    // excludes the final inter-row gap; a partial first/last row is still visible.
+    public static double ClampScroll(double offset, int rows, float cell, float gap, float viewport)
+    {
+        double extent = Math.Max(0, rows * (double)(cell + gap) - gap);
+        return Math.Max(0, Math.Min(offset, Math.Max(0, extent - viewport)));
+    }
+    public static float DetailTextScale(float width) { return Math.Max(.78f, Math.Min(1f, width / 500f)); }
     public static bool NotesUnlocked(bool killed, int remaining) { return killed && remaining <= 0; }
     public static string JournalKilledKey(string name) { return "killed" + name; }
     public static string JournalKillsKey(string name) { return "kills" + name; }

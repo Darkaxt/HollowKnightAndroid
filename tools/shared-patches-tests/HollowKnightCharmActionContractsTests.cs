@@ -51,11 +51,13 @@ public sealed class HollowKnightCharmActionContractsTests
     }
     static (float x,float y) ActionPoint(HKDualScreen f)
     {
-        // The measured name/prose rectangles bound the existing control band.
-        // Hit the independently tappable right half, away from native cost pips.
-        var name=f.CharmName.TextRect;var prose=f.CharmDescription.TextRect;
-        return ((name.x+name.width*.75f)/f.BOTTOM_W,
-                (name.y+name.height+(prose.y-name.y-name.height)*.5f)/f.BOTTOM_H);
+        // The legal EQUIP/UNEQUIP plate now owns the bottom detail band,
+        // not the title-to-prose gap. Tap its actual rendered center.
+        var plate=f.paneClone.transform.Find("CanonicalCharmActionPlate")?.GetComponent<SpriteRenderer>();
+        Assert.NotNull(plate);Assert.True(plate.enabled);
+        var point=plate.bounds.center;
+        return ((point.x-f.compRoot.position.x)/f.BOTTOM_W+.5f,
+                .5f-(point.y-f.compRoot.position.y)/f.BOTTOM_H);
     }
     static void Confirm(HKDualScreen f) { var p=ActionPoint(f);Tap(f,p.x,p.y); }
     static void Equipped(HKDualScreen f,int id,int filled,bool over=false)

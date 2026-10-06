@@ -24,6 +24,7 @@ public partial class HKDualScreen
 
     // Collection action state belongs to the lower Charms activation, never the save or cloned FSM.
     NativePaneLabel nativeCharmAction; GameObject charmActionPane, charmActionVisiblePane;
+    SpriteRenderer charmActionPlate;
     Rect charmActionRect; object charmActionTransport;
     bool charmActionVisible, charmActionArmed, charmActionUnequip;
     int charmActionEpoch, charmActionDownEpoch, charmActionDownClean, charmActionAttempts;
@@ -44,8 +45,8 @@ public partial class HKDualScreen
         public UnityEngine.Object upper; public int cost, slots, filled; public bool equipped, canOvercharm;
     }
 
-    // World-space bounds of a TMP's DRAWN GLYPHS (reflection textBounds -> TransformPoint; renderer bounds
-    // over-span the authored rect). False if the component/property is missing or the mesh is empty.
+    // World-space bounds of actual visible legacy TMP character quads, not line metrics
+    // or the generated root/material mesh render extent. False means no ready glyph domain.
     static System.Reflection.PropertyInfo _tmpTextBoundsPI;
     static bool TryTmpGlyphBoundsWorld(Transform tmpT, out Vector3 wMin, out Vector3 wMax)
     {
@@ -53,19 +54,55 @@ public partial class HKDualScreen
         try
         {
             if (tmpT == null) return false;
-            Component tmp = null;
-            foreach (var ccc in tmpT.GetComponents<Component>()) { if (IsTextMeshProGraphic(ccc)) { tmp = ccc; break; } }
+            Component component = null;
+            foreach (var candidate in tmpT.GetComponents<Component>())
+                if (IsTextMeshProGraphic(candidate)) { component = candidate; break; }
+            var tmp = component as TMProOld.TMP_Text;
             if (tmp == null) return false;
-            if (_tmpTextBoundsPI == null || _tmpTextBoundsPI.DeclaringType != tmp.GetType()) _tmpTextBoundsPI = tmp.GetType().GetProperty("textBounds");
-            if (_tmpTextBoundsPI == null) return false;
-            Bounds tb = (Bounds)_tmpTextBoundsPI.GetValue(tmp, null);
-            if (tb.size.sqrMagnitude < 1e-8f) return false;
-            Vector3 p0 = tmpT.TransformPoint(tb.min);
-            Vector3 p1 = tmpT.TransformPoint(new Vector3(tb.min.x, tb.max.y, tb.min.z));
-            Vector3 p2 = tmpT.TransformPoint(new Vector3(tb.max.x, tb.min.y, tb.min.z));
-            Vector3 p3 = tmpT.TransformPoint(new Vector3(tb.max.x, tb.max.y, tb.min.z));
-            wMin = Vector3.Min(Vector3.Min(p0, p1), Vector3.Min(p2, p3));
-            wMax = Vector3.Max(Vector3.Max(p0, p1), Vector3.Max(p2, p3));
+            var textProperty = component.GetType().GetProperty("text");
+            string text = textProperty != null ? textProperty.GetValue(component, null) as string : null;
+            if (string.IsNullOrEmpty(text)) return false; // Explicit empty domain, never the container rectangle.
+            // This synchronous legacy seam certifies this text's generated geometry only.
+            // It is NOT a whole-HUD readiness event, nor an optical/material render-coverage bound.
+            var generate = component.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes);
+            if (generate == null) return false;
+            generate.Invoke(component, null);
+            if (tmpT == null || component == null || !string.Equals(text, textProperty.GetValue(component, null) as string, StringComparison.Ordinal)) return false;
+            var info = tmp.textInfo;
+            if (info == null || !ReferenceEquals(info.textComponent, tmp) || info.characterInfo == null ||
+                info.characterCount <= 0 || info.characterCount > info.characterInfo.Length ||
+                info.meshInfo == null || info.materialCount <= 0 || info.materialCount > info.meshInfo.Length) return false;
+            Vector3 min = Vector3.zero, max = Vector3.zero;
+            bool have = false;
+            for (int i = 0; i < info.characterCount; i++)
+            {
+                var character = info.characterInfo[i];
+                if (!character.isVisible) continue;
+                int material = character.materialReferenceIndex, vertex = character.vertexIndex;
+                if (material < 0 || material >= info.materialCount || vertex < 0) return false;
+                var mesh = info.meshInfo[material];
+                if (mesh.mesh == null || mesh.vertices == null || mesh.vertexCount < 4 ||
+                    mesh.vertexCount > mesh.vertices.Length || vertex > mesh.vertexCount - 4) return false;
+                // Four generated vertices, including overhang, skew and fallback material groups.
+                // Do not substitute ascender/descender/xAdvance or the padded/decorated material mesh extent.
+                for (int corner = 0; corner < 4; corner++)
+                {
+                    Vector3 local = corner == 0 ? character.vertex_BL.position : corner == 1 ? character.vertex_TL.position :
+                                    corner == 2 ? character.vertex_TR.position : character.vertex_BR.position;
+                    Vector3 buffer = mesh.vertices[vertex + corner];
+                    if (float.IsNaN(local.x) || float.IsInfinity(local.x) || float.IsNaN(local.y) || float.IsInfinity(local.y) ||
+                        float.IsNaN(local.z) || float.IsInfinity(local.z) || local.x != buffer.x || local.y != buffer.y || local.z != buffer.z) return false;
+                    Vector3 world = tmpT.TransformPoint(local);
+                    if (float.IsNaN(world.x) || float.IsInfinity(world.x) || float.IsNaN(world.y) || float.IsInfinity(world.y) ||
+                        float.IsNaN(world.z) || float.IsInfinity(world.z)) return false;
+                    if (!have) { min = max = world; have = true; }
+                    else { min = Vector3.Min(min, world); max = Vector3.Max(max, world); }
+                }
+            }
+            Vector3 extent = max - min;
+            if (!have || float.IsNaN(extent.x) || float.IsInfinity(extent.x) || float.IsNaN(extent.y) || float.IsInfinity(extent.y) ||
+                float.IsNaN(extent.z) || float.IsInfinity(extent.z) || extent.sqrMagnitude <= 1e-8f) return false;
+            wMin = min; wMax = max;
             return true;
         }
         catch { return false; }
@@ -123,13 +160,15 @@ public partial class HKDualScreen
         charmActionVisible=available;charmActionTransport=transport;charmActionVisiblePane=paneClone;
         charmActionEpoch++;charmActionAttempts=0;CharmActionCancel();
         if(nativeCharmAction != null) SetPaneLabelVisible(nativeCharmAction,available && sel.charmN > 0);
+        if(charmActionPlate != null) charmActionPlate.enabled=available && sel.charmN > 0;
     }
     void CharmActionCancel() { charmActionArmed=false;charmActionItem=null;charmActionDownOwners=default; }
     void CharmActionRetire()
     {
         CharmActionVisibility(false);CharmActionCancel();charmActionAttempts=0;
         if(nativeCharmAction != null && nativeCharmAction.Root != null) Destroy(nativeCharmAction.Root.gameObject);
-        nativeCharmAction=null;charmActionPane=null;
+        if(charmActionPlate != null) Destroy(charmActionPlate.gameObject);
+        charmActionPlate=null;nativeCharmAction=null;charmActionPane=null;
         charmActionFeedbackBound=charmActionFeedbackReady=false;
         charmActionFeedbackPane=null;charmActionFeedbackItem=null;charmActionFeedbackNumber=0;
         charmActionAudioPrefab=null;charmActionVibrations=null;
@@ -142,16 +181,32 @@ public partial class HKDualScreen
             CharmActionRetire();charmActionPane=pane;
         }
         if(lastDetailCharmN <= 0 || sel.kind != 1 || sel.item == null)
-        { if(nativeCharmAction != null) SetPaneLabelVisible(nativeCharmAction,false);return; }
+        { if(nativeCharmAction != null) SetPaneLabelVisible(nativeCharmAction,false);if(charmActionPlate != null) charmActionPlate.enabled=false;return; }
         CharmActionBindFeedback(pane);
-        if(nativeCharmAction == null) nativeCharmAction=CopyPaneLabel(charmNameT,pane.transform,"CanonicalCharmAction",24);
+        if(nativeCharmAction == null) nativeCharmAction=CopyPaneLabel(charmNameT,pane.transform,"CanonicalCharmAction",34,true);
         if(nativeCharmAction == null || nativeCharmName == null || nativeCharmDesc == null) return;
-        // Use the measured dedicated control row, not a camera/grid offset. Cost pips own its left half.
-        var name=nativeCharmName.TextRect;var prose=nativeCharmDesc.TextRect;
-        charmActionRect=new Rect(name.x+name.width/2,name.y+name.height,name.width/2,
-                                 Mathf.Max(0,prose.y-name.y-name.height));
+        if(mapControlPill == null) mapControlPill=CreateMapRounded();
+        if(charmActionPlate == null) charmActionPlate=ShellSprite("CanonicalCharmActionPlate",pane.transform,mapControlPill,99);
+        var p=HKLowerLayout.NativeColumns(LowerGeometry(),true);
+        charmActionRect=new Rect(p.DetailX+14,p.Top+p.Height-78+12,p.DetailWidth-28,54);
+        charmActionPlate.drawMode=SpriteDrawMode.Sliced;charmActionPlate.size=new Vector2(charmActionRect.width/100,54f/100);
+        var parent=charmActionPlate.transform.parent.lossyScale;
+        charmActionPlate.transform.localScale=new Vector3(100/Mathf.Max(.001f,Mathf.Abs(parent.x)),100/Mathf.Max(.001f,Mathf.Abs(parent.y)),1);
+        charmActionPlate.transform.position=PanePixel(charmActionRect.x+charmActionRect.width/2,charmActionRect.y+27);
+        charmActionPlate.color=Color.white;charmActionPlate.enabled=true;
         string key=state.Has(sel.charmN) ? "CTRL_UNEQUIP" : "CTRL_EQUIP";
-        SetPaneLabel(nativeCharmAction,NativeText(key,"UI"),charmActionRect,ShellInk);
+        CharmActionSetLabel(NativeText(key,"UI"),Color.black);
+    }
+    void CharmActionSetLabel(string text,Color color)
+    {
+        if(nativeCharmAction == null) return;
+        SetPaneLabel(nativeCharmAction,text,charmActionRect,color);
+        Vector3 min,max;
+        if(TryTmpGlyphBoundsWorld(nativeCharmAction.Root,out min,out max))
+        {
+            nativeCharmAction.Root.position+=PanePixel(charmActionRect.x+charmActionRect.width/2,charmActionRect.y+charmActionRect.height/2)-(min+max)/2;
+            ApplyPaneLabelClip(nativeCharmAction,charmActionRect);
+        }
     }
     bool CharmActionSelectionVisible()
     {
@@ -239,7 +294,7 @@ public partial class HKDualScreen
     }
     void CharmActionFeedback(string key,string sheet)
     {
-        if(nativeCharmAction != null) SetPaneLabel(nativeCharmAction,NativeText(key,sheet),charmActionRect,ShellMuted);
+        CharmActionSetLabel(NativeText(key,sheet),Color.black);
     }
     // UI Charms 21194 / CharmVibrations 26954: bind only on a selected clone event.
     // The detached FSM remains disabled; only its exact serialized resource references are read.

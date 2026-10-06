@@ -40,17 +40,19 @@ public sealed class HollowKnightNativeLayoutIntegrationTests
         RectAt(lower,v.Left,new(0,p.Top,p.SubjectX,p.Height));
         RectAt(lower,v.Right,new(p.DetailX+p.DetailWidth,p.Top,g.Width-p.DetailX-p.DetailWidth,p.Height));
     }
-    static void Detail(HK lower,HK.NativePaneLabel name,HK.NativePaneLabel prose,HKLowerLayout.NativePaneColumns p)
+    static void Detail(HK lower,HK.NativePaneLabel name,HK.NativePaneLabel prose,HKLowerLayout.NativePaneColumns p,bool charms=false)
     {
-        Close(37.44f,name.UnitScale*name.Tmp.InkHeight);Close(28.08f,prose.UnitScale*prose.Tmp.InkHeight);
+        float scale=charms ? .78f : Math.Clamp(p.DetailWidth/500f,.78f,1);
+        float titleHeight=charms ? 56 : 48*scale+10,proseTop=charms ? 100 : titleHeight+10,reserve=charms ? 78 : 0;
+        Close(48*scale,name.UnitScale*name.Tmp.InkHeight);Close(36*scale,prose.UnitScale*prose.Tmp.InkHeight);
         Assert.False(name.Tmp.enableAutoSizing);Assert.False(prose.Tmp.enableAutoSizing);
         Assert.Equal(HkPauseContracts.TextAlignment.TopLeft,prose.Tmp.alignment);
-        Close(p.DetailX,name.ClipRect.x);Close(p.Top,name.ClipRect.y);Close(56,name.ClipRect.height);
-        Close(p.DetailX,prose.ClipRect.x);Close(p.Top+100,prose.ClipRect.y);
-        Close(p.DetailWidth,prose.ClipRect.width);Close(p.Height-100,prose.ClipRect.height);
+        Close(p.DetailX,name.ClipRect.x);Close(p.Top+(charms ? 0 : 4),name.ClipRect.y);Close(titleHeight,name.ClipRect.height);
+        Close(p.DetailX,prose.ClipRect.x);Close(p.Top+proseTop,prose.ClipRect.y);
+        Close(p.DetailWidth,prose.ClipRect.width);Close(p.Height-proseTop-reserve,prose.ClipRect.height);
         foreach(var r in prose.ClipRenderers)
         {
-            var lo=prose.Root.InverseTransformPoint(lower.compRoot.position+new Vector3(p.DetailX-lower.BOTTOM_W/2f,lower.BOTTOM_H/2f-p.Top-p.Height,0));
+            var lo=prose.Root.InverseTransformPoint(lower.compRoot.position+new Vector3(p.DetailX-lower.BOTTOM_W/2f,lower.BOTTOM_H/2f-p.Top-p.Height+reserve,0));
             Close(lo.x,r.Clip.x);Close(lo.y,r.Clip.y);
         }
     }
@@ -90,7 +92,7 @@ public sealed class HollowKnightNativeLayoutIntegrationTests
         var p=HKLowerLayout.NativeColumns(lower.LowerGeometry(),true);var b=Occupied(lower.nativeCharmGrid);
         Close(p.ChooserX+p.ChooserWidth/2-width/2f,b.center.x);
         Close(height/2f-(p.Top+p.Height/2),b.center.y);Close(p.ChooserWidth,b.size.x);
-        Assert.True(b.size.y<=p.Height+.02f);Graphics(lower,lower.CharmGraphics,p);Detail(lower,lower.CharmName,lower.CharmDescription,p);
+        Assert.True(b.size.y<=p.Height+.02f);Graphics(lower,lower.CharmGraphics,p);Detail(lower,lower.CharmName,lower.CharmDescription,p,true);
         Assert.False(lower.nativeCharmPortrait.enabled);
         var boards=lower.nativeCharmGrid.Children.Where(t=>t.name.StartsWith("CharmBoard")).ToArray();Assert.Equal(40,boards.Length);
         var dx=boards[1].position.x-boards[0].position.x;var stagger=boards[8].position.x-boards[0].position.x;
@@ -112,14 +114,16 @@ public sealed class HollowKnightNativeLayoutIntegrationTests
         HK lower=new();var pane=lower.NewNativePane(false);lower.NativeLayoutRouteStep(1);var r=lower.refsInv;
         lower.NativeSource(pane,"Text Desc").text="Localized long prose";r.descLabel.Tmp.MeasuredTextHeight=60;lower.NativeLayoutRouteStep(1);
         for(int i=0;i<30;i++) lower.NativeScrollStep(0,-.2f);
-        Assert.Equal(3,r.scrollRow);Close(0,r.descLabel.ScrollOffset);
-        Assert.All(r.slots.Take(9),slot=>Assert.All(slot.Renderers,x=>Assert.False(x.enabled)));
-        Assert.All(r.slots.Skip(9),slot=>Assert.All(slot.Renderers,x=>Assert.True(x.enabled)));
+        var p=HKLowerLayout.NativeColumns(lower.LowerGeometry(),false);
+        float end=7*(p.Cell+p.Gap)-p.Gap-p.Height;
+        Close(end,(float)r.chooserOffset);Close(0,r.descLabel.ScrollOffset);
+        Assert.All(r.slots.Take(6),slot=>Assert.All(slot.Renderers,x=>Assert.False(x.enabled)));
+        Assert.All(r.slots.Skip(6),slot=>Assert.All(slot.Renderers,x=>Assert.True(x.enabled)));
         for(int i=0;i<30;i++) lower.NativeScrollStep(1,-.2f);
-        Close(r.descLabel.ScrollMax,r.descLabel.ScrollOffset);Assert.Equal(3,r.scrollRow);
-        lower.NativeScrollStep(2,1);Close(r.descLabel.ScrollMax,r.descLabel.ScrollOffset);Assert.Equal(3,r.scrollRow);
+        Close(r.descLabel.ScrollMax,r.descLabel.ScrollOffset);Close(end,(float)r.chooserOffset);
+        lower.NativeScrollStep(2,1);Close(r.descLabel.ScrollMax,r.descLabel.ScrollOffset);Close(end,(float)r.chooserOffset);
         for(int i=0;i<30;i++) {lower.NativeScrollStep(0,.2f);lower.NativeScrollStep(1,.2f);}
-        Assert.Equal(0,r.scrollRow);Close(0,r.descLabel.ScrollOffset);
+        Close(0,(float)r.chooserOffset);Close(0,r.descLabel.ScrollOffset);
         var charms=lower.NewNativePane(true);lower.NativeLayoutRouteStep(2);
         lower.NativeSource(charms,"Text Desc").text="Charm prose";lower.CharmDescription.Tmp.MeasuredTextHeight=60;lower.NativeLayoutRouteStep(2);
         var b=Occupied(lower.nativeCharmGrid);lower.NativeScrollStep(0,-1);Close(0,lower.CharmDescription.ScrollOffset);
@@ -153,14 +157,14 @@ public sealed class HollowKnightNativeLayoutIntegrationTests
             lower.transport.T0Y=y/1080;lower.transport.contacts=contacts;lower.TouchStep();
             lower.transport.T0Y-=.2f;lower.TouchStep();lower.transport.contacts=0;lower.TouchStep();
         }
-        Drag(230,400);Assert.Equal(0,r.scrollRow);Close(0,r.descLabel.ScrollOffset);
-        Drag(455,400);Assert.Equal(0,r.scrollRow);Close(0,r.descLabel.ScrollOffset);
-        Drag(670,100);Assert.Equal(0,r.scrollRow); // HUD owns this region.
-        Drag(670,1000);Assert.Equal(0,r.scrollRow); // Strip owns this region.
-        Drag(670,400,2);Assert.Equal(0,r.scrollRow);
-        lower.slideT=.5f;Drag(670,400);Assert.Equal(0,r.scrollRow);lower.slideT=1;
-        Drag(670,400);Assert.Equal(1,r.scrollRow);Close(0,r.descLabel.ScrollOffset);
-        Drag(1050,400);Assert.Equal(1,r.scrollRow);Assert.True(r.descLabel.ScrollOffset>0);
+        Drag(230,400);Assert.Equal(0,r.chooserOffset);Close(0,r.descLabel.ScrollOffset);
+        Drag(455,400);Assert.Equal(0,r.chooserOffset);Close(0,r.descLabel.ScrollOffset);
+        Drag(670,100);Assert.Equal(0,r.chooserOffset); // HUD owns this region.
+        Drag(670,1000);Assert.Equal(0,r.chooserOffset); // Strip owns this region.
+        Drag(670,400,2);Assert.Equal(0,r.chooserOffset);
+        lower.slideT=.5f;Drag(670,400);Assert.Equal(0,r.chooserOffset);lower.slideT=1;
+        Drag(670,400);Close(216,(float)r.chooserOffset);Close(0,r.descLabel.ScrollOffset);
+        Drag(1050,400);Close(216,(float)r.chooserOffset);Assert.True(r.descLabel.ScrollOffset>0);
         lower.NewNativePane(true);lower.NativeLayoutRouteStep(2);var before=Occupied(lower.nativeCharmGrid);
         Drag(690,400);var after=Occupied(lower.nativeCharmGrid);Close(before.center.y,after.center.y);Close(0,lower.CharmDescription.ScrollOffset);
     }

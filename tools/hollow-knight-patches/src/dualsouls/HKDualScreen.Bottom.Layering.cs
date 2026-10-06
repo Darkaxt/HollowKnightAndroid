@@ -133,22 +133,18 @@ public partial class HKDualScreen
         return dsOn;
     }
 
-    // [B1] Tie the whole companion to the HUD's visibility: when HK FADES the HUD in-gameplay (reading a lore
-    // tablet, cutscenes, dream-dialogue) it drops the Hud Canvas CanvasGroup alpha (GameObject stays active).
-    // Detect that and hide our companion (pane + frame + fps/battery/area-name/equip-row) to match.
-    // Use ONLY the CanvasGroup on the Hud Canvas object itself. (A GetComponentInChildren(true) search
-    // grabbed an INACTIVE HUD sub-element stuck at alpha 0, so hudFaded was always true and the companion
-    // vanished during normal play.) If that CanvasGroup isn't the HUD-fade one, this is a safe no-op.
+    // [B1] Native HudGlobalHide owns suppression even though Hud Canvas is an ordinary Transform.
+    // Retain the optional CanvasGroup fade compatibility input; never use it as the sole hide authority.
     bool HudFadedInGameplay(GameCameras gc)
     {
-        bool hudFadedInGameplay = false; float hudAlpha = 1f;
+        bool hudFadedInGameplay = HudGlobalHide.IsHidden; float hudAlpha = 1f;
         try
         {
             if (cfg.compHudSync == 1 && gc != null && gc.hudCanvas != null)
             {
                 var hgo = gc.hudCanvas.transform.gameObject;
                 var hcg = hgo.GetComponent<CanvasGroup>();
-                if (hgo.activeInHierarchy && hcg != null) { hudAlpha = hcg.alpha; hudFadedInGameplay = hudAlpha <= 0.5f; }
+                if (hgo.activeInHierarchy && hcg != null) { hudAlpha = hcg.alpha; hudFadedInGameplay |= hudAlpha <= 0.5f; }
             }
         }
         catch { }
@@ -161,6 +157,8 @@ public partial class HKDualScreen
     // Never alter role-camera enables or resident pages: normal policy restores them on the first unpaused Tick.
     void ApplyLowerPauseGate(GameCameras gc, bool paused)
     {
+        ValidateHudCameraState(gc);
+        if (paused) RestoreHudCameraState(); // BEFORE paused bypass/relayer and the logo's first presentation.
         RelayerHud(gc, false, paused);
         if (promptCam != null) promptCam.cullingMask = paused ? 0 : 1 << tutLayer;
         if (!paused) return;

@@ -322,8 +322,8 @@ public sealed class HollowKnightPauseContractsTests
         lower.SelectionTap(3,45f/1240,300f/1080);
         Assert.Equal(0,lower.journalSelected); Assert.True(lower.journalGraphics.TL.enabled);
         Assert.Equal("NAME_CRAWLER",lower.journalName.Text);
-        lower.ScrollStep(-.1f); Assert.Equal(1,lower.journalScrollRow);
-        Assert.False(lower.journalGraphics.TL.enabled); Assert.Equal("NAME_CRAWLER",lower.journalName.Text);
+        lower.ScrollStep(-.1f); Assert.Equal(108,(float)lower.journalChooserOffset,3);
+        Assert.True(lower.journalGraphics.TL.enabled); Assert.Equal("NAME_CRAWLER",lower.journalName.Text); // The first row remains fractionally visible.
         lower.ScrollStep(.1f); Assert.True(lower.journalGraphics.TL.enabled);
         int selected=lower.journalSelected;
         lower.SelectionTap(3,45f/1240,930f/1080); Assert.Equal(selected,lower.journalSelected); // clipped body padding is not a row
@@ -359,7 +359,7 @@ public sealed class HollowKnightPauseContractsTests
         lower.GuideDataStep(true); lower.SelectionTap(4,200f/1240,280f/1080);
         Assert.Equal(0,lower.guideSelected); Assert.True(lower.guideGraphics.TL.enabled);
         Assert.Equal("row-localization-0",lower.guideDetail.Text);
-        lower.ScrollStep(-.1f); Assert.Equal(1,lower.guideScrollRow);
+        lower.ScrollStep(-.1f); Assert.Equal(66,(float)lower.guideChooserOffset,3);
         Assert.False(lower.guideGraphics.TL.enabled);
         Assert.All(lower.guideRecords[0].Label.ClipRenderers,r=>Assert.False(r.enabled));
         Assert.All(lower.guideRecords[10].Label.ClipRenderers,r=>Assert.True(r.enabled));
@@ -605,6 +605,9 @@ public sealed class HollowKnightPauseContractsTests
     public void ActualBuildGuardDiscardsThrownPartialCacheWithoutAdmittingOrResettingRetry(int id)
     {
         HKDualScreen lower=new();
+        // Keep the healthy sibling owner while supplying genuine typed donors
+        // and data to the complete production builder used after the retry.
+        lower.InstallCompleteSupplementaryInputs(retireExisting:false);
         var sibling=lower.Route(id==3 ? 4 : 3);
         if(id==3) lower.journalCloneCache=null; else lower.guideCloneCache=null;
         lower.ThrowPartialBuild=true;

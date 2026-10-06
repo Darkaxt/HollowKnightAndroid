@@ -52,10 +52,25 @@ public sealed class SkinSaveIdentityContractsTests
         window.CompleteEvidence("PENDING"); Assert.True(window.Due(62));
         window.CompleteEvidence("TERMINAL");
         int bridgeCalls = 0;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int frame = 0; frame < 100000; frame++)
-            if (window.Due(63 + frame)) bridgeCalls++;
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long allocated = -1;
+        Exception measurementError = null;
+        // Measure settled production work on its own thread, not the xUnit worker.
+        // Warm only this terminal path/counter; never re-arm or replace the window.
+        var allocationThread = new Thread(() => {
+            try {
+                for (int frame = 0; frame < 1000; frame++)
+                    if (window.Due(63 + frame)) bridgeCalls++;
+                _ = GC.GetAllocatedBytesForCurrentThread();
+                long before = GC.GetAllocatedBytesForCurrentThread();
+                for (int frame = 0; frame < 100000; frame++)
+                    if (window.Due(63 + frame)) bridgeCalls++;
+                allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+            catch (Exception error) { measurementError = error; }
+        }) { IsBackground = true };
+        allocationThread.Start();
+        Assert.True(allocationThread.Join(TimeSpan.FromSeconds(30)), "Allocation measurement did not finish.");
+        Assert.Null(measurementError);
         Assert.Equal(0, bridgeCalls); Assert.Equal(0, allocated);
         Assert.False(window.Pending); Assert.False(window.TimedOut);
     }

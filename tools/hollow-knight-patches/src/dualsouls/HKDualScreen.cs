@@ -487,7 +487,8 @@ public partial class HKDualScreen : MonoBehaviour
         LoadConfig(false);
         GameCameras gc;
         GameManager gm;
-        if (!TryResolveSceneManagers(out gc, out gm)) { CharmActionVisibility(false);return; }
+        if (!TryResolveSceneManagers(out gc, out gm)) { RestoreHudCameraState(); CharmActionVisibility(false);return; }
+        ValidateHudCameraState(gc);
         if (TryRunLowerHudFixture(gc, gm)) { CharmActionVisibility(false);return; }
         HkStageHooks.Tick(cfg, cfg.debug == 1);
         SyncDumpHook();   // B1: RT->PNG dump hook only while compDumpRT=1
@@ -507,7 +508,7 @@ public partial class HKDualScreen : MonoBehaviour
         // SetTransportActive(false), which restores the live HUD and every
         // routed overlay. Stop here so none of the reference bottom-screen
         // hooks can route those objects again while transport is inactive.
-        if (!dsOn) { CharmActionVisibility(false);return; }
+        if (!dsOn) { RestoreHudCameraState(); CharmActionVisibility(false);return; }
         StripPrivateLayers();     // B1: keep the 3 private layers off every on-screen camera
         bool companionOn = dsOn && (compOn >= 0 ? compOn : cfg.companion) == 1;
 
@@ -523,6 +524,7 @@ public partial class HKDualScreen : MonoBehaviour
         // keeps them visible. The menu is the one real reset point. Without this the old tab + stale-language clones survived.
         SyncSupplementarySource(); // identity-only while healthy; retire all five owners even during pause
         bool atMenu = false; try { atMenu = gm.gameState == GlobalEnums.GameState.MAIN_MENU; } catch { }
+        if (atMenu) RestoreHudCameraState();
         if (atMenu && !wasAtMenu)
         {
             if(mapClone != null || invCloneCache != null || charmCloneCache != null || journalCloneCache != null || guideCloneCache != null || frameRoot != null || tab.built != -1) TeardownCompanion();
@@ -533,7 +535,7 @@ public partial class HKDualScreen : MonoBehaviour
 
         ApplyLowerPauseGate(gc, paused); // B1: route HUD before tutorial hooks; paused gameplay roles stay hidden
         if(paused || atMenu) CharmActionVisibility(false);
-        if (!paused && gc != null && gc.hudCamera != null)
+        if (!paused && !atMenu && gc != null && gc.hudCamera != null)
         {
             var src = gc.hudCamera;
             // Active transport keeps HUD ownership below; the pause gate selects its render role.
@@ -668,6 +670,8 @@ public partial class HKDualScreen : MonoBehaviour
     // requests restoration to the original upper UI layer.
     void RelayerHud(GameCameras gc, bool restoreToUpperDisplay, bool suppressForPause = false)
     {
+        ValidateHudCameraState(gc);
+        if (restoreToUpperDisplay) RestoreHudCameraState();
         if (gc.hudCanvas != null)
         {
             var hudRoot = gc.hudCanvas.transform;

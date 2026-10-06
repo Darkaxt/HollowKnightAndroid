@@ -33,7 +33,8 @@ public partial class HKDualScreen
         public readonly List<NativeInventorySlot> slots = new List<NativeInventorySlot>();
         public NativePaneLabel nameLabel,descLabel; public Component sourceName,sourceDesc;
         public Renderer[] sourceDetail; public PaneGraphics graphics;
-        public bool canonicalReady; public int scrollRow,language=-1; public float width,height;
+        public bool canonicalReady; public int language=-1; public float width,height,nameScale,descScale;
+        public double chooserOffset;
     }
     sealed class NativeInventorySlot { public Transform Root; public Renderer[] Renderers; }
     PaneRefs refsInv, refsCharm;   // one slot per cached clone, so a tab switch doesn't re-scan (Unity's == is false for a destroyed pane -> rebuilt)
@@ -529,6 +530,7 @@ public partial class HKDualScreen
         if(r.descLabel == null) r.descLabel=CopyPaneLabel(descT,pane.transform,"CanonicalInventoryDescription",28.08f);
         if(r.graphics == null) r.graphics=BuildNativePaneGraphics(pane);
         if(r.nameLabel == null || r.descLabel == null || r.graphics == null || r.subject == null) return false;
+        r.nameScale=r.nameLabel.UnitScale;r.descScale=r.descLabel.UnitScale;
         var hidden=new List<Renderer>();
         foreach(var name in new[]{"Text Name","Text Desc","Text Desc Low","Text Completion","Percentage","Divider L","Divider R"})
         { var t=FindDeep(pane.transform,name);if(t != null) hidden.AddRange(t.GetComponentsInChildren<Renderer>(true)); }
@@ -542,30 +544,32 @@ public partial class HKDualScreen
         foreach(var hidden in r.sourceDetail) if(hidden != null) hidden.enabled=false;
         FitOccupiedNative(r.subject,r.subjectRenderers,new Rect(p.SubjectX,p.Top,p.SubjectWidth,p.Height));
         int count=0;foreach(var slot in r.slots) if(slot.Root.gameObject.activeSelf) count++;
-        int rows=Mathf.Max(1,Mathf.FloorToInt((p.Height+p.Gap)/(p.Cell+p.Gap)));
-        r.scrollRow=Mathf.Clamp(r.scrollRow,0,Mathf.Max(0,(count+2)/3-rows));
+        r.chooserOffset=HKLowerLayout.ClampScroll(r.chooserOffset,(count+2)/3,p.Cell,p.Gap,p.Height);
         int index=0;
         foreach(var slot in r.slots)
         {
             if(!slot.Root.gameObject.activeSelf) continue;
-            int row=index/3-r.scrollRow,col=index%3;index++;
-            bool shown=row>=0 && row<rows;
+            int row=index/3,col=index%3;index++;
+            float y=p.Top+row*(p.Cell+p.Gap)-(float)r.chooserOffset;
+            bool shown=y+p.Cell>p.Top && y<p.Top+p.Height;
             foreach(var renderer in slot.Renderers) if(renderer != null) renderer.enabled=shown;
             if(shown) FitOccupiedNative(slot.Root,slot.Renderers,new Rect(p.ChooserX+col*(p.Cell+p.Gap)+p.Cell*.06f,
-                p.Top+row*(p.Cell+p.Gap)+p.Cell*.06f,p.Cell*.88f,p.Cell*.88f));
+                y+p.Cell*.06f,p.Cell*.88f,p.Cell*.88f));
         }
+        float textScale=HKLowerLayout.DetailTextScale(p.DetailWidth)/.78f;
+        r.nameLabel.UnitScale=r.nameScale*textScale;r.descLabel.UnitScale=r.descScale*textScale;
         PositionNativePaneGraphics(r.graphics,false);LayoutNativeDetail(r.nameLabel,r.descLabel,r.sourceName,r.sourceDesc,false);
         r.width=BOTTOM_W;r.height=BOTTOM_H;r.language=(int)TeamCherry.Localization.Language.CurrentLanguage();
     }
     void ScrollNativePane(float delta)
     {
-        if(Mathf.Abs(delta)<.04f) return;
+        if(float.IsNaN(delta) || float.IsInfinity(delta) || delta==0) return;
         if(tab.cur==COMP_INV)
         {
             var r=Refs(paneClone);
             if(supplementaryDragRegion==1 && r.descLabel!=null)
             { r.descLabel.ScrollOffset=Mathf.Clamp(r.descLabel.ScrollOffset-delta*BOTTOM_H,0,r.descLabel.ScrollMax);LayoutNativeDetail(r.nameLabel,r.descLabel,r.sourceName,r.sourceDesc,false); }
-            else if(supplementaryDragRegion==0) { r.scrollRow+=delta<0 ? 1 : -1;LayoutNativeInventory(paneClone); }
+            else if(supplementaryDragRegion==0) { r.chooserOffset-=(double)delta*BOTTOM_H;LayoutNativeInventory(paneClone); }
         }
         else if(tab.cur==COMP_CHARM && supplementaryDragRegion==1 && nativeCharmDesc!=null)
         {
@@ -579,9 +583,13 @@ public partial class HKDualScreen
         var p=HKLowerLayout.NativeColumns(LowerGeometry(),charms);
         string n=sourceName != null ? TmpProp(sourceName,"text")?.GetValue(sourceName,null) as string : "";
         string d=sourceDesc != null ? TmpProp(sourceDesc,"text")?.GetValue(sourceDesc,null) as string : "";
-        SetPaneLabel(name,n,new Rect(p.DetailX,p.Top,p.DetailWidth,56),ShellInk);
-        // A dedicated notch/control row follows the name; prose never inherits an old full-width band.
-        SetPaneLabel(desc,d,new Rect(p.DetailX,p.Top+100,p.DetailWidth,Mathf.Max(1,p.Height-100)),ShellInk);
+        float titleHeight=charms ? 56 : 48*HKLowerLayout.DetailTextScale(p.DetailWidth)+10;
+        float proseTop=charms ? 100 : titleHeight+10;
+        float bottomReserve=charms ? 78 : 0;
+        SetPaneLabel(name,n,new Rect(p.DetailX,p.Top+(charms ? 0 : 4),p.DetailWidth,titleHeight),ShellInk);
+        // Only Charms owns a notch row and a bottom action band. Inventory
+        // derives its title/prose flow from this detail column's actual width.
+        SetPaneLabel(desc,d,new Rect(p.DetailX,p.Top+proseTop,p.DetailWidth,Mathf.Max(1,p.Height-proseTop-bottomReserve)),ShellInk);
     }
 
     // [B4] INV clone init. Soul VESSEL (InvVesselFragments): its self/piece1/piece2/full sprite renderers are left
