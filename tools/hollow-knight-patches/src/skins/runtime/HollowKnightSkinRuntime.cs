@@ -538,7 +538,11 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             bool replaced = !ReferenceEquals(hero, nextHero) || !ReferenceEquals(hud, nextHud);
             if (replaced) Invalidate(); // before the gate/throttle can retain a stale successful observation
             hero = nextHero; hud = nextHud;
-            if (!targetsLive || nextHero == null || nextHud == null) return;
+            if (!targetsLive || nextHero == null || nextHud == null)
+            {
+                Invalidate(); // Unity owner loss can keep the same managed identity.
+                return;
+            }
             if (!replaced && settled)
             {
                 if (canRefresh()) return;

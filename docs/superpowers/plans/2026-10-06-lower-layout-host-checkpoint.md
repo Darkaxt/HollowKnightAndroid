@@ -85,3 +85,24 @@ Back remains actionable and selected on unavailable reads. On a failed first rea
 | Quality review | `e02a1db100e3a619a2d6a54e4559e38260477b763b055880f508aea4e2f8d7dc` |
 
 Only the two native presenters, owning test and this checkpoint document change. The shared model, transport, runtime loader and generated engine fixture are unchanged. Host orchestration is not real JNI, Unity scheduling, hardware-controller, native lifecycle, GPU, default-appearance, FPS or parity evidence. Full A25/A27 and Phase 1 remain open; Phase 2 remains not started.
+
+## Follow-up Hollow Knight required-owner observation retirement
+
+The existing skin scheduler now invalidates its cached observation and settlement before returning when required owners are unavailable, even when their managed references have not changed. The Unity caller already supplies owner liveness separately. An old `Applied`, `Unchanged`, or `Restored` observation becomes `AwaitingTargets`; current `Failed` and `RestoreFailed` results remain visible. This changes observation authority, not texture application, restoration, resource ownership or persistence.
+
+Unavailable ticks still perform no discovery, readiness callback or refresh. Repeated unavailable ticks reuse the pending observation without allocation. Recovery uses the existing invalidation/bootstrap and two-second retry cadence, then returns to the existing settled healthy-frame path.
+
+- Owning RED: **7 expected behavioral failures and 4 passing controls**, reproduced against the unchanged production scheduler. Six cases retained stale successes; one missed the recovery scan.
+- Final affected runtime, paired library/loaded-loader/save and native source contracts: **218 passed, 0 failed, 0 skipped**, actual exit 0; 841 frozen inputs unchanged. Includes **11 new owning cases**, two exact-zero healthy/unavailable scheduler allocation cases and all six paired OFF/ON/ROTATE idle contracts.
+- Fresh exact Hollow Knight Unity .61 and Silksong Unity .50 compiles: both actual exits 0; 1,234 frozen inputs unchanged. Hollow Knight mandatory builtin weave and byte-idempotence passed. Existing compiler warnings remain retained.
+- The first compile wrapper stopped before launching either compiler because its expected path set retained Windows separators while the actual set was normalized. Both input sets were correct. That wrapper failure is retained separately; correcting only the comparison admitted the fresh compile execution. It is not behavioral RED or a failed compiler run.
+- Ordered inline specification then quality review cover this bounded correction, not independent parity acceptance.
+
+| Required-owner follow-up evidence | SHA-256 |
+|---|---|
+| Owning RED | `21eaa977754e5d5c218109c105433018dcf76571ed7b9ebff8d0cc32d146ee41` |
+| Final affected suite | `9f249f122d619260d4605962cd7aff96e72c6cad9f58cd4203b520d468bfb423` |
+| Exact compiles | `d4867eaec0c6ae2ca8629dbb16e01a0557ab23390b6258277d4497a546d64c8f` |
+| Specification review | `7b35218fac118c6b458ec46b51e89a7a8c14eb18a3cc44c391c26bf1498a260e` |
+
+Only `SkinRuntimeRefreshSchedule.Tick`, its owning test file and this checkpoint document change. Shared loader/core, Silksong production source, fixtures and HUD paths are unchanged. The same-reference recovery control is a host liveness input, not proof that a destroyed Unity object revives. No real native lifecycle, JNI, GPU, default appearance, frame pacing or parity result is claimed. Historical allocation failures remain unwaived. Full A25/A27/A29 and resident-HUD confinement remain open; Phase 1 is IN_PROGRESS and Phase 2 is NOT_STARTED.

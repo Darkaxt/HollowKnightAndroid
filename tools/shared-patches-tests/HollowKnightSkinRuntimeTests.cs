@@ -1181,6 +1181,131 @@ public sealed class HollowKnightSkinRuntimeTests
         Assert.Equal(1, refreshes);
     }
 
+    [Theory]
+    [InlineData(SkinApplyStatus.Applied)]
+    [InlineData(SkinApplyStatus.Unchanged)]
+    [InlineData(SkinApplyStatus.Restored)]
+    public void Required_owner_loss_retires_settled_success_without_reference_replacement(SkinApplyStatus status)
+    {
+        int caches = 0, checks = 0, refreshes = 0;
+        var result = new SkinApplyResult(status);
+        SkinRuntimeRefreshSchedule schedule = null;
+        schedule = new SkinRuntimeRefreshSchedule(() => caches++, () => { checks++; return true; },
+            () => { refreshes++; schedule.Publish(result); });
+        var hero = new object(); var hud = new object();
+        schedule.Tick(0, hero, hud);
+        Assert.Same(result, schedule.LastResult);
+        int settledChecks = checks;
+
+        schedule.Tick(.1f, hero, hud, false);
+
+        Assert.Equal(1, caches); Assert.Equal(1, refreshes); Assert.Equal(settledChecks, checks);
+        Assert.Equal(SkinApplyStatus.AwaitingTargets, schedule.LastResult.Status);
+        Assert.NotSame(result, schedule.LastResult);
+        var pending = schedule.LastResult;
+        schedule.Tick(10, hero, hud, false);
+        Assert.Same(pending, schedule.LastResult);
+        Assert.Equal(1, caches); Assert.Equal(1, refreshes); Assert.Equal(settledChecks, checks);
+    }
+
+    [Theory]
+    [InlineData(SkinApplyStatus.Applied)]
+    [InlineData(SkinApplyStatus.Unchanged)]
+    [InlineData(SkinApplyStatus.Restored)]
+    public void Required_owner_loss_also_retires_success_published_between_scheduled_scans(SkinApplyStatus status)
+    {
+        int caches = 0, refreshes = 0;
+        SkinRuntimeRefreshSchedule schedule = null;
+        schedule = new SkinRuntimeRefreshSchedule(() => caches++, () => true,
+            () => { refreshes++; schedule.Publish(new SkinApplyResult(SkinApplyStatus.Unchanged)); });
+        var hero = new object(); var hud = new object();
+        schedule.Tick(0, hero, hud);
+        var published = schedule.Publish(new SkinApplyResult(status));
+
+        schedule.Tick(.1f, hero, hud, false);
+
+        Assert.Equal(SkinApplyStatus.AwaitingTargets, schedule.LastResult.Status);
+        Assert.NotSame(published, schedule.LastResult);
+        Assert.Equal(1, caches); Assert.Equal(1, refreshes);
+    }
+
+    [Theory]
+    [InlineData(SkinApplyStatus.Failed)]
+    [InlineData(SkinApplyStatus.RestoreFailed)]
+    public void Required_owner_loss_preserves_current_failure_and_does_no_work(SkinApplyStatus status)
+    {
+        int caches = 0, checks = 0, refreshes = 0;
+        var failure = new SkinApplyResult(status, "Current restore or apply failure.");
+        SkinRuntimeRefreshSchedule schedule = null;
+        schedule = new SkinRuntimeRefreshSchedule(() => caches++, () => { checks++; return true; },
+            () => { refreshes++; schedule.Publish(failure); });
+        var hero = new object(); var hud = new object();
+        schedule.Tick(0, hero, hud);
+        int priorChecks = checks;
+
+        schedule.Tick(.1f, hero, hud, false);
+        schedule.Tick(10, hero, hud, false);
+
+        Assert.Same(failure, schedule.LastResult);
+        Assert.Equal(1, caches); Assert.Equal(1, refreshes); Assert.Equal(priorChecks, checks);
+    }
+
+    [Fact]
+    public void Required_owner_loss_recovery_bootstraps_once_then_keeps_existing_retry_cadence()
+    {
+        int caches = 0, refreshes = 0;
+        bool ready = true;
+        var success = new SkinApplyResult(SkinApplyStatus.Unchanged);
+        SkinRuntimeRefreshSchedule schedule = null;
+        schedule = new SkinRuntimeRefreshSchedule(() => caches++, () => ready,
+            () => { refreshes++; schedule.Publish(success); });
+        var hero = new object(); var hud = new object();
+        schedule.Tick(0, hero, hud);
+        schedule.Tick(.1f, hero, hud, false);
+        ready = false;
+        schedule.Tick(.2f, hero, hud);
+        Assert.Equal(2, caches); Assert.Equal(1, refreshes);
+        Assert.Equal(SkinApplyStatus.AwaitingTargets, schedule.LastResult.Status);
+        ready = true;
+        schedule.Tick(.3f, hero, hud);
+        schedule.Tick(2.19f, hero, hud);
+        Assert.Equal(2, caches); Assert.Equal(1, refreshes);
+
+        schedule.Tick(2.2f, hero, hud);
+        schedule.Tick(10, hero, hud);
+
+        Assert.Equal(3, caches); Assert.Equal(2, refreshes);
+        Assert.Same(success, schedule.LastResult);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Required_owner_steady_state_has_zero_allocations_and_no_extra_discovery(bool live)
+    {
+        int caches = 0, refreshes = 0;
+        SkinRuntimeRefreshSchedule schedule = null;
+        schedule = new SkinRuntimeRefreshSchedule(() => caches++, () => true,
+            () => { refreshes++; schedule.Publish(new SkinApplyResult(SkinApplyStatus.Unchanged)); });
+        var hero = new object(); var hud = new object();
+        long allocated = -1; Exception failure = null;
+        var measurement = new Thread(() => {
+            try
+            {
+                schedule.Tick(0, hero, hud);
+                for (int frame = 1; frame < 1200; frame++) schedule.Tick(frame / 60f, hero, hud, live);
+                long before = GC.GetAllocatedBytesForCurrentThread();
+                for (int frame = 1200; frame < 4800; frame++) schedule.Tick(frame / 60f, hero, hud, live);
+                allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+            catch (Exception error) { failure = error; }
+        }) { IsBackground = true };
+        measurement.Start();
+        Assert.True(measurement.Join(TimeSpan.FromSeconds(30)), "Scheduler measurement exceeded its bound.");
+        Assert.Null(failure); Assert.Equal(0, allocated);
+        Assert.Equal(1, caches); Assert.Equal(1, refreshes);
+    }
+
     [Fact]
     public void Missing_required_owners_do_not_run_expensive_discovery()
     {
