@@ -205,10 +205,19 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
         }
         renewRotation(value.copy(mode = mode))
     }
-    fun remove(id: String): SkinResult<Unit> = mutate { value ->
+    fun remove(id: String): SkinResult<Unit> = mutate { value -> removePack(value, id) }
+    fun remove(expectedConfiguration: String, id: String, expectedTree: String,
+        expectedReceipt: String): SkinResult<Unit> = mutateExpected(expectedConfiguration) { value ->
+        val pack = requireNotNull(value.packs.singleOrNull { it.id == id }) { "Pack was removed; refresh and retry" }
+        require(pack.treeSha256 == expectedTree && pack.receiptSha256 == expectedReceipt) {
+            "Removal target changed; refresh and confirm again"
+        }
+        removePack(value, id)
+    }
+    private fun removePack(value: SkinLibraryDocument, id: String): SkinLibraryDocument {
         checkEditable(value, id)
         require(value.packs.any { it.id == id }) { "Pack was removed; refresh and retry" }
-        renewRotation(value.copy(packs = value.packs.filterNot { it.id == id }, selectedPackId = value.selectedPackId.takeUnless { it == id },
+        return renewRotation(value.copy(packs = value.packs.filterNot { it.id == id }, selectedPackId = value.selectedPackId.takeUnless { it == id },
             eligiblePackIds = value.eligiblePackIds - id, saveAffinities = value.saveAffinities.filterNot { it.packId == id }))
     }
     internal fun install(pack: LibraryPack, replacing: LibraryPack? = null): SkinResult<Unit> = mutate { value ->

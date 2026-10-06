@@ -77,7 +77,8 @@ internal class SkinLibraryUiServices(
                     override fun enable(target: SkinReplaceTarget) = store.enable(target.id)
                     override fun disable(target: SkinReplaceTarget) = store.disable(target.id)
                     override fun eligibility(target: SkinReplaceTarget, eligible: Boolean) = store.setEligibility(target.id, eligible)
-                    override fun remove(target: SkinReplaceTarget) = store.remove(target.id)
+                    override fun remove(target: SkinReplaceTarget) = store.remove(
+                        target.generationSha256, target.id, target.treeSha256, target.receiptSha256)
                 }, SkinModeAdvancePort { store.advanceMode() }, modeAvailable = true, simplifiedAuthority = true, recover = store::recoverOff,
             )
         }

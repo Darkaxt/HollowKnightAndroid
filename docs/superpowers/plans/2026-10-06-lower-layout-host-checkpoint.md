@@ -106,3 +106,25 @@ Unavailable ticks still perform no discovery, readiness callback or refresh. Rep
 | Specification review | `7b35218fac118c6b458ec46b51e89a7a8c14eb18a3cc44c391c26bf1498a260e` |
 
 Only `SkinRuntimeRefreshSchedule.Tick`, its owning test file and this checkpoint document change. Shared loader/core, Silksong production source, fixtures and HUD paths are unchanged. The same-reference recovery control is a host liveness input, not proof that a destroyed Unity object revives. No real native lifecycle, JNI, GPU, default appearance, frame pacing or parity result is claimed. Historical allocation failures remain unwaived. Full A25/A27/A29 and resident-HUD confinement remain open; Phase 1 is IN_PROGRESS and Phase 2 is NOT_STARTED.
+
+## Follow-up paired launcher Delete confirmation authority
+
+The bound launcher removal adapter now forwards the captured configuration, pack ID, tree and receipt identities to a single locked store transaction. A retired confirmation cannot delete a newer same-ID replacement or authorize removal after configuration changes. Exact current tree/receipt checks occur before mutation, under the same existing lock as configuration validation and publication.
+
+The shared removal helper preserves selected/pending in-use protection, rotation renewal, selection/eligibility/affinity retirement and staged unbound intent. Fresh OFF removal changes library membership only; immutable object and receipt bytes remain retained. Mode, selection, importer, Activity/session and native runtime behavior are unchanged.
+
+- Owning RED: **8 expected behavioral failures and 6 passing controls**, paired across Hollow Knight and Silksong using actual bound services and importer/receipts. Wrong tree/receipt cases are deliberate request fault injection, not values claimed to originate from the UI.
+- Unchanged owning tests GREEN: **14 passed, 0 failed, 0 skipped**.
+- Final affected library/UI, production transport and lifecycle contracts: **180 passed, 0 failed, 0 skipped**, actual gated exit 0; all 292 frozen inputs unchanged. Only the two admitted production paths differ between RED and GREEN; the owning test remains identical.
+- The first attempt failed at Android task configuration because external output and project roots were on different drives; zero tests ran. That failure is retained separately, not behavioral RED. Fresh drive-compatible checkpoint artifacts admitted the later executions without changing assertions or production validation.
+- Ordered inline specification then quality review passed this bounded correction. The quality receipt explicitly corrects a SPEC prose-only suite count: four library suites plus fourteen others, eighteen total. Raw receipts and the 180-case total are unchanged.
+- The shared Gradle gate verified two workers, no parallelism and a 3GB Gradle heap. Kotlin 3GB was requested; test-fork evidence is configuration-time (one fork, 512MB), and task-specific effective overrides remain a recorded verification gap. Existing compileSdk/AGP and wrapper-catalog warnings are not bypassed.
+
+| Delete follow-up evidence | SHA-256 |
+|---|---|
+| Authenticated behavioral RED | `9287ad60ad86dae48bc19deaecd248d3e933d1f46ff541ced74a28f7b2b808d6` |
+| Final affected suite | `edde92d461bf20e8373326e46590bc207a9f22486f2bcb3b14ef4b475ed4429e` |
+| Specification review | `540f498fd6d518933663b8c6255525f19390c94b17ff1e8154ff58afc5e220ef` |
+| Quality review | `41fca3bf1d90460bb553e7bae1317e054e794a135bf2f8ebf94ffb9f479f05ef` |
+
+This closes the bounded `P1-DELETE-01` host item only. Paired conditional Unity caller/binding, game-entry lifecycle and skin safety contracts are the next finite batch. Resident-HUD H01/H02/H03/H05 authority remains unadmitted; Task137 remains HELD. No exact native compile, device, GPU, live lifecycle, signed candidate, release or independent parity result is claimed by this launcher-only checkpoint. Historical QA evidence remains unwaived; Phase 1 is IN_PROGRESS and Phase 2 is NOT_STARTED.
