@@ -109,7 +109,13 @@ public class DsActionBar
         public Image Plate;
         public Rect Hit;          // layout space, for the shell's hit testing
         public Action Invoke;
-        public bool Live;
+        public bool Live, Placed, Measured;
+        public string MeasuredText;
+        public object Font, Material;
+        public float Size, MinSize, MaxSize, CharacterSpace, LineSpace, ParagraphSpace, Width;
+        public TMProOld.FontStyles Style;
+        public int Weight;
+        public bool AutoSize, Wrap, Kerning, RichText, RightToLeft;
     }
 
     // White plates as the designs draw them: each sized to its OWN text rather
@@ -241,7 +247,7 @@ public class DsActionBar
             row.Live = !action.Disabled && action.Invoke != null;
 
             string text = action.Label ?? "";
-            if (row.Label != null) row.Label.text = text;
+            if (row.Label != null && row.Label.text != text) row.Label.text = text;
 
             Rect where;
             if (hasPane && action.Place == DsActionPlace.Pane)
@@ -257,7 +263,7 @@ public class DsActionBar
                 float textW = 0f;
                 if (row.Label != null && text.Length > 0)
                 {
-                    try { textW = row.Label.GetPreferredValues(text).x; } catch { }
+                    textW = Measure(row, text);
                 }
                 float w = Mathf.Max(MinW, textW + PadX * 2f);
                 where = new Rect(_right - w, headerGap * (headerSeen + 1) + RowH * headerSeen,
@@ -265,7 +271,11 @@ public class DsActionBar
                 headerSeen++;
             }
 
-            DsWidgets.Place(row.Root, where);
+            if (!row.Placed || row.Hit != where)
+            {
+                DsWidgets.Place(row.Root, where);
+                row.Placed = true;
+            }
             // The host covers the panel, so what was placed and what is
             // hit-tested are the same rectangle in the same space.
             row.Hit = where;
@@ -278,11 +288,40 @@ public class DsActionBar
             // than popping -- see the note on DsAction.Alpha for why zero here
             // means opaque.
             float alpha = action.Alpha <= 0f ? 1f : Mathf.Min(1f, action.Alpha);
-            if (row.Plate != null)
-                row.Plate.color = new Color(1f, 1f, 1f, (row.Live ? 1f : 0.35f) * alpha);
-            if (row.Label != null)
-                row.Label.color = new Color(0f, 0f, 0f, (row.Live ? 1f : 0.55f) * alpha);
+            var plate = new Color(1f, 1f, 1f, (row.Live ? 1f : 0.35f) * alpha);
+            var ink = new Color(0f, 0f, 0f, (row.Live ? 1f : 0.55f) * alpha);
+            if (row.Plate != null && row.Plate.color != plate) row.Plate.color = plate;
+            if (row.Label != null && row.Label.color != ink) row.Label.color = ink;
         }
+    }
+
+    static float Measure(Row row, string text)
+    {
+        var label = row.Label;
+        if (row.Measured && row.MeasuredText == text && row.Font == label.font &&
+            row.Material == label.fontSharedMaterial && row.Size == label.fontSize &&
+            row.MinSize == label.fontSizeMin && row.MaxSize == label.fontSizeMax &&
+            row.Style == label.fontStyle && row.CharacterSpace == label.characterSpacing &&
+            row.LineSpace == label.lineSpacing &&
+            row.ParagraphSpace == label.paragraphSpacing && row.AutoSize == label.enableAutoSizing &&
+            row.Wrap == label.enableWordWrapping && row.Weight == (int)label.fontWeight &&
+            row.Kerning == label.enableKerning && row.RichText == label.richText &&
+            row.RightToLeft == label.isRightToLeftText) return row.Width;
+        row.Measured = false;
+        try
+        {
+            float width = label.GetPreferredValues(text).x;
+            row.MeasuredText = text; row.Font = label.font; row.Material = label.fontSharedMaterial;
+            row.Size = label.fontSize; row.MinSize = label.fontSizeMin; row.MaxSize = label.fontSizeMax;
+            row.Style = label.fontStyle; row.CharacterSpace = label.characterSpacing;
+            row.LineSpace = label.lineSpacing;
+            row.ParagraphSpace = label.paragraphSpacing; row.AutoSize = label.enableAutoSizing;
+            row.Wrap = label.enableWordWrapping; row.Weight = (int)label.fontWeight;
+            row.Kerning = label.enableKerning; row.RichText = label.richText;
+            row.RightToLeft = label.isRightToLeftText; row.Width = width; row.Measured = true;
+            return width;
+        }
+        catch { return 0f; } // Preserve the minimum-width fallback; retry next frame.
     }
 
     Row NewRow(int index)

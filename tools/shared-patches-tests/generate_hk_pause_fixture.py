@@ -66,6 +66,13 @@ for filename, names in methods.items():
                              "declaration_utf8_lf_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
                              "declaration_identical": True})
     if filename == "HKDualScreen.Util.cs":
+        for line in source.splitlines():
+            if line.startswith("    static MaterialPropertyBlock "):
+                parts.append(line)
+                identity.append({"source": str(root / filename), "declaration": "retained clipping scratch",
+                                 "source_file_sha256": hashlib.sha256((root / filename).read_bytes()).hexdigest(),
+                                 "declaration_utf8_lf_sha256": hashlib.sha256(line.encode()).hexdigest(),
+                                 "declaration_identical": True})
         text = source[source.index("    struct CharmState"):source.index("    static void BuildCharmKeys")]
         parts.append(text)
         identity.append({"source": str(root / filename), "declaration": "actual frame-keyed charm cache",

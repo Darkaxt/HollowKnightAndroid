@@ -83,7 +83,7 @@ def generate(output, source_root, manifest, shared_source_root=None):
     whole('DsInput.cs',('DsGestureType','DsGesture','DsInput'))
     whole('DsTitleCard.cs',('DsTitleCard',))
     whole('DsZoomSlider.cs',('DsZoomSlider',))
-    whole('DsHudRouting.cs',('DsHudRouting','DsHudRenderScope','DsHudSuppressionScope'))
+    whole('DsHudRouting.cs',('DsHudRouting','DsHudRenderScope','DsHudSuppressionScope','DsHudFrame'))
     theme=(source_root/'DsTheme.cs').read_text(encoding='utf-8')
     declarations=re.findall(r'^    public (?:const [^;]+|static readonly Color [^;]+);',theme,re.M)
     parts.append('public static partial class DsTheme {\n'+'\n'.join(declarations)+'\n}')
@@ -153,18 +153,40 @@ def generate(output, source_root, manifest, shared_source_root=None):
         bodies.append(value)
         identity.append(dict(source=str(source_root/'DsMapView.cs'),member='DsMapView.'+field,
                              declaration_utf8_lf_sha256=hashlib.sha256(value.encode()).hexdigest(),declaration_identical=True))
-    for name in ('SetVisible','LateTick','Mode','Pan','Zoom','ZoomLevel','SetZoom','ResetPan','ResetZoom','ViewMoved','ResetView','SetMode'):
+    for field in ('_cameraOwner','_cameraHud','_nextSourceCameraFrame','_sourceCamerasBound'):
+        match=re.search(r'^    (?:GameCameras|Transform|int|bool) '+field+r'\b[^;]*;',text,re.M)
+        if match:
+            value=match.group();bodies.append(value)
+            identity.append(dict(source=str(source_root/'DsMapView.cs'),member='DsMapView.'+field,
+                source_file_sha256=hashlib.sha256((source_root/'DsMapView.cs').read_bytes()).hexdigest(),
+                declaration_utf8_lf_sha256=hashlib.sha256(value.encode()).hexdigest(),declaration_identical=True))
+    for name in ('SetVisible','LateTick','Mode','Pan','Zoom','ZoomLevel','SetZoom','ResetPan','ResetZoom','ViewMoved','ResetView','SetMode','Poll','Rebind','FindSourceCameras','Classify'):
         value=member(class_text(text,'DsMapView'),name)
-        bodies.append(value)
-        record('DsMapView.cs','DsMapView.'+name,value,value)
+        adapted=value.replace('Poll(', 'PollSources(', 1) if name=='Poll' else value
+        bodies.append(adapted)
+        record('DsMapView.cs','DsMapView.'+name,value,adapted)
     parts.append('public partial class DsMapView {\n'+'\n'.join(bodies)+'\n}')
     # HUD render suppression/event lifecycle bodies, not a fake capture policy.
     text=(source_root/'DsHudView.cs').read_text(encoding='utf-8')
     bodies=[]
-    for name in ('OnEnable','OnDisable','SetVisible','Stop','StopCanvasCleanup','Suspend','LateUpdate','BeforeCamera','AfterCamera','RestoreScope','RestoreAllScopes','CanPresent','NativeVisible','Hide','CollectRenderers','SuppressOverlay','RestoreOverlay'):
+    for name in ('OnEnable','OnDisable','SetVisible','Stop','StopCanvasCleanup','Suspend','LateUpdate','BeforeCamera','AfterCamera','RestoreScope','RestoreAllScopes','CanPresent','NativeVisible','Hide','CollectRenderers','SuppressOverlay','RestoreOverlay','PrepareCanvasScope','FrameCamera','MeasureToolSplit','LayoutPosition','HasArtwork','Fail'):
         value=member(class_text(text,'DsHudView'),name)
+        adapted=value.replace('FrameCamera(', 'FrameCameraBody(', 1) if name=='FrameCamera' else value
+        bodies.append(adapted)
+        record('DsHudView.cs','DsHudView.'+name,value,adapted)
+    inventory_start=next((text.index(marker) for marker in ('    struct HudNode','    public sealed class HudInventoryWatch') if marker in text),None)
+    if inventory_start is not None:
+        value=text[inventory_start:text.index('    readonly DsHudRenderScope')]
         bodies.append(value)
-        record('DsHudView.cs','DsHudView.'+name,value,value)
+        identity.append(dict(source=str(source_root/'DsHudView.cs'),member='native inventory declarations',
+            source_file_sha256=hashlib.sha256((source_root/'DsHudView.cs').read_bytes()).hexdigest(),
+            declaration_utf8_lf_sha256=hashlib.sha256(value.encode()).hexdigest(),declaration_identical=True))
+        start=text.index('    static bool Retired<T>')
+        value=text[start:end_brace(text,text.index('{',start))]
+        bodies.append(value);record('DsHudView.cs','Retired<T>',value,value)
+        for name in ('EnsureInventory','WatchInventoryNode','RetireInventoryWatches'):
+            if name=='RetireInventoryWatches' and name not in text: continue
+            value=member(text,name);bodies.append(value);record('DsHudView.cs',name,value,value)
     parts.append('public partial class DsHudView : MonoBehaviour {\n'+'\n'.join(bodies)+'\n}')
     text=(source_root/'DsWidgets.cs').read_text(encoding='utf-8')
     cls=class_text(text,'DsWidgets')

@@ -106,10 +106,12 @@ public partial class HKDualScreen
     // the initial clone sanitation. Reapply the unbounded property block after
     // every detached-clone mesh generation and cover every renderer, matching
     // the complete set touched by TextMeshProClipRect.LateUpdate.
+    static MaterialPropertyBlock tmpClipBlock;
     static void NeutralizeDetachedTmpClip(GameObject clone)
     {
         if (clone == null) return;
-        var block = new MaterialPropertyBlock();
+        // These render-owner calls are sequential on Unity's main thread.
+        var block = tmpClipBlock ?? (tmpClipBlock = new MaterialPropertyBlock());
         foreach (var renderer in clone.GetComponentsInChildren<Renderer>(true))
         {
             if (renderer == null) continue;
@@ -146,6 +148,7 @@ public partial class HKDualScreen
     // Put every routed game object back where HK had it. Called when dual-screen is switched off.
     void RestoreRoutedLayers()
     {
+        RetireTutorialWatches(); tutorialInventoryReady = false;
         foreach (var kv in routedLayers)
             if (kv.Key != null) SetLayerRecursive(kv.Key, kv.Value);
         routedLayers.Clear();

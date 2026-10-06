@@ -65,6 +65,10 @@ public class DsMapView
 
     GameMap _map;
     Camera _srcRooms, _srcDecor;
+    GameCameras _cameraOwner;
+    Transform _cameraHud;
+    int _nextSourceCameraFrame;
+    bool _sourceCamerasBound;
     Transform _compass;
 
     Vector2 _pan;
@@ -411,6 +415,8 @@ public class DsMapView
             _compass = null;
             _srcRooms = null;
             _srcDecor = null;
+            _nextSourceCameraFrame = 0;
+            _sourceCamerasBound = false;
             _nextAssert = 0f;
             _pan = Vector2.zero;
             _zoom = 1f;
@@ -441,13 +447,30 @@ public class DsMapView
         if (scene != _lastScene)
         {
             _lastScene = scene;
+            _nextSourceCameraFrame = 0;
             _forceAssert = true;
             _nextAssert = 0f;
             _settleUntil = Time.unscaledTime + DsConfig.Int("map_settle_ms", 600) / 1000f;
         }
 
-        if (_srcRooms == null || _srcDecor == null) FindSourceCameras();
-        return _srcRooms != null && _srcDecor != null;
+        if (_srcRooms != null && _srcDecor != null) { _sourceCamerasBound = true; return true; }
+        if (_sourceCamerasBound) { _sourceCamerasBound = false; _nextSourceCameraFrame = 0; }
+        GameCameras owner = null;
+        Transform hud = null;
+        try
+        {
+            owner = GameCameras.instance;
+            if (owner != null && owner.hudCamera != null) hud = owner.hudCamera.transform;
+        }
+        catch { }
+        if (!ReferenceEquals(owner, _cameraOwner) || hud != _cameraHud)
+        { _cameraOwner = owner; _cameraHud = hud; _nextSourceCameraFrame = 0; }
+        // Late-born pairs retry locally; actual owner/scene changes bypass the delay.
+        if (Time.frameCount < _nextSourceCameraFrame) return false;
+        _nextSourceCameraFrame = Time.frameCount + 30;
+        FindSourceCameras();
+        _sourceCamerasBound = _srcRooms != null && _srcDecor != null;
+        return _sourceCamerasBound;
     }
 
     string _lastScene;

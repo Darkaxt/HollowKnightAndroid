@@ -63,6 +63,9 @@ public class DsShell
     readonly List<DsAction> _actionBuffer = new List<DsAction>();
     // The screen's name in the header, in the space the tools used to fill.
     TmpText _headerTitle;
+    string _headerRawTitle, _headerCapsTitle;
+    Rect _headerTitleRect;
+    bool _headerTitlePlaced;
     // A screen's replacement tab strip, e.g. the map's marker icons.
     readonly List<DsStripItem> _stripBuffer = new List<DsStripItem>();
     readonly List<RectTransform> _stripRoots = new List<RectTransform>();
@@ -594,8 +597,7 @@ public class DsShell
         TickOperational(dt);
     }
 
-    // Keep capturing delegates behind admission: C# otherwise allocates their
-    // closure before the early return, even for an unchanged paused frame.
+    // Frame calls are guarded directly; lifecycle/event calls keep Guard.
     void TickOperational(float dt)
     {
         if (_hud != null) _hud.SetVisible(true);
@@ -614,13 +616,14 @@ public class DsShell
         if (Sliding && _slideFrom >= 0 && _slideFrom < _entries.Count)
         {
             var going = _entries[_slideFrom];
-            if (!going.Broken) Guard(going, () => going.Screen.Tick(dt));
+            if (!going.Broken) TickScreen(going, dt);
         }
 
         if (_active < 0 || _active >= _entries.Count) return;
         var e = _entries[_active];
-        if (e.Broken) return;
-        Guard(e, () => e.Screen.Tick(dt));
+        if (e.Broken) { _actions.Clear(); return; }
+        TickScreen(e, dt);
+        if (e.Broken) { _actions.Clear(); return; }
         RefreshActions(e);
         RefreshTitle(e);
         RefreshStrip(e);
@@ -652,7 +655,13 @@ public class DsShell
         }
 
         _stripBuffer.Clear();
-        Guard(e, () => source.CollectStrip(_stripBuffer));
+        try { source.CollectStrip(_stripBuffer); }
+        catch (Exception ex)
+        {
+            DisableScreen(e, ex); _stripBuffer.Clear();
+            RefreshStrip(e); // The broken owner now withdraws its strip.
+            return;
+        }
         BuildStrip(_stripBuffer.Count);
 
         if (!_stripShown)
@@ -866,7 +875,12 @@ public class DsShell
         // name arrives from the game in mixed case ("Choral Chambers") and is
         // raised to match, which also keeps it on the display face -- Trajan
         // has no real lowercase, see DsWidgets.Label.
-        text = text.ToUpperInvariant();
+        if (_headerRawTitle != text)
+        {
+            _headerRawTitle = text;
+            _headerCapsTitle = text.ToUpperInvariant();
+        }
+        text = _headerCapsTitle;
         var font = DsTheme.Display;
         if (font != null && _headerTitle.font != font)
         {
@@ -884,8 +898,12 @@ public class DsShell
         // Centred vertically it floated in the middle of a band taller than the
         // words, which read as a gap between the title and the divider rather
         // than as a title above one.
-        DsWidgets.Place(_headerTitle.rectTransform, 0f, space.y, _w,
-                        Mathf.Max(10f, space.height - TitleBottomGap));
+        var where = new Rect(0f, space.y, _w, Mathf.Max(10f, space.height - TitleBottomGap));
+        if (!_headerTitlePlaced || _headerTitleRect != where)
+        {
+            DsWidgets.Place(_headerTitle.rectTransform, where);
+            _headerTitleRect = where; _headerTitlePlaced = true;
+        }
     }
 
     /// <summary>
@@ -913,11 +931,18 @@ public class DsShell
         // buttons go is as broken as one that throws while listing them, and
         // the fallback for either is an empty bar rather than a stale one.
         Rect pane = default(Rect);
-        Guard(e, () =>
+        try
         {
             source.CollectActions(_actionBuffer);
             pane = source.ActionPane;
-        });
+        }
+        catch (Exception ex)
+        {
+            DisableScreen(e, ex);
+            _actionBuffer.Clear();
+            _actions.Clear();
+            return;
+        }
         _actions.Set(_actionBuffer, pane);
     }
 
@@ -979,13 +1004,22 @@ public class DsShell
     void Guard(Entry e, Action action)
     {
         try { action(); }
-        catch (Exception ex)
-        {
-            e.Broken = true;
-            if (e.Host != null) e.Host.gameObject.SetActive(false);
-            Debug.LogError("[DualScreen] screen '" + e.Screen.Id + "' disabled after error: " + ex);
-            Paint();
-        }
+        catch (Exception ex) { DisableScreen(e, ex); }
+    }
+
+    void TickScreen(Entry e, float dt)
+    {
+        try { e.Screen.Tick(dt); }
+        catch (Exception ex) { DisableScreen(e, ex); }
+    }
+
+    void DisableScreen(Entry e, Exception ex)
+    {
+        e.Broken = true;
+        if (_active >= 0 && _active < _entries.Count && _entries[_active] == e) _actions.Clear();
+        if (e.Host != null) e.Host.gameObject.SetActive(false);
+        Debug.LogError("[DualScreen] screen '" + e.Screen.Id + "' disabled after error: " + ex);
+        Paint();
     }
 }
 #endif

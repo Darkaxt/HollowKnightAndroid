@@ -59,7 +59,7 @@
   </ItemGroup>
   <ItemGroup>
     <!-- Engine model is a per-profile generator template, not a global Unity stub. -->
-    <Compile Remove="NativeModsMenuNativeModel.cs;SkinUnityNativeModel.cs" />
+    <Compile Remove="NativeModsMenuNativeModel.cs;SkinUnityNativeModel.cs;GameplayPerformanceFixture.cs;GameplayDiscoveryFixture.cs" />
     <!-- External intermediates must not admit historical generated obj/bin sources. -->
     <Compile Remove="obj/**/*.cs;bin/**/*.cs" />
   </ItemGroup>

@@ -182,9 +182,15 @@ public partial class DsJournalScreen
 }
 public partial class DsMapView
 {
-    Camera _rooms,_decor;bool _visible,_contentDark;float _settleUntil;
+    Camera _rooms,_decor,_srcRooms,_srcDecor;bool _visible,_contentDark;float _settleUntil;
+    Transform _compass;
+    string _lastScene;
+    bool _zoneBoundsOk,_describedRig;
+    int _lastDropped;
+    MapNextAreaDisplay[] _arrows;
     GameMap _map=new();bool GameMapShowing;public int ArrowHides,Polls,Drives;
-    public RenderTexture Texture=new();public Vector2 PanState=>_pan;
+    RenderTexture _rt=new();
+    public RenderTexture Texture=>_rt;public Vector2 PanState=>_pan;
     public bool HasAnyMap=true;
     public GlobalEnums.MapZone CurrentZone=>GlobalEnums.MapZone.NONE;public string ZoneName=>"";
     readonly Transform _parent;
@@ -202,7 +208,9 @@ public partial class DsMapView
     public bool TryToMapLocal(Vector2 uv,out Vector2 local){local=uv;return true;}
     public bool TryToViewport(Vector2 local,out Vector2 uv){uv=local;return true;}
 }
-public class GameMap{}
+public class GameMap:Component{}
+public class MapNextAreaDisplay:Component{}
+public class CameraRenderToMesh:Component{}
 public static class DsMarkers
 {
     public const int TypeCount=2;
@@ -218,11 +226,36 @@ public class GameCameras
 public static class HudGlobalHide{public static bool IsHidden=false;}
 public class InventoryPaneList{public enum PaneTypes{Inv,Tools,Quests,Journal,Map}}
 public class ToolItem{}
+public class SilkSpool:Component{}
+public class BindOrbHudFrame:Component{}
+public class BlueHealth:Component{}
+public class ToolHudIcon:Component{public ToolItem CurrentTool;}
+public class PlayMakerFSM:Component
+{
+    public string FsmName="health_display";
+    public FsmVariables FsmVariables=new();
+}
+public class FsmVariables
+{
+    public FsmInt Number=new();
+    public FsmInt FindFsmInt(string name)=>name=="Health Number"?Number:null;
+}
+public class FsmInt{public int Value;}
+public class PlayerData{public static PlayerData instance=new();public int CurrentMaxHealth=5;}
+public class JitterSelf:Component
+{
+    bool isActive;
+    Vector3 initialPosition;
+    Transform overrideTransform;
+    public void SetOrigin(Vector3 value){isActive=true;initialPosition=value;overrideTransform=transform;}
+}
 public class FullQuestBase{public enum ListCounterTypes{None,Dots,Bar}}
 public class GameManager
 {
     public delegate void GameStateEvent(GlobalEnums.GameState state);public delegate void PausedEvent(bool paused);public delegate void EnterSceneEvent();
     public static GameManager SilentInstance;
+    public static GameManager instance=>SilentInstance;
+    public GameMap gameMap;public string sceneName;
     public bool IsInSceneTransition,isPaused;public UIManager ui=new();
     public event GameStateEvent GameStateChange;public event PausedEvent GamePausedChange;
     public event Action UnloadingLevel;public event EnterSceneEvent OnFinishedEnteringScene;
@@ -243,6 +276,23 @@ public partial class DsHudView
     readonly List<Renderer> _overlayRenderers=new(),_renderers=new(),_scratch=new();
     readonly List<CanvasRenderer> _overlayCanvasRenderers=new();
     readonly List<Transform> _roots=new();
+    readonly List<PlayMakerFSM> _healthFsms=new();
+    readonly List<BlueHealth> _blueHealth=new();
+    readonly List<ToolHudIcon> _toolIcons=new();
+    readonly List<Canvas> _toolCanvases=new();
+    readonly List<Graphic> _toolGraphics=new();
+    readonly List<GameObject> _canvasTargets=new();
+    readonly List<Vector3> _maskPositions=new();
+    Transform _health,_tools,_barParent,_capRAnchor;
+    SilkSpool _spool;
+    BindOrbHudFrame _bindFrame;
+    Matrix4x4 _worldToFrame;
+    Bounds _bounds;
+    int _activeTools,_activeToolCanvases;
+    float _zoom=1,_maskPixelPitch,_rowSplitPx,_healthEndPx,_toolSplitPx,_maskCentrePx,_toolOffsetPx;
+    static readonly FieldInfo JitterActive=typeof(JitterSelf).GetField("isActive",BindingFlags.Instance|BindingFlags.NonPublic);
+    static readonly FieldInfo JitterOrigin=typeof(JitterSelf).GetField("initialPosition",BindingFlags.Instance|BindingFlags.NonPublic);
+    static readonly FieldInfo JitterTransform=typeof(JitterSelf).GetField("overrideTransform",BindingFlags.Instance|BindingFlags.NonPublic);
     Transform _overlayRoot;
     Camera _capture,_scopedCamera;RenderTexture _texture;RawImage _image,_silkImage,_toolsImage;TmpText _fallback;
     GameCameras _gameCameras;Transform _hudRoot;Coroutine _canvasCleanup;
@@ -251,7 +301,8 @@ public partial class DsHudView
     float _waitingSince;string _waitingReason;
     public readonly List<GameObject> NativeTargets=new();
     public int Binds,Captures,CanvasRestores;
-    public Rect TitleSpace=>new(0,150,900,80);
+    public Rect TitleRegion=new(0,150,900,80);
+    public Rect TitleSpace=>TitleRegion;
     public void Build(RectTransform host,float width,float height)
     {
         // HUD camera/art construction boundary; actual admission, visibility,
@@ -261,17 +312,31 @@ public partial class DsHudView
         _capture=new GameObject("hud-camera-boundary").AddComponent<Camera>();_capture.transform.SetParent(host);
         _hudRoot=new GameObject("native-hud-boundary").transform;
         _gameCameras=GameCameras.instance;
-        var native=new GameObject("native-health"){layer=5};native.AddComponent<Renderer>();NativeTargets.Add(native);_roots.Add(native.transform);
+        var native=new GameObject("native-health"){layer=5};
+        native.AddComponent<Renderer>(); native.transform.SetParent(_hudRoot);
+        NativeTargets.Add(native);_health=native.transform;_roots.Add(_health);
+        for(int i=1;i<=2;i++)
+        {
+            var mask=new GameObject("mask"+i){layer=5};mask.transform.SetParent(_health);mask.transform.position=new Vector3(i-1,0,0);
+            mask.AddComponent<PlayMakerFSM>().FsmVariables.Number.Value=i;
+            mask.AddComponent<SpriteRenderer>().sprite=new Sprite();
+        }
+        _tools=new GameObject("tools").transform;_tools.SetParent(_hudRoot);_roots.Add(_tools);
+        _spool=new GameObject("spool").AddComponent<SilkSpool>();_spool.transform.SetParent(_hudRoot);_roots.Add(_spool.transform);
+        _bindFrame=_spool.gameObject.AddComponent<BindOrbHudFrame>();_spool.gameObject.AddComponent<SpriteRenderer>().sprite=new Sprite();
+        _capRAnchor=new GameObject("cap").transform;_capRAnchor.SetParent(_spool.transform);_capRAnchor.position=new Vector3(2,-1,0);
+        _barParent=_spool.transform;
         _overlayRoot=new GameObject("captured-backdrop-boundary").transform;
         _overlayRoot.gameObject.AddComponent<Renderer>();_overlayRoot.gameObject.AddComponent<CanvasRenderer>();
     }
     IEnumerator RestoreCanvasAtFrameEnd(){yield break;}
     bool TryBind(){Binds++;return true;}
     void Waiting(string reason){}
-    void Fail(Exception error){_failed=true;Debug.LogError(error);}
-    void PrepareCanvasScope(){}
+    string CanvasState()=>"modeled canvas boundary";
     void Diagnostic(){}
+    static float HudPad=>6;
+    static float ToolGap=>28;
     readonly List<GameObject> _targets=new();
-    bool FrameCamera(){Captures++;return _targets.Count>0;}
+    bool FrameCamera(){Captures++;return FrameCameraBody();}
     void ApplySplit(){}
 }

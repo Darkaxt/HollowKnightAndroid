@@ -8,6 +8,16 @@ public partial class HKDualScreen
     // measure its own current bounds; it is not a settled-state/FPS certificate.
     const int NativeHudRendererLimit = 256, NativeHudNodeLimit = 384, NativeHudAnimatorLayers = 8;
     const int NativeHudReservationLimit = 32;
+    sealed class NativeHudAnimation
+    {
+        public Animator Owner;
+        public readonly AnimatorStateInfo[] States = new AnimatorStateInfo[NativeHudAnimatorLayers];
+        public readonly AnimatorStateInfo[] NextStates = new AnimatorStateInfo[NativeHudAnimatorLayers];
+        public readonly float[] Transitions = new float[NativeHudAnimatorLayers];
+        public readonly bool[] Transitioning = new bool[NativeHudAnimatorLayers];
+        public int Layers;
+        public bool Observed, Changed;
+    }
     sealed class NativeHudOwner
     {
         public Renderer Renderer;
@@ -18,12 +28,7 @@ public partial class HKDualScreen
         public MeshFilter MeshFilter;
         public Mesh Mesh;
         public Bounds MeshBounds;
-        public Animator Animator;
-        public readonly AnimatorStateInfo[] States = new AnimatorStateInfo[NativeHudAnimatorLayers];
-        public readonly AnimatorStateInfo[] NextStates = new AnimatorStateInfo[NativeHudAnimatorLayers];
-        public readonly float[] Transitions = new float[NativeHudAnimatorLayers];
-        public readonly bool[] Transitioning = new bool[NativeHudAnimatorLayers];
-        public int Layers;
+        public NativeHudAnimation Animation;
         public Func<string> Text;
         public TMProOld.TMP_Text Tmp;
         public Transform TextTransform;
@@ -76,6 +81,8 @@ public partial class HKDualScreen
     Matrix4x4 nativeHudHeaderProjection, nativeHudHeaderMatrix;
     bool nativeHudHeaderCameraChanged;
     readonly NativeHudOwner[] nativeHudOwners = new NativeHudOwner[NativeHudRendererLimit];
+    readonly NativeHudAnimation[] nativeHudAnimations = new NativeHudAnimation[NativeHudRendererLimit];
+    int nativeHudAnimationCount;
     readonly NativeHudNode[] nativeHudNodes = new NativeHudNode[NativeHudNodeLimit];
     readonly NativeHudHeaderSprite[] nativeHudHeaderSprites = new NativeHudHeaderSprite[23];
     readonly Rect[] nativeHudReservations = new Rect[NativeHudReservationLimit];
@@ -99,6 +106,8 @@ public partial class HKDualScreen
         if (nativeHudCamera != null) Camera.onPreCull -= BeforeNativeHudCamera;
         nativeHudCamera = null; nativeHudRoot = nativeHudHide = null;
         for (int i = 0; i < nativeHudOwnerCount; i++) nativeHudOwners[i] = null;
+        for (int i = 0; i < nativeHudAnimationCount; i++) nativeHudAnimations[i] = null;
+        nativeHudAnimationCount = 0;
         for (int i = 0; i < nativeHudNodeCount; i++)
         {
             var watch = nativeHudNodes[i].Watch;
@@ -179,6 +188,8 @@ public partial class HKDualScreen
             nativeHudNodes[i] = default;
         }
         for (int i = 0; i < nativeHudOwnerCount; i++) nativeHudOwners[i] = null;
+        for (int i = 0; i < nativeHudAnimationCount; i++) nativeHudAnimations[i] = null;
+        nativeHudAnimationCount = 0;
         nativeHudOwnerCount = nativeHudNodeCount = 0; nativeHudHide = null;
         nativeHudStructureDirty = false;
         int ancestors = 0;
@@ -212,12 +223,24 @@ public partial class HKDualScreen
                     Tk = t.GetComponent<tk2dBaseSprite>(), MeshFilter = t.GetComponent<MeshFilter>(),
                     Particle = r is ParticleSystemRenderer ? t.GetComponent<ParticleSystem>() : null };
                 if (r is ParticleSystemRenderer && o.Particle == null) return false;
+                Animator animator = null;
                 for (var p = t; p != null; p = p.parent)
                 {
-                    if (o.Animator == null) o.Animator = p.GetComponent<Animator>();
+                    if (animator == null) animator = p.GetComponent<Animator>();
                     if (p == nativeHudRoot) break;
                 }
-                if (o.Animator != null && o.Animator.layerCount > NativeHudAnimatorLayers) return false;
+                if (animator != null)
+                {
+                    if (animator.layerCount > NativeHudAnimatorLayers) return false;
+                    for (int k = 0; k < nativeHudAnimationCount; k++)
+                        if (nativeHudAnimations[k].Owner == animator) { o.Animation = nativeHudAnimations[k]; break; }
+                    if (o.Animation == null)
+                    {
+                        if (nativeHudAnimationCount == NativeHudRendererLimit) return false;
+                        o.Animation = new NativeHudAnimation { Owner = animator };
+                        nativeHudAnimations[nativeHudAnimationCount++] = o.Animation;
+                    }
+                }
                 var tmp = TmpOn(t);
                 for (var p = t.parent; tmp == null && p != null && t != nativeHudRoot; p = p.parent)
                 { tmp = TmpOn(p); if (p == nativeHudRoot) break; }
@@ -238,12 +261,17 @@ public partial class HKDualScreen
         return true;
     }
 
-    static bool NativeHudAnimatorAdvanced(NativeHudOwner o)
+    static bool NativeHudAnimatorAdvanced(NativeHudOwner owner)
     {
-        var a = o.Animator;
-        if (a == null || !a.enabled || !a.gameObject.activeInHierarchy) return false;
+        var o = owner.Animation;
+        if (o == null) return false;
+        if (o.Observed) return o.Changed;
+        var a = o.Owner;
+        if (a == null || !a.enabled || !a.gameObject.activeInHierarchy)
+        { o.Observed = true; o.Changed = false; return false; }
         int layers = a.layerCount;
-        if (layers > NativeHudAnimatorLayers) return true;
+        if (layers > NativeHudAnimatorLayers)
+        { o.Observed = true; o.Changed = true; return true; }
         bool changed = o.Layers != layers; o.Layers = layers;
         for (int i = 0; i < layers; i++)
         {
@@ -254,6 +282,7 @@ public partial class HKDualScreen
                 moving != o.Transitioning[i] || phase != o.Transitions[i];
             o.States[i] = s; o.NextStates[i] = next; o.Transitioning[i] = moving; o.Transitions[i] = phase;
         }
+        o.Changed = changed; o.Observed = true;
         return changed;
     }
 
@@ -305,7 +334,7 @@ public partial class HKDualScreen
             o.ParticleTime = o.Particle.time; o.ParticleCount = o.Particle.particleCount;
         }
         dirty |= NativeHudAnimatorAdvanced(o);
-        if (o.Animator != null && o.Animator.layerCount > NativeHudAnimatorLayers) return false;
+        if (o.Animation != null && o.Animation.Owner != null && o.Animation.Owner.layerCount > NativeHudAnimatorLayers) return false;
         if (dirty) { o.Ready = false; o.Retry.Reset(); }
         if (!o.Ready && o.Retry.Due(Time.frameCount))
         {
@@ -485,7 +514,8 @@ public partial class HKDualScreen
         for (int i = 0; !rebound && i < nativeHudOwnerCount; i++)
         {
             var o = nativeHudOwners[i];
-            rebound = o.Renderer == null || (o.Renderer is ParticleSystemRenderer && o.Particle == null);
+            rebound = o.Renderer == null || (o.Renderer is ParticleSystemRenderer && o.Particle == null) ||
+                (o.Animation != null && o.Animation.Owner == null);
         }
         if (rebound)
         {
@@ -497,6 +527,7 @@ public partial class HKDualScreen
         bool skinChanged = nativeHudSkinStamp != HkStageHooks.SkinStamp;
         nativeHudSkinStamp = HkStageHooks.SkinStamp;
         bool ready = true;
+        for (int i = 0; i < nativeHudAnimationCount; i++) nativeHudAnimations[i].Observed = false;
         for (int i = 0; i < nativeHudOwnerCount; i++)
         {
             bool changed;

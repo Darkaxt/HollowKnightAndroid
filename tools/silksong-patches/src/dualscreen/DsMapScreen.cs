@@ -81,6 +81,14 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip,
     MapZone _zone = MapZone.NONE;
     float _nextSymbolHunt;
     float _nextHeader;
+    readonly Action _toggleMode, _enterMarkers, _exitMarkers, _resetView;
+
+    public DsMapScreen()
+    {
+        _toggleMode = ToggleMode; _resetView = ResetView;
+        _enterMarkers = () => SetMarkerMode(true);
+        _exitMarkers = () => SetMarkerMode(false);
+    }
 
     public string Id { get { return "map"; } }
     public string Title { get { return "MAP"; } }
@@ -673,17 +681,17 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip,
 
         if (_markerMode)
         {
-            into.Add(new DsAction("EXIT", () => SetMarkerMode(false)));
+            into.Add(new DsAction("EXIT", _exitMarkers));
             return;
         }
 
         into.Add(new DsAction(
             _view.Mode == DsMapView.Frame.World ? "AREA MAP" : "FULL MAP",
-            ToggleMode));
+            _toggleMode));
         // Only where there is a map to pin things to, and only once the player
         // has actually found a pin to place.
         if (_state == State.Map && AnyMarkerUnlocked())
-            into.Add(new DsAction("MARKERS", () => SetMarkerMode(true)));
+            into.Add(new DsAction("MARKERS", _enterMarkers));
 
         // RESET is not like the two above. They change what the map IS -- which
         // is always a thing you might want -- while this one only undoes a pan
@@ -698,7 +706,7 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip,
         // the moment you might want it.
         float alpha = ControlsAlpha();
         if (alpha > 0f && _view.ViewMoved)
-            into.Add(new DsAction("RESET", ResetView, false,
+            into.Add(new DsAction("RESET", _resetView, false,
                                   DsActionPlace.Pane, alpha));
     }
 

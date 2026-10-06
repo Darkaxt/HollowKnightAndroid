@@ -16,11 +16,17 @@ internal sealed class Animator:MonoBehaviour
     internal int layerCount=1;
     internal AnimatorStateInfo State,Next;
     internal AnimatorTransitionInfo Transition;
-    internal bool Transitioning;
-    internal AnimatorStateInfo GetCurrentAnimatorStateInfo(int layer) => State;
-    internal AnimatorStateInfo GetNextAnimatorStateInfo(int layer) => Next;
-    internal AnimatorTransitionInfo GetAnimatorTransitionInfo(int layer) => Transition;
-    internal bool IsInTransition(int layer) => Transitioning;
+    internal bool Transitioning, Retired;
+    internal int CurrentReads, NextReads, TransitionReads, MovingReads;
+    internal AnimatorStateInfo GetCurrentAnimatorStateInfo(int layer) { CurrentReads++; return State; }
+    internal AnimatorStateInfo GetNextAnimatorStateInfo(int layer) { NextReads++; return Next; }
+    internal AnimatorTransitionInfo GetAnimatorTransitionInfo(int layer) { TransitionReads++; return Transition; }
+    internal bool IsInTransition(int layer) { MovingReads++; return Transitioning; }
+    public static bool operator ==(Animator a,Animator b)=>
+        (ReferenceEquals(a,null)||a.Retired)?ReferenceEquals(b,null)||b.Retired:ReferenceEquals(a,b);
+    public static bool operator !=(Animator a,Animator b)=>!(a==b);
+    public override bool Equals(object o)=>ReferenceEquals(this,o);
+    public override int GetHashCode()=>System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this);
 }
 internal sealed class tk2dBaseSprite:MonoBehaviour
 {

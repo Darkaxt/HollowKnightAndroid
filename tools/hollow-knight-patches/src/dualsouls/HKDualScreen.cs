@@ -100,30 +100,94 @@ public partial class HKDualScreen : MonoBehaviour
     // promptCam (full-frame bottom; FrameHudCams zooms it by creditScale while the credit draws — the old
     // ATTR_LAYER/attrCam home is owned by the companion whenever it is on, which is the shipped default,
     // so credits parked there never rendered). World signposts (layer 0) + focus-tablet lore untouched.
+    public sealed class TutorialInventoryWatch : MonoBehaviour
+    {
+        internal HKDualScreen Owner;
+        void OnTransformChildrenChanged() { if (Owner != null) Owner.tutorialInventoryDirty = true; }
+        void OnTransformParentChanged() { if (Owner != null) Owner.tutorialInventoryDirty = true; }
+        void OnDestroy() { if (Owner != null) Owner.tutorialInventoryDirty = true; Owner = null; }
+    }
+    struct TutorialScene { public int Handle, Roots; public bool Loaded; }
+    readonly List<TutorialScene> tutorialScenes = new List<TutorialScene>();
+    readonly List<GameObject> tutorialSceneRoots = new List<GameObject>();
+    readonly List<Transform> tutorialScanRoots = new List<Transform>();
+    readonly List<TutorialInventoryWatch> tutorialWatches = new List<TutorialInventoryWatch>();
+    Transform tutorialPersistentRoot;
+    bool tutorialInventoryReady, tutorialInventoryDirty;
+    int tutorialInventoryLayer, tutorialRecoveryFrame;
+
     void ScanTutorials(int layer)
     {
         int n = UnityEngine.SceneManagement.SceneManager.sceneCount;
-        for (int i = 0; i < n; i++)
-        {
-            var sc = UnityEngine.SceneManagement.SceneManager.GetSceneAt(i);
-            if (!sc.isLoaded) continue;
-            var roots = sc.GetRootGameObjects();
-            for (int r = 0; r < roots.Length; r++) ScanNode(roots[r].transform, layer);
-        }
-        // GameCameras/HUD can live in Unity's hidden DontDestroyOnLoad
-        // scene, which SceneManager.sceneCount does not enumerate. Scan its
-        // persistent root explicitly so newly spawned attack/focus prompts
-        // cannot remain on the primary display.
         var cameras = resolvedGameCameras;
         Transform persistentRoot = cameras != null ? cameras.transform.root : null;
-        if (persistentRoot != null) ScanNode(persistentRoot, layer);
+        bool discover = !tutorialInventoryReady || tutorialInventoryDirty || tutorialInventoryLayer != layer ||
+            tutorialScenes.Count != n || tutorialPersistentRoot != persistentRoot || Time.frameCount >= tutorialRecoveryFrame;
+        for (int i = 0; !discover && i < n; i++)
+        {
+            var scene = UnityEngine.SceneManagement.SceneManager.GetSceneAt(i);
+            var old = tutorialScenes[i];
+            discover = scene.handle != old.Handle || scene.isLoaded != old.Loaded || scene.rootCount != old.Roots;
+        }
+        for (int i = 0; !discover && i < tutorialScanRoots.Count; i++) discover = tutorialScanRoots[i] == null;
+        for (int i = tutRoots.Count - 1; i >= 0; i--)
+        {
+            var root = tutRoots[i];
+            if (root == null) { tutRoots.RemoveAt(i); discover = true; }
+            else if (root.gameObject.layer != layer) RouteToLayer(root, layer);
+        }
+        if (creditT != null && creditT.gameObject.layer != layer) RouteToLayer(creditT, layer);
+        if (!discover) return;
+
+        tutorialInventoryReady = false;
+        RetireTutorialWatches();
+        tutorialScenes.Clear(); tutorialScanRoots.Clear();
+        tutorialInventoryDirty = false;
+        for (int i = 0; i < n; i++)
+        {
+            var scene = UnityEngine.SceneManagement.SceneManager.GetSceneAt(i);
+            tutorialScenes.Add(new TutorialScene { Handle = scene.handle, Loaded = scene.isLoaded, Roots = scene.rootCount });
+            if (!scene.isLoaded) continue;
+            scene.GetRootGameObjects(tutorialSceneRoots);
+            for (int r = 0; r < tutorialSceneRoots.Count; r++)
+            {
+                var root = tutorialSceneRoots[r].transform;
+                tutorialScanRoots.Add(root); WatchTutorialNode(root); ScanNode(root, layer);
+            }
+        }
+        // The hidden DontDestroyOnLoad scene is absent from SceneManager's list.
+        if (persistentRoot != null && !tutorialScanRoots.Contains(persistentRoot))
+        { tutorialScanRoots.Add(persistentRoot); WatchTutorialNode(persistentRoot); ScanNode(persistentRoot, layer); }
+        tutorialSceneRoots.Clear();
+        tutorialPersistentRoot = persistentRoot; tutorialInventoryLayer = layer;
+        // Names/layers can change without a transform event. Keep recovery bounded,
+        // without rebuilding known inventories on each thirty-frame admission poll.
+        tutorialRecoveryFrame = Time.frameCount + 120;
+        tutorialInventoryReady = true;
+    }
+
+    void RetireTutorialWatches()
+    {
+        foreach (var watch in tutorialWatches) if (watch != null && watch.Owner == this) watch.Owner = null;
+        tutorialWatches.Clear();
+    }
+
+    void WatchTutorialNode(Transform root)
+    {
+        var watch = root.GetComponent<TutorialInventoryWatch>();
+        if (watch == null) watch = root.gameObject.AddComponent<TutorialInventoryWatch>();
+        if (watch.Owner == this) return;
+        watch.Owner = this; tutorialWatches.Add(watch);
     }
 
     void ScanNode(Transform t, int layer)
     {
+        if (t == null) return;
         var go = t.gameObject;
         string nm = go.name;   // PERF: match with NameHas (no ToLowerInvariant alloc per node — this recurses whole scenes)
         bool onUI = go.layer == UI_LAYER || go.layer == hudLayer || go.layer == layer || go.layer == ATTR_LAYER;
+        // Watch native UI ancestry and scene roots, not every world object.
+        if (onUI) WatchTutorialNode(t);
         bool isCredit = onUI && NameHas(nm, "credit");
         bool isTut = (go.layer == UI_LAYER || go.layer == hudLayer || go.layer == layer) &&
                      (NameHas(nm, "tutorial") || NameHas(nm, "focus_prompt"));
@@ -267,9 +331,11 @@ public partial class HKDualScreen : MonoBehaviour
             // it. Route the whole card to the bottom while the box is up; CenterDialogue parks it at
             // the bottom screen's bottom-left [user].
             if (dlgNameT == null && dlgBoxT.parent != null && dlgBoxT.parent.parent != null)
+            {
                 dlgNameT = FindDeep(dlgBoxT.parent.parent, "Title Small");
-                // a fresh card after a scene load invalidates everything bound to the old one
+                // Only a newly discovered card invalidates its native bindings.
                 if (dlgNameT != null) { dlgNameSrcTmps = null; dlgTitleFsm = null; dlgTitleFsmSearched = false; }
+            }
             if (dlgNameT != null && !dlgNameRouted)
             {
                 // fix(1.0.2) [user: "the dialog char name is not top left now slightly right"]: this used to

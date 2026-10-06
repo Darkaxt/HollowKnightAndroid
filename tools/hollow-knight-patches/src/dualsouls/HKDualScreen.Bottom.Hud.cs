@@ -557,6 +557,27 @@ public partial class HKDualScreen
     // the other lines. Clone the whole Title Small group and drive every part.
     static readonly string[] NAME_PARTS = { "Title Small Main", "Title Small Sub", "Title Small Super" };
     Transform dlgNameClone; Component[] dlgNameSrcTmps, dlgNameCloneTmps; Renderer[] dlgNameCloneRs;
+    Transform dlgNameSourcesOwner, dlgNameAppliedOwner, dlgNameCloneFor;
+    int dlgNameSourceMask, dlgNameSourceRetry, dlgTitleFsmRetry;
+    int dlgNameClipUntil = -1, dlgNameClipFrame = -1, dlgNameCloneChildren = -1, dlgNameCloneBindRetry;
+    bool dlgNameClipPending, dlgTitleFsmWasBound;
+    readonly string[] dlgNameObservedParts = new string[NAME_PARTS.Length];
+    string dlgNameObservedText;
+    sealed class NameClonePart
+    {
+        public Component Owner;
+        public Renderer Renderer;
+        public Func<string> Text;
+        public Action<string> SetText;
+        public Func<Color> Color;
+        public Action<Color> SetColor;
+        public Func<bool> Dirty;
+        public Action Generate;
+        public string Content;
+        public int Children = -1;
+        public bool Applied, PropertiesDirty;
+    }
+    NameClonePart[] dlgNameCloneState;
     string[] dlgNameParts = new string[NAME_PARTS.Length];
     string dlgNameStr = "", dlgNameSeen = ""; float dlgRouteT; Vector3 dlgNameSrcLossy = Vector3.one;
     float dlgNameFit = 1f;   // <1 only when a caption is wider than the panel
@@ -582,12 +603,16 @@ public partial class HKDualScreen
     PlayMakerFSM dlgTitleFsm; bool dlgTitleFsmSearched;
     bool NpcTitleActive()
     {
+        BindNameSources();
+        if (dlgTitleFsmWasBound && dlgTitleFsm == null)
+        { dlgTitleFsmSearched = false; dlgTitleFsmWasBound = false; }
+        if (dlgTitleFsmSearched && !dlgTitleFsmWasBound && Time.frameCount >= dlgTitleFsmRetry) dlgTitleFsmSearched = false;
         if (!dlgTitleFsmSearched && dlgNameT != null)
         {
-            dlgTitleFsmSearched = true;
+            dlgTitleFsmSearched = true; dlgTitleFsmRetry = Time.frameCount + 30;
             var root = dlgNameT.parent != null ? dlgNameT.parent : dlgNameT;
             foreach (var f in root.GetComponentsInChildren<PlayMakerFSM>(true))
-                if (f != null && f.FsmName == "Area Title Control") { dlgTitleFsm = f; break; }
+                if (f != null && f.FsmName == "Area Title Control") { dlgTitleFsm = f; dlgTitleFsmWasBound = true; break; }
         }
         if (dlgTitleFsm == null) return true;   // FSM not found: fall back to accepting the text
         try { var v = dlgTitleFsm.FsmVariables.GetFsmBool("NPC Title"); return v == null || v.Value; }
@@ -596,9 +621,22 @@ public partial class HKDualScreen
 
     void BindNameSources()
     {
+        bool changed = dlgNameSourcesOwner != dlgNameT ||
+            (dlgNameSrcTmps != null && dlgNameSourceMask != (1 << NAME_PARTS.Length) - 1 && Time.frameCount >= dlgNameSourceRetry);
+        for (int i = 0; !changed && dlgNameSrcTmps != null && i < dlgNameSrcTmps.Length; i++)
+            changed = (dlgNameSourceMask & (1 << i)) != 0 && dlgNameSrcTmps[i] == null;
+        if (changed || dlgNameT == null)
+        {
+            dlgNameSourcesOwner = dlgNameT; dlgNameSrcTmps = null; dlgNameSourceMask = 0; dlgNameObservedText = null;
+            dlgTitleFsm = null; dlgTitleFsmSearched = dlgTitleFsmWasBound = false;
+        }
         if (dlgNameSrcTmps != null || dlgNameT == null) return;
-        dlgNameSrcTmps = new Component[NAME_PARTS.Length];
-        for (int i = 0; i < NAME_PARTS.Length; i++) dlgNameSrcTmps[i] = TmpOn(FindDeep(dlgNameT, NAME_PARTS[i]));
+        dlgNameSrcTmps = new Component[NAME_PARTS.Length]; dlgNameSourceRetry = Time.frameCount + 30;
+        for (int i = 0; i < NAME_PARTS.Length; i++)
+        {
+            dlgNameSrcTmps[i] = TmpOn(FindDeep(dlgNameT, NAME_PARTS[i]));
+            if (dlgNameSrcTmps[i] != null) dlgNameSourceMask |= 1 << i;
+        }
     }
 
     // Everything the card is currently displaying, joined — used both to detect a new speaker and to log.
@@ -606,15 +644,30 @@ public partial class HKDualScreen
     {
         BindNameSources();
         if (dlgNameSrcTmps == null) return "";
-        string j = "";
+        bool changed = dlgNameObservedText == null;
         for (int i = 0; i < dlgNameSrcTmps.Length; i++)
-            if (dlgNameSrcTmps[i] != null) { var t = TmpText(dlgNameSrcTmps[i]); if (!string.IsNullOrEmpty(t)) j += (j.Length > 0 ? " " : "") + t; }
-        return j;
+        {
+            var text = dlgNameSrcTmps[i] != null ? TmpText(dlgNameSrcTmps[i]) : "";
+            changed |= dlgNameObservedParts[i] != text; dlgNameObservedParts[i] = text;
+        }
+        if (changed)
+        {
+            string joined = "";
+            for (int i = 0; i < dlgNameObservedParts.Length; i++)
+                if (!string.IsNullOrEmpty(dlgNameObservedParts[i])) joined += (joined.Length > 0 ? " " : "") + dlgNameObservedParts[i];
+            dlgNameObservedText = joined;
+        }
+        return dlgNameObservedText;
     }
 
     void EnsureNameClone()
     {
-        if (dlgNameClone != null || dlgNameT == null || dlgBoxT == null) return;
+        if (dlgNameT == null || dlgBoxT == null) return;
+        if (dlgNameClone != null && dlgNameCloneFor == dlgNameT) return;
+        if (dlgNameClone != null) Destroy(dlgNameClone.gameObject);
+        dlgNameClone = null; dlgNameCloneTmps = null; dlgNameCloneRs = null;
+        dlgNameCloneState = null; dlgNameAppliedOwner = null;
+        dlgNameClipPending = false; dlgNameClipUntil = dlgNameClipFrame = -1;
         try
         {
             BindNameSources();
@@ -624,7 +677,7 @@ public partial class HKDualScreen
             SanitizeDetachedTmpClone(go);   // no FadeGroup/FSM/legacy clip driver on our detached copy
             SetLayerRecursive(go.transform, tutLayer);
             go.SetActive(true);
-            dlgNameClone = go.transform;
+            dlgNameClone = go.transform; dlgNameCloneFor = dlgNameT;
             dlgNameCloneTmps = new Component[NAME_PARTS.Length];
             dlgNameCloneRs = new Renderer[NAME_PARTS.Length];
             for (int i = 0; i < NAME_PARTS.Length; i++)
@@ -657,25 +710,115 @@ public partial class HKDualScreen
 
     // Show or hide our label. A blank TMP reports its whole container rect as bounds, which would poison both
     // the placement and the zoom reserve — so an empty part has its renderer switched off, not just its text.
+    static NameClonePart BindNameClonePart(Component c, Renderer renderer)
+    {
+        var text = NativeHudGetter<string>(c, "text");
+        var setter = TmpProp(c, "text")?.GetSetMethod();
+        var generate = c.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes);
+        if (text == null || setter == null || generate == null) throw new MissingMethodException("Native speaker TMP text/generation methods unavailable");
+        var colorSetter = TmpProp(c, "color")?.GetSetMethod();
+        return new NameClonePart
+        {
+            Owner = c, Renderer = renderer, Text = text,
+            SetText = (Action<string>)Delegate.CreateDelegate(typeof(Action<string>), c, setter),
+            Generate = (Action)Delegate.CreateDelegate(typeof(Action), c, generate),
+            Dirty = NativeHudGetter<bool>(c, "havePropertiesChanged"),
+            Color = NativeHudGetter<Color>(c, "color"),
+            SetColor = colorSetter != null ? (Action<Color>)Delegate.CreateDelegate(typeof(Action<Color>), c, colorSetter) : null
+        };
+    }
+
     void SetNameClone(bool show)
     {
-        if (dlgNameCloneTmps == null) return;
+        if (dlgNameCloneTmps == null || dlgNameClone == null) return;
+        if (dlgNameAppliedOwner != dlgNameClone || dlgNameCloneState == null || dlgNameCloneState.Length != dlgNameCloneTmps.Length)
+        {
+            dlgNameAppliedOwner = dlgNameClone;
+            dlgNameCloneState = new NameClonePart[dlgNameCloneTmps.Length];
+            dlgNameClipPending = false; dlgNameClipUntil = dlgNameClipFrame = -1; dlgNameCloneChildren = -1;
+        }
+        if (dlgNameCloneChildren != dlgNameClone.childCount)
+        {
+            dlgNameCloneChildren = dlgNameClone.childCount; dlgNameCloneBindRetry = 0;
+            dlgNameClipPending = true; dlgNameClipUntil = Time.frameCount + 2; dlgNameClipFrame = -1;
+        }
+        bool missing = false, retired = false;
+        for (int i = 0; i < dlgNameCloneTmps.Length; i++)
+        {
+            if (dlgNameCloneTmps[i] != null && dlgNameCloneRs[i] != null) continue;
+            missing = true;
+            var old = dlgNameCloneState[i];
+            if (old != null && (old.Owner == null || (!ReferenceEquals(old.Renderer, null) && old.Renderer == null)))
+            { retired = true; dlgNameCloneState[i] = null; }
+        }
+        if (missing && (retired || Time.frameCount >= dlgNameCloneBindRetry))
+        {
+            dlgNameCloneBindRetry = Time.frameCount + 30;
+            for (int i = 0; i < dlgNameCloneTmps.Length; i++)
+            {
+                if (dlgNameCloneTmps[i] == null) dlgNameCloneTmps[i] = TmpOn(FindDeep(dlgNameClone, NAME_PARTS[i]));
+                if (dlgNameCloneRs[i] == null && dlgNameCloneTmps[i] != null) dlgNameCloneRs[i] = dlgNameCloneTmps[i].GetComponent<Renderer>();
+            }
+        }
         for (int i = 0; i < dlgNameCloneTmps.Length; i++)
         {
             var c = dlgNameCloneTmps[i];
-            if (c == null) continue;
-            string t = show && dlgNameParts != null && i < dlgNameParts.Length ? (dlgNameParts[i] ?? "") : "";
+            if (c == null) { dlgNameCloneState[i] = null; continue; }
+            string text = show && dlgNameParts != null && i < dlgNameParts.Length ? (dlgNameParts[i] ?? "") : "";
+            NameClonePart part = dlgNameCloneState[i];
             try
             {
-                TmpProp(c, "text")?.SetValue(c, t, null);
-                c.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)?.Invoke(c, null);
-                var pi = TmpProp(c, "color");
-                if (pi != null) { var v = pi.GetValue(c, null); if (v is Color) { var col = (Color)v; if (col.a < 0.999f) { col.a = 1f; pi.SetValue(c, col, null); } } }
+                var renderer = dlgNameCloneRs[i];
+                if (part == null || part.Owner != c || part.Renderer != renderer)
+                    dlgNameCloneState[i] = part = BindNameClonePart(c, renderer);
+                if (part.Children != c.transform.childCount)
+                {
+                    part.Children = c.transform.childCount;
+                    dlgNameClipPending = true; dlgNameClipUntil = Time.frameCount + 2; dlgNameClipFrame = -1;
+                }
+                bool dirty = show && part.Dirty != null && part.Dirty();
+                bool contentChanged = part.Content != text || part.Text() != text;
+                if (!part.Applied || contentChanged || (dirty && !part.PropertiesDirty))
+                {
+                    part.Applied = false;
+                    if (part.Text() != text) part.SetText(text);
+                    part.Generate();
+                    if (part.Text() != text) throw new InvalidOperationException("Native speaker TMP changed during generation");
+                    part.Content = text; part.Applied = true;
+                    dlgNameClipPending = true; dlgNameClipUntil = Time.frameCount + 2; dlgNameClipFrame = -1;
+                    dirty = part.Dirty != null && part.Dirty();
+                }
+                part.PropertiesDirty = dirty;
+                if (show && part.Color != null && part.SetColor != null)
+                {
+                    var color = part.Color();
+                    if (color.a < .999f) { color.a = 1f; part.SetColor(color); }
+                }
             }
-            catch { }
-            if (dlgNameCloneRs[i] != null) dlgNameCloneRs[i].enabled = t.Length > 0;
+            catch (Exception e)
+            {
+                if (part != null) part.Applied = false;
+                WarnOnce("dlg name apply", e);
+            }
         }
-        NeutralizeDetachedTmpClip(dlgNameClone.gameObject);
+        // Generation can add fallback submeshes during the following LateUpdate.
+        // Keep only this event-bounded settle window, plus retry after a failed clip write.
+        if ((dlgNameClipPending || Time.frameCount <= dlgNameClipUntil) && dlgNameClipFrame != Time.frameCount)
+        {
+            try
+            {
+                NeutralizeDetachedTmpClip(dlgNameClone.gameObject);
+                dlgNameClipPending = false; dlgNameClipFrame = Time.frameCount;
+            }
+            catch (Exception e) { dlgNameClipPending = true; WarnOnce("dlg name clip", e); }
+        }
+        for (int i = 0; i < dlgNameCloneRs.Length; i++)
+        {
+            var renderer = dlgNameCloneRs[i]; if (renderer == null) continue;
+            var part = i < dlgNameCloneState.Length ? dlgNameCloneState[i] : null;
+            bool enabled = !dlgNameClipPending && part != null && part.Applied && part.Content.Length > 0;
+            if (renderer.enabled != enabled) renderer.enabled = enabled;
+        }
     }
 
     // The ornament and page glyphs sit under DialogueBox, whose scale HK ANIMATES as the box opens. Converting
@@ -982,7 +1125,7 @@ public partial class HKDualScreen
                 {
                     dlgNameStr = cur;
                     for (int i = 0; dlgNameSrcTmps != null && i < dlgNameSrcTmps.Length; i++)
-                        dlgNameParts[i] = dlgNameSrcTmps[i] != null ? TmpText(dlgNameSrcTmps[i]) : "";
+                        dlgNameParts[i] = dlgNameObservedParts[i] ?? "";
                 }
                 SetNameClone(dlgNameStr.Length > 0);
                 Transform tgt = dlgNameClone;

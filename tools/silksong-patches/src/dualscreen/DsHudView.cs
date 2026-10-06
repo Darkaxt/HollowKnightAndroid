@@ -22,6 +22,22 @@ public sealed class DsHudView : MonoBehaviour
     readonly List<GameObject> _canvasTargets = new List<GameObject>();
     readonly List<Renderer> _overlayRenderers = new List<Renderer>();
     readonly List<CanvasRenderer> _overlayCanvasRenderers = new List<CanvasRenderer>();
+    // Local structural notifications; component-only changes retain the bounded fallback.
+    public sealed class HudInventoryWatch : MonoBehaviour
+    {
+        internal DsHudView Owner;
+        void OnTransformChildrenChanged() { if (Owner != null) Owner._inventoryDirty = true; }
+        void OnTransformParentChanged() { if (Owner != null) Owner._inventoryDirty = true; }
+        void OnDestroy() { if (Owner != null) Owner._inventoryDirty = true; Owner = null; }
+    }
+    readonly List<Transform> _inventoryTransforms = new List<Transform>();
+    readonly List<HudInventoryWatch> _inventoryWatches = new List<HudInventoryWatch>();
+    Transform _inventoryHud, _inventoryHealth, _inventoryTools, _inventoryOverlay, _inventorySpool;
+    bool _inventoryReady, _inventoryDirty;
+    int _inventoryRetry;
+    static readonly string[] EffectRoots = {
+        "Crest Get Effects", "Blue_Health_Overblue_HUD_burst", "Blue_Health_Overblue_HUD_drips"
+    };
     readonly DsHudRenderScope<GameObject> _scope = new DsHudRenderScope<GameObject>(
         go => go != null, go => go.layer, (go, layer) => go.layer = layer);
     readonly DsHudRenderScope<GameObject> _canvasScope = new DsHudRenderScope<GameObject>(
@@ -189,6 +205,7 @@ public sealed class DsHudView : MonoBehaviour
         Camera.onPostRender -= AfterCamera;
         StopCanvasCleanup();
         Suspend();
+        RetireInventoryWatches();
     }
 
     void StopCanvasCleanup()
@@ -211,6 +228,7 @@ public sealed class DsHudView : MonoBehaviour
 
     void Suspend()
     {
+        _inventoryReady = false;
         if (_capture != null) _capture.enabled = false;
         _capturedFrame = -1;
         _submitted = false;
@@ -323,6 +341,7 @@ public sealed class DsHudView : MonoBehaviour
         if (Time.unscaledTime < _nextBind) return false;
         _nextBind = Time.unscaledTime + 1f;
         _capturedFrame = -1;
+        _inventoryReady = false;
         _roots.Clear();
         if (cameras == null || cameras.hudCanvasSlideOut == null || cameras.silkSpool == null) return false;
 
@@ -364,9 +383,7 @@ public sealed class DsHudView : MonoBehaviour
         _roots.Add(health);
         _roots.Add(spool.transform);
         _roots.Add(tools);
-        foreach (string name in new[] {
-            "Crest Get Effects", "Blue_Health_Overblue_HUD_burst", "Blue_Health_Overblue_HUD_drips",
-        })
+        foreach (string name in EffectRoots)
         {
             var effects = root.Find(name);
             if (effects != null) _roots.Add(effects);
@@ -584,17 +601,94 @@ public sealed class DsHudView : MonoBehaviour
         finally { _canvasScope.Restore(); }
     }
 
+    static bool Retired<T>(List<T> owners) where T : UnityEngine.Object
+    {
+        for (int i = 0; i < owners.Count; i++) if (owners[i] == null) return true;
+        return false;
+    }
+
+    void EnsureInventory()
+    {
+        var spool = _spool != null ? _spool.transform : null;
+        bool changed = !_inventoryReady || _inventoryDirty || Time.frameCount >= _inventoryRetry ||
+            _inventoryHud != _hudRoot || _inventoryHealth != _health || _inventorySpool != spool ||
+            _inventoryTools != _tools || _inventoryOverlay != _overlayRoot;
+        changed |= Retired(_renderers) || Retired(_healthFsms) || Retired(_blueHealth) ||
+            Retired(_toolIcons) || Retired(_toolCanvases) || Retired(_toolGraphics) ||
+            Retired(_overlayRenderers) || Retired(_overlayCanvasRenderers);
+        if (changed)
+        {
+            _inventoryReady = false;
+            // Re-find optional effect roots, including ones born after binding.
+            _roots.Clear();
+            if (_health != null) _roots.Add(_health);
+            if (_spool != null) _roots.Add(_spool.transform);
+            if (_tools != null) _roots.Add(_tools);
+            if (_hudRoot != null)
+                foreach (string name in EffectRoots)
+                {
+                    var effects = _hudRoot.Find(name);
+                    if (effects != null) _roots.Add(effects);
+                }
+            _renderers.Clear();
+            foreach (var root in _roots)
+            {
+                _scratch.Clear(); root.GetComponentsInChildren(true, _scratch);
+                _renderers.AddRange(_scratch);
+            }
+            _healthFsms.Clear(); _blueHealth.Clear();
+            if (_health != null)
+            {
+                _health.GetComponentsInChildren(true, _healthFsms);
+                _health.GetComponentsInChildren(true, _blueHealth);
+            }
+            _toolIcons.Clear(); _toolCanvases.Clear(); _toolGraphics.Clear();
+            if (_tools != null)
+            {
+                _tools.GetComponentsInChildren(true, _toolIcons);
+                _tools.GetComponentsInChildren(true, _toolCanvases);
+                _tools.GetComponentsInChildren(true, _toolGraphics);
+            }
+            _overlayRenderers.Clear(); _overlayCanvasRenderers.Clear();
+            if (_overlayRoot != null)
+            {
+                _overlayRoot.GetComponentsInChildren(true, _overlayRenderers);
+                _overlayRoot.GetComponentsInChildren(true, _overlayCanvasRenderers);
+            }
+            _inventoryTransforms.Clear(); RetireInventoryWatches();
+            _inventoryDirty = false;
+            if (_hudRoot != null) _hudRoot.GetComponentsInChildren(true, _inventoryTransforms);
+            _scratch.Clear(); // Scratch contains renderers, never routing authority.
+            for (int i = 0; i < _inventoryTransforms.Count; i++) WatchInventoryNode(_inventoryTransforms[i]);
+            _inventoryTransforms.Clear();
+            if (_overlayRoot != null) _overlayRoot.GetComponentsInChildren(true, _inventoryTransforms);
+            for (int i = 0; i < _inventoryTransforms.Count; i++) WatchInventoryNode(_inventoryTransforms[i]);
+            _inventoryHud = _hudRoot; _inventoryHealth = _health; _inventorySpool = spool;
+            _inventoryTools = _tools; _inventoryOverlay = _overlayRoot;
+            _inventoryRetry = Time.frameCount + 30;
+            _inventoryReady = true;
+        }
+    }
+
+    void RetireInventoryWatches()
+    {
+        foreach (var watch in _inventoryWatches)
+            if (watch != null && watch.Owner == this) watch.Owner = null;
+        _inventoryWatches.Clear();
+    }
+
+    void WatchInventoryNode(Transform owner)
+    {
+        if (owner == null) return;
+        var watch = owner.GetComponent<HudInventoryWatch>();
+        if (watch == null) watch = owner.gameObject.AddComponent<HudInventoryWatch>();
+        watch.Owner = this; _inventoryWatches.Add(watch);
+    }
+
     void CollectRenderers()
     {
-        _renderers.Clear();
+        EnsureInventory();
         _targets.Clear();
-        foreach (var root in _roots)
-        {
-            if (root == null) continue;
-            _scratch.Clear();
-            root.GetComponentsInChildren(true, _scratch);
-            _renderers.AddRange(_scratch);
-        }
         foreach (var renderer in _renderers)
         {
             if (renderer != null && renderer.enabled && renderer.gameObject.activeInHierarchy &&
@@ -615,10 +709,7 @@ public sealed class DsHudView : MonoBehaviour
         if (_overlayRendererScope.Active || _overlayCanvasScope.Active)
             throw new InvalidOperationException("A companion overlay suppression scope is already active");
 
-        _overlayRenderers.Clear();
-        _overlayRoot.GetComponentsInChildren(true, _overlayRenderers);
-        _overlayCanvasRenderers.Clear();
-        _overlayRoot.GetComponentsInChildren(true, _overlayCanvasRenderers);
+        EnsureInventory();
         try
         {
             _overlayRendererScope.Begin(_overlayRenderers);
@@ -659,10 +750,9 @@ public sealed class DsHudView : MonoBehaviour
     {
         // uGUI batches before camera callbacks. Keep these layers in place for
         // the whole render phase, then restore them at WaitForEndOfFrame.
+        EnsureInventory();
         _canvasTargets.Clear();
         _activeToolCanvases = 0;
-        _toolCanvases.Clear();
-        _tools.GetComponentsInChildren(true, _toolCanvases);
         foreach (var canvas in _toolCanvases)
         {
             if (canvas == null || !canvas.isActiveAndEnabled) continue;
@@ -674,8 +764,6 @@ public sealed class DsHudView : MonoBehaviour
                 _activeToolCanvases++;
             }
         }
-        _toolGraphics.Clear();
-        _tools.GetComponentsInChildren(true, _toolGraphics);
         foreach (var graphic in _toolGraphics)
         {
             if (graphic != null && graphic.isActiveAndEnabled && graphic.canvas != null &&
@@ -693,9 +781,8 @@ public sealed class DsHudView : MonoBehaviour
         _worldToFrame = Matrix4x4.TRS(_hudRoot.position, _hudRoot.rotation, Vector3.one).inverse;
         Transform first = null, second = null;
         var pd = PlayerData.instance;
-        _healthFsms.Clear();
+        EnsureInventory();
         _maskPositions.Clear();
-        _health.GetComponentsInChildren(true, _healthFsms);
         foreach (var fsm in _healthFsms)
         {
             if (fsm == null || fsm.FsmName != "health_display") continue;
@@ -714,15 +801,12 @@ public sealed class DsHudView : MonoBehaviour
         if (pitch <= 0f) return false;
         float rightmost = anchor.x;
         foreach (var point in _maskPositions) rightmost = Mathf.Max(rightmost, point.x);
-        _blueHealth.Clear();
-        _health.GetComponentsInChildren(true, _blueHealth);
         foreach (var blue in _blueHealth)
         {
             if (blue != null && blue.gameObject.activeInHierarchy)
                 rightmost = Mathf.Max(rightmost, LayoutPosition(blue.transform).x);
         }
         _activeTools = 0;
-        _toolIcons.Clear();
         // Everything that is HEALTH -- the masks, the lifeblood, and the silk
         // bar's own cap below them. Kept apart from `rightmost`, which goes on
         // to include the tools: the tools are drawn beside the health now, so
@@ -731,7 +815,6 @@ public sealed class DsHudView : MonoBehaviour
         // native position instead left a gap that grew as masks were lost.
         Vector3 cap = LayoutPosition(_capRAnchor);
         float healthRight = Mathf.Max(rightmost, cap.x);
-        _tools.GetComponentsInChildren(true, _toolIcons);
         foreach (var icon in _toolIcons)
         {
             if (icon == null || !icon.gameObject.activeInHierarchy || icon.CurrentTool == null) continue;
