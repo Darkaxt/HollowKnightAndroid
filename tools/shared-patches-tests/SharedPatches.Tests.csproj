@@ -59,7 +59,7 @@
   </ItemGroup>
   <ItemGroup>
     <!-- Engine model is a per-profile generator template, not a global Unity stub. -->
-    <Compile Remove="NativeModsMenuNativeModel.cs" />
+    <Compile Remove="NativeModsMenuNativeModel.cs;SkinUnityNativeModel.cs" />
     <!-- External intermediates must not admit historical generated obj/bin sources. -->
     <Compile Remove="obj/**/*.cs;bin/**/*.cs" />
   </ItemGroup>
@@ -94,6 +94,13 @@
     <Exec Command="python &quot;$(MSBuildProjectDirectory)/generate_ss_shell_fixture.py&quot; &quot;$(IntermediateOutputPath)SilksongShellFixture.g.cs&quot; --source-root &quot;$(SilksongShellSourceRoot)&quot;" />
     <ItemGroup>
       <Compile Include="$(IntermediateOutputPath)SilksongShellFixture.g.cs" />
+    </ItemGroup>
+  </Target>
+  <Target Name="GenerateSkinUnityFixture" BeforeTargets="CoreCompile">
+    <Exec Command="python &quot;$(MSBuildProjectDirectory)/generate_skin_unity_fixture.py&quot; &quot;$(IntermediateOutputPath)SkinUnityFixture.g.cs&quot; --source-root &quot;$(MSBuildProjectDirectory)/../..&quot;" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)SkinUnityFixture.g.cs" />
+      <Compile Include="$(MSBuildProjectDirectory)/SkinUnityNativeModel.cs" />
     </ItemGroup>
   </Target>
 </Project>

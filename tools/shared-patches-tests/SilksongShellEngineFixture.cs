@@ -54,6 +54,7 @@ public static class Mathf
     public static float Clamp01(float v)=>Clamp(v,0,1);public static float Abs(float v)=>MathF.Abs(v);
     public static float Pow(float a,float b)=>MathF.Pow(a,b);public static float Lerp(float a,float b,float t)=>a+(b-a)*t;
     public static int RoundToInt(float v)=>(int)MathF.Round(v);public static float Round(float v)=>MathF.Round(v); public static int CeilToInt(float v)=>(int)MathF.Ceiling(v);
+    public static float Sqrt(float v)=>MathF.Sqrt(v);
     public static float Log(float v)=>MathF.Log(v);public static float Exp(float v)=>MathF.Exp(v);
     public static bool Approximately(float a,float b)=>MathF.Abs(a-b)<.000001f;
 }
@@ -119,6 +120,7 @@ public class GameObject : Object
     public T AddComponent<T>() where T:Component,new()
     {
         if(typeof(T)==typeof(RectTransform)&&transform is RectTransform existing)return (T)(Component)existing;
+        if(typeof(T)==typeof(Canvas) && transform is not RectTransform) AddComponent<RectTransform>();
         var value=new T{gameObject=this};components.Add(value);
         if(value is RectTransform rt){components.Remove(transform);rt.parent=transform.parent;transform=rt;}
         if(activeInHierarchy)Invoke(value,"OnEnable");
@@ -158,9 +160,39 @@ public class MonoBehaviour:Component
     public bool isActiveAndEnabled=>gameObject.activeInHierarchy;
 }
 public enum RenderMode{ScreenSpaceOverlay,ScreenSpaceCamera,WorldSpace}
-public class Canvas:MonoBehaviour{public RenderMode renderMode;public int targetDisplay;public Camera worldCamera;}
+public class Canvas:MonoBehaviour
+{
+    public bool enabled=true;public float planeDistance;
+    public RenderMode renderMode;public int targetDisplay;public Camera worldCamera;
+    public static void ForceUpdateCanvases(){}
+}
+public class CanvasScaler:MonoBehaviour
+{
+    public enum ScaleMode { ScaleWithScreenSize }
+    public enum ScreenMatchMode { MatchWidthOrHeight }
+    public ScaleMode uiScaleMode;public ScreenMatchMode screenMatchMode;
+    public float matchWidthOrHeight,referencePixelsPerUnit=100;
+    Vector2 resolution;
+    public Vector2 referenceResolution
+    {
+        get=>resolution;
+        set { resolution=value;((RectTransform)transform).sizeDelta=value; }
+    }
+    protected virtual void HandleScaleWithScreenSize(){}
+    protected void SetScaleFactor(float value){}
+    protected void SetReferencePixelsPerUnit(float value){}
+}
+public enum CameraClearFlags { SolidColor,Depth }
 public class Camera:MonoBehaviour
 {
+    static readonly List<Camera> Cameras=new();
+    public Camera(){Cameras.Add(this);}
+    static IEnumerable<Camera> Active=>Cameras.Where(c=>c.gameObject!=null && c.isActiveAndEnabled);
+    public static int allCamerasCount=>Active.Count();
+    public static int GetAllCameras(Camera[] into){var active=Active.ToArray();Array.Copy(active,into,active.Length);return active.Length;}
+    public bool orthographic,allowHDR,allowMSAA,useOcclusionCulling;
+    public float nearClipPlane,farClipPlane,depth;
+    public CameraClearFlags clearFlags;public Color backgroundColor;
     public bool enabled;public RenderTexture targetTexture;public int cullingMask=32,targetDisplay;
     public new bool isActiveAndEnabled=>enabled&&gameObject.activeInHierarchy;
     public static event Action<Camera> onPreCull,onPostRender;
@@ -206,7 +238,7 @@ public class TextMeshProUGUI:Component
     public Vector2 GetPreferredValues(string t)=>new((t?.Length??0)*fontSize*.5f,fontSize);
 }
 public enum TouchPhase{Began,Moved,Stationary,Ended,Canceled}
-public static class Time{public static float unscaledTime=10,unscaledDeltaTime=.016f;public static int frameCount=1;}
+public static class Time{public static float unscaledTime=10,unscaledDeltaTime=.016f,realtimeSinceStartup=10;public static int frameCount=1;}
 public static class Debug
 {
     public static readonly List<string> Errors=new();
@@ -215,6 +247,8 @@ public static class Debug
 }
 public class Display
 {
+    public int systemWidth=1240,systemHeight=1080,renderingWidth,renderingHeight,Activations;
+    public void Activate()=>Activations++;
     public static Display[] displays={new(),new()};public static event Action onDisplaysUpdated;
     public static void Publish()=>onDisplaysUpdated?.Invoke();
 }

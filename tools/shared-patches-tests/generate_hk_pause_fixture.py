@@ -9,7 +9,7 @@ import json
 root = Path(sys.argv[3]) if len(sys.argv) > 3 else Path(__file__).resolve().parents[1] / "hollow-knight-patches/src/dualsouls"
 fixture_namespace = sys.argv[4] if len(sys.argv) > 4 else "HkPauseContracts"
 methods = {
-    "HKDualScreen.cs": ("Tick", "LoadConfig", "RelayerHud", "LogoTick", "SyncBgCapture"),
+    "HKDualScreen.cs": ("Boot", "EnsureStarted", "Start", "TickError", "Tick", "LoadConfig", "RelayerHud", "LogoTick", "SyncBgCapture"),
     "HKDualScreen.Bottom.Layering.cs": (
         "CompanionVisible", "ApplyDualScreenToggle", "ApplyLowerPauseGate", "HudFadedInGameplay"),
     "HKDualScreen.Bottom.Hud.cs": ("FrameHudCams", "BuildEquipCharmRow", "UpdateEquipCharmRow", "BuildAreaName", "RefreshHeaderRenderers", "BuildNoMapLabel", "PositionHudStrip"),
@@ -17,7 +17,7 @@ methods = {
     "HKDualScreen.Bottom.Inventory.cs": ("Refs", "FitOccupiedNative", "BuildNativePaneGraphics", "PositionNativePaneGraphics", "EnsureNativeInventory", "LayoutNativeInventory", "ScrollNativePane", "LayoutNativeDetail", "PopulateInvDetail", "PopulateSpellDetail", "PopulateEquipDetail", "PopulateGeoDetail", "PopulateGodfinderDetail", "ClearInvDetail", "ClearInvDetailLocal"),
     "HKDualScreen.Bottom.Charms.cs": ("TryTmpGlyphBoundsWorld", "CharmNumOf", "EnsureCharmRefs", "LayoutCharmsRedesign", "PopulateCharmDetail", "CharmsTick"),
     "HKDualScreen.Bottom.Frame.cs": ("BuildFrame", "BuildMapMask", "CreateShellRule", "ShellSprite", "MakePillSprite", "DiscardPartialFrame", "BuildTabRow", "ResolveTabDonors", "CopyShellSpriteOrientation", "ShellPoint", "AnimateTabFleurX", "PositionFrame", "OnConfigReloaded", "FitSprite", "UpdateCompanion", "ApplyCompanionCamera", "InvalidateCompanionClones", "RetireCompanionCaches", "TeardownFrame", "TeardownCompanion", "TabSlideTick", "StowSlideClone"),
-    "HKDualScreen.DirectDisplay.cs": ("SetDirectDisplayActive", "SetRoleCamerasEnabled", "RestoreReferenceRouting", "TryDirectStep"),
+    "HKDualScreen.DirectDisplay.cs": ("BindDirectDisplay", "OnDirectPanelGeometry", "SetDirectDisplayActive", "SetRoleCamerasEnabled", "RestoreReferenceRouting", "TryDirectStep", "ShutdownDirectDisplayAndRestore", "RetryPendingDirectDisplayRestore", "CompleteDirectDisplayTeardown"),
     "HKDualScreen.Bottom.Map.cs": ("MapFrameTick", "ResolveMapArea", "MapTick"),
     "HKDualScreen.Bottom.MapControls.cs": (), # all complete methods; no partial Map playback
     "HKDualScreen.Bottom.MapRenderRoles.cs": (), # complete role partition/event/lifetime bodies
@@ -29,6 +29,19 @@ identity = []
 config_method = None
 for filename, names in methods.items():
     source = (root / filename).read_text(encoding="utf-8")
+    if filename == "HKDualScreen.cs":
+        for pattern in (r"^    static bool started;", r"^    static HKDualScreen activeInstance;",
+                        r"^    readonly WaitForEndOfFrame _eof = [^;]+;",
+                        r"^    string _lastTickErr; float _nextTickErrLog; int _tickErrN;"):
+            declaration = re.search(pattern, source, re.M)
+            if declaration is None:
+                raise RuntimeError("Missing lifecycle declaration " + pattern)
+            text = declaration.group()
+            parts.append(text)
+            identity.append({"source": str(root / filename), "declaration": text.strip(),
+                             "source_file_sha256": hashlib.sha256((root / filename).read_bytes()).hexdigest(),
+                             "declaration_utf8_lf_sha256": hashlib.sha256(text.encode()).hexdigest(),
+                             "declaration_identical": True})
     if filename == "HKDualScreen.Bottom.Hud.cs" and "void RestoreHudCameraState(" in source:
         names += ("RestoreHudCameraState", "ValidateHudCameraState", "CaptureHudCameraState")
         start=source.index("    Camera hudCameraStateOwner")
@@ -78,7 +91,7 @@ for filename, names in methods.items():
                          "declaration_utf8_lf_sha256": hashlib.sha256(declaration.encode()).hexdigest(),
                          "access_only_redirect": True})
     for name in names:
-        match = re.search(r"\b(?:static\s+)?(?:void|bool|float|Rect|Sprite|SelectionMetric|CharmState|CharmActionInputs|CharmActionResult|CharmFeedbackResult|MapActionButton|GameObject\[\]|List<Vector3>|GameObject|string|Vector3|Transform|Renderer|SpriteRenderer|NativePaneLabel|PaneRefs|PaneGraphics|FitResult|Bounds|int)\s+" + name + r"\s*\([^)]*\)\s*\{", source)
+        match = re.search(r"\b(?:static\s+)?(?:void|bool|float|Rect|Sprite|IEnumerator|HKDualScreen|SelectionMetric|CharmState|CharmActionInputs|CharmActionResult|CharmFeedbackResult|MapActionButton|GameObject\[\]|List<Vector3>|GameObject|string|Vector3|Transform|Renderer|SpriteRenderer|NativePaneLabel|PaneRefs|PaneGraphics|FitResult|Bounds|int)\s+" + name + r"\s*\([^)]*\)\s*\{", source)
         if match is None:
             # Before the fix this gate does not exist; retain an executable RED.
             if name in ("ApplyLowerPauseGate", "ResetJournalDetailScroll"):
@@ -177,7 +190,8 @@ for filename, names in methods.items():
             parts.append(declaration.group())
 output = Path(sys.argv[1])
 output.parent.mkdir(parents=True, exist_ok=True)
-output.write_text("// Generated from production; do not edit.\nusing System.IO;\nnamespace " + fixture_namespace + ";\n"
+output.write_text("// Generated from production; do not edit.\nusing System.IO;\nusing System.Collections;\nnamespace " + fixture_namespace + ";\n"
+                  "using HkDirectDisplayAdapter = " + fixture_namespace + ".Transport;\n"
                   "internal partial class HKDualScreen {\n" + "\n".join(parts) + "\n}\n" +
                   "internal partial class HKConfigFixture {\n" + config_method + "\n}\n" +
                   (root / "HKLayout.cs").read_text(encoding="utf-8").replace("using System;", "").replace("using UnityEngine;", ""),

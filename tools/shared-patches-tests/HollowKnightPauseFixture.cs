@@ -15,9 +15,24 @@ internal partial class HKDualScreen
     internal readonly GameManager Manager = new();
     internal Camera hudCam2 = new(), attrCam = new(), promptCam = new(), clearCam = new(), bgCaptureCam = new();
     internal Transport transport = new();
-    internal readonly Dimmer bgDimmer = new();
+    internal Dimmer bgDimmer = new();
+    internal bool bgSetup, directDisplayShuttingDown, directDisplayFinalTeardownPending;
+    internal int bottomWidth = 1240, bottomHeight = 1080;
+    internal GameObject gameObject = new("HK component ingress");
+    internal bool LifecycleStartup, ThrowNextInputRelease;
+    internal int CameraSetups, LogoSetups, ForcedConfigLoads;
+    internal static HKDualScreen EnsureStartedStep() => EnsureStarted();
+    internal static HKDualScreen LifecycleOwner => activeInstance;
+    internal static void BootStep() => Boot();
+    internal System.Collections.IEnumerator StartStep() => Start();
+    internal void BindStep(Transport adapter) => BindDirectDisplay(adapter);
+    internal void ShutdownStep() => ShutdownDirectDisplayAndRestore();
+    internal void RetryRestoreStep() => RetryPendingDirectDisplayRestore();
+    static void DontDestroyOnLoad(GameObject go) => go.Persistent = true;
+    void SetupBottomCameras() => CameraSetups++;
+    void Destroy(Dimmer dimmer) => dimmer.Destroyed = true;
     internal bool directDisplayActive = true, dsWas = true, bgShow, popupBlack;
-    internal readonly GameObject logoGo = new();
+    internal GameObject logoGo = new();
     internal bool logoNeedsBake, fleurBaked = true, wired = true, wasAtMenu, creditNow, loreDialogueOpen;
     internal bool Popup, InventoryOpen, Credit;
     internal bool HudFaded { get => Cameras.hudCanvas.GetComponent<CanvasGroup>()?.alpha <= .5f; set { (Cameras.hudCanvas.GetComponent<CanvasGroup>() ?? Cameras.hudCanvas.AddComponent<CanvasGroup>()).alpha = value ? 0 : 1; } }
@@ -92,7 +107,7 @@ internal partial class HKDualScreen
     internal void FramePane(Vector3 center) => ApplyCompanionCamera(center);
     internal readonly GameObject Health = new(), Soul = new(), Geo = new(), Frame = new(), Controls = new(), Heal = new();
 
-    internal HKDualScreen()
+    public HKDualScreen()
     {
         HudGlobalHide.IsHidden = HudGlobalHide.IsReduced = false;
         var mask=new GameObject(); mapMaskTopT=mask.transform;
@@ -147,7 +162,7 @@ internal partial class HKDualScreen
     // Filesystem/JsonUtility are unrelated engine boundaries in the pause fixture.
     // File-reload cases opt in to the separately extracted production LoadConfig.
     internal HKConfigFixture ConfigOwner;
-    void LoadConfig(bool force) { if(ConfigOwner!=null) { ConfigOwner.Read(force); cfg=ConfigOwner.cfg; } }
+    void LoadConfig(bool force) { if(force) ForcedConfigLoads++; if(ConfigOwner!=null) { ConfigOwner.Read(force); cfg=ConfigOwner.cfg; } }
     void SyncDumpHook() { }
     void PushInputSettings() { }
     bool PollInventoryToggle(GameCameras gc, bool paused) => InventoryOpen;
@@ -298,7 +313,11 @@ internal partial class HKDualScreen
     internal void DisplayStep(bool active) => SetDirectDisplayActive(active);
     internal void LoseDisplay() => SetDirectDisplayActive(false);
     internal void MenuStep() { Manager.gameState=GlobalEnums.GameState.MAIN_MENU; Time.frameCount++; Tick(); }
-    void ReleaseLowerHudFixtureInputLockOrThrow() => InputReleases++;
+    void ReleaseLowerHudFixtureInputLockOrThrow()
+    {
+        InputReleases++;
+        if(ThrowNextInputRelease) { ThrowNextInputRelease=false; throw new InvalidOperationException("native input release unavailable"); }
+    }
     void RestoreNameCardOrThrow() => NameRestores++;
     void RestoreDialogueShapeOrThrow() => DialogueRestores++;
     void RestoreRoutedLayers() { RouteRestores++; routedLayers.Clear(); }
@@ -468,7 +487,7 @@ internal partial class HKDualScreen
     internal void ScrollStep(float delta) => ScrollSupplementary(delta);
     void CenterAttribution() { }
     void ApplyHalo() { }
-    void SetupLogo() => throw new InvalidOperationException("unexpected logo rebake");
+    void SetupLogo() { if(!LifecycleStartup) throw new InvalidOperationException("unexpected logo rebake"); LogoSetups++; }
     void TryBakeTabFleurs() => throw new InvalidOperationException("unexpected fleur rebake");
     void TeardownFrame() { FrameTeardowns++;TeardownFrameBody(); }
     void PushToBottom() { }
@@ -491,7 +510,14 @@ internal partial class HKConfigFixture
     void OnConfigReloaded() => Reloads++;
     static void LogUnknownConfigKeys(string text) { }
 }
-internal static class Application { internal static string persistentDataPath; }
+internal enum RuntimePlatform { Android, WindowsPlayer }
+internal sealed class WaitForEndOfFrame { }
+internal static class SystemInfo
+{
+    internal static string graphicsDeviceName = "host model", graphicsDeviceType = "host model";
+    internal static bool SupportsTextureFormat(TextureFormat format) => false;
+}
+internal static class Application { internal static string persistentDataPath; internal static RuntimePlatform platform = RuntimePlatform.Android; }
 internal static class JsonUtility
 {
     // Bound the Unity JSON ABI to flat serialized public fields, not config policy.
@@ -508,7 +534,7 @@ internal static class JsonUtility
         }
     }
 }
-internal static class Debug { internal static void Log(string text) { } }
+internal static class Debug { internal static readonly List<string> Logs = new(); internal static void Log(string text) => Logs.Add(text); internal static void LogError(object value) => Logs.Add(value.ToString()); }
 
 internal sealed class Layout
 {
@@ -524,6 +550,10 @@ internal sealed class Layout
 internal sealed class Tab { internal int tap = 2, cur = 2, built = 2, lastCfg = 1; }
 internal sealed class Transport
 {
+    internal int PanelWidth = 1240, PanelHeight = 1080, RestoreCompleted, TeardownCompleted;
+    internal HKDualScreen CompletedOwner;
+    internal void OnReferenceRestoreCompleted() => RestoreCompleted++;
+    internal void OnReferenceTeardownComplete(HKDualScreen owner) { TeardownCompleted++; CompletedOwner=owner; }
     internal int TargetDisplayIndex = 1;
     internal int contacts, Polls, TapSequence, CleanTapSequence;
     internal float TouchX, TouchY, CleanTapX, CleanTapY, T0Y,T0X,T1X,T1Y;
@@ -540,7 +570,7 @@ internal sealed class Transport
     }
     internal void SetProductEnabled(bool requested) { ProductChanges++; Owner.DisplayStep(requested); }
 }
-internal sealed class Dimmer { internal float Brightness, BlurFactor; }
+internal sealed class Dimmer { internal float Brightness, BlurFactor; internal bool Destroyed; }
 internal static class HudGlobalHide { internal static bool IsHidden, IsReduced; }
 internal sealed class CanvasGroup { public CanvasGroup() { } internal float alpha = 1; }
 internal sealed class GameCameras
@@ -613,6 +643,7 @@ internal static class HkStageHooks
 internal static class Time { internal static int frameCount; internal static float unscaledDeltaTime = .1f,unscaledTime; }
 internal static class Mathf
 {
+    internal static int RoundToInt(float value) => (int)MathF.Round(value);
     internal static float Clamp01(float value) => Math.Clamp(value,0,1);
     internal static float Log(float value) => MathF.Log(value);
     internal static float Exp(float value) => MathF.Exp(value);
@@ -683,7 +714,10 @@ internal struct Matrix4x4
 }
 internal sealed class Camera
 {
-    internal bool enabled = true, orthographic;
+    internal bool ThrowNextEnableWrite;
+    bool active = true;
+    internal bool enabled { get => active; set { if(ThrowNextEnableWrite) { ThrowNextEnableWrite=false; throw new InvalidOperationException("native role camera unavailable"); } active=value; } }
+    internal bool orthographic;
     internal Rect rect;
     internal int cullingMask, targetDisplay;
     internal float aspect = 1, orthographicSize = 8, depth, nearClipPlane=.3f, farClipPlane=1000;
@@ -700,7 +734,7 @@ internal sealed class Camera
 }
 internal sealed class GameObject
 {
-    internal bool activeSelf = true;
+    internal bool activeSelf = true, Persistent;
     internal bool activeInHierarchy => activeSelf && (transform.parent == null || transform.parent.gameObject.activeInHierarchy);
     internal int layer;
     internal readonly Transform transform;
@@ -712,6 +746,7 @@ internal sealed class GameObject
     internal T AddComponent<T>() where T:new()
     {
         var component=new T(); Components[typeof(T)]=component;
+        if(component is HKDualScreen owner) owner.gameObject=this;
         if(component is Renderer renderer) { renderer.transform=transform;transform.Renderers.Add(renderer); }
         return component;
     }
@@ -847,7 +882,7 @@ internal sealed class Sprite:UnityEngine.Object
       => new(){texture=t,rect=rect,border=border,bounds=new(Vector3.zero,new(rect.width/pixels,rect.height/pixels,0))};
 }
 internal enum SpriteMeshType { FullRect }
-internal enum TextureFormat { RGBA32 }
+internal enum TextureFormat { RGBA32, DXT1, DXT5, BC4, BC7, ASTC_6x6 }
 internal enum TextureWrapMode { Clamp }
 internal enum FilterMode { Bilinear }
 internal struct Color32 { internal byte r,g,b,a;internal Color32(byte r,byte g,byte b,byte a){this.r=r;this.g=g;this.b=b;this.a=a;} }

@@ -19,7 +19,18 @@ internal static class EngineBoundary
         foreach(var c in Coroutines.ToArray())
             if(c.Routine.GetType().Name.Contains("Bringup")){Drain(c.Routine);Coroutines.Remove(c);}
     }
-    static void Drain(IEnumerator routine){while(routine.MoveNext())if(routine.Current is IEnumerator child)Drain(child);}
+    static void Drain(IEnumerator routine)
+    {
+        // Advance only the typed engine clock at yielded frame boundaries. The
+        // unchanged presentation owns activation/settle/readiness decisions.
+        int frames=0;
+        while(routine.MoveNext())
+        {
+            if(++frames>1000) throw new InvalidOperationException("host coroutine did not terminate within the fixture frame budget");
+            if(routine.Current is IEnumerator child) Drain(child);
+            else Time.realtimeSinceStartup += Time.unscaledDeltaTime;
+        }
+    }
 }
 public static class FixtureAccess
 {
@@ -59,7 +70,7 @@ public static class SilksongProcessStartup
 }
 public static class SilksongModsRuntime{public static void EnsureStarted(){}}
 public static class DsGameData{public static bool InGame=true;public static string IdleReason=>"No save";}
-public static class DsTouch
+public static partial class DsTouch
 {
     public struct Point{public int FingerId;public TouchPhase Phase;public Vector2 Position;public double Time;}
     static bool _ready=true;static int _frame=-1;
@@ -75,29 +86,11 @@ public static class DsTouch
         }
         set{_ready=value;_frame=-1;Batch.Clear();}
     }
+    public static Vector2 SurfaceSize=new(1240,1080);
     public static long Generation=1;
     public static readonly List<Point> Events=new();
     public static bool Begin(){Ready=true;return true;}public static void Stop(){Ready=false;Events.Clear();Generation++;}
     public static void CollectSecondScreen(List<Point> into){into.Clear();if(Ready)into.AddRange(Batch);}
-}
-public class DsPresentation
-{
-    public const int DISPLAY=1,LAYER=3;public static Vector2 LayoutSize=new(1240,1080);public static int PanelW=1240,PanelH=1080;
-    public readonly RectTransform Root;
-    public bool Ready=true,Disposed;public int Width=>PanelW;public int Height=>PanelH;
-    public DsPresentation(Transform owner)
-    {
-        Root=DsWidgets.Rect(owner,"presentation");Root.sizeDelta=LayoutSize;
-        var canvas=Root.gameObject.AddComponent<Canvas>();canvas.renderMode=RenderMode.ScreenSpaceCamera;
-        var go=new GameObject("secondary-camera");go.transform.SetParent(Root);
-        canvas.worldCamera=go.AddComponent<Camera>();canvas.worldCamera.enabled=true;canvas.worldCamera.targetDisplay=1;
-    }
-    public static Vector2 ToLayout(Vector2 p)=>DsLayout.Current.ToLayout(p);
-    public IEnumerator Bringup(){Ready=true;yield break;}
-    public void SetVisible(bool value)=>Root.gameObject.SetActive(value);
-    public void MarkUnavailable(){Ready=false;}
-    public void SweepCameras(){}
-    public void Dispose(){Disposed=true;Object.Destroy(Root.gameObject);}
 }
 public class DsTestCard{public DsTestCard(RectTransform root,int w,int h){}public void Tick(){}}
 public static class DsProbe

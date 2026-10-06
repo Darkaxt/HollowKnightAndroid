@@ -41,7 +41,9 @@ def member(text, name):
     return text[match.start():text.index(';', match.end())+1]
 
 
-def generate(output, source_root, manifest):
+def generate(output, source_root, manifest, shared_source_root=None):
+    if shared_source_root is None:
+        shared_source_root = source_root.parents[2] / 'shared-patches/src/dualscreen'
     identity, parts = [], []
     def record(file, label, original, extracted):
         # Imports and partial access are outside executable type bodies.
@@ -62,6 +64,13 @@ def generate(output, source_root, manifest):
             parts.append(adapted if 'class ' + name in value else value)
             record(file,name,value,parts[-1])
     whole('DualScreenV2.cs',('DualScreenV2','DsHudReleasePump'))
+    whole('DsPresentation.cs',('DsPresentation',))
+    touch = class_text((source_root/'DsTouch.cs').read_text(encoding='utf-8'), 'DsTouch')
+    mapping = member(touch, 'MapToCanvas')
+    parts.append('public static partial class DsTouch {\n' + mapping + '\n}')
+    record('DsTouch.cs', 'DsTouch.MapToCanvas', mapping, mapping)
+    whole(shared_source_root / 'DirectDisplayPresentation.cs',
+          ('DirectDisplayPresentation', 'DirectDisplayCanvasScaler'))
     whole('DsShell.cs',('DsShell',))
     shell = class_text((source_root/'DsShell.cs').read_text(encoding='utf-8'), 'DsShell')
     for name in ('SetPaused', 'EndSlide', 'SettleSlide', 'SuspendPresentation'):
@@ -199,5 +208,6 @@ if __name__=='__main__':
     parser.add_argument('output',type=Path)
     parser.add_argument('--source-root',type=Path,default=Path(__file__).resolve().parents[1]/'silksong-patches/src/dualscreen')
     parser.add_argument('--manifest',type=Path)
+    parser.add_argument('--shared-source-root',type=Path)
     args=parser.parse_args()
-    generate(args.output,args.source_root,args.manifest or args.output.with_suffix('.manifest.json'))
+    generate(args.output,args.source_root,args.manifest or args.output.with_suffix('.manifest.json'),args.shared_source_root)

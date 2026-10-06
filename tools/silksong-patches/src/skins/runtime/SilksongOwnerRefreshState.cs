@@ -75,7 +75,11 @@ namespace DualSouls.Skins.Silksong.Runtime
         {
             bool changed = identity == null ? current != null : !identity.Equals(current);
             current = identity;
-            if (changed) InvalidateObservation();
+            if (changed)
+            {
+                RequireVisualRefresh();
+                InvalidateObservation();
+            }
             return changed;
         }
 

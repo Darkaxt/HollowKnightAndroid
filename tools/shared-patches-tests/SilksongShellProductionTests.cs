@@ -19,7 +19,8 @@ public partial class SilksongShellProductionTests
         internal Live(bool paused=false,string menu="Pause")
         {
             Time.unscaledTime=10;Time.frameCount=1;DsGameData.InGame=true;
-            DsPresentation.LayoutSize=new(1240,1080);DsPresentation.PanelW=1240;DsPresentation.PanelH=1080;
+            DsTouch.SurfaceSize=new(1240,1080);Time.realtimeSinceStartup=10;
+            Display.displays=new[]{new Display(),new Display()};
             SilksongPatches.Settings.Enabled=true;DsTouch.Ready=true;DsTouch.Events.Clear();Debug.Errors.Clear();
             Manager=new(){isPaused=paused};Manager.ui.uiState=paused?GlobalEnums.UIState.PAUSED:GlobalEnums.UIState.PLAYING;
             GameManager.SilentInstance=Manager;
@@ -235,7 +236,11 @@ public partial class SilksongShellProductionTests
         replacement.Pause(false);live.Update();Assert.True(Field<bool>(live.Shell,"_transitioning"));Assert.False(Field<bool>(live.Shell,"_operational"));
         replacement.Finish();live.Update();Assert.True(Field<bool>(live.Shell,"_operational"));
         replacement.Pause(true);Call(live.Owner,"OnApplicationPause",true);
-        Assert.False(live.Root.gameObject.activeInHierarchy);Call(live.Owner,"OnApplicationPause",false);live.Update();LogoOnly(live);
+        var presentation=Field<DsPresentation>(live.Owner,"_screen");
+        Assert.False(presentation.Camera.enabled);Assert.False(presentation.OverlayCamera.enabled);
+        Assert.False(presentation.Canvas.enabled);Assert.False(presentation.OverlayCanvas.enabled);
+        Assert.False(Field<DualSouls.DualScreen.DirectDisplayHost>(live.Owner,"_host").IsActive);
+        Call(live.Owner,"OnApplicationPause",false);live.Update();LogoOnly(live);
         replacement.Pause(false);live.Update();Assert.True(Child(live.Root,"body").gameObject.activeInHierarchy);
     }
 }

@@ -1,6 +1,7 @@
 import hashlib
 import json
 import pathlib
+import re
 import subprocess
 import tempfile
 import unittest
@@ -8,6 +9,38 @@ import unittest
 
 REPO_ROOT = pathlib.Path(__file__).parents[3]
 LAUNCHER = REPO_ROOT / "src" / "SilksongLauncher.Launcher" / "app" / "src" / "main" / "kotlin" / "dev" / "silksong" / "launcher"
+
+
+SKIN_SOURCE_ROOTS = (
+    "tools/shared-patches/src/skins",
+    "tools/hollow-knight-patches/src/skins",
+    "tools/silksong-patches/src/skins",
+)
+SKIN_FORBIDDEN_SEAMS = {
+    "native-interop": r"\b(?:IntPtr|UIntPtr|Marshal|DllImport|unsafe)\b",
+    "process-memory": r"\b(?:ReadProcessMemory|WriteProcessMemory|OpenProcess|VirtualAlloc|ProcessMemory|GetProcAddress)\b",
+    "native-offset": r"\b(?:il2cpp|native)[_\w]*(?:offset|address)\b",
+    "player-data-injection": r"\b(?:class\s+PlayerData|PlayerData\s*\.\s*__\w+|playerData\s*\.\s*__\w+)",
+    "player-data-write": r"\bplayerData\s*\.\s*\w+\s*(?:=(?!=)|\+=|-=|\+\+|--)",
+    "save-content-api": r"\b(?:SaveGame|LoadGame|ClearSaveFile|ReadSaveFile|WriteSaveFile|SaveData|LoadSaveData)\b",
+    "save-content-path": r"(?:user|save)\d*\.(?:dat|sav)\b",
+    "gameplay-death-command": r"\b(?:hero|currentHero|HeroController(?:\.(?:instance|SilentInstance|UnsafeInstance))?)\s*\.\s*(?:Die|Kill|TakeDamage|SetHealth)\s*\(",
+}
+
+
+def skin_source_inventory(root=REPO_ROOT):
+    return sorted(path for relative in SKIN_SOURCE_ROOTS for path in (root / relative).rglob("*.cs"))
+
+
+def skin_source_violations(path, source):
+    # Lexical regression guard, not a semantic C# security analyzer. Preserve string
+    # literals (including save paths), exclude comments, and report file/seam/line.
+    tokens = re.compile(r'@"(?:""|[^"])*"|"(?:\\.|[^"\\])*"|//[^\n]*|/\*.*?\*/', re.S)
+    code = tokens.sub(lambda match: match.group() if match.group().startswith(('"', '@"')) else
+                      re.sub(r"[^\n]", " ", match.group()), source)
+    return [f"{path}:{code.count(chr(10), 0, match.start()) + 1}: {seam}"
+            for seam, pattern in SKIN_FORBIDDEN_SEAMS.items()
+            for match in re.finditer(pattern, code, re.I)]
 
 
 class ProfileModPipelineContractTest(unittest.TestCase):
@@ -433,6 +466,14 @@ class ProfileModPipelineContractTest(unittest.TestCase):
 
         for forbidden in ("intptr", "marshal.", "unsafe", "processmemory", "readprocessmemory", "writeprocessmemory"):
             self.assertNotIn(forbidden, source)
+
+    def test_skin_sources_do_not_add_forbidden_game_or_memory_seams(self):
+        paths = skin_source_inventory()
+        for relative in SKIN_SOURCE_ROOTS:
+            self.assertTrue(any(path.is_relative_to(REPO_ROOT / relative) for path in paths), relative)
+        violations = [finding for path in paths for finding in skin_source_violations(
+            path.relative_to(REPO_ROOT), path.read_text(encoding="utf-8"))]
+        self.assertEqual([], violations, "\n".join(violations))
 
     def test_silksong_save_states_and_gameplay_hooks_fail_closed_without_real_saves(self):
         features = (REPO_ROOT / "tools" / "silksong-patches" / "src" / "mods" / "SilksongGameplayFeatures.cs").read_text(encoding="utf-8")

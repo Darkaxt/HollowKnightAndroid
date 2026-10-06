@@ -128,3 +128,29 @@ The shared removal helper preserves selected/pending in-use protection, rotation
 | Quality review | `41fca3bf1d90460bb553e7bae1317e054e794a135bf2f8ebf94ffb9f479f05ef` |
 
 This closes the bounded `P1-DELETE-01` host item only. Paired conditional Unity caller/binding, game-entry lifecycle and skin safety contracts are the next finite batch. Resident-HUD H01/H02/H03/H05 authority remains unadmitted; Task137 remains HELD. No exact native compile, device, GPU, live lifecycle, signed candidate, release or independent parity result is claimed by this launcher-only checkpoint. Historical QA evidence remains unwaived; Phase 1 is IN_PROGRESS and Phase 2 is NOT_STARTED.
+
+## Follow-up paired native caller, lifecycle-entry and skin safety contracts
+
+The complete conditional Hollow Knight and Silksong skin callers now execute in isolated host namespaces against typed engine boundaries. Actual discovery, target rules, admission, decoder ownership, shared session transactions and observation scheduling remain the product oracles. The 21 paired owning cases cover normalized loaded-pack A→B→true-original restoration, missing/omitted bindings, required-owner loss and scene rebind, setter/decode/restore failures, deferred resource retirement, replacement blocking and event release. Normalized fixture packs are caller inputs, not a new importer integration test; existing paired launcher importer/receipt evidence is retained.
+
+One genuine Silksong defect was reproduced: after required-owner loss, the same owners could return while a retained visual stamp suppressed recovery indefinitely, leaving `AwaitingTargets`. A genuine identity change now requires visual refresh before invalidating the observation, using the existing authority. No new poll/timer, caller, loader, transaction or resource-ownership mechanism is introduced; unchanged healthy identities and visible failure results are preserved.
+
+Lifecycle coverage extends the actual Hollow Knight Boot/EnsureStarted/Start and complete direct-display bind/final/retry methods. The Silksong fixture now compiles the complete actual `DsPresentation` and shared `DirectDisplayPresentation`/scaler, replacing its modeled presentation decisions while retaining the complete `DualScreenV2` shell oracle. Seven new entry contracts cover dormant startup, one measured owner, failed route-back retry before gameplay, final retirement/fresh ownership, display loss/rebind, first eligible pause/resume and cross-profile isolation. Existing pause, shell, common state-machine and Java surface-preservation guards are retained.
+
+- Genuine skin owning RED: **20 passed, 1 failed**; unchanged owning GREEN: **21 passed, 0 failed, 0 skipped**. Exactly the admitted Silksong refresh-state production file differs; the other 256 frozen inputs and owning assertions are identical across those runs.
+- Final coherent affected host suite: **555 passed, 0 failed, 0 skipped**, actual exit 0; all 259 frozen inputs unchanged. Includes all 28 new owning cases. The earlier affected skin-only run passed 239; it is not relabeled as the final lifecycle result.
+- Final Python extraction/replay/safety and existing Android lifecycle source guards: **11 passed**, actual exit 0. Automatic inventory covers all 41 paired/shared skin sources with prohibited-seam negative and allowed typed-API controls; findings identify file, line and seam. This is a lexical regression guard, not semantic security analysis.
+- Exact Hollow Knight Unity .61 and Silksong Unity .50 compiles: both actual exits 0; 1,240 frozen inputs unchanged during that compile. Hollow Knight mandatory builtin weave and byte-idempotence passed. The later lifecycle harness changes do not change any native production/depot/player compile input. Existing compiler and fixture warnings remain retained.
+- Four zero-test setup failures remain separate. The initial 14/21 caller run included six incorrect decode/rollback oracles; actual session behavior corrected those test expectations before the isolated genuine RED. The lifecycle 117/118 run exposed one prior model-only inactive-root oracle: actual presentation disables both owned cameras and canvases while retaining its root. Exact disabled-role/host assertions replace that oracle, with all original failure evidence preserved.
+- Ordered final inline specification then quality reviews passed. The quality review required an explicit selected shared-source replay root; alternate-source hash and missing-selected-source failure contracts now prevent silent fallback to the current checkout.
+
+| Caller/lifecycle follow-up evidence | SHA-256 |
+|---|---|
+| Genuine owning RED | `449d63127794480cbbc86bc3bb9d32abc1692ec84b935c01860a486267730963` |
+| Final affected suite | `201888f0a27c031beb162c76ecc074216905e998e49285d72bc94f53a8e52ff3` |
+| Final Python | `183af36c923c5b022853f5b5f896336dc764c16b231dc32103401ea58b9ddeb2` |
+| Exact paired compiles | `30c04bca2a1a86f00306aa22a44463f6084bf3dcc248d6b5710a06154481afe4` |
+| Final specification review | `f394792493df9c3beac43cf0f0a7a42eb8f99d291d5701c20a3066e53656db98` |
+| Final quality review | `2dfd8e44ae306fbf2788f7319a573edb4598067a25d2e05fb5766bc05f032811` |
+
+This closes only bounded host rows `P1-SKIN-UNITY-01`, `P1-LIFE-ENTRY-01` and `P1-SAFETY-SKIN-01`. Engine hierarchy/components, graphics, surface geometry, clock and destruction are modeled boundaries; Java checks are source guards. No real Android Home/Recents, Unity scheduling/native lifecycle, JNI, GPU/default optical appearance, frame pacing, signing/release or independent parity acceptance is claimed. Resident-HUD H01/H02/H03/H05 authority remains unadmitted, Task137 remains HELD and historical allocation/full77 evidence is unwaived. Phase 1 remains IN_PROGRESS; Phase 2 remains NOT_STARTED.
