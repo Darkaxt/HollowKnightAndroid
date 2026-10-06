@@ -33,7 +33,9 @@ class SkinsActivity : Activity() {
         super.onCreate(savedInstanceState)
         val retained = lastNonConfigurationInstance as? SkinLibrarySession
         profile = SelectedGameStore(this).get()
-        if (!SkinLibraryService.isVisible(profile)) { retained?.close(); finish(); return }
+        if (!SkinLibraryService.isVisible(profile) || (retained != null && retained.profile != profile)) {
+            retained?.close(); finish(); return
+        }
         setContentView(R.layout.activity_skins)
         val profilePresentation = SkinProfilePresentation.require(profile)
         findViewById<TextView>(R.id.skins_title).setText(profilePresentation.title)

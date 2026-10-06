@@ -39,6 +39,7 @@ internal class SkinLibrarySession(
     private val worker: Executor,
     private val dispatch: (() -> Unit) -> Unit,
 ) {
+    val profile: GameProfile get() = services.profile
     @Volatile var state = SkinScreenState()
         private set
     private var workflow = SkinImportWorkflow(services.imports)

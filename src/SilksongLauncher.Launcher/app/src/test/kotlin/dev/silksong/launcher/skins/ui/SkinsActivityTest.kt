@@ -13,6 +13,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import dev.silksong.launcher.R
+import dev.silksong.launcher.profiles.GameProfile
 import dev.silksong.launcher.profiles.HollowKnightProfile
 import dev.silksong.launcher.profiles.SilksongProfile
 import dev.silksong.launcher.profiles.SelectedGameStore
@@ -209,23 +210,25 @@ class SkinsActivityTest {
         }
     }
 
-    @Test fun `default production surface enables ordinary ZIP picker without runtime controls`() {
+    @Test fun `production service surface enables ordinary ZIP picker without runtime controls`() {
         SelectedGameStore(ApplicationProvider.getApplicationContext()).set(HollowKnightProfile)
-        val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
-        try {
-            val activity = controller.get()
-            val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5)
-            while (!activity.findViewById<Button>(R.id.skins_import).isEnabled && System.nanoTime() < deadline) {
-                Thread.sleep(20); shadowOf(Looper.getMainLooper()).idle()
+        withProductionBinding(HollowKnightProfile) { worker ->
+            val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
+            try {
+                worker.runAll(); shadowOf(Looper.getMainLooper()).idle()
+                val activity = controller.get()
+                assertTrue(activity.findViewById<Button>(R.id.skins_import).isEnabled)
+                val screenText = allText(activity.findViewById(android.R.id.content))
+                assertFalse(screenText.contains(activity.getString(R.string.skins_change_mode)))
+                assertFalse(screenText.contains(activity.getString(R.string.skins_enable)))
+                assertFalse(screenText.contains(activity.getString(R.string.skins_disable)))
+                openArchivePicker(activity)
+                assertEquals(Intent.ACTION_OPEN_DOCUMENT, shadowOf(activity).nextStartedActivityForResult.intent.action)
+            } finally {
+                controller.pause().stop().destroy()
+                worker.runAll(); shadowOf(Looper.getMainLooper()).idle()
             }
-            assertTrue(activity.findViewById<Button>(R.id.skins_import).isEnabled)
-            val screenText = allText(activity.findViewById(android.R.id.content))
-            assertFalse(screenText.contains(activity.getString(R.string.skins_change_mode)))
-            assertFalse(screenText.contains(activity.getString(R.string.skins_enable)))
-            assertFalse(screenText.contains(activity.getString(R.string.skins_disable)))
-            openArchivePicker(activity)
-            assertEquals(Intent.ACTION_OPEN_DOCUMENT, shadowOf(activity).nextStartedActivityForResult.intent.action)
-        } finally { controller.pause().stop().destroy() }
+        }
     }
 
     @Test fun `injected Activity picker prepares then explicit second source Replace confirms captured CAS`() {
@@ -303,6 +306,100 @@ class SkinsActivityTest {
         }
     }
 
+    @Test fun `Hollow Knight to Silksong recreation retires old library and preparation`() {
+        assertProfileChangeRecreation(HollowKnightProfile, SilksongProfile, prepared = true)
+    }
+
+    @Test fun `Silksong to Hollow Knight recreation retires old library and preparation`() {
+        assertProfileChangeRecreation(SilksongProfile, HollowKnightProfile, prepared = true)
+    }
+
+    @Test fun `Hollow Knight to Silksong recreation cancels queued provider work`() {
+        assertProfileChangeRecreation(HollowKnightProfile, SilksongProfile, prepared = false)
+    }
+
+    @Test fun `Silksong to Hollow Knight recreation cancels queued provider work`() {
+        assertProfileChangeRecreation(SilksongProfile, HollowKnightProfile, prepared = false)
+    }
+
+    private fun assertProfileChangeRecreation(from: GameProfile, to: GameProfile, prepared: Boolean) {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val old = Fixture(profile = from)
+        val next = Fixture(profile = to)
+        val controller = SkinsActivity.withHostBinding(old.binding) {
+            SelectedGameStore(context).set(from)
+            Robolectric.buildActivity(SkinsActivity::class.java).setup().also {
+                old.idle()
+                openArchivePicker(it.get())
+                val launch = shadowOf(it.get()).nextStartedActivityForResult
+                shadowOf(it.get()).receiveResult(launch.intent, Activity.RESULT_OK,
+                    Intent().setData(Uri.parse("content://test/document/input")))
+                if (prepared) old.idle()
+            }
+        }
+        val oldSession = controller.get().onRetainNonConfigurationInstance() as SkinLibrarySession
+        assertEquals(if (prepared) 1 else 0, old.opens)
+        assertEquals(if (prepared) 1 else 0, oldSession.state.handles.size)
+        SelectedGameStore(context).set(to)
+        SkinsActivity.withHostBinding(next.binding) {
+            try {
+                controller.recreate()
+                val recreated = controller.get()
+                assertTrue("A new profile must not adopt the retained ${from.id} session", recreated.isFinishing)
+                assertNull("Reject before mounting the other profile's packages or controls",
+                    recreated.findViewById<View>(R.id.skins_title))
+                old.idle(); next.idle()
+                assertEquals(if (prepared) 1 else 0, old.opens)
+                assertEquals(if (prepared) 1 else 0, old.cancels)
+                assertTrue(oldSession.state.handles.isEmpty())
+                assertFalse(oldSession.state.cleanupPending)
+                assertEquals(0, next.opens)
+                assertEquals(0, next.reads)
+                assertTrue(old.replaced.isEmpty() && old.removed.isEmpty() && old.directActions.isEmpty())
+                assertTrue(next.replaced.isEmpty() && next.removed.isEmpty() && next.directActions.isEmpty())
+            } finally { controller.pause().stop().destroy(); old.idle(); next.idle() }
+            assertEquals(if (prepared) 1 else 0, old.cancels)
+
+            val reopened = Robolectric.buildActivity(SkinsActivity::class.java).setup()
+            try {
+                next.idle()
+                assertFalse(reopened.get().isFinishing)
+                val title = if (to == HollowKnightProfile) R.string.skins_title_hollow_knight else R.string.skins_title_silksong
+                assertEquals(reopened.get().getString(title),
+                    reopened.get().findViewById<TextView>(R.id.skins_title).text.toString())
+                assertTrue(next.reads > 0)
+                assertNotSame(oldSession, reopened.get().onRetainNonConfigurationInstance())
+                assertTrue(reopened.get().findViewById<Button>(R.id.skins_import).isEnabled)
+                assertFalse(reopened.get().findViewById<Button>(R.id.skins_import_all).isEnabled)
+            } finally { reopened.pause().stop().destroy(); next.idle() }
+        }
+    }
+
+    @Test fun `Silksong same profile recreation retains queued preparation until terminal exit`() {
+        val fixture = Fixture(profile = SilksongProfile)
+        SkinsActivity.withHostBinding(fixture.binding) {
+            SelectedGameStore(ApplicationProvider.getApplicationContext()).set(SilksongProfile)
+            val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
+            try {
+                fixture.idle()
+                val activity = controller.get()
+                openArchivePicker(activity)
+                val launch = shadowOf(activity).nextStartedActivityForResult
+                shadowOf(activity).receiveResult(launch.intent, Activity.RESULT_OK,
+                    Intent().setData(Uri.parse("content://test/document/input")))
+                val owner = activity.onRetainNonConfigurationInstance()
+                controller.recreate()
+                assertFalse(controller.get().isFinishing)
+                assertSame(owner, controller.get().onRetainNonConfigurationInstance())
+                fixture.idle()
+                assertEquals(1, fixture.opens)
+                assertEquals(0, fixture.cancels)
+                assertTrue(controller.get().findViewById<Button>(R.id.skins_import_all).isEnabled)
+            } finally { controller.pause().stop().destroy(); fixture.idle() }
+            assertEquals(1, fixture.cancels)
+        }
+    }
+
     @Test fun `destroyed Activity confirmation cannot mutate retained preparation`() {
         val fixture = Fixture()
         SkinsActivity.withHostBinding(fixture.binding) {
@@ -341,6 +438,8 @@ class SkinsActivityTest {
                     shadowOf(activity).receiveResult(launch.intent, Activity.RESULT_OK,
                         Intent().setData(Uri.parse("content://test/document/input")))
                     fixture.idle()
+                    val state = (activity.onRetainNonConfigurationInstance() as SkinLibrarySession).state
+                    assertTrue("Preparation must be ready before replacement: $state", state.handles.isNotEmpty())
                 }
                 prepare()
                 val oldPicker = openReplacementSource(activity)
@@ -400,11 +499,17 @@ class SkinsActivityTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         fun text(profile: dev.silksong.launcher.profiles.GameProfile): Pair<String, String> {
             SelectedGameStore(context).set(profile)
-            val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
-            return try {
-                controller.get().findViewById<TextView>(R.id.skins_title).text.toString() to
-                    controller.get().findViewById<TextView>(R.id.skins_availability).text.toString()
-            } finally { controller.pause().stop().destroy() }
+            return withProductionBinding(profile) { worker ->
+                val controller = Robolectric.buildActivity(SkinsActivity::class.java).setup()
+                try {
+                    worker.runAll(); shadowOf(Looper.getMainLooper()).idle()
+                    controller.get().findViewById<TextView>(R.id.skins_title).text.toString() to
+                        controller.get().findViewById<TextView>(R.id.skins_availability).text.toString()
+                } finally {
+                    controller.pause().stop().destroy()
+                    worker.runAll(); shadowOf(Looper.getMainLooper()).idle()
+                }
+            }
         }
 
         val hollowKnight = text(HollowKnightProfile)
@@ -432,6 +537,14 @@ class SkinsActivityTest {
         val notice = context.getString(R.string.skins_notice_import_complete, 1)
         assertTrue(notice, notice.contains("Import finished for 1 candidate(s)."))
         assertFalse(notice, notice.contains("Refreshing", ignoreCase = true))
+    }
+
+    private fun <T> withProductionBinding(profile: GameProfile, action: (Queue) -> T): T {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val worker = Queue()
+        val binding = SkinActivityHostBinding(SkinLibraryUiServices.production(context, profile),
+            AndroidSkinDocumentProvider(context.contentResolver), worker)
+        return SkinsActivity.withHostBinding(binding) { action(worker) }
     }
 
     private fun openArchivePicker(activity: SkinsActivity) {
@@ -481,8 +594,9 @@ class SkinsActivityTest {
         private val mode: String = "OFF",
         private val readFailure: Boolean = false,
         recoverAvailable: Boolean = false,
+        profile: GameProfile = HollowKnightProfile,
     ) {
-        val worker = Queue(); var opens = 0; var cancels = 0
+        val worker = Queue(); var opens = 0; var cancels = 0; var reads = 0
         val replaced = mutableListOf<SkinReplaceRequest>()
         val directActions = mutableListOf<String>()
         val removed = mutableListOf<String>()
@@ -524,7 +638,8 @@ class SkinsActivityTest {
                 return SkinResult.Ok(Unit)
             }
         } else UnavailableSkinLibraryMutations
-        val services = SkinLibraryUiServices(HollowKnightProfile, {
+        val services = SkinLibraryUiServices(profile, {
+            reads++
             if (readFailure) SkinResult.Error(SkinImportCode.DURABILITY_UNAVAILABLE, "refresh failed")
             else SkinResult.Ok(SkinLibraryViewState("c".repeat(64), mode, "target", null, emptyList(), "CLEAR", null, null, "CLEAR", listOf(
                 SkinPackRow("target", "Target", "Author", "f".repeat(64), "d".repeat(64), "e".repeat(64), true, false, SkinReceiptSummary())),
