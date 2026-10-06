@@ -4,7 +4,9 @@ param(
     [string]$Depot,
     [string]$Player = "$env:USERPROFILE\.cache\silksong\unity-player\android\Variations\il2cpp\Managed",
     [string]$Output,
-    [switch]$RetainArtifacts
+    [switch]$RetainArtifacts,
+    [string]$ReceiptDirectory,
+    [string]$RunToken
 )
 
 $ErrorActionPreference = 'Stop'
@@ -95,17 +97,38 @@ function GetSha256([string]$Path) {
     finally { $hash.Dispose(); $stream.Dispose() }
 }
 
+if ($ReceiptDirectory) {
+    if (-not $RetainArtifacts -or -not $RunToken -or (Test-Path -LiteralPath $ReceiptDirectory)) {
+        throw 'Receipt mode requires a fresh directory, run token and retained artifacts'
+    }
+    New-Item -ItemType Directory -Path $ReceiptDirectory | Out-Null
+}
+function InvokeCheckBuild([string]$Name, [string[]]$Arguments) {
+    if ($ReceiptDirectory) {
+        & python -B (Join-Path $repo 'tools/ci/compile_receipt.py') run-build --repo $repo `
+            --directory (Join-Path $ReceiptDirectory $Name) --run-token $RunToken -- @Arguments
+    } else {
+        $buildArguments = $Arguments[1..($Arguments.Length - 1)]
+        & dotnet build @buildArguments
+    }
+    if ($LASTEXITCODE -ne 0) { throw "Hollow Knight $Name compile failed with exit code $LASTEXITCODE" }
+}
+function InvokeCheckWeave([string]$Name) {
+    if ($ReceiptDirectory) {
+        & python -B (Join-Path $repo 'tools/ci/compile_receipt.py') run-process --repo $repo `
+            --directory (Join-Path $ReceiptDirectory $Name) -- dotnet $weaver builtin --assemblies $staged
+    } else {
+        & dotnet $weaver builtin --assemblies $staged
+    }
+    if ($LASTEXITCODE -ne 0) { throw "Hollow Knight mandatory $Name weave failed with exit code $LASTEXITCODE" }
+}
+
 try {
-    & dotnet build (Join-Path $PSScriptRoot 'HollowKnightPatches.csproj') `
-        -c Release `
-        -o $output `
-        --nologo `
-        -v minimal `
-        -nodeReuse:false `
-        -p:UseSharedCompilation=false `
-        "-p:BaseIntermediateOutputPath=$(Join-Path $output 'patch-obj')/" `
-        "-p:HollowKnightManaged=$managed" `
-        "-p:UnityManaged=$Player"
+    InvokeCheckBuild 'patch' @('build', (Join-Path $PSScriptRoot 'HollowKnightPatches.csproj'),
+        '-c', 'Release', '-o', $output, '--nologo', '-v', 'minimal', '-nodeReuse:false',
+        '-p:UseSharedCompilation=false',
+        "-p:BaseIntermediateOutputPath=$(Join-Path $output 'patch-obj')/",
+        "-p:HollowKnightManaged=$managed", "-p:UnityManaged=$Player")
     if ($LASTEXITCODE -ne 0) {
         throw "Hollow Knight patch compile failed with exit code $LASTEXITCODE"
     }
@@ -114,10 +137,10 @@ try {
         throw "Hollow Knight patch compile produced no DLL"
     }
     $weaverOutput = Join-Path $output 'weaver'
-    & dotnet build (Join-Path $PSScriptRoot '../mod-weaver/ModWeaver.csproj') `
-        -c Release -o $weaverOutput `
-        --artifacts-path (Join-Path $output 'weaver-artifacts') `
-        --nologo -v minimal -nodeReuse:false -p:UseSharedCompilation=false
+    InvokeCheckBuild 'weaver' @('build', (Join-Path $PSScriptRoot '../mod-weaver/ModWeaver.csproj'),
+        '-c', 'Release', '-o', $weaverOutput,
+        '--artifacts-path', (Join-Path $output 'weaver-artifacts'),
+        '--nologo', '-v', 'minimal', '-nodeReuse:false', '-p:UseSharedCompilation=false')
     if ($LASTEXITCODE -ne 0) {
         throw "Hollow Knight mandatory weaver build failed with exit code $LASTEXITCODE"
     }
@@ -126,18 +149,28 @@ try {
     Get-ChildItem -LiteralPath $managed -Filter '*.dll' -File | Copy-Item -Destination $staged
     Copy-Item -LiteralPath $dll -Destination $staged
     $weaver = Join-Path $weaverOutput 'ModWeaver.dll'
-    & dotnet $weaver builtin --assemblies $staged
+    if ($ReceiptDirectory) {
+        & python -B (Join-Path $repo 'tools/ci/compile_receipt.py') weave-start --repo $repo `
+            --directory $ReceiptDirectory --run-token $RunToken --stage $staged --depot $managed --patch $dll --weaver $weaver
+        if ($LASTEXITCODE -ne 0) { throw 'Hollow Knight weave input receipt failed' }
+    }
+    InvokeCheckWeave 'first'
     if ($LASTEXITCODE -ne 0) {
         throw "Hollow Knight mandatory gameplay weave failed with exit code $LASTEXITCODE"
     }
     $woven = Join-Path $staged 'Assembly-CSharp.dll'
     $firstHash = GetSha256 $woven
-    & dotnet $weaver builtin --assemblies $staged
+    InvokeCheckWeave 'second'
     if ($LASTEXITCODE -ne 0) {
         throw "Hollow Knight mandatory prior-weave verification failed with exit code $LASTEXITCODE"
     }
     if ($firstHash -ne (GetSha256 $woven)) {
         throw "Hollow Knight mandatory gameplay weave was not byte-idempotent"
+    }
+    if ($ReceiptDirectory) {
+        & python -B (Join-Path $repo 'tools/ci/compile_receipt.py') weave-end --repo $repo `
+            --directory $ReceiptDirectory --stage $staged --first-hash $firstHash
+        if ($LASTEXITCODE -ne 0) { throw 'Hollow Knight weave completion receipt failed' }
     }
     $entryPoints = (Get-Content (Join-Path $PSScriptRoot 'entrypoints.json') -Raw | ConvertFrom-Json).entryPoints
     Write-Host "[check] OK - HollowKnightPatches.dll $((Get-Item $dll).Length) bytes; $($entryPoints.Count) entry point(s); mandatory gameplay weave verified"

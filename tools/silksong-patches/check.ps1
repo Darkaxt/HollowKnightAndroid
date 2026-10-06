@@ -29,7 +29,9 @@ param(
     [string]$Output,
     # Explicit fresh compiler directory for retained host evidence.
     [string]$Work,
-    [switch]$RetainArtifacts
+    [switch]$RetainArtifacts,
+    [string]$ReceiptDirectory,
+    [string]$RunToken
 )
 
 $ErrorActionPreference = 'Stop'
@@ -200,7 +202,26 @@ Write-Host "[check] compiling $($sources.Count) source(s)..."
 #                             forever. A throwaway compile gains nothing from
 #                             either daemon.
 
+if ($ReceiptDirectory) {
+    if (-not $RetainArtifacts -or -not $RunToken -or (Test-Path -LiteralPath $ReceiptDirectory)) {
+        throw 'Receipt mode requires a fresh directory, run token and retained artifacts'
+    }
+    New-Item -ItemType Directory -Path $ReceiptDirectory | Out-Null
+}
 $log = Join-Path $work 'build.log'
+if ($ReceiptDirectory) {
+    & python -B (Join-Path $repo 'tools/ci/compile_receipt.py') run-build --repo $repo `
+        --directory (Join-Path $ReceiptDirectory 'patch') --run-token $RunToken -- `
+        build (Join-Path $work 'PatchCheck.csproj') -c Release -o (Join-Path $work 'bin') `
+        --nologo -v quiet '-nodeReuse:false' '-p:UseSharedCompilation=false'
+    $exitCode = $LASTEXITCODE
+    $receiptLog = Join-Path $ReceiptDirectory 'patch/process/stdout.log'
+    if (Test-Path -LiteralPath $receiptLog) { Copy-Item -LiteralPath $receiptLog -Destination $log }
+    $receiptError = Join-Path $ReceiptDirectory 'patch/process/stderr.log'
+    if (Test-Path -LiteralPath $receiptError) {
+        Copy-Item -LiteralPath $receiptError -Destination "$log.err"
+    }
+} else {
 $proc = Start-Process dotnet `
     -ArgumentList 'build', (Join-Path $work 'PatchCheck.csproj'),
                   '-c', 'Release', '-o', (Join-Path $work 'bin'),
@@ -214,6 +235,7 @@ $proc = Start-Process dotnet `
 $null = $proc.Handle
 $proc.WaitForExit()
 $exitCode = $proc.ExitCode
+}
 
 $out = @()
 foreach ($f in @($log, "$log.err")) {

@@ -1,0 +1,41 @@
+<Project>
+  <!-- Imported only by the real checker build; never a replacement project. -->
+  <!-- SDK metadata hooks are also BeforeTargets=CoreCompile, but imported later.
+       Settle them before hashing; Csc argument concordance rejects any late input. -->
+  <Target Name="ReceiptSettleNetAnalyzers" BeforeTargets="ReceiptBeforeCompile"
+          DependsOnTargets="AddGlobalAnalyzerConfigForPackage_MicrosoftCodeAnalysisNetAnalyzers"
+          Condition="'$(CompilerReceiptDirectory)' != '' And '$(EnableNETAnalyzers)' == 'true'" />
+  <Target Name="ReceiptBeforeCompile" BeforeTargets="CoreCompile" DependsOnTargets="_SetEmbeddedFilesFromSourceControlManagerUntrackedFiles;GenerateSourceLinkFile" Condition="'$(CompilerReceiptDirectory)' != ''">
+    <Error Condition="'$(DesignTimeBuild)' == 'true' Or '$(SkipCompilerExecution)' == 'true' Or '$(UseSharedCompilation)' != 'false' Or '$(ProvideCommandLineArgs)' != 'true'" Text="Receipt requires real, unshared compiler execution." />
+    <Error Condition="'$(CscToolPath)' != '' Or '$(CscToolExe)' != ''" Text="Receipt rejects custom compiler tool overrides." />
+    <Error Condition="Exists('$(CompilerReceiptDirectory)/before.tsv')" Text="Receipt directory is not fresh." />
+    <Error Condition="'$(CompilerResponseFile)' != '' Or '@(ResponseFiles)' != '' Or '@(EmbeddedDocumentation)' != '' Or '@(AddModules)' != '' Or '@(CompiledLicenseFile)' != '' Or '@(_CoreCompileResourceInputs)' != '' Or '$(AppConfigForCompiler)' != '' Or '$(ResolvedCodeAnalysisRuleSet)' != '' Or '$(Win32Manifest)' != '' Or '@(LinkResource)' != '' Or '@(Resource)' != '' Or '@(ManifestResourceWithNoCulture)' != '' Or '@(ManifestNonResxWithNoCultureOnDisk)' != '' Or '$(Win32Resource)' != '' Or '$(Win32Icon)' != '' Or '$(ApplicationIcon)' != '' Or '$(KeyOriginatorFile)' != ''" Text="Receipt rejects unhandled resource, response, module or signing compiler inputs." />
+    <PropertyGroup>
+      <ReceiptAnalyzerGlobs>@(Analyzer->'%(RootDir)%(Directory)*.dll')</ReceiptAnalyzerGlobs>
+    </PropertyGroup>
+    <ItemGroup>
+      <ReceiptInput Include="@(Compile)"><Role>source</Role></ReceiptInput>
+      <ReceiptInput Include="@(ReferencePathWithRefAssemblies)"><Role>reference</Role></ReceiptInput>
+      <ReceiptInput Include="@(Analyzer)"><Role>analyzer</Role></ReceiptInput>
+      <ReceiptInput Include="$(ReceiptAnalyzerGlobs)"><Role>analyzer-dependency</Role></ReceiptInput>
+      <ReceiptInput Include="@(AdditionalFiles)"><Role>additional</Role></ReceiptInput>
+      <ReceiptInput Include="@(EditorConfigFiles);@(AnalyzerConfigFiles)"><Role>config</Role></ReceiptInput>
+      <ReceiptInput Include="@(EmbeddedFiles)"><Role>embedded</Role></ReceiptInput>
+      <ReceiptInput Include="@(CustomAdditionalCompileInputs)"><Role>incremental</Role></ReceiptInput>
+      <ReceiptInput Include="$(SourceLink)" Condition="'$(SourceLink)' != ''"><Role>sourcelink</Role></ReceiptInput>
+      <ReceiptInput Include="$(MSBuildAllProjects);$(MSBuildProjectFullPath)"><Role>import</Role></ReceiptInput>
+      <ReceiptInput Include="$(ProjectAssetsFile)" Condition="Exists('$(ProjectAssetsFile)')"><Role>assets</Role></ReceiptInput>
+    </ItemGroup>
+    <GetFileHash Files="@(ReceiptInput)" Algorithm="SHA256"><Output TaskParameter="Items" ItemName="ReceiptBefore" /></GetFileHash>
+    <WriteLinesToFile File="$(CompilerReceiptDirectory)/before.tsv" Lines="@(ReceiptBefore->'%(Role)|%(FileHash)|%(FullPath)')" Overwrite="false" Encoding="UTF-8" />
+    <WriteLinesToFile File="$(CompilerReceiptDirectory)/selection.txt" Lines="$(MSBuildToolsPath);$(MSBuildSDKsPath);$(RoslynTargetsPath);$(NETCoreSdkVersion);$([System.Environment]::Version);$(TargetFramework);$(MSBuildProjectFullPath);$(CompilerReceiptToken)" Overwrite="false" Encoding="UTF-8" />
+  </Target>
+  <Target Name="ReceiptAfterCompile" AfterTargets="CoreCompile" Condition="'$(CompilerReceiptDirectory)' != ''">
+    <Error Condition="'@(CscCommandLineArgs)' == ''" Text="No actual Csc task argument witness." />
+    <GetFileHash Files="@(ReceiptInput)" Algorithm="SHA256"><Output TaskParameter="Items" ItemName="ReceiptAfter" /></GetFileHash>
+    <GetFileHash Files="@(IntermediateAssembly)" Algorithm="SHA256"><Output TaskParameter="Items" ItemName="ReceiptOutput" /></GetFileHash>
+    <WriteLinesToFile File="$(CompilerReceiptDirectory)/after.tsv" Lines="@(ReceiptAfter->'%(Role)|%(FileHash)|%(FullPath)')" Overwrite="false" Encoding="UTF-8" />
+    <WriteLinesToFile File="$(CompilerReceiptDirectory)/arguments.txt" Lines="@(CscCommandLineArgs)" Overwrite="false" Encoding="UTF-8" />
+    <WriteLinesToFile File="$(CompilerReceiptDirectory)/output.tsv" Lines="@(ReceiptOutput->'%(FileHash)|%(FullPath)')" Overwrite="false" Encoding="UTF-8" />
+  </Target>
+</Project>
