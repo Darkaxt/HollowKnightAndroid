@@ -384,6 +384,7 @@ public partial class HKDualScreen
 
     void RestoreHudCameraState()
     {
+        ResetNativeHudView();
         var owner = hudCameraStateOwner;
         if (owner != null)
         {
@@ -422,28 +423,16 @@ public partial class HKDualScreen
         hudCameraStateOwner = hudCam2;
     }
 
-    // [B3] hudCam2 mirrors HK's OWN Hud Canvas (masks / soul / geo — the persistent HUD) at 75% top-left of the
-    // bottom panel (zoom + pan tunable); promptCam is full-frame with the same view centre as HK's HUD camera.
+    // The existing HUD mirror is fitted at pre-cull, after this frame's generated
+    // header reservations. Prompt framing remains independently full-panel.
     void FrameHudCams(Camera src, bool popupBlackNow, bool creditShowing)
     {
         if (hudCam2 == null || src == null) { RestoreHudCameraState(); return; }
         bool nativeHidden = HudGlobalHide.IsHidden;
         if (nativeHidden) RestoreHudCameraState();
         else CaptureHudCameraState(src);
-        // Blank the HUD mirror while a popup/dialogue/credit draws on the bottom (compPopupBlack), so the
-        // overlay reads on clean black instead of over the live HUD. The gate uses the renderer-DRAWING
-        // predicate (AnyRendererDrawing, alpha-aware) — NOT activeInHierarchy, which is what made the old
-        // v0.37-era auto-hide stick near the focus tablet and got the gate removed entirely.
-        hudCam2.cullingMask = popupBlackNow || nativeHidden ? 0 : 1 << hudLayer;
-
-        // Keep native reduced position/scale perceptible: no extent-driven autozoom or source-transform writes.
-        // A hidden root is offscreen by native authority; never frame it back into view.
-        if (!nativeHidden)
-        {
-            hudCam2.orthographicSize = src.orthographicSize * (src.aspect / ((float)BOTTOM_W / BOTTOM_H)) * cfg.zoomMul;
-            hudCam2.transform.position = src.transform.position + new Vector3(cfg.panX, cfg.panY, 0f);
-            hudCam2.transform.rotation = src.transform.rotation;
-        }
+        if (nativeHidden) hudCam2.cullingMask = 0;
+        else PrepareNativeHudView(popupBlackNow);
 
         // promptCam: full-frame (100%), same view centre as the main HUD camera. While the opening
         // attribution draws, zoom in by creditScale (its old dedicated-camera treatment, now on this cam).

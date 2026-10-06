@@ -53,6 +53,8 @@ for filename, names in methods.items():
                          "declaration_utf8_lf_sha256":hashlib.sha256(declaration.encode()).hexdigest(),
                          "declaration_identical":True})
     if filename == "HKDualScreen.Bottom.Charms.cs":
+        if "bool TryGeneratedGlyphBoundsWorld(" in source:
+            names += ("TryGeneratedGlyphBoundsWorld",)
         names += tuple(re.findall(r"^    (?:static )?(?:void|bool|CharmActionInputs|CharmActionResult|CharmFeedbackResult)\s+(CharmAction\w+)\s*\(", source, re.M))
         start = source.find("    // Collection action state")
         if start >= 0:
@@ -188,6 +190,14 @@ for filename, names in methods.items():
             if declaration is None:
                 raise RuntimeError(f"Missing production declaration {name}")
             parts.append(declaration.group())
+native_hud = root / "HKDualScreen.Bottom.NativeHud.cs"
+if native_hud.exists():
+    source = native_hud.read_text(encoding="utf-8")
+    body = source[source.index("{", source.index("public partial class HKDualScreen")) + 1:source.rindex("}")]
+    parts.append(body)
+    identity.append({"source": str(native_hud), "declaration": "complete native HUD owner and pre-cull implementation",
+                     "source_file_sha256": hashlib.sha256(native_hud.read_bytes()).hexdigest(),
+                     "body_utf8_lf_sha256": hashlib.sha256(body.encode()).hexdigest(), "body_identical": True})
 output = Path(sys.argv[1])
 output.parent.mkdir(parents=True, exist_ok=True)
 output.write_text("// Generated from production; do not edit.\nusing System.IO;\nusing System.Collections;\nnamespace " + fixture_namespace + ";\n"

@@ -683,11 +683,12 @@ public partial class HKDualScreen : MonoBehaviour
             // While paused, park only the live HUD on the suppressed companion role. The separately
             // parented logo stays on hudLayer; native Inventory alone does not change HUD visibility.
             // Product/transport restoration still returns this subtree to the original upper UI layer.
-            // PERF: the recursive walk over the whole HUD subtree ran EVERY frame; now on change / root change /
-            // every 10 frames (catches HUD children HK spawns later, e.g. new mask/soul pieces) — invisible delay.
+            // New resident children are handled by the bounded structural-edge cache,
+            // not an unchanged-gameplay periodic hierarchy walk.
             int wantLayer = restoreToUpperDisplay ? UI_LAYER : suppressForPause ? ATTR_LAYER : hudLayer;
-            if (wantLayer != hudLayerApplied || hudRoot != hudRootApplied || (Time.frameCount % 10) == 0)
+            if (wantLayer != hudLayerApplied || hudRoot != hudRootApplied)
             { SetLayerRecursive(hudRoot, wantLayer); hudLayerApplied = wantLayer; hudRootApplied = hudRoot; }
+            PreserveNativeHudVignette(hudRoot);
         }
     }
     int hudLayerApplied = -1; Transform hudRootApplied;   // RelayerHud change-detect

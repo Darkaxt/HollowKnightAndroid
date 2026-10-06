@@ -68,6 +68,19 @@ public partial class HKDualScreen
             if (generate == null) return false;
             generate.Invoke(component, null);
             if (tmpT == null || component == null || !string.Equals(text, textProperty.GetValue(component, null) as string, StringComparison.Ordinal)) return false;
+            return TryGeneratedGlyphBoundsWorld(tmp, tmpT, out wMin, out wMax);
+        }
+        catch { return false; }
+    }
+
+    // Already-bound native consumers reuse generated buffers without discovery or
+    // generation. The same four-corner validation owns both call paths.
+    static bool TryGeneratedGlyphBoundsWorld(TMProOld.TMP_Text tmp, Transform tmpT, out Vector3 wMin, out Vector3 wMax)
+    {
+        wMin = wMax = Vector3.zero;
+        try
+        {
+            if (tmp == null || tmpT == null) return false;
             var info = tmp.textInfo;
             if (info == null || !ReferenceEquals(info.textComponent, tmp) || info.characterInfo == null ||
                 info.characterCount <= 0 || info.characterCount > info.characterInfo.Length ||

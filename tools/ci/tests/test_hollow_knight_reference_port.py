@@ -632,7 +632,13 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         self.assertIn("gc.hudCanvas.transform", relayer)
         self.assertRegex(relayer, r"hudRoot\s*=\s*hudRoot\.parent\.parent")
         self.assertIn("SetLayerRecursive(hudRoot, wantLayer)", relayer)
-        self.assertRegex(relayer, r"Time\.frameCount\s*%\s*10")
+        self.assertIn("wantLayer != hudLayerApplied || hudRoot != hudRootApplied", relayer)
+        self.assertIn("PreserveNativeHudVignette(hudRoot)", relayer)
+        self.assertNotRegex(relayer, r"Time\.frameCount\s*%")
+        native = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.NativeHud.cs"))
+        self.assertIn("void OnTransformChildrenChanged()", native)
+        self.assertIn("nativeHudStructureDirty", native)
+        self.assertIn("t.gameObject.layer = hudLayer", native)
         self.assertNotRegex(relayer, r"\b(?:Instantiate|Clone)\s*\(")
         self.assertNotIn("new GameObject", relayer)
 
@@ -1053,7 +1059,13 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         glyphs = method_body(strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Charms.cs")),
                              r"static\s+bool\s+TryTmpGlyphBoundsWorld\s*\([^)]*\)")
         self.assertIn('GetMethod("ForceMeshUpdate", Type.EmptyTypes)', glyphs)
-        self.assertLess(glyphs.index("generate.Invoke(component, null)"), glyphs.index("var info = tmp.textInfo"))
+        self.assertLess(glyphs.index("generate.Invoke(component, null)"),
+                        glyphs.index("return TryGeneratedGlyphBoundsWorld(tmp, tmpT, out wMin, out wMax)"))
+        generated = method_body(strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Charms.cs")),
+                                r"static\s+bool\s+TryGeneratedGlyphBoundsWorld\s*\([^)]*\)")
+        self.assertIn("var info = tmp.textInfo", generated)
+        for forbidden in ("GetMethod(", "generate.Invoke(", "GetComponents"):
+            self.assertNotIn(forbidden, generated)
         self.assertLess(label.index("TryTmpGlyphBoundsWorld"), label.index("label.ClipRenderers=label.Root.GetComponentsInChildren<Renderer>(true)"))
         self.assertIn('label.Text=""; label.ScrollOffset=0', label)
         self.assertIn("label.Renderer.enabled=label.Text.Length>0", label)
@@ -1257,9 +1269,11 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
         charms = strip_csharp_comments(
             read(REFERENCE_ROOT / "HKDualScreen.Bottom.Charms.cs")
         )
+        wrapper = method_body(charms, r"static\s+bool\s+TryTmpGlyphBoundsWorld\s*\([^)]*\)")
+        self.assertIn("return TryGeneratedGlyphBoundsWorld(tmp, tmpT, out wMin, out wMax)", wrapper)
         bounds = method_body(
             charms,
-            r"static\s+bool\s+TryTmpGlyphBoundsWorld\s*\([^)]*\)",
+            r"static\s+bool\s+TryGeneratedGlyphBoundsWorld\s*\([^)]*\)",
         )
 
         self.assertIn("for (int corner = 0; corner < 4; corner++)", bounds)

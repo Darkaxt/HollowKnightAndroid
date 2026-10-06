@@ -145,6 +145,9 @@ public sealed class HollowKnightPauseContractsTests
         lower.Step(true);
         GameObject replacement = new();
         GameObject newHealth = new();
+        // This is a native Health replacement, not an empty-domain case. Supply
+        // explicit renderer ingress now that the owning camera fits actual geometry.
+        newHealth.AddComponent<SpriteRenderer>();
         newHealth.transform.SetParent(replacement.transform);
         lower.Cameras.hudCanvas = replacement;
         lower.Step(true);

@@ -109,6 +109,7 @@ internal partial class HKDualScreen
 
     public HKDualScreen()
     {
+        Camera.ResetCallbacks();
         HudGlobalHide.IsHidden = HudGlobalHide.IsReduced = false;
         var mask=new GameObject(); mapMaskTopT=mask.transform;
         mask.AddComponent<MeshFilter>().sharedMesh=new object();
@@ -125,7 +126,14 @@ internal partial class HKDualScreen
         GameObject middle = new();
         middle.transform.SetParent(anchor.transform);
         Cameras.hudCanvas.transform.SetParent(middle.transform);
-        foreach (GameObject go in new[] { Health, Soul, Geo }) go.transform.SetParent(Cameras.hudCanvas.transform);
+        middle.AddComponent<HudGlobalHide>();
+        Health.name="Health"; Soul.name="SoulOrb"; Geo.name="GeoCounter";
+        foreach (GameObject go in new[] { Health, Soul, Geo })
+        {
+            go.transform.SetParent(Cameras.hudCanvas.transform);
+            go.AddComponent<SpriteRenderer>().sprite=new Sprite { bounds=new(Vector3.zero,new(2,1,0)) };
+        }
+        Soul.transform.localPosition=new(-3,0,0); Geo.transform.localPosition=new(3,0,0);
         foreach (GameObject go in new[] { mapClone, invCloneCache, charmCloneCache, journalCloneCache, guideCloneCache, frameRoot, Frame, Controls })
             go.layer = ATTR_LAYER;
         foreach(var cache in new[]{mapClone,invCloneCache,charmCloneCache,journalCloneCache,guideCloneCache}) cache.transform.SetParent(compRoot);
@@ -149,6 +157,7 @@ internal partial class HKDualScreen
         InventoryOpen = inventory;
         Time.frameCount++;
         Tick();
+        Camera.PreCull(hudCam2);
     }
 
     internal bool Drawn(GameObject go) => go != null && go.activeInHierarchy &&
@@ -171,7 +180,7 @@ internal partial class HKDualScreen
     void StripPrivateLayers() { }
     internal bool NativeHudSuppressedStep() => HudFadedInGameplay(Cameras);
     internal bool GlyphBoundsStep(Transform owner, out Vector3 min, out Vector3 max) => TryTmpGlyphBoundsWorld(owner, out min, out max);
-    internal void NativeHudCameraStep() => FrameHudCams(Cameras.hudCamera, false, false);
+    internal void NativeHudCameraStep() { FrameHudCams(Cameras.hudCamera, false, false); Camera.PreCull(hudCam2); }
     void TeardownCompanion() { Teardowns++;TeardownCompanionBody(); }
     internal readonly List<GameObject> Destroyed = new();
     void Destroy(GameObject go) { AssertSingleDestroy(go); Destroyed.Add(go); go.SetActive(false); }
@@ -571,7 +580,7 @@ internal sealed class Transport
     internal void SetProductEnabled(bool requested) { ProductChanges++; Owner.DisplayStep(requested); }
 }
 internal sealed class Dimmer { internal float Brightness, BlurFactor; internal bool Destroyed; }
-internal static class HudGlobalHide { internal static bool IsHidden, IsReduced; }
+internal sealed class HudGlobalHide:MonoBehaviour { internal static bool IsHidden, IsReduced; }
 internal sealed class CanvasGroup { public CanvasGroup() { } internal float alpha = 1; }
 internal sealed class GameCameras
 {
@@ -679,7 +688,10 @@ internal struct Vector2
 internal struct Quaternion
 {
     internal float Angle;
+    internal bool Equals(Quaternion q) => Angle==q.Angle;
     internal static Quaternion identity => default;
+    internal static Quaternion Inverse(Quaternion q) => new(){Angle=-q.Angle};
+    public static Vector3 operator *(Quaternion q,Vector3 p) => q.Apply(p);
     internal static Quaternion Euler(float x,float y,float z) => new(){Angle=z*MathF.PI/180};
     internal Vector3 Apply(Vector3 p) {float c=MathF.Cos(Angle),s=MathF.Sin(Angle);return new(c*p.x-s*p.y,s*p.x+c*p.y,p.z);}
     internal Vector3 Inverse(Vector3 p) => new Quaternion{Angle=-Angle}.Apply(p);
@@ -705,20 +717,26 @@ internal struct Vector3
 }
 internal struct Matrix4x4
 {
-    internal float m00, m11, m22, m23, m33;
+    internal float m00,m01,m02,m03,m10,m11,m12,m13,m20,m21,m22,m23,m30,m31,m32,m33;
     internal static Matrix4x4 identity => new() { m00=1, m11=1, m22=1, m33=1 };
     public static bool operator ==(Matrix4x4 a, Matrix4x4 b) => a.Equals(b);
     public static bool operator !=(Matrix4x4 a, Matrix4x4 b) => !a.Equals(b);
-    public override bool Equals(object value) => value is Matrix4x4 b && m00==b.m00 && m11==b.m11 && m22==b.m22 && m23==b.m23 && m33==b.m33;
+    internal bool Equals(Matrix4x4 b) => m00==b.m00 && m01==b.m01 && m02==b.m02 && m03==b.m03 &&
+        m10==b.m10 && m11==b.m11 && m12==b.m12 && m13==b.m13 && m20==b.m20 && m21==b.m21 && m22==b.m22 && m23==b.m23 &&
+        m30==b.m30 && m31==b.m31 && m32==b.m32 && m33==b.m33;
+    public override bool Equals(object value) => value is Matrix4x4 b && Equals(b);
     public override int GetHashCode() => HashCode.Combine(m00,m11,m22,m23,m33);
 }
 internal sealed class Camera
 {
+    internal static event Action<Camera> onPreCull;
+    internal static void PreCull(Camera camera) => onPreCull?.Invoke(camera);
+    internal static void ResetCallbacks() => onPreCull=null;
     internal bool ThrowNextEnableWrite;
     bool active = true;
     internal bool enabled { get => active; set { if(ThrowNextEnableWrite) { ThrowNextEnableWrite=false; throw new InvalidOperationException("native role camera unavailable"); } active=value; } }
     internal bool orthographic;
-    internal Rect rect;
+    internal Rect rect = new(0,0,1,1);
     internal int cullingMask, targetDisplay;
     internal float aspect = 1, orthographicSize = 8, depth, nearClipPlane=.3f, farClipPlane=1000;
     Matrix4x4? customProjection;
@@ -730,7 +748,8 @@ internal sealed class Camera
     internal CameraClearFlags clearFlags;
     internal readonly Transform transform = new();
     internal void CopyFrom(Camera source) { }
-    internal Vector3 ViewportToWorldPoint(Vector3 p) => transform.position+new Vector3((p.x-.5f)*orthographicSize*2*aspect,(p.y-.5f)*orthographicSize*2,p.z);
+    internal Vector3 WorldToViewportPoint(Vector3 p) { DiscoveryCounters.Projections++;var q=Quaternion.Inverse(transform.rotation)*(p-transform.position);return new(.5f+q.x/(2*orthographicSize*aspect),.5f+q.y/(2*orthographicSize),q.z); }
+    internal Vector3 ViewportToWorldPoint(Vector3 p) => transform.position+transform.rotation*new Vector3((p.x-.5f)*orthographicSize*2*aspect,(p.y-.5f)*orthographicSize*2,p.z);
 }
 internal sealed class GameObject
 {
@@ -748,6 +767,7 @@ internal sealed class GameObject
         var component=new T(); Components[typeof(T)]=component;
         if(component is HKDualScreen owner) owner.gameObject=this;
         if(component is Renderer renderer) { renderer.transform=transform;transform.Renderers.Add(renderer); }
+        if(component is Component native) { native.NativeTransform=transform; transform.TextComponents.Add(native); }
         return component;
     }
     internal void SetComponent<T>(T component) where T:class => Components[typeof(T)]=component;
@@ -759,7 +779,12 @@ internal sealed class GameObject
     }
     internal Component GetComponent(string name) => transform.TextComponents.FirstOrDefault(c=>c.GetType().Name==name);
     internal T GetComponentInChildren<T>(bool inactive=true) where T:class => transform.GetComponentInChildren<T>(inactive);
-    internal void RemoveRenderer() { foreach(var key in Components.Where(p=>p.Value is Renderer).Select(p=>p.Key).ToArray()) Components.Remove(key);transform.Renderers.Clear(); }
+    internal void RemoveRenderer() { foreach(var r in transform.Renderers) r.Destroyed=true;foreach(var key in Components.Where(p=>p.Value is Renderer).Select(p=>p.Key).ToArray()) Components.Remove(key);transform.Renderers.Clear(); }
+    internal void NotifyChildrenChanged()
+    {
+        foreach(var component in Components.Values)
+            component.GetType().GetMethod("OnTransformChildrenChanged",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic)?.Invoke(component,null);
+    }
     internal void SetActive(bool active) => activeSelf = active;
 }
 internal sealed class Transform
@@ -779,24 +804,30 @@ internal sealed class Transform
     internal Transform root => parent!=null ? parent.root : this;
     internal Vector3 InverseTransformPoint(Vector3 point) {var q=localRotation.Inverse((parent!=null ? parent.InverseTransformPoint(point) : point)-localPosition);return new(q.x/localScale.x,q.y/localScale.y,q.z/localScale.z);}
     internal Quaternion rotation,localRotation;
+    internal Matrix4x4 localToWorldMatrix
+    {
+        get { var p=TransformPoint(Vector3.zero);var x=TransformVector(new(1,0,0));var y=TransformVector(new(0,1,0));var z=TransformVector(new(0,0,1));
+            return new(){m00=x.x,m10=x.y,m20=x.z,m01=y.x,m11=y.y,m21=y.z,m02=z.x,m12=z.y,m22=z.z,m03=p.x,m13=p.y,m23=p.z,m33=1}; }
+    }
     internal readonly List<Renderer> Renderers=new();
     internal T[] GetComponentsInChildren<T>(bool inactive=true) where T:class { DiscoveryCounters.Hierarchy++;return GetComponents<T>().Concat(Children.Where(c=>inactive || c.gameObject.activeInHierarchy).SelectMany(c=>c.GetComponentsInChildren<T>(inactive))).ToArray(); }
     internal Transform(GameObject go = null) { gameObject = go; }
     internal readonly List<PlayMakerFSM> FsMs=new();
     internal readonly List<Component> TextComponents=new();
-    internal T[] GetComponents<T>() where T:class => (typeof(T)==typeof(Transform) ? new object[]{this} : Array.Empty<object>()).Concat(FsMs.Cast<object>()).Concat(TextComponents).Concat(Renderers).OfType<T>().ToArray();
+    internal T[] GetComponents<T>() where T:class { DiscoveryCounters.Hierarchy++;return (typeof(T)==typeof(Transform) ? new object[]{this} : Array.Empty<object>()).Concat(FsMs.Cast<object>()).Concat(TextComponents).Concat(Renderers).OfType<T>().ToArray(); }
     internal T GetComponentInChildren<T>(bool inactive) where T:class => GetComponentsInChildren<T>(inactive).FirstOrDefault();
     internal T GetComponent<T>() where T:class => gameObject.GetComponent<T>();
     internal Component GetComponent(string name) => gameObject.GetComponent(name);
     internal string name => gameObject?.name;
-    internal int childCount => Children.Count;
+    internal int childCount { get { DiscoveryCounters.ChildReads++;return Children.Count; } }
     internal Transform GetChild(int index) => Children[index];
     internal Transform Find(string name) => Children.FirstOrDefault(c=>c.name==name);
     internal bool IsChildOf(Transform owner) { for(var t=parent;t!=null;t=t.parent) if(t==owner) return true;return false; }
     internal void SetParent(Transform value,bool worldPositionStays=false)
     {
         var p=position;var s=lossyScale;
-        parent?.Children.Remove(this);parent=value;value?.Children.Add(this);
+        var old=parent;old?.Children.Remove(this);parent=value;value?.Children.Add(this);
+        old?.gameObject?.NotifyChildrenChanged();value?.gameObject?.NotifyChildrenChanged();
         if(worldPositionStays) { position=p;var ps=value?.lossyScale ?? Vector3.one;localScale=new(s.x/ps.x,s.y/ps.y,s.z/ps.z); }
     }
 }
@@ -825,6 +856,11 @@ internal sealed class FsmEvent { internal string Name; }
 // cursor decisions are extracted production methods, never repeated here.
 internal class Renderer
 {
+    internal bool Destroyed;
+    public static bool operator ==(Renderer a,Renderer b) => ReferenceEquals(a,b) || ((ReferenceEquals(a,null) || a.Destroyed) && (ReferenceEquals(b,null) || b.Destroyed));
+    public static bool operator !=(Renderer a,Renderer b) => !(a==b);
+    public override bool Equals(object value) => ReferenceEquals(this,value);
+    public override int GetHashCode() => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this);
     internal Transform transform;
     internal object sharedMaterial;
     internal GameObject gameObject => transform.gameObject;
@@ -835,7 +871,7 @@ internal class Renderer
     internal Renderer(Transform owner) { transform=owner ?? new GameObject().transform; }
     internal Vector3 BoundsSize=Vector3.one;
     internal virtual Bounds LocalBounds => new(Vector3.zero,BoundsSize);
-    internal Bounds bounds { get {DiscoveryCounters.BoundsReads++;var b=LocalBounds;var lo=new Vector3(float.PositiveInfinity,float.PositiveInfinity,0);var hi=new Vector3(float.NegativeInfinity,float.NegativeInfinity,0);for(int i=0;i<4;i++){var p=transform.TransformVector(new(i%2==0 ? b.min.x : b.max.x,i<2 ? b.min.y : b.max.y,0));lo=Vector3.Min(lo,p);hi=Vector3.Max(hi,p);}return new Bounds(transform.position+(lo+hi)*.5f,hi-lo);} }
+    internal Bounds bounds { get {DiscoveryCounters.BoundsReads++;var b=LocalBounds;var lo=new Vector3(float.PositiveInfinity,float.PositiveInfinity,float.PositiveInfinity);var hi=new Vector3(float.NegativeInfinity,float.NegativeInfinity,float.NegativeInfinity);for(int i=0;i<8;i++){var p=transform.TransformVector(new((i&1)==0 ? b.min.x : b.max.x,(i&2)==0 ? b.min.y : b.max.y,(i&4)==0 ? b.min.z : b.max.z));lo=Vector3.Min(lo,p);hi=Vector3.Max(hi,p);}return new Bounds(transform.position+(lo+hi)*.5f,hi-lo);} }
     internal T GetComponent<T>() where T:class => gameObject.GetComponent<T>();
     internal void GetPropertyBlock(MaterialPropertyBlock block) => block.Value=Clip;
     internal void SetPropertyBlock(MaterialPropertyBlock block) { Clip=block.Value;ClipWrites++; }
@@ -860,7 +896,7 @@ internal sealed partial class GameMap
 }
 internal sealed class Mesh:UnityEngine.Object { internal Bounds bounds=new(Vector3.zero,Vector3.one); internal string name;internal Vector3[] vertices;internal Vector2[] uv;internal Color[] colors;internal int[] triangles;internal void RecalculateBounds() { } }
 internal sealed class MeshFilter { public MeshFilter() { } internal object sharedMesh;internal Mesh mesh { get => sharedMesh as Mesh;set => sharedMesh=value; } }
-internal sealed class MeshRenderer:Renderer { public MeshRenderer() { } }
+internal sealed class MeshRenderer:Renderer { public MeshRenderer() { } internal override Bounds LocalBounds => gameObject.GetComponent<MeshFilter>()?.mesh?.bounds ?? base.LocalBounds; }
 internal enum SpriteDrawMode { Simple,Sliced }
 internal sealed class SpriteRenderer:Renderer
 {
@@ -940,11 +976,13 @@ internal class Component:TMProOld.TMP_Text
 {
     readonly Renderer renderer;
     internal Component(Renderer renderer=null) { this.renderer=renderer; textInfo=new() { textComponent=this }; }
-    internal Transform transform => renderer?.transform;
+    internal Transform NativeTransform;
+    internal Transform transform => NativeTransform ?? renderer?.transform;
     internal GameObject gameObject => transform?.gameObject;
     internal T[] GetComponentsInChildren<T>(bool inactive=true) where T:class => transform.GetComponentsInChildren<T>(inactive);
     internal T GetComponent<T>() where T:class => renderer as T;
     public string text { get;set; }
+    public bool havePropertiesChanged { get;set; }
     public Color color { get;set; }
     internal bool SpawnFallbackOnMesh;
     internal Renderer LastFallback;
@@ -965,10 +1003,12 @@ internal class Component:TMProOld.TMP_Text
     public Bounds textBounds => LegacyMetricBounds ?? new(InkCenter,new Vector3(1,MeasuredTextHeight ?? InkHeight,1));
     // Existing synthetic layout input is retained for older guards; it is not an optical/native cap-height golden.
     internal bool AutomaticGlyphInput=true, ThrowGeneration;
-    internal int MeshGenerations;
+    internal int MeshGenerations,GenerationAttempts;
     public void ForceMeshUpdate()
     {
+        GenerationAttempts++;
         if(ThrowGeneration) throw new InvalidOperationException("native generation unavailable");
+        havePropertiesChanged=false;
         MeshGenerations++;LastMeshSize=Container?.size ?? size;
         if(AutomaticGlyphInput)
         {
@@ -991,7 +1031,7 @@ internal class TextContainer:MonoBehaviour { internal TextContainer(Renderer own
 internal sealed class GameplayLabelDriver:MonoBehaviour { internal GameplayLabelDriver(Renderer owner):base(owner) { } }
 internal class MonoBehaviour:Component { internal bool enabled=true; internal MonoBehaviour(Renderer owner=null):base(owner) { } }
 internal sealed class NativeOwner:UnityEngine.Object { public Transform transform=new GameObject().transform;public string ActiveStateName="Closed"; }
-internal static class DiscoveryCounters { internal static int Hierarchy, BoundsReads; }
+internal static class DiscoveryCounters { internal static int Hierarchy, BoundsReads,ChildReads,Projections; }
 internal static class Resources
 {
     internal static int Discoveries;

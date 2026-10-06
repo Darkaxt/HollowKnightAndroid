@@ -37,7 +37,7 @@ Retained receipt SHA-256 identities:
 
 Private execution receipts and original failed attempts remain in the protected acceptance evidence; game binaries and private transcripts are not publication artifacts.
 
-## Still open
+## Remaining at the original native-layout checkpoint
 
 Phase 1 remains **IN_PROGRESS**, Phase 2 **NOT_STARTED**. Resident-HUD/header confinement still uses legacy mirror framing. H01/H02/H03/H05 fitting, readiness/writer and effect bridges are not implemented or admitted by this checkpoint. T01 numerical native parity and broader A20/A30/A25/A27/A28/A29 obligations remain tracked separately.
 
@@ -153,4 +153,32 @@ Lifecycle coverage extends the actual Hollow Knight Boot/EnsureStarted/Start and
 | Final specification review | `f394792493df9c3beac43cf0f0a7a42eb8f99d291d5701c20a3066e53656db98` |
 | Final quality review | `2dfd8e44ae306fbf2788f7319a573edb4598067a25d2e05fb5766bc05f032811` |
 
-This closes only bounded host rows `P1-SKIN-UNITY-01`, `P1-LIFE-ENTRY-01` and `P1-SAFETY-SKIN-01`. Engine hierarchy/components, graphics, surface geometry, clock and destruction are modeled boundaries; Java checks are source guards. No real Android Home/Recents, Unity scheduling/native lifecycle, JNI, GPU/default optical appearance, frame pacing, signing/release or independent parity acceptance is claimed. Resident-HUD H01/H02/H03/H05 authority remains unadmitted, Task137 remains HELD and historical allocation/full77 evidence is unwaived. Phase 1 remains IN_PROGRESS; Phase 2 remains NOT_STARTED.
+This closes only bounded host rows `P1-SKIN-UNITY-01`, `P1-LIFE-ENTRY-01` and `P1-SAFETY-SKIN-01`. Engine hierarchy/components, graphics, surface geometry, clock and destruction are modeled boundaries; Java checks are source guards. No real Android Home/Recents, Unity scheduling/native lifecycle, JNI, GPU/default optical appearance, frame pacing, signing/release or independent parity acceptance is claimed. Resident-HUD H01/H02/H03/H05 authority remained unadmitted at that checkpoint; its implementation follows below. Historical allocation/full77 evidence is unwaived.
+
+## Follow-up coherent native HUD confinement
+
+The existing Hollow Knight HUD camera now fits current resident geometry inside the canonical top-left header rather than using legacy configurable full-panel mirror framing. Its pre-cull boundary consumes the current generated title/toast, bench, equipped/notch and action plate/ink reservations before applying the destination viewport. No extra camera, texture or render pass is added.
+
+Renderer owners are bound on ownership/structural edges. Bounded current transform, sprite/tk2d, mesh-shape, generated-text and native particle/Animator phase comparisons refresh only changed owners. A HUD-local structural callback replaces periodic hierarchy walks. Static generated ink and projected reservations stay cached. Unready, nonfinite, empty or over-budget geometry blanks only the HUD; identical failed text requests and missing particle owners recover through bounded retry. Persistent text-dirty flags do not restart failed generation each frame. Smaller rebinds release unused owner references; retirement unsubscribes the camera callback.
+
+Native artwork transforms, materials and shaders are preserved. Actual reduced-state ancestor semantics remain visible without rewriting source transforms. Eight-corner geometry and camera clip-depth coverage are retained. The low-health vignette stays single-owned on upper UI layer 5; tutorial-routed HP-Up remains owned by the prompt camera and excluded from resident fitting. Existing pause/hidden and complete captured-camera restoration contracts remain in force.
+
+- Original owning RED: **9 failed, 1 passed** against unchanged framing. Later isolated RED includes cached-text discovery, idle reservation projections, two lifetime/particle admission failures, and the corrected single-owner persistent-dirty retry failure.
+- Final affected host suite: **581 passed, 0 failed, 0 skipped**, actual exit 0; all **261** frozen inputs unchanged. Includes **26** new owning cases and the preserved pane, pause, paired lifecycle and skin controls.
+- Final affected Python source/wiring/weave guards: **88 passed**, exit 0, frozen inputs unchanged.
+- Final exact Hollow Knight Unity .61 and Silksong Unity .50 compiles: actual exits **0/0**, all **552** frozen production/depot/player inputs unchanged. HK nine-site mandatory weave and byte-idempotence pass. Existing compiler warnings remain visible.
+- Ordered inline specification then quality reviews admit this bounded checkpoint. Full new production bodies execute in generated fixtures; engine ingress is modeled, not duplicated HUD policy.
+- Original failed attempts remain retained. A pause replacement gained explicit native Health renderer ingress with all assertions preserved; a separate genuinely empty replacement stays blank. The first dirty-retry oracle counted one owner on a two-renderer donor; the corrected single-owner test separately reproduces the per-frame defect. Initial 3D fixture arithmetic caused eight geometry/bounds-counter failures and was corrected without changing tolerances. Two source-call whitespace guards and command-local GNU make discovery were corrected, not skipped.
+
+| HUD follow-up evidence | SHA-256 |
+|---|---|
+| Original owning RED | `34bba918141fdf7d36586731e171bb1d4d28b47bd2f6263cddcc81cd126e82e2` |
+| Lifetime/particle RED | `27bf7245349a29dcdde9c536815335b7f1d09f6fbaa9b85c017282a774b210cf` |
+| Genuine persistent-dirty retry RED | `f8f2027ef6a5b07324a97f72988101b47d7b0f3f3ca30a2872b7e3c2a2d7c503` |
+| Final affected suite | `1b775aeceeba6cbea0b78ec76762495e034954b126c74b87490919ecb65403cc` |
+| Final Python | `df45dde7bf0fa4e155b24d5216114c32702ae24263a51b47452a4e8af66d5824` |
+| Final exact paired compiles | `f4d583bc20f1742b9371faee78fd38dc93b7cd3d9d2af627160e23e8f381c449` |
+| Specification review | `3a1dd793b73ed78fbecf945ad4fe40026a4a9f8b3b1c74625aeef17a58f1fb14` |
+| Quality review | `b4ffd063a853e59ea3e3cf53ae1a0a2a20f441e65f64b9e1a2221f1335cbf5ef` |
+
+This closes bounded host rows `P1-HUD-01/02/03`; it does not prove shader/stencil appearance, real Unity render/job timing, native lifecycle, numerical optical parity or FPS. Same-token unannounced shader/vertex mutations are not claimed to be universally observed. Necessary native animation remains supported through relevant cached-owner changes; an exhaustive engine settlement oracle or a separate sampling approval is not a Phase 1 prerequisite. The separately ledgered host build/receipt row `P1-BUILD-01` remains pending. Phase 1 remains IN_PROGRESS, Phase 2 NOT_STARTED; no ADB, signing, release or independent parity acceptance is claimed.
