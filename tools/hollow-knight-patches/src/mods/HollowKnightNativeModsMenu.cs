@@ -236,6 +236,7 @@ namespace DualSouls.Mods.HollowKnight
         HollowKnightModsSession _session;
         TweakMenuModel _menu;
         NativeSkinMenuModel _skinMenu;
+        bool _skinSnapshotReady;
         readonly SkinNativeTransportWindow _skinTransport = new SkinNativeTransportWindow();
         AndroidJavaClass _skinBridge;
         UIManager _ui;
@@ -1374,8 +1375,12 @@ namespace DualSouls.Mods.HollowKnight
 
         internal void SubmitSkin(HollowKnightNativeSkinButton button)
         {
-            if (button == null || _skinMenu == null || _transitioning ||
+            if (button == null || _transitioning ||
                 !DriverIsCurrent(button, button.Generation)) return;
+            if (_skinMenu == null) {
+                if (ReferenceEquals(button, _skinButtons[0])) Close();
+                return;
+            }
             SelectSkin(button);
             NativeSkinMenuRow row = _skinMenu.Selected;
             if (row.Kind == NativeSkinMenuRowKind.Back) { Close(); return; }
@@ -1389,7 +1394,7 @@ namespace DualSouls.Mods.HollowKnight
 
         internal void MoveSkin(HollowKnightNativeSkinButton button, MoveDirection direction)
         {
-            if (button == null || _skinMenu == null || _transitioning ||
+            if (button == null || !_skinSnapshotReady || _skinMenu == null || _transitioning ||
                 !DriverIsCurrent(button, button.Generation)) return;
             SelectSkin(button);
             if (direction == MoveDirection.Left || direction == MoveDirection.Right)
@@ -1423,7 +1428,7 @@ namespace DualSouls.Mods.HollowKnight
 
         void ApplySkinMutation(NativeSkinMutation mutation)
         {
-            if (_skinMenu == null || mutation.Kind == NativeSkinMutationKind.None) return;
+            if (!_skinSnapshotReady || _skinMenu == null || mutation.Kind == NativeSkinMutationKind.None) return;
             string expected = _skinMenu.Snapshot.ConfigSha256;
             _skinTransport.Start(Time.unscaledTime);
             HollowKnightModsRuntime currentRuntime = HollowKnightModsRuntime.Current;
@@ -1460,6 +1465,7 @@ namespace DualSouls.Mods.HollowKnight
 
         void RefreshSkinMenu()
         {
+            _skinSnapshotReady = false;
             try
             {
                 string json = SkinBridge.CallStatic<string>("readMenuSnapshot", SkinProfileId);
@@ -1499,12 +1505,21 @@ namespace DualSouls.Mods.HollowKnight
                     _skinError.StartsWith("CHANGE NOT APPLIED", StringComparison.Ordinal);
                 if (!preserveMutationError)
                     _skinError = FormatSkinEvidence(wire);
+                _skinSnapshotReady = true;
             }
             catch (Exception error)
             {
                 _skinTransport.Cancel();
                 _skinError = "SKINS UNAVAILABLE · " + error.GetBaseException().Message;
                 Debug.LogWarning("[HK Skins] " + _skinError);
+            }
+            finally
+            {
+                if (!_skinSnapshotReady && _skinMenu != null && BindingIsAlive()) {
+                    _skinMenu.SelectRow(_skinMenu.Rows.Count - 1);
+                    PaintSkins();
+                    if (_nativeOpen && _openRoute == NativeMenuRoute.Skins) FocusSkin();
+                }
             }
         }
 
@@ -1542,8 +1557,15 @@ namespace DualSouls.Mods.HollowKnight
                 : _skinError.ToUpperInvariant();
             if (_skinMenu == null)
             {
-                for (int index = 0; index < _skinButtonRoots.Count; index++)
-                    _skinButtonRoots[index].SetActive(false);
+                int back = 0;
+                for (int index = 0; index < _skinButtonRoots.Count; index++) {
+                    bool shown = index == back;
+                    _skinButtonRoots[index].SetActive(shown);
+                    _skinButtons[index].DataIndex = -1;
+                    _skinButtons[index].Selectable.interactable = shown;
+                }
+                _skinLabels[back].Text = "BACK";
+                _skinsScreen.defaultHighlight = _skinButtons[back].Selectable;
                 return;
             }
             IReadOnlyList<NativeSkinMenuRow> visible = _skinMenu.VisibleRows;
@@ -1558,10 +1580,13 @@ namespace DualSouls.Mods.HollowKnight
                 for (int index = 0; index < _skinMenu.Rows.Count; index++)
                     if (ReferenceEquals(_skinMenu.Rows[index], row)) { dataIndex = index; break; }
                 _skinButtons[slot].DataIndex = dataIndex;
-                _skinButtons[slot].Selectable.interactable = row.IsActionable;
+                _skinButtons[slot].Selectable.interactable = row.IsActionable &&
+                    (_skinSnapshotReady || row.Kind == NativeSkinMenuRowKind.Back);
                 _skinLabels[slot].Text = row.Label.ToUpperInvariant() +
                     (string.IsNullOrEmpty(row.Value) ? "" : "     " + row.Value);
             }
+            _skinsScreen.defaultHighlight = _skinSnapshotReady
+                ? _skinButtons[0].Selectable : _skinButtons[visible.Count - 1].Selectable;
         }
 
         string SkinFocusDescription()
@@ -1691,6 +1716,7 @@ namespace DualSouls.Mods.HollowKnight
             _session = null;
             _menu = null;
             _skinMenu = null;
+            _skinSnapshotReady = false;
         }
 
         void OnDestroy()
