@@ -923,14 +923,36 @@ class DualSoulsUiPortContractTest(unittest.TestCase):
         self.assertIn("!OwnedOverlay(renderer.transform)", bind)
         self.assertIn("!OwnedOverlay(canvas.transform)", bind)
 
-        suppress = csharp_method_body(view, r"void\s+SuppressOverlay\s*\(\s*\)")
+        inventory = csharp_method_body(view, r"void\s+EnsureInventory\s*\(\s*\)")
         for required in (
+            "!_inventoryReady || _inventoryDirty || Time.frameCount >= _inventoryRetry",
+            "_inventoryOverlay != _overlayRoot",
+            "Retired(_overlayRenderers) || Retired(_overlayCanvasRenderers)",
+            "if (changed)",
             "_overlayRoot.GetComponentsInChildren(true, _overlayRenderers);",
             "_overlayRoot.GetComponentsInChildren(true, _overlayCanvasRenderers);",
-            "_overlayRendererScope.Begin(_overlayRenderers);",
-            "_overlayCanvasScope.Begin(_overlayCanvasRenderers);",
+            "_inventoryOverlay = _overlayRoot;",
+            "_inventoryRetry = Time.frameCount + 30;",
+        ):
+            self.assertIn(required, inventory)
+        for collection in ("_overlayRenderers", "_overlayCanvasRenderers"):
+            query = inventory.index(f"_overlayRoot.GetComponentsInChildren(true, {collection});")
+            self.assertLess(inventory.index("if (changed)"), query)
+            self.assertLess(query, inventory.index("_inventoryReady = true;"))
+
+        suppress = csharp_method_body(view, r"void\s+SuppressOverlay\s*\(\s*\)")
+        self.assertNotIn("GetComponentsInChildren", suppress)
+        for required in (
+            "if (_overlayRoot == null)",
+            "_overlayRendererScope.Active || _overlayCanvasScope.Active",
+            "RestoreOverlay();",
+            "throw;",
         ):
             self.assertIn(required, suppress)
+        for scope, collection in (("_overlayRendererScope", "_overlayRenderers"),
+                                  ("_overlayCanvasScope", "_overlayCanvasRenderers")):
+            self.assertLess(suppress.index("EnsureInventory();"),
+                            suppress.index(f"{scope}.Begin({collection});"))
 
         before = csharp_method_body(view, r"void\s+BeforeCamera\s*\(\s*Camera\s+camera\s*\)")
         self.assertLess(before.index("if (!FrameCamera())"), before.index("SuppressOverlay();"))

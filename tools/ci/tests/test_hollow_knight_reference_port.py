@@ -1089,10 +1089,26 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
                               r"bool\s+TryMapLabelInk\s*\([^)]*\)")
         self.assertIn("!TryTmpGlyphBoundsWorld(label.Root, out min, out max)", measure)
         self.assertNotIn("ForceMeshUpdate", position_hud)
-        self.assertIn("ForceMeshUpdate", set_name)
-        self.assertIn("NeutralizeDetachedTmpClip(dlgNameClone.gameObject)", set_name)
+        bind_name = method_body(hud, r"static\s+NameClonePart\s+BindNameClonePart\s*\([^)]*\)")
+        self.assertIn('c.GetType().GetMethod("ForceMeshUpdate", Type.EmptyTypes)', bind_name)
+        self.assertIn("Owner = c, Renderer = renderer", bind_name)
+        self.assertIn("Generate = (Action)Delegate.CreateDelegate(typeof(Action), c, generate)", bind_name)
+        self.assertNotIn("GetMethod(", set_name)
+        for required in (
+            "part == null || part.Owner != c || part.Renderer != renderer",
+            "part = BindNameClonePart(c, renderer)",
+            "!part.Applied || contentChanged || (dirty && !part.PropertiesDirty)",
+            "part.Generate();",
+            'if (part.Text() != text) throw new InvalidOperationException',
+            "part.Content = text; part.Applied = true;",
+            "!dlgNameClipPending && part != null && part.Applied && part.Content.Length > 0",
+            "NeutralizeDetachedTmpClip(dlgNameClone.gameObject)",
+        ):
+            self.assertIn(required, set_name)
+        self.assertLess(set_name.index("part.Generate();"),
+                        set_name.index("part.Content = text; part.Applied = true;"))
         self.assertLess(
-            set_name.index("ForceMeshUpdate"),
+            set_name.index("part.Generate();"),
             set_name.index("NeutralizeDetachedTmpClip(dlgNameClone.gameObject)"),
         )
         self.assertLess(
