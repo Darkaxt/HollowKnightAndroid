@@ -20,6 +20,10 @@ on:
         description: "Build and verify, but publish nothing"
         type: boolean
         default: false
+      compiler_runner:
+        description: "Unique label of the one-job private Windows compiler runner"
+        type: string
+        required: true
       prerelease:
         description: "Mark as prerelease (auto = any version with a -suffix)"
         type: choice
@@ -28,19 +32,88 @@ on:
 
 permissions:
   contents: write        # create a release, upload the APK
+  actions: read         # verify this attempt's private compiler dependency
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
+  patch-profiles:
+    name: Exact patch profiles
+    runs-on: ${{ inputs.compiler_runner }}
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Guard private runner context and mask local paths
+        env:
+          COMPILER_LABEL: ${{ inputs.compiler_runner }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:GITHUB_EVENT_NAME -ne 'workflow_dispatch' -or
+              $env:COMPILER_LABEL -notmatch '^dualsouls-compile-[0-9a-f]{32}$' -or
+              -not $env:DUALSOULS_INPUT_CONTRACT -or
+              -not $env:DUALSOULS_INPUT_CONTRACT_SHA256) {
+            throw 'Private compiler runner context is not provisioned'
+          }
+          foreach ($path in @($env:RUNNER_WORKSPACE, $env:RUNNER_TEMP,
+                              $env:USERPROFILE, $env:DUALSOULS_INPUT_CONTRACT)) {
+            if ($path) {
+              Write-Output "::add-mask::$path"
+              Write-Output ('::add-mask::' + $path.Replace('\', '/'))
+            }
+          }
+          $contract = Get-Content -LiteralPath $env:DUALSOULS_INPUT_CONTRACT -Raw | ConvertFrom-Json
+          foreach ($profile in $contract.profiles.PSObject.Properties.Value) {
+            foreach ($path in @($profile.depot, $profile.player)) {
+              Write-Output "::add-mask::$path"
+              Write-Output ('::add-mask::' + $path.Replace('/', '\'))
+            }
+          }
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Compile and verify exact patch profiles
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $out = Join-Path $env:RUNNER_TEMP "patch-profiles-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          & pwsh -NoLogo -NoProfile -NonInteractive -File tools/ci/check_patch_profiles.ps1 `
+            -InputContract $env:DUALSOULS_INPUT_CONTRACT -OutputRoot $out `
+            -RunToken "$($env:GITHUB_RUN_ID):$($env:GITHUB_RUN_ATTEMPT):$($env:GITHUB_SHA)" `
+            *> (Join-Path $env:RUNNER_TEMP 'compiler-entry.log')
+          if ($LASTEXITCODE -ne 0) { throw 'Private exact-profile compilation rejected' }
+          & python -B tools/ci/compile_receipt.py verify-gate --repo $env:GITHUB_WORKSPACE `
+            --gate (Join-Path $out 'both-profiles-success.json') --source-revision $env:GITHUB_SHA `
+            --run-token "$($env:GITHUB_RUN_ID):$($env:GITHUB_RUN_ATTEMPT):$($env:GITHUB_SHA)" `
+            *> (Join-Path $env:RUNNER_TEMP 'compiler-verify.log')
+          if ($LASTEXITCODE -ne 0) { throw 'Private exact-profile verification rejected' }
+
+      - name: Test release verification helper
+        run: |
+          & python -B tools/ci/check_input_contract_tests.py
+          if ($LASTEXITCODE -ne 0) { throw 'Private input-contract suite rejected' }
+
+      - name: Verify completed compiler gate
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP "patch-profiles-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          & python -B tools/ci/compile_receipt.py verify-gate --repo $env:GITHUB_WORKSPACE `
+            --gate (Join-Path $out 'both-profiles-success.json') --source-revision $env:GITHUB_SHA `
+            --run-token "$($env:GITHUB_RUN_ID):$($env:GITHUB_RUN_ATTEMPT):$($env:GITHUB_SHA)" `
+            *> (Join-Path $env:RUNNER_TEMP 'compiler-final-verify.log')
+          if ($LASTEXITCODE -ne 0) { throw 'Completed private compiler gate rejected' }
+          # Raw logs, receipts, game DLLs and compiler stages remain on this runner.
+
   release:
+    needs: patch-profiles
     runs-on: ubuntu-latest
-    env:
-      # Reviewed private mounts must be supplied by runner administration.
-      # Hosted runners without these inputs intentionally fail before signing.
-      DUALSOULS_INPUT_CONTRACT: ${{ vars.PATCH_INPUT_CONTRACT }}
-      DUALSOULS_INPUT_CONTRACT_SHA256: ${{ vars.PATCH_INPUT_CONTRACT_SHA256 }}
 
     steps:
       - uses: actions/checkout@v4
@@ -110,20 +183,6 @@ jobs:
             echo "$tag is new."
           fi
 
-      - name: Compile and verify exact patch profiles
-        shell: bash
-        run: |
-          set -euo pipefail
-          [[ -n "${DUALSOULS_INPUT_CONTRACT:-}" ]] || { echo "::error::Private patch inputs are not provisioned"; exit 1; }
-          pwsh -NoLogo -NoProfile -NonInteractive -File tools/ci/check_patch_profiles.ps1 \
-            -InputContract "$DUALSOULS_INPUT_CONTRACT" \
-            -OutputRoot "$RUNNER_TEMP/patch-profiles-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
-            -RunToken "$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT:$GITHUB_SHA"
-          python3 -B tools/ci/compile_receipt.py verify-gate --repo "$GITHUB_WORKSPACE" \
-            --gate "$RUNNER_TEMP/patch-profiles-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/both-profiles-success.json" \
-            --source-revision "$GITHUB_SHA" --run-token "$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT:$GITHUB_SHA"
-          # Private compiler logs, game DLLs and receipts are never upload inputs.
-
       # ── Signing key ───────────────────────────────────────────────────────
       #
       # The signing key IS the app's identity: Android refuses an update signed
@@ -138,15 +197,14 @@ jobs:
       - name: Prepare signing key
         id: signing
         env:
+          GH_TOKEN: ${{ github.token }}
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           set -euo pipefail
-          python3 -B tools/ci/compile_receipt.py verify-gate --repo "$GITHUB_WORKSPACE" \
-            --gate "$RUNNER_TEMP/patch-profiles-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/both-profiles-success.json" \
-            --source-revision "$GITHUB_SHA" --run-token "$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT:$GITHUB_SHA"
+          python3 -B tools/ci/workflow_gate.py verify-job --repo "$GITHUB_WORKSPACE"
           for name in KEYSTORE_B64 KS_PASS KEY_PASS KEY_ALIAS; do
             [[ -n "${!name:-}" ]] || { echo "::error::Required signing secret for $name is missing"; exit 1; }
           done
@@ -156,24 +214,6 @@ jobs:
             -keystore "$RUNNER_TEMP/release.p12" \
             -alias "$KEY_ALIAS" -storepass:env KS_PASS >/dev/null
           echo "Using the configured HollowKnightAndroid release identity."
-
-      - name: Test release verification helper
-        run: |
-          set -euo pipefail
-          python3 -B - <<'PY'
-          import os, subprocess, sys
-          from pathlib import Path
-          from tools.ci.compile_receipt import admit_contract
-          contract = admit_contract(Path.cwd(), os.environ["DUALSOULS_INPUT_CONTRACT"])
-          temp = os.environ["RUNNER_TEMP"]
-          env = dict(os.environ, DUALSOULS_RETAIN_TEST_FIXTURES="1",
-                     DUALSOULS_TEMP_ROOT=temp, TMPDIR=temp, TEMP=temp, TMP=temp)
-          for profile, player, depot in [("hollow-knight", "UNITY_PLAYER_61", "HK_ORIGINAL_DEPOT"),
-                                         ("silksong", "UNITY_PLAYER_50", "SS_ORIGINAL_DEPOT")]:
-              env[player] = contract["profiles"][profile]["player"]
-              env[depot] = contract["profiles"][profile]["depot"]
-          raise SystemExit(subprocess.call([sys.executable, "-B", "-m", "unittest", "discover", "tools/ci/tests", "-v"], env=env))
-          PY
 
       # ── Build ─────────────────────────────────────────────────────────────
       #
@@ -216,14 +256,13 @@ jobs:
 
       - name: Build the APK
         env:
+          GH_TOKEN: ${{ github.token }}
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           set -euo pipefail
-          python3 -B tools/ci/compile_receipt.py verify-gate --repo "$GITHUB_WORKSPACE" \
-            --gate "$RUNNER_TEMP/patch-profiles-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/both-profiles-success.json" \
-            --source-revision "$GITHUB_SHA" --run-token "$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT:$GITHUB_SHA"
+          python3 -B tools/ci/workflow_gate.py verify-job --repo "$GITHUB_WORKSPACE"
           mkdir -p .ci-cache/unity-player .ci-cache/nuget .ci-cache/build
 
           docker run --rm \

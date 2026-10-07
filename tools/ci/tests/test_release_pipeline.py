@@ -103,39 +103,50 @@ class ReleasePipelineContractTest(unittest.TestCase):
         self.assertNotIn(":emulator-test-app", workflow)
 
     def assert_exact_profile_control_flow(self, workflow):
-        steps = re.split(r"(?m)^      - ", workflow)[1:]
-        gate = next((i for i, s in enumerate(steps)
-                     if 'name: Compile and verify exact patch profiles\n' in s), None)
+        private, release = workflow.split('  patch-profiles:\n', 1)[1].split('  release:\n', 1)
+        self.assertIn('    needs: patch-profiles\n', release)
+        self.assertNotIn('always()', release)
+        self.assertNotIn('continue-on-error:', workflow)
+        self.assertNotIn('secrets.', private)
+        self.assertNotIn('upload-artifact', private)
+        steps = re.split(r'(?m)^      - ', private)[1:]
+        gate = next((s for s in steps if 'name: Compile and verify exact patch profiles\n' in s), None)
         self.assertIsNotNone(gate, 'Signing is reachable without exact-profile compiles')
-        step = steps[gate]
-        self.assertNotRegex(step, r'(?m)^        (if|continue-on-error):')
-        self.assertIn('tools/ci/check_patch_profiles.ps1', step)
-        self.assertIn('verify-gate', step)
-        self.assertIn('$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT:$GITHUB_SHA', step)
-        for name in ('Prepare signing key', 'Build the image', 'Build the APK',
-                     'Upload the build artefact'):
-            index = next(i for i, s in enumerate(steps) if 'name: ' + name + '\n' in s)
-            self.assertLess(gate, index)
+        self.assertNotRegex(gate, r'(?m)^        (if|continue-on-error):')
+        self.assertIn('tools/ci/check_patch_profiles.ps1', gate)
+        self.assertIn('verify-gate', gate)
+        token = '$($env:GITHUB_RUN_ID):$($env:GITHUB_RUN_ATTEMPT):$($env:GITHUB_SHA)'
+        self.assertIn(token, gate)
+        final = next(s for s in steps if 'name: Verify completed compiler gate\n' in s)
+        self.assertNotRegex(final, r'(?m)^        (if|continue-on-error):')
+        self.assertIn('verify-gate', final)
+        self.assertIn(token, final)
         for name in ('Prepare signing key', 'Build the APK'):
-            step = next(s for s in steps if 'name: ' + name + '\n' in s)
-            self.assertIn('verify-gate', step)
-            self.assertLess(step.index('verify-gate'), step.index('printf') if name == 'Prepare signing key'
+            step = next(s for s in re.split(r'(?m)^      - ', release)[1:]
+                        if 'name: ' + name + '\n' in s)
+            self.assertIn('workflow_gate.py verify-job', step)
+            self.assertIn('GH_TOKEN: ${{ github.token }}', step)
+            self.assertLess(step.index('verify-job'), step.index('printf') if name == 'Prepare signing key'
                             else step.index('docker run'))
-        checkout = next(s for s in steps if 'actions/checkout@' in s)
-        self.assertIn('ref: ${{ github.sha }}', checkout)
-        self.assertNotIn('download-artifact', steps[gate])
+        for section in (private, release):
+            checkout = next(s for s in re.split(r'(?m)^      - ', section)[1:] if 'actions/checkout@' in s)
+            self.assertIn('ref: ${{ github.sha }}', checkout)
+        self.assertNotIn('download-artifact', private)
 
     def test_exact_profiles_are_unconditional_before_signing_and_artifacts(self):
-        self.assert_exact_profile_control_flow(WORKFLOW.read_text(encoding="utf-8"))
+        self.assert_exact_profile_control_flow(WORKFLOW.read_text(encoding='utf-8'))
 
     def test_profile_gate_control_flow_rejects_bypass_and_stale_run_mutations(self):
-        workflow = WORKFLOW.read_text(encoding="utf-8")
+        workflow = WORKFLOW.read_text(encoding='utf-8')
         marker = '      - name: Compile and verify exact patch profiles\n'
         variants = [workflow.replace(marker, marker + '        if: ${{ !inputs.dry_run }}\n'),
                     workflow.replace(marker, marker + '        continue-on-error: true\n'),
                     workflow.replace('tools/ci/check_patch_profiles.ps1', 'download-artifact'),
                     workflow.replace('ref: ${{ github.sha }}', 'ref: stale-checkpoint'),
-                    workflow.replace('$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT:$GITHUB_SHA', 'old-run-token')]
+                    workflow.replace('$($env:GITHUB_RUN_ID):$($env:GITHUB_RUN_ATTEMPT):$($env:GITHUB_SHA)', 'old-run-token'),
+                    workflow.replace('    needs: patch-profiles\n', ''),
+                    workflow.replace('    needs: patch-profiles\n', '    needs: patch-profiles\n    if: ${{ always() }}\n'),
+                    workflow.replace('workflow_gate.py verify-job', 'workflow_gate.py skip-gate')]
         for changed in variants:
             with self.subTest(changed=hash(changed)), self.assertRaises(AssertionError):
                 self.assert_exact_profile_control_flow(changed)
@@ -152,38 +163,40 @@ class ReleasePipelineContractTest(unittest.TestCase):
             sentinel = root / ('sentinel-' + dry_run)
             env = dict(os.environ, GITHUB_WORKSPACE=ROOT.as_posix(), RUNNER_TEMP=root.as_posix(),
                        GITHUB_RUN_ID='123', GITHUB_RUN_ATTEMPT='1', GITHUB_SHA='a' * 40,
+                       GITHUB_REPOSITORY='Darkaxt/HollowKnightAndroid', GH_TOKEN='',
                        INPUT_DRY_RUN=dry_run, SENTINEL=sentinel.as_posix())
             result = subprocess.run([bash, '-c', script + '\nprintf reached > "$SENTINEL"\n'],
                                     env=env, capture_output=True, text=True)
             (root / (dry_run + '.stdout')).write_text(result.stdout)
             (root / (dry_run + '.stderr')).write_text(result.stderr)
             self.assertNotEqual(0, result.returncode)
-            self.assertIn('[receipt] rejected:', result.stderr)
+            self.assertIn('[workflow gate] rejected:', result.stderr)
             self.assertFalse(sentinel.exists())
 
     def test_workflow_forwards_admitted_roots_to_full_input_contract_suite(self):
         import ast
         workflow = WORKFLOW.read_text(encoding='utf-8')
-        step = workflow.split('      - name: Test release verification helper\n', 1)[1].split('      # ', 1)[0]
-        self.assertIn("python3 -B - <<'PY'", step)
-        script = textwrap.dedent(step.split("python3 -B - <<'PY'\n", 1)[1].split('          PY', 1)[0])
+        private = workflow.split('  patch-profiles:\n', 1)[1].split('  release:\n', 1)[0]
+        self.assertIn('tools/ci/check_input_contract_tests.py', private)
+        script = (ROOT / 'tools/ci/check_input_contract_tests.py').read_text(encoding='utf-8')
         tree = ast.parse(script)
-        self.assertIn('admit_contract(Path.cwd(), os.environ["DUALSOULS_INPUT_CONTRACT"])', script)
+        self.assertIn("admit_contract(repo, os.environ['DUALSOULS_INPUT_CONTRACT'])", script)
         for profile, player, depot in [('hollow-knight', 'UNITY_PLAYER_61', 'HK_ORIGINAL_DEPOT'),
                                       ('silksong', 'UNITY_PLAYER_50', 'SS_ORIGINAL_DEPOT')]:
-            self.assertIn(f'("{profile}", "{player}", "{depot}")', script)
-        self.assertIn('env[player] = contract["profiles"][profile]["player"]', script)
-        self.assertIn('env[depot] = contract["profiles"][profile]["depot"]', script)
-        self.assertIn('DUALSOULS_RETAIN_TEST_FIXTURES="1"', script)
-        self.assertIn('DUALSOULS_TEMP_ROOT=temp, TMPDIR=temp, TEMP=temp, TMP=temp', script)
+            self.assertIn(f"('{profile}', '{player}', '{depot}')", script)
+        self.assertIn("os.environ[player] = contract['profiles'][profile]['player']", script)
+        self.assertIn("os.environ[depot] = contract['profiles'][profile]['depot']", script)
+        self.assertIn("DUALSOULS_RETAIN_TEST_FIXTURES='1'", script)
+        self.assertIn('TMPDIR=str(temp), TEMP=str(temp), TMP=str(temp)', script)
         calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and
-                 isinstance(n.func, ast.Attribute) and n.func.attr == 'call']
+                 isinstance(n.func, ast.Name) and n.func.id == 'run_process']
         self.assertEqual(1, len(calls))
         self.assertIsInstance(calls[0].args[0], ast.List)
         self.assertEqual(['-B', '-m', 'unittest', 'discover', 'tools/ci/tests', '-v'],
                          [n.value for n in calls[0].args[0].elts[1:]])
-        self.assertIn('raise SystemExit(subprocess.call(', script)
-        self.assertIn('env=env', script)
+        self.assertIn('require_process(process)', script)
+        self.assertIn('os.environ.pop(key)', script)
+        self.assertNotIn('upload-artifact', private)
 
     def test_apk_shell_ignores_empty_resource_directories(self):
         script = BUILD_SCRIPT.read_text(encoding="utf-8")
