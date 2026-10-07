@@ -49,7 +49,12 @@ identity checks are unchanged. Also provide an existing absolute
 GitHub's runner empties `RUNNER_TEMP` at job teardown, including failed jobs;
 therefore compiler/test witnesses use this separate private root instead.
 The workflow masks that root and never uploads it. Each disposable runner owns
-one fresh root; do not reuse previous outputs as a new run's evidence.
+one fresh root; do not reuse previous outputs as a new run's evidence. The suite
+helper forwards both `DUALSOULS_TEMP_ROOT` and `DUALSOULS_HOST_TEST_TEMP` to its
+private test-temp directory; lifecycle and skin source-identity fixtures require
+that declared host root. Provide real GNU make on the runner process's `PATH`
+for the executable Makefile dry-run contract. A temporary authenticated portable
+GNU make is sufficient; no global package installation is required.
 
 Input consumers are read-only; compiler/weave output is separate. Scrub unrelated
 host credentials before starting the runner.

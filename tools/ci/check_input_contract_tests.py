@@ -15,6 +15,7 @@ def main():
     temp = private / 'test-temp'
     temp.mkdir(exist_ok=False)
     os.environ.update(DUALSOULS_RETAIN_TEST_FIXTURES='1', DUALSOULS_TEMP_ROOT=str(temp),
+                      DUALSOULS_HOST_TEST_TEMP=str(temp),
                       TMPDIR=str(temp), TEMP=str(temp), TMP=str(temp))
     for profile, player, depot in [('hollow-knight', 'UNITY_PLAYER_61', 'HK_ORIGINAL_DEPOT'),
                                   ('silksong', 'UNITY_PLAYER_50', 'SS_ORIGINAL_DEPOT')]:
