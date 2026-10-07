@@ -9,7 +9,11 @@ from compile_receipt import admit_contract, require_process, run_process
 def main():
     repo = Path(__file__).resolve().parents[2]
     contract = admit_contract(repo, os.environ['DUALSOULS_INPUT_CONTRACT'])
-    temp = Path(os.environ['RUNNER_TEMP'])
+    private = Path(os.environ['DUALSOULS_PRIVATE_ROOT'])
+    if not private.is_absolute() or not private.is_dir() or private.resolve().is_relative_to(repo):
+        raise ValueError('Private witness root must be outside checkout')
+    temp = private / 'test-temp'
+    temp.mkdir(exist_ok=False)
     os.environ.update(DUALSOULS_RETAIN_TEST_FIXTURES='1', DUALSOULS_TEMP_ROOT=str(temp),
                       TMPDIR=str(temp), TEMP=str(temp), TMP=str(temp))
     for profile, player, depot in [('hollow-knight', 'UNITY_PLAYER_61', 'HK_ORIGINAL_DEPOT'),

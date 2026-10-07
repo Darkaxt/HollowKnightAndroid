@@ -44,8 +44,15 @@ to select their paths. Ephemeral alone is not first-job isolation.
 Provide `DUALSOULS_INPUT_CONTRACT` and its reviewed
 `DUALSOULS_INPUT_CONTRACT_SHA256` in the runner process environment, not public
 repository variables. The existing contract schema and physical profile/player
-identity checks are unchanged. Input consumers are read-only; compiler/weave
-output is separate. Scrub unrelated host credentials before starting the runner.
+identity checks are unchanged. Also provide an existing absolute
+`DUALSOULS_PRIVATE_ROOT` outside the checkout and runner `_work/_temp` tree.
+GitHub's runner empties `RUNNER_TEMP` at job teardown, including failed jobs;
+therefore compiler/test witnesses use this separate private root instead.
+The workflow masks that root and never uploads it. Each disposable runner owns
+one fresh root; do not reuse previous outputs as a new run's evidence.
+
+Input consumers are read-only; compiler/weave output is separate. Scrub unrelated
+host credentials before starting the runner.
 After terminal job completion/failure, verify runner registration is gone and
 retain the required private evidence. No persistent service or licensed-input
 upload is part of this procedure.

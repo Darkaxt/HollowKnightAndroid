@@ -57,11 +57,15 @@ jobs:
           if ($env:GITHUB_EVENT_NAME -ne 'workflow_dispatch' -or
               $env:COMPILER_LABEL -notmatch '^dualsouls-compile-[0-9a-f]{32}$' -or
               -not $env:DUALSOULS_INPUT_CONTRACT -or
-              -not $env:DUALSOULS_INPUT_CONTRACT_SHA256) {
+              -not $env:DUALSOULS_INPUT_CONTRACT_SHA256 -or
+              -not $env:DUALSOULS_PRIVATE_ROOT -or
+              -not [IO.Path]::IsPathRooted($env:DUALSOULS_PRIVATE_ROOT) -or
+              -not (Test-Path -LiteralPath $env:DUALSOULS_PRIVATE_ROOT -PathType Container)) {
             throw 'Private compiler runner context is not provisioned'
           }
           foreach ($path in @($env:RUNNER_WORKSPACE, $env:RUNNER_TEMP,
-                              $env:USERPROFILE, $env:DUALSOULS_INPUT_CONTRACT)) {
+                              $env:USERPROFILE, $env:DUALSOULS_INPUT_CONTRACT,
+                              $env:DUALSOULS_PRIVATE_ROOT)) {
             if ($path) {
               Write-Output "::add-mask::$path"
               Write-Output ('::add-mask::' + $path.Replace('\', '/'))
@@ -84,16 +88,16 @@ jobs:
       - name: Compile and verify exact patch profiles
         run: |
           $ErrorActionPreference = 'Stop'
-          $out = Join-Path $env:RUNNER_TEMP "patch-profiles-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $out = Join-Path $env:DUALSOULS_PRIVATE_ROOT "patch-profiles-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
           & pwsh -NoLogo -NoProfile -NonInteractive -File tools/ci/check_patch_profiles.ps1 `
             -InputContract $env:DUALSOULS_INPUT_CONTRACT -OutputRoot $out `
             -RunToken "$($env:GITHUB_RUN_ID):$($env:GITHUB_RUN_ATTEMPT):$($env:GITHUB_SHA)" `
-            *> (Join-Path $env:RUNNER_TEMP 'compiler-entry.log')
+            *> (Join-Path $env:DUALSOULS_PRIVATE_ROOT 'compiler-entry.log')
           if ($LASTEXITCODE -ne 0) { throw 'Private exact-profile compilation rejected' }
           & python -B tools/ci/compile_receipt.py verify-gate --repo $env:GITHUB_WORKSPACE `
             --gate (Join-Path $out 'both-profiles-success.json') --source-revision $env:GITHUB_SHA `
             --run-token "$($env:GITHUB_RUN_ID):$($env:GITHUB_RUN_ATTEMPT):$($env:GITHUB_SHA)" `
-            *> (Join-Path $env:RUNNER_TEMP 'compiler-verify.log')
+            *> (Join-Path $env:DUALSOULS_PRIVATE_ROOT 'compiler-verify.log')
           if ($LASTEXITCODE -ne 0) { throw 'Private exact-profile verification rejected' }
 
       - name: Test release verification helper
@@ -103,11 +107,11 @@ jobs:
 
       - name: Verify completed compiler gate
         run: |
-          $out = Join-Path $env:RUNNER_TEMP "patch-profiles-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $out = Join-Path $env:DUALSOULS_PRIVATE_ROOT "patch-profiles-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
           & python -B tools/ci/compile_receipt.py verify-gate --repo $env:GITHUB_WORKSPACE `
             --gate (Join-Path $out 'both-profiles-success.json') --source-revision $env:GITHUB_SHA `
             --run-token "$($env:GITHUB_RUN_ID):$($env:GITHUB_RUN_ATTEMPT):$($env:GITHUB_SHA)" `
-            *> (Join-Path $env:RUNNER_TEMP 'compiler-final-verify.log')
+            *> (Join-Path $env:DUALSOULS_PRIVATE_ROOT 'compiler-final-verify.log')
           if ($LASTEXITCODE -ne 0) { throw 'Completed private compiler gate rejected' }
           # Raw logs, receipts, game DLLs and compiler stages remain on this runner.
 

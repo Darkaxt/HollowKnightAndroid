@@ -34,3 +34,7 @@ gradlew       text eol=lf
 # place, and a .cs staged with CRLF is nobody's intention.
 *.cs          text eol=lf
 *.json        text eol=lf
+
+# This independently authored golden was committed with CRLF. Preserve its
+# exact authority bytes; text normalization otherwise makes fresh checkouts dirty.
+tools/skin-goldens/v1/transactions.json -text
