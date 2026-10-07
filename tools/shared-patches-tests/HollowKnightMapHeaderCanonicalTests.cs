@@ -208,6 +208,7 @@ public sealed class HollowKnightMapHeaderCanonicalTests
     {
         var f=Map();f.mapMarkerMode=markers;f.ResolveAllShellDonors();
         Time.unscaledTime=0;for(int i=0;i<150;i++) {Time.frameCount++;f.HeaderTickStep(0);f.PositionActionsStep();f.ResolveShellStep();f.FramePositionStep();}
+        using var allocationScope = new StrictAllocationScope();
         int hierarchy=DiscoveryCounters.Hierarchy,scans=Resources.Discoveries;long start=GC.GetAllocatedBytesForCurrentThread();
         for(int i=0;i<300;i++) {Time.frameCount++;f.HeaderTickStep(0);f.PositionActionsStep();f.ResolveShellStep();f.FramePositionStep();}
         Assert.Equal(0,GC.GetAllocatedBytesForCurrentThread()-start);Assert.Equal(scans,Resources.Discoveries);Assert.Equal(hierarchy,DiscoveryCounters.Hierarchy);

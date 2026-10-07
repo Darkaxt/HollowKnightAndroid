@@ -3,6 +3,7 @@ using DualSouls.Skins.Runtime;
 using DualSouls.Skins.Silksong.Runtime;
 using Xunit;
 
+[Collection("HollowKnightPauseOwners")]
 public sealed class SkinResolvedLoaderContractsTests
 {
     [Theory]
@@ -155,6 +156,7 @@ public sealed class SkinResolvedLoaderContractsTests
             {
                 for (int frame = 0; frame < 1200; frame++) Tick(frame);
                 rig.ResetCounts();
+                using var allocationScope = new StrictAllocationScope();
                 measuring = true;
                 long before = GC.GetAllocatedBytesForCurrentThread();
                 for (int frame = 1200; frame < 4800; frame++) Tick(frame);
