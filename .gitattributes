@@ -38,3 +38,8 @@ gradlew       text eol=lf
 # This independently authored golden was committed with CRLF. Preserve its
 # exact authority bytes; text normalization otherwise makes fresh checkouts dirty.
 tools/skin-goldens/v1/transactions.json -text
+
+# These baseline C# blobs also contain CRLF. Keep exact compiler/test inputs;
+# do not rewrite source authority just to satisfy a clean-filter comparison.
+tools/hollow-knight-patches/src/skins/core/SkinResourceCleanupModels.cs -text
+tools/shared-patches-tests/HollowKnightSkinTransactionGoldenTests.cs -text
