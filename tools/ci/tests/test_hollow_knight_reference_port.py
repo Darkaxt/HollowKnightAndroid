@@ -1116,6 +1116,37 @@ class HollowKnightReferencePortContractTest(unittest.TestCase):
             populate_control.index("NeutralizeDetachedTmpClip(ctrlMyVerbT.gameObject)"),
         )
 
+    def test_prompt_visibility_owns_the_complete_subtree_without_idle_renderer_scans(self):
+        source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Select.cs"))
+        gate = method_body(source, r"void\s+GateControlPrompt\s*\(\s*\)")
+        construct = method_body(source, r"void\s+EnsureCtrlOverlay\s*\([^)]*\)")
+        for token in ("NativeBodyReady()", "ctrlActive", "ctrlPlaced", "ctrlLayoutPending==0",
+                      "tab.cur==COMP_INV", "ctrlPromptRoot.gameObject.activeSelf!=show",
+                      "ctrlPromptRoot.gameObject.SetActive(show)"):
+            self.assertIn(token, gate)
+        for forbidden in ("GetComponents", "FindDeep", "Resources.", ".enabled", "new "):
+            self.assertNotIn(forbidden, gate)
+        self.assertIn("g.transform.SetParent(ctrlPromptRoot, false)", construct)
+        self.assertIn("Instantiate(src.gameObject, ctrlPromptRoot)", construct)
+        self.assertLess(construct.index("root.SetActive(false)"), construct.index("Instantiate(src.gameObject"))
+        for name in ("ReassertControlPrompt", "PopulateControlPrompt", "HideControlPrompt"):
+            self.assertIn("GateControlPrompt()", method_body(source, rf"void\s+{name}\s*\([^)]*\)"))
+        frame = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs"))
+        self.assertIn("GateControlPrompt()", method_body(frame, r"void\s+TeardownCompanion\s*\(\s*\)"))
+
+    def test_native_outgoing_permission_is_rechecked_at_both_presentation_boundaries(self):
+        source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Frame.cs"))
+        gate = method_body(source, r"void\s+GateNativeOutgoing\s*\(\s*\)")
+        for token in ("slideOutClone==invCloneCache", "slideOutClone==charmCloneCache",
+                      "!NativePaneReady(slideOutClone,false)", "!NativePaneReady(slideOutClone,true)", "StowSlideClone()"):
+            self.assertIn(token, gate)
+        for forbidden in ("new ", "GetComponents", "FindDeep", "Resources.", "cullingMask"):
+            self.assertNotIn(forbidden, gate)
+        slide = method_body(source, r"void\s+TabSlideTick\s*\(\s*\)")
+        self.assertLess(slide.index("GateNativeOutgoing()"), slide.index("slideOutClone.SetActive(true)"))
+        final = method_body(source, r"void\s+GateNativePresentation\s*\(\s*\)")
+        self.assertIn("GateNativeOutgoing()", final)
+
     def test_tick_waits_for_scene_managers_without_calling_logging_singleton_getters(self):
         source = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.cs"))
         tick = method_body(source, r"void\s+Tick\s*\(\s*\)")
@@ -1609,8 +1640,12 @@ class HollowKnightCharmActionSourceContractTest(unittest.TestCase):
         visible = method_body(charms, r"void\s+CharmActionVisibility\s*\([^)]*\)")
         current = method_body(charms, r"bool\s+CharmActionOwnersCurrent\s*\([^)]*\)")
         for token in ("transport.IsTransportActive", "attrCam.enabled", "attrCam.cullingMask",
-                      "charmRun.finalized", "charmActionEpoch++", "charmActionAttempts=0", "CharmActionCancel()"):
+                      "NativePaneReady(paneClone,true)", "charmActionEpoch++", "charmActionAttempts=0", "CharmActionCancel()"):
             self.assertIn(token, visible)
+        inventory = strip_csharp_comments(read(REFERENCE_ROOT / "HKDualScreen.Bottom.Inventory.cs"))
+        ready = method_body(inventory, r"bool\s+NativePaneReady\s*\([^)]*\)")
+        for token in ("run.owner==pane", "run.finalized", "run.pixelReady"):
+            self.assertIn(token, ready)
         for forbidden in ("GetBool(", "GetInt(", "GetComponents", "Resources.", "new ", "CharmUpdate("):
             self.assertNotIn(forbidden, visible)
         for token in ("ReferenceEquals(PlayerData.instance", "ReferenceEquals(GameManager.instance",

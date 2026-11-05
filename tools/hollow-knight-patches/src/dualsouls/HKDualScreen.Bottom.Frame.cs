@@ -44,7 +44,27 @@ public partial class HKDualScreen
     // and LayoutCharmsRedesign (B7, RETURNS one); invalidated on tab build / map availability loss / teardown.
     struct FitResult { public Vector3 center; public float ortho; public bool valid; }
     FitResult fit;
-    void ApplyFit(FitResult r) { if (r.valid) fit = r; }
+    void ApplyFit(FitResult r) { fit = r; }
+
+    // Keep native initialization active at its normal root during admitted work.
+    // Only the uncalibrated incoming owner is parked after all world positioning;
+    // shell, independent HUD and a ready outgoing slide retain their own policy.
+    void GateNativeOutgoing()
+    {
+        if(slideOutClone!=null &&
+           ((slideOutClone==invCloneCache && !NativePaneReady(slideOutClone,false)) ||
+            (slideOutClone==charmCloneCache && !NativePaneReady(slideOutClone,true))))
+            StowSlideClone(); // Restore the captured transform; never compensate a revoked owner.
+    }
+    void GateNativePresentation()
+    {
+        GateNativeOutgoing(); // Also cover any real layout revocation after the slide driver.
+        if((tab.cur==COMP_INV || tab.cur==COMP_CHARM) && paneClone!=null && !NativeBodyReady())
+        {
+            paneClone.transform.localPosition=PARK;
+            ReassertControlPrompt();
+        }
+    }
 
 
     GameObject frameRoot;
@@ -406,7 +426,7 @@ public partial class HKDualScreen
 
     // Tab-slide animation, mirroring the MAIN screen's pane carousel ("Tween Panes" = two simultaneous
     // iTweenMoveTo: old pane out one side, new pane in from the other), with the camera framing eased between
-    // the two tabs' fits. Only ready (finalized) clones slide; a first build shows instantly as before.
+    // two tabs' fits. Only presentation-ready clones slide; a first build shows instantly as before.
     GameObject slideOutClone; float slideT = 1f; int slideDir; Vector3 slideStartCamPos; bool slideCamValid;
     float slideStartOrtho;
     Vector3 slideStartPanePos, slideNormalLocalPos, slideNormalLocalScale;
@@ -417,6 +437,9 @@ public partial class HKDualScreen
     // side — the same easeOut feel as HK's iTweenMoveTo pane carousel.
     void TabSlideTick()
     {
+        // Capture precedes cache-local detail/layout mutation on a tab change.
+        // Revalidate every frame before reactivation or affine compensation.
+        GateNativeOutgoing();
         if (slideT >= 1f) { if (slideOutClone != null) StowSlideClone(); return; }
         slideT = Mathf.Min(1f, slideT + Time.unscaledDeltaTime / Mathf.Max(0.05f, cfg.compTabSlideTime));
         float e = 1f - Mathf.Pow(1f - slideT, 3f);   // easeOutCubic
@@ -834,8 +857,7 @@ public partial class HKDualScreen
                     if(refs.language!=language && sel.item!=null) RefreshSelectedDetail(paneClone);
                     paneNeedsFit=true;refs.width=BOTTOM_W;refs.height=BOTTOM_H;refs.language=language;
                 }
-                if(Time.frameCount%120==0 && ((tab.cur==COMP_INV && !refs.canonicalReady) ||
-                    (tab.cur==COMP_CHARM && (nativeCharmName==null || nativeCharmDesc==null || nativeCharmGraphics==null)))) paneNeedsFit=true;
+                if(Time.frameCount%120==0 && !NativePaneReady(paneClone,tab.cur==COMP_CHARM)) paneNeedsFit=true;
             }
             compFrameTick++;
             if (paneNeedsFit)
@@ -843,7 +865,13 @@ public partial class HKDualScreen
                 paneNeedsFit = false;
                 if (tab.cur == COMP_CHARM)
                     ApplyFit(LayoutCharmsRedesign(paneClone));
-                else if(invRun.finalized) { LayoutNativeInventory(paneClone);fit=new FitResult { center=compRoot.position,ortho=BOTTOM_H/2f,valid=true }; }
+                else LayoutNativeInventory(paneClone);
+                // Record attempted geometry even on failure. The thirty-frame
+                // observation must not turn a failed first attempt into an
+                // unscheduled retry of unchanged inputs.
+                var attempted=Refs(paneClone);
+                attempted.width=BOTTOM_W;attempted.height=BOTTOM_H;
+                attempted.language=(int)TeamCherry.Localization.Language.CurrentLanguage();
             }
             if (fit.valid) frameCenter = fit.center;
         }
@@ -852,6 +880,7 @@ public partial class HKDualScreen
         TabSlideTick();                      // B2: HK-style pane slide (offsets BOTH clones + eases the camera between the two tabs' framings)
         BuildFrame(); PositionFrame();
         ReassertControlPrompt();   // re-pin the control-prompt line at pre-render (beats ActionButtonIcon's Update)
+        GateNativePresentation();
         if (cfg.debug == 1 && (Time.frameCount % 90) == 0)   // frame-count gate: compFrameTick only advances on the pane tabs, so on the Map tab the old %90 was true EVERY frame -> logcat flood at debug=1
             Debug.Log($"HKDS mapframe attrPos={attrCam.transform.position} ortho={attrCam.orthographicSize:F1} centered={fit.valid} c={fit.center}");
     }
@@ -1053,14 +1082,14 @@ public partial class HKDualScreen
                 if (charms) fsm.enabled = (n == "UI Charms" || n == "charm_show_if_collected");
                 else        fsm.enabled = (n == "Check Active" || n == "Build Equipment List" || n == "Set Pieces");
             }
+            var run = RunFor(charms);
+            run.owner=pane;run.pixelReady=false;run.finalized=false;
+            run.kicks=charms ? 0 : 8;run.settle=charms ? 20 : 45;
             pane.transform.SetParent(compRoot, false);
             pane.SetActive(true);
             if (!charms) InvPaneInit(pane);      // B4: soul-vessel renderers on
             else         CharmsPaneInit(pane);   // B7: equipped row + default detail (needs an ACTIVE pane: it reads renderer bounds)
             paneNeedsFit = true;
-            var run = RunFor(charms); run.finalized = false;
-            run.kicks = charms ? 0 : 8;   // kick only INV's populate FSMs; charms need no kick (more kicks: let Build Equipment List finish activating the ability/key/consumable row, not just the trinkets)
-            run.settle = charms ? 20 : 45;   // populate, THEN freeze all pane FSMs (stops the per-frame NRE leak source); INV needs longer for the equipment row to build
             if (cfg.debug == 1) Dbg($"HKDS pane clone built tab={tab} renderers={pane.GetComponentsInChildren<Renderer>(true).Length}");
             return pane;
         }
@@ -1091,6 +1120,9 @@ public partial class HKDualScreen
         if (invCloneCache != null) { Destroy(invCloneCache); invCloneCache = null; }
         if (charmCloneCache != null) { Destroy(charmCloneCache); charmCloneCache = null; }
         paneClone = null;
+        invRun.owner=charmRun.owner=null;invRun.pixelReady=charmRun.pixelReady=false;
+        invRun.finalized=charmRun.finalized=false;
+        invRun.kicks=invRun.settle=charmRun.kicks=charmRun.settle=0;
         // TeardownFrame owns supplementary labels/materials and resets retries
         // exactly once. A failed build never uses this owner-retirement path.
         TeardownFrame();
@@ -1116,6 +1148,7 @@ public partial class HKDualScreen
         // teardown — without this reset a session quit with a prompt showing left a stray PRESS/HOLD glyph
         // rendering into the next session, re-pinned against a destroyed pane.
         ctrlActive = false; ctrlSrcIconT = null; ctrlHkRs = null; ctrlHkRsFor = null; ctrlPlaced = false; ctrlLayoutPending = 0; ctrlGlyphPending = false;
+        GateControlPrompt();
         ctrlTnR = ctrlTdR = null; ctrlTdT = null;
         try { if (ctrlMyGlyph != null) ctrlMyGlyph.enabled = false; } catch { }
         try { if (ctrlMyVerbTmp != null) { var vr = (ctrlMyVerbTmp as Component).GetComponent<Renderer>(); if (vr != null) vr.enabled = false; } } catch { }

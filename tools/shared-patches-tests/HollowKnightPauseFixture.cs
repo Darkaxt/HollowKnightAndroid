@@ -54,7 +54,7 @@ internal partial class HKDualScreen
     internal int EquipmentReassertions;
     bool equipGridDirty; int frameBuildHash;
     bool ctrlActive; int ctrlLayoutPending,ctrlLayoutWait;
-    void ReassertEquipment(GameObject go) { EquipmentReassertions++;equipGridDirty=false; }
+    void ReassertEquipment(GameObject go) { EquipmentReassertions++;ReassertEquipmentBody(go); }
     internal void EquipBuildStep() => BuildEquipCharmRow();
     internal Transform equipRowRoot; internal readonly List<SpriteRenderer> equipCharmSRs=new();
     internal NativePaneLabel shellTitle;
@@ -90,7 +90,8 @@ internal partial class HKDualScreen
     readonly Sprite[] tabIcons = new Sprite[5];
     readonly SpriteRenderer[] frameTabs = new SpriteRenderer[5];
     internal readonly PaneRun invRun = new(), charmRun = new();
-    internal sealed class PaneRun { internal bool finalized = true; }
+    // Cache-supplied legacy fixtures default to finished initialization, not layout readiness.
+    // Cold dispatcher tests explicitly supply the production kick/settle ingress below.
     internal GameObject Route(int id) => CloneForTab(id);
     internal bool Ready(int id) => ReadyForTab(id);
     internal HKLowerLayout.Geometry LowerGeometry() => HKLowerLayout.Measure(BOTTOM_W, BOTTOM_H);
@@ -120,6 +121,8 @@ internal partial class HKDualScreen
         GameManager.instance = Manager;Manager.FixtureOwner=this; PlayerData.instance = new();
         Manager.playerData=PlayerData.instance;Manager.hero_ctrl=HeroController.instance=new HeroController{playerData=PlayerData.instance};
         InitializeOwnership();
+        invRun.finalized=charmRun.finalized=true;prewarmDone=true;paneSrcRef=Manager.inventoryFSM;mapSrcRef=Manager.gameMap;
+        foreach(var name in new[]{"Inv","Charms"}) { var node=new GameObject(name);node.transform.SetParent(Manager.inventoryFSM.transform); }
         var donor = TextDonor(Vector3.one,false);donor.gameObject.name="Pane Name";donor.SetParent(Manager.inventoryFSM.transform);
         HkStageHooks.SkinStamp = 0;
         GameObject anchor = new();
@@ -347,7 +350,15 @@ internal partial class HKDualScreen
     void InvStateDiag() { }
     void DebugPopupTick() { }
     void SyncBottomFade() { }
-    void PrewarmTick() => Prewarms++;
+    void PrewarmTick() { Prewarms++;PrewarmTickBody(); }
+    static readonly Vector3 PARK=new(0,-100000,0);
+    int PaneStamp(bool charms,int fallback) => fallback; // Stable source/PlayerData fingerprint ingress.
+    GameObject BuildPaneClone(int id,Transform source) => throw new InvalidOperationException("Cache-supplied lifecycle test cannot claim Unity Instantiate/OnEnable");
+    void BuildMapClone(UnityEngine.Object source) => throw new InvalidOperationException("Map clone construction not modeled");
+    Transform mainFocusBase;
+    float EffectiveFocusDY() => 0;
+    void DrainFsmStack() { }
+    readonly List<Transform> _eqOrder=new();
     void EnsureCompRoot() => Updates++;
     Selection sel=new(){kind=-1};
     int mapStowStamp,compFrameTick; internal bool mapAnyAvailable; bool paneNeedsFit;
@@ -376,8 +387,7 @@ internal partial class HKDualScreen
     const float HeaderActionRightMarginPixels=40f;
     internal void EquipUpdateStep() => UpdateEquipCharmRow(attrCam.orthographicSize,attrCam.aspect);
     internal IReadOnlyList<SpriteRenderer> JournalCells => journalCells;
-    void HideControlPrompt(GameObject go) { }
-    void BuildCompanionTab(int id) { paneClone=id==0 ? null : (id==3 || id==4) ? BuildSupplementaryPane(id) : CloneForTab(id); }
+    void BuildCompanionTab(int id) => BuildCompanionTabBody(id);
     int MapContentStamp() => 0;
     void MapTick() { }
     Bounds mapAreaB; string lastMapZone="CROSSROADS";
@@ -392,9 +402,6 @@ internal partial class HKDualScreen
     internal int CleanTapConsumed => lastCleanTapSeq;
     internal void MapPinchStep(int count,float x,float y,float x1=0,float y1=0) { transport.contacts=count;transport.T0X=x;transport.T0Y=y;transport.T1X=x1;transport.T1Y=y1;MapPinchTick(); }
     PaneRun RunFor(bool charms) => charms ? charmRun : invRun;
-    void PaneSettleTick(GameObject go,PaneRun run,bool inventory,bool active) { }
-    void RefreshInvCounters(GameObject go) { }
-    void ApplyFit(FitResult value) { if(value.valid) fit=value; }
     internal void FitOccupiedStep(Transform root,Renderer[] renderers,Rect target) => FitOccupiedNative(root,renderers,target);
     internal int NativeInventoryLayouts,NativeCharmLayouts;
     internal void NativeLayoutRouteStep(int id) { tab.tap=id;tab.cur=id;tab.built=id;paneClone=CloneForTab(id);paneNeedsFit=true;UpdateCompanion(Cameras.hudCamera); }
@@ -473,14 +480,14 @@ internal partial class HKDualScreen
         }
         return go;
     }
-    void PositionFrame() { }
+    internal bool NativeFinalPositioning;
+    void PositionFrame() { if(NativeFinalPositioning) PositionFrameBody(); }
     internal void FramePositionStep() => PositionFrameBody();
     void PositionHudStrip(float s,float asp,float zf,int tab) => PositionHeaderFixture(s,asp,zf,tab);
     float tabFleurMoveFromX,tabFleurMoveX;
     const float TabCaretMoveSeconds=.15f;
     internal SpriteRenderer MapFade => FindDeep(frameRoot.transform,"F_MapEdgeFade")?.GetComponent<SpriteRenderer>();
     internal SpriteRenderer MarkerStripIcon(int id) => FindDeep(frameRoot.transform,"F_MapMarker"+id)?.GetComponent<SpriteRenderer>();
-    void ReassertControlPrompt() { }
     internal int TouchPollsRecorded, JournalTaps, GuideTaps, ItemTaps;
     readonly HKLowerLayout.TabGesture lowerTabGesture = new();
     int lastSimTapN, lastTapSeq, lowerCleanTabSeq; bool lowerTouchDownBody;
@@ -615,7 +622,7 @@ internal sealed class GameManager
 {
     internal static GameManager instance;
     internal HKDualScreen FixtureOwner;
-    internal dynamic inventoryFSM = new NativeOwner(); internal UnityEngine.Object gameMap = new UnityEngine.Object();
+    internal NativeOwner inventoryFSM = new NativeOwner(); internal UnityEngine.Object gameMap = new UnityEngine.Object();
     internal string Zone="";internal string GetCurrentMapZone() => Zone;
     internal string sceneName="";
     internal bool IsInSceneTransition;
@@ -641,7 +648,7 @@ internal sealed class HeroController
     internal void CharmUpdate() { Updates++;if(ThrowRefresh) throw new InvalidOperationException("native hero refresh unavailable"); }
 }
 internal static class BossSequenceController { internal static bool BoundCharms; }
-internal static class GlobalEnums { internal enum GameState { PLAYING, PAUSED, MAIN_MENU } }
+internal static class GlobalEnums { internal enum GameState { PLAYING, PAUSED, MAIN_MENU, ENTERING_LEVEL } }
 internal static class HkStageHooks
 {
     internal static int SkinStamp;
@@ -652,6 +659,7 @@ internal static class HkStageHooks
 internal static class Time { internal static int frameCount; internal static float unscaledDeltaTime = .1f,unscaledTime; }
 internal static class Mathf
 {
+    internal static int CeilToInt(float value) => (int)MathF.Ceiling(value);
     internal static int RoundToInt(float value) => (int)MathF.Round(value);
     internal static float Clamp01(float value) => Math.Clamp(value,0,1);
     internal static float Log(float value) => MathF.Log(value);
@@ -834,6 +842,9 @@ internal sealed class Transform
 internal sealed class PlayMakerFSM
 {
     internal bool enabled=true;
+    internal PlayMakerFSM Fsm => this;
+    internal readonly List<string> Events=new();
+    internal void SendEvent(string name) { Events.Add(name);if(name=="FINISHED") ActiveStateName="All Done"; }
     internal string FsmName="Control",ActiveStateName="Closed";
     internal static readonly List<string> Broadcasts=new();
     internal static string ThrowBroadcast;
@@ -1006,7 +1017,7 @@ internal class Component:TMProOld.TMP_Text
     internal int MeshGenerations,GenerationAttempts;
     public void ForceMeshUpdate()
     {
-        GenerationAttempts++;
+        GenerationAttempts++;DiscoveryCounters.MeshGenerations++;
         if(ThrowGeneration) throw new InvalidOperationException("native generation unavailable");
         havePropertiesChanged=false;
         MeshGenerations++;LastMeshSize=Container?.size ?? size;
@@ -1031,7 +1042,7 @@ internal class TextContainer:MonoBehaviour { internal TextContainer(Renderer own
 internal sealed class GameplayLabelDriver:MonoBehaviour { internal GameplayLabelDriver(Renderer owner):base(owner) { } }
 internal class MonoBehaviour:Component { internal bool enabled=true; internal MonoBehaviour(Renderer owner=null):base(owner) { } }
 internal sealed class NativeOwner:UnityEngine.Object { public Transform transform=new GameObject().transform;public string ActiveStateName="Closed"; }
-internal static class DiscoveryCounters { internal static int Hierarchy, BoundsReads,ChildReads,Projections; }
+internal static class DiscoveryCounters { internal static int Hierarchy, BoundsReads,ChildReads,Projections,MeshGenerations; }
 internal static class Resources
 {
     internal static int Discoveries;

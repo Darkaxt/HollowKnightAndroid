@@ -642,8 +642,8 @@ public partial class HKDualScreen : MonoBehaviour
             if (companionVisible)
             {
                 attrCam.cullingMask = 1 << ATTR_LAYER;   // show companion
-                UpdateCompanion(src);
-                PollTouch();
+                try { UpdateCompanion(src);PollTouch(); }
+                finally { GateNativePresentation(); } // Input or a throwing layout can revoke readiness after positioning.
             }
             else if (companionOn)
             {

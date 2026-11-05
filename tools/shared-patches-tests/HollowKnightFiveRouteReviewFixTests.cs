@@ -7,7 +7,13 @@ public class HollowKnightFiveRouteReviewFixTests
     static void Near(float expected,float actual) => Assert.InRange(actual,expected-.02f,expected+.02f);
     static HKDualScreen SwitchFixture(int from)
     {
-        var f=new HKDualScreen(); f.tab.cur=f.tab.built=from;f.tab.tap=from;
+        var f=new HKDualScreen();
+        // These are ready-outgoing controls: supply actual native pane inputs and
+        // earn their layout outcome before selecting any of the five routes.
+        f.NewNativePane(false);f.NativeLayoutRouteStep(1);
+        f.NewNativePane(true);f.NativeLayoutRouteStep(2);
+        f.EquipmentReassertions=0;
+        f.tab.cur=f.tab.built=from;f.tab.tap=from;
         f.cfg.compTab=from; f.paneClone=from==0 ? null : f.Route(from); f.tab.lastCfg=from; f.cfg.compTabSlide=1;f.cfg.compTabSlideTime=1;
         Time.unscaledDeltaTime=.1f;
         f.compRoot.position=new Vector3(20000,20000,0);
@@ -107,7 +113,11 @@ public class HollowKnightFiveRouteReviewFixTests
     [Fact]
     public void Config_reload_holds_equipment_dirty_while_paused_then_consumes_once_in_inventory()
     {
-        var f=SwitchFixture(1);f.ConfigReloadStep();
+        var f=SwitchFixture(1);
+        // Real ReassertEquipment consumes the dirty grid after placing an owned
+        // item; the former fixture stub cleared it even for an empty grid.
+        HkPauseContracts.PlayerData.instance.Bools["hasDash"]=true;
+        f.ConfigReloadStep();
         f.Step(true);Assert.Equal(0,f.EquipmentReassertions);
         f.Step(false);Assert.Equal(1,f.EquipmentReassertions);
         f.Step(false);Assert.Equal(1,f.EquipmentReassertions);

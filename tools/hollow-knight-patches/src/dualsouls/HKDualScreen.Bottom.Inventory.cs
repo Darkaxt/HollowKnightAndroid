@@ -11,7 +11,31 @@ public partial class HKDualScreen
     // settle = frames left before we FREEZE the pane's FSMs (once content has populated) — stops their per-frame Update
     // from NRE-ing on the detached clone and leaking FsmExecutionStack. (finalized / focusDY: reserved for the per-clone
     // finalize + live Focus-lift tracking.)
-    class PaneRun { public int kicks, settle; public bool finalized; }
+    class PaneRun { public int kicks, settle; public bool finalized; public GameObject owner; public bool pixelReady; }
+    // Initialization, resource admission and successful pixel placement are distinct.
+    // A cached sibling cannot borrow the current route's shared fit.
+    bool NativePaneReady(GameObject pane,bool charms)
+    {
+        var run=RunFor(charms);
+        return pane!=null && run.owner==pane && run.finalized && run.pixelReady;
+    }
+    bool NativeBodyReady()
+    {
+        return tab.cur!=COMP_INV && tab.cur!=COMP_CHARM || NativePaneReady(paneClone,tab.cur==COMP_CHARM);
+    }
+    void BeginNativeLayout(GameObject pane,bool charms)
+    {
+        var run=RunFor(charms);run.owner=pane;run.pixelReady=false;
+        if(pane==paneClone) fit.valid=false;
+    }
+    FitResult PublishNativeLayout(GameObject pane,bool charms,bool ready)
+    {
+        var run=RunFor(charms);
+        if(run.owner==pane) run.pixelReady=ready;
+        var result=new FitResult { center=compRoot!=null ? compRoot.position : Vector3.zero,ortho=BOTTOM_H/2f,valid=ready };
+        if(pane==paneClone) fit=result;
+        return result;
+    }
     PaneRun invRun = new PaneRun(), charmRun = new PaneRun();   // ONE per cached clone: a tab switch mid-settle no longer cross-wires them (the stowed clone's window pauses and resumes)
     PaneRun RunFor(bool charms) => charms ? charmRun : invRun;
 
@@ -536,13 +560,17 @@ public partial class HKDualScreen
         { var t=FindDeep(pane.transform,name);if(t != null) hidden.AddRange(t.GetComponentsInChildren<Renderer>(true)); }
         r.sourceDetail=hidden.ToArray();r.canonicalReady=true;return true;
     }
-    void LayoutNativeInventory(GameObject pane)
+    bool LayoutNativeInventory(GameObject pane)
     {
-        if(pane == null || !invRun.finalized) return;
-        var r=Refs(pane);if(!EnsureNativeInventory(pane,r)) return;
+        BeginNativeLayout(pane,false);
+        bool ready=false;
+        try
+        {
+        if(pane == null || !invRun.finalized) return false;
+        var r=Refs(pane);if(!EnsureNativeInventory(pane,r)) return false;
         var g=LowerGeometry();var p=HKLowerLayout.NativeColumns(g,false);
         foreach(var hidden in r.sourceDetail) if(hidden != null) hidden.enabled=false;
-        FitOccupiedNative(r.subject,r.subjectRenderers,new Rect(p.SubjectX,p.Top,p.SubjectWidth,p.Height));
+        if(!FitOccupiedNative(r.subject,r.subjectRenderers,new Rect(p.SubjectX,p.Top,p.SubjectWidth,p.Height))) return false;
         int count=0;foreach(var slot in r.slots) if(slot.Root.gameObject.activeSelf) count++;
         r.chooserOffset=HKLowerLayout.ClampScroll(r.chooserOffset,(count+2)/3,p.Cell,p.Gap,p.Height);
         int index=0;
@@ -560,9 +588,13 @@ public partial class HKDualScreen
         r.nameLabel.UnitScale=r.nameScale*textScale;r.descLabel.UnitScale=r.descScale*textScale;
         PositionNativePaneGraphics(r.graphics,false);LayoutNativeDetail(r.nameLabel,r.descLabel,r.sourceName,r.sourceDesc,false);
         r.width=BOTTOM_W;r.height=BOTTOM_H;r.language=(int)TeamCherry.Localization.Language.CurrentLanguage();
+        ready=true;return true;
+        }
+        finally { PublishNativeLayout(pane,false,ready); }
     }
     void ScrollNativePane(float delta)
     {
+        if(!NativeBodyReady()) return;
         if(float.IsNaN(delta) || float.IsInfinity(delta) || delta==0) return;
         if(tab.cur==COMP_INV)
         {

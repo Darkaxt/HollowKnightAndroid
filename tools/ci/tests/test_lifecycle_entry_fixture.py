@@ -70,7 +70,12 @@ class LifecycleEntryFixtureTest(unittest.TestCase):
                         self.assertTrue(record["body_identical"])
                 required = ({"Boot", "EnsureStarted", "Start", "TickError", "BindDirectDisplay",
                              "OnDirectPanelGeometry", "ShutdownDirectDisplayAndRestore",
-                             "RetryPendingDirectDisplayRestore", "CompleteDirectDisplayTeardown"}
+                             "RetryPendingDirectDisplayRestore", "CompleteDirectDisplayTeardown",
+                             "Tick", "PrewarmTick", "BuildCompanionTab", "PaneSettleTick", "FinalizeInvPane",
+                             "ReassertEquipment", "RefreshInvCounters", "LayoutNativeInventory", "LayoutCharmsRedesign",
+                             "NativePaneReady", "NativeBodyReady", "BeginNativeLayout", "PublishNativeLayout",
+                             "ApplyFit", "GateNativePresentation", "GateNativeOutgoing", "ReadyForTab", "PositionFrame", "PollTouch",
+                             "ReassertControlPrompt", "GateControlPrompt", "LayoutCtrlPrompt", "LayoutCanonicalControlPrompt"}
                             if label == "hk" else
                             {"DualScreenV2", "DsPresentation", "DirectDisplayPresentation",
                              "DirectDisplayCanvasScaler", "DsTouch.MapToCanvas"})

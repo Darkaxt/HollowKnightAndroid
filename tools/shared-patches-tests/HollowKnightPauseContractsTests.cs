@@ -189,6 +189,8 @@ public sealed class HollowKnightPauseContractsTests
     public void AllFiveProductionRoutesDispatchToRealOwnedCaches()
     {
         HKDualScreen lower = new();
+        lower.NewNativePane(false);lower.NativeLayoutRouteStep(1);
+        lower.NewNativePane(true);lower.NativeLayoutRouteStep(2);
         GameObject[] caches = { lower.mapClone, lower.invCloneCache, lower.charmCloneCache, lower.journalCloneCache, lower.guideCloneCache };
         for(int id = 0; id < 5; id++) { Assert.Same(caches[id],lower.Route(id)); Assert.True(lower.Ready(id)); }
         Assert.Same(caches[0],lower.Route(-1)); Assert.Same(caches[0],lower.Route(5));
@@ -200,7 +202,7 @@ public sealed class HollowKnightPauseContractsTests
     public void SourceReplacementWhilePausedRetiresAllFiveCachesAndRearmsDonors()
     {
         HKDualScreen lower = new(); lower.Step(false); lower.Step(true);
-        lower.iconRetry.Resolved(); lower.Manager.inventoryFSM = new UnityEngine.Object();
+        lower.iconRetry.Resolved(); lower.Manager.inventoryFSM = new NativeOwner();
         lower.Step(true);
         for(int id=0;id<5;id++) Assert.Null(lower.Route(id));
         Assert.True(lower.iconRetry.Due(Time.frameCount));
@@ -466,7 +468,7 @@ public sealed class HollowKnightPauseContractsTests
         Assert.Equal(64,lower.guideGraphics.TL.bounds.size.x); Assert.Equal(64,lower.guideGraphics.TL.bounds.size.y);
         lower.Step(true); var before=lower.guideGraphics.Center;
         lower.Step(true); Assert.Equal(before.x,lower.guideGraphics.Center.x); Assert.Equal(before.y,lower.guideGraphics.Center.y);
-        lower.Manager.inventoryFSM=new UnityEngine.Object(); lower.Step(true);
+        lower.Manager.inventoryFSM=new NativeOwner(); lower.Step(true);
         Assert.Null(lower.journalGraphics); Assert.Null(lower.guideGraphics);
         Time.unscaledDeltaTime=.1f;
     }
@@ -635,7 +637,7 @@ public sealed class HollowKnightPauseContractsTests
         if(boundary == 0 || boundary == 3) HkPauseContracts.PlayerData.instance = new HkPauseContracts.PlayerData();
         if(boundary == 1 || boundary == 3) HkPauseContracts.HkStageHooks.SkinStamp++;
         if(boundary == 2 || boundary == 3) lower.Manager.gameMap = new UnityEngine.Object();
-        if(boundary == 3) lower.Manager.inventoryFSM = new UnityEngine.Object();
+        if(boundary == 3) lower.Manager.inventoryFSM = new NativeOwner();
         lower.Step(true);
         for(int id=0;id<5;id++) Assert.Null(lower.Route(id));
         Assert.Equal(1,lower.Teardowns);
@@ -654,6 +656,9 @@ public sealed class HollowKnightPauseContractsTests
         for(int from=0;from<5;from++) for(int to=0;to<5;to++)
         {
             HKDualScreen lower = new();
+            // This manually seeded driver control requires a genuinely ready
+            // native outgoing owner, not the old finalized-only placeholder.
+            if(from==1 || from==2) { lower.NewNativePane(from==2);lower.NativeLayoutRouteStep(from); }
             var outgoing=lower.Route(from); var incoming=lower.Route(to);
             lower.tab.cur=to; lower.paneClone=incoming;
             lower.slideOutClone=outgoing; lower.slideT=0;
@@ -673,6 +678,26 @@ public sealed class HollowKnightPauseContractsTests
         Time.unscaledDeltaTime=.1f;
     }
 
+    [Fact]
+    public void Readiness_RealTabTransitionPauseRetainsReadyOutgoingAndUnreadyIncomingWithoutAdvancingWork()
+    {
+        Time.frameCount=1;Time.unscaledDeltaTime=.05f;
+        try
+        {
+            HKDualScreen lower=new();lower.cfg.compTabSlide=1;
+            var inv=lower.ColdNativeOwner(false);lower.Step(false);
+            var charm=lower.NewNativePane(true,populate:false);lower.NativeSource(charm,"Text Name").ThrowGeneration=true;
+            lower.cfg.compTab=2;lower.Step(false);
+            Assert.Same(inv,lower.slideOutClone);Assert.True(lower.Ready(1));Assert.False(lower.Ready(2));
+            Assert.Equal(-100000,charm.transform.localPosition.y);
+            float slide=lower.slideT;int layouts=lower.NativeCharmLayouts;var position=inv.transform.position;
+            for(int i=0;i<130;i++) lower.Step(true);
+            Assert.Same(inv,lower.slideOutClone);Assert.Equal(slide,lower.slideT);Assert.Equal(layouts,lower.NativeCharmLayouts);
+            Assert.Equal(position.x,inv.transform.position.x);Assert.Same(charm,lower.charmCloneCache);Assert.Equal(-100000,charm.transform.localPosition.y);
+            lower.Step(false);Assert.True(lower.slideT>slide);Assert.Same(inv,lower.slideOutClone);Assert.False(lower.Ready(2));
+        }
+        finally { Time.unscaledDeltaTime=.1f; }
+    }
     [Fact]
     public void JournalAndGuideRetainOwnershipAcrossUnchangedPausePlateau()
     {

@@ -14,15 +14,15 @@ methods = {
         "CompanionVisible", "ApplyDualScreenToggle", "ApplyLowerPauseGate", "HudFadedInGameplay"),
     "HKDualScreen.Bottom.Hud.cs": ("FrameHudCams", "BuildEquipCharmRow", "UpdateEquipCharmRow", "BuildAreaName", "RefreshHeaderRenderers", "BuildNoMapLabel", "PositionHudStrip"),
     "HKDualScreen.Util.cs": ("SetTmpFont", "NeutralizeDetachedTmpClip", "ItemBounds", "SanitizeDetachedTmpClone", "BuildCharmKeys", "Charms", "CharmGot", "CharmBroken"),
-    "HKDualScreen.Bottom.Inventory.cs": ("Refs", "FitOccupiedNative", "BuildNativePaneGraphics", "PositionNativePaneGraphics", "EnsureNativeInventory", "LayoutNativeInventory", "ScrollNativePane", "LayoutNativeDetail", "PopulateInvDetail", "PopulateSpellDetail", "PopulateEquipDetail", "PopulateGeoDetail", "PopulateGodfinderDetail", "ClearInvDetail", "ClearInvDetailLocal"),
+    "HKDualScreen.Bottom.Inventory.cs": ("PaneSettleTick", "FinalizeInvPane", "ForcePaneOpaque", "ForceAmountCounters", "RefreshInvCounters", "ReassertEquipment", "EquipShown", "NudgeFocusCluster", "Refs", "FitOccupiedNative", "BuildNativePaneGraphics", "PositionNativePaneGraphics", "EnsureNativeInventory", "LayoutNativeInventory", "ScrollNativePane", "LayoutNativeDetail", "PopulateInvDetail", "PopulateSpellDetail", "PopulateEquipDetail", "PopulateGeoDetail", "PopulateGodfinderDetail", "ClearInvDetail", "ClearInvDetailLocal"),
     "HKDualScreen.Bottom.Charms.cs": ("TryTmpGlyphBoundsWorld", "CharmNumOf", "EnsureCharmRefs", "LayoutCharmsRedesign", "PopulateCharmDetail", "CharmsTick"),
-    "HKDualScreen.Bottom.Frame.cs": ("BuildFrame", "BuildMapMask", "CreateShellRule", "ShellSprite", "MakePillSprite", "DiscardPartialFrame", "BuildTabRow", "ResolveTabDonors", "CopyShellSpriteOrientation", "ShellPoint", "AnimateTabFleurX", "PositionFrame", "OnConfigReloaded", "FitSprite", "UpdateCompanion", "ApplyCompanionCamera", "InvalidateCompanionClones", "RetireCompanionCaches", "TeardownFrame", "TeardownCompanion", "TabSlideTick", "StowSlideClone"),
+    "HKDualScreen.Bottom.Frame.cs": ("BuildFrame", "BuildMapMask", "CreateShellRule", "ShellSprite", "MakePillSprite", "DiscardPartialFrame", "BuildTabRow", "ResolveTabDonors", "CopyShellSpriteOrientation", "ShellPoint", "AnimateTabFleurX", "PositionFrame", "OnConfigReloaded", "FitSprite", "ApplyFit", "PrewarmTick", "BuildCompanionTab", "UpdateCompanion", "ApplyCompanionCamera", "InvalidateCompanionClones", "RetireCompanionCaches", "TeardownFrame", "TeardownCompanion", "TabSlideTick", "StowSlideClone"),
     "HKDualScreen.DirectDisplay.cs": ("BindDirectDisplay", "OnDirectPanelGeometry", "SetDirectDisplayActive", "SetRoleCamerasEnabled", "RestoreReferenceRouting", "TryDirectStep", "ShutdownDirectDisplayAndRestore", "RetryPendingDirectDisplayRestore", "CompleteDirectDisplayTeardown"),
     "HKDualScreen.Bottom.Map.cs": ("MapFrameTick", "ResolveMapArea", "MapTick"),
     "HKDualScreen.Bottom.MapControls.cs": (), # all complete methods; no partial Map playback
     "HKDualScreen.Bottom.MapRenderRoles.cs": (), # complete role partition/event/lifetime bodies
-    "HKDualScreen.Bottom.Select.cs": ("ResetMapView", "ResetMapViewAnimated", "MapPinchTick", "TouchToWorld", "PollTouch", "RefreshSelectedDetail", "SetDetailFont", "PositionSelection", "AnimateSelectionBounds", "ResetSelectionAnimation", "PollItemTap", "VisibleItemRenderer", "TrySelectionBounds"),
-    "HKDualScreen.Bottom.JournalGuide.cs": ("BuildJournalPane", "BuildGuidePane", "CopyPaneLabel", "ResetJournalDetailScroll", "CloneForTab", "ReadyForTab", "SyncSupplementarySource", "RetireSupplementaryPanes", "DiscardSupplementaryPane", "BuildSupplementaryPane", "GuideRowCondition", "BindJournalLabels", "SetPaneLabel", "SetPaneLabelVisible", "ApplyPaneLabelClip", "PanePixel", "BuildPaneGraphics", "CopyPaneMask", "PositionPaneGraphics", "PositionPaneRule", "PositionPaneMask", "SetPaneSelection", "PaneCursorTick", "LayoutJournal", "LayoutGuide", "JournalTap", "GuideTap", "ScrollSupplementary", "SupplementaryTick", "RefreshJournal", "RefreshGuide"),
+    "HKDualScreen.Bottom.Select.cs": ("ReassertControlPrompt", "LayoutCtrlPrompt", "LayoutCanonicalControlPrompt", "FreezeCtrlSource", "HideControlPrompt", "ResetMapView", "ResetMapViewAnimated", "MapPinchTick", "TouchToWorld", "PollTouch", "RefreshSelectedDetail", "SetDetailFont", "PositionSelection", "AnimateSelectionBounds", "ResetSelectionAnimation", "PollItemTap", "VisibleItemRenderer", "TrySelectionBounds"),
+    "HKDualScreen.Bottom.JournalGuide.cs": ("BuildJournalPane", "BuildGuidePane", "CopyPaneLabel", "ResetJournalDetailScroll", "CloneForTab", "ReadyForTab", "StowSupplementaryExcept", "SyncSupplementarySource", "RetireSupplementaryPanes", "DiscardSupplementaryPane", "BuildSupplementaryPane", "GuideRowCondition", "BindJournalLabels", "SetPaneLabel", "SetPaneLabelVisible", "ApplyPaneLabelClip", "PanePixel", "BuildPaneGraphics", "CopyPaneMask", "PositionPaneGraphics", "PositionPaneRule", "PositionPaneMask", "SetPaneSelection", "PaneCursorTick", "LayoutJournal", "LayoutGuide", "JournalTap", "GuideTap", "ScrollSupplementary", "SupplementaryTick", "RefreshJournal", "RefreshGuide"),
 }
 parts = []
 identity = []
@@ -52,6 +52,25 @@ for filename, names in methods.items():
                          "source_file_sha256":hashlib.sha256((root / filename).read_bytes()).hexdigest(),
                          "declaration_utf8_lf_sha256":hashlib.sha256(declaration.encode()).hexdigest(),
                          "declaration_identical":True})
+    if filename == "HKDualScreen.Bottom.Inventory.cs":
+        for name in ("NativePaneReady", "NativeBodyReady", "BeginNativeLayout", "PublishNativeLayout"):
+            if re.search(r"\b" + name + r"\s*\(", source):
+                names += (name,)
+    if filename == "HKDualScreen.Bottom.Frame.cs":
+        for name in ("GateNativePresentation", "GateNativeOutgoing"):
+            if "void " + name + "(" in source:
+                names += (name,)
+    if filename == "HKDualScreen.Bottom.Select.cs":
+        if "void GateControlPrompt(" in source:
+            names += ("GateControlPrompt",)
+        for declaration in ("Renderer ctrlMyVerbRenderer;", "Transform ctrlPromptRoot;"):
+            if declaration not in source:
+                continue
+            text = re.search(r"^    " + re.escape(declaration) + r"[^\n]*", source, re.M).group()
+            parts.append(text)
+            identity.append({"source": str(root / filename), "declaration": declaration,
+                             "source_file_sha256": hashlib.sha256((root / filename).read_bytes()).hexdigest(),
+                             "declaration_utf8_lf_sha256": hashlib.sha256(text.encode()).hexdigest(), "declaration_identical": True})
     if filename == "HKDualScreen.Bottom.Charms.cs":
         if "bool TryGeneratedGlyphBoundsWorld(" in source:
             names += ("TryGeneratedGlyphBoundsWorld",)
@@ -120,7 +139,7 @@ for filename, names in methods.items():
             parts.append(source[match.start():end].replace("BuildFrame(", "BuildFrameBody(", 1))
         elif name == "LoadConfig":
             config_method = source[match.start():end]
-        elif name in ("ResetMapViewAnimated", "LayoutNativeInventory", "LayoutCharmsRedesign", "TeardownFrame", "TeardownCompanion", "PollItemTap", "BuildNoMapLabel", "PositionFrame", "BuildMapMask", "CreateShellRule", "MapTick"):
+        elif name in ("ResetMapViewAnimated", "LayoutNativeInventory", "LayoutCharmsRedesign", "TeardownFrame", "TeardownCompanion", "PollItemTap", "BuildNoMapLabel", "PositionFrame", "BuildMapMask", "CreateShellRule", "PrewarmTick", "BuildCompanionTab", "ReassertEquipment", "MapTick"):
             parts.append(source[match.start():end].replace(name + "(", name + "Body(", 1))
         elif name in ("BuildJournalPane", "BuildGuidePane", "LayoutJournal", "LayoutGuide", "JournalTap", "GuideTap", "ScrollSupplementary"):
             # Only the signature is redirected so the fixture can count calls;
@@ -161,7 +180,7 @@ for filename, names in methods.items():
                          "declaration_utf8_lf_sha256": hashlib.sha256(source[declaration:end].encode("utf-8")).hexdigest(),
                          "declaration_identical": True})
     if filename in ("HKDualScreen.Bottom.Inventory.cs", "HKDualScreen.Bottom.Charms.cs"):
-        classes = ("PaneRefs", "NativeInventorySlot") if filename.endswith("Inventory.cs") else ("CharmBoard",)
+        classes = ("PaneRun", "PaneRefs", "NativeInventorySlot") if filename.endswith("Inventory.cs") else ("CharmBoard",)
         for name in classes:
             declaration = re.search(r"(?:sealed\s+)?class " + name + r"\s*\{", source)
             depth, end = 1, declaration.end()
@@ -169,7 +188,12 @@ for filename, names in methods.items():
                 depth += (source[end] == "{") - (source[end] == "}")
                 end += 1
             # Access only; declarations and all executable statements are unchanged.
-            parts.append("internal " + source[declaration.start():end])
+            text = source[declaration.start():end]
+            parts.append("internal " + text)
+            identity.append({"source": str(root / filename), "declaration": name,
+                             "source_file_sha256": hashlib.sha256((root / filename).read_bytes()).hexdigest(),
+                             "declaration_utf8_lf_sha256": hashlib.sha256(text.encode()).hexdigest(),
+                             "access_only_redirect": True})
         if filename.endswith("Inventory.cs"):
             parts.append(re.search(r"static readonly string\[\] EQUIP_ORDER\s*=\s*\{[^;]+;", source).group())
     if filename == "HKDualScreen.Bottom.Select.cs":

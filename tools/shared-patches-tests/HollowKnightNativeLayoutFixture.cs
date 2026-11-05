@@ -25,6 +25,7 @@ internal partial class HKDualScreen
     internal int EquipWatchHash => lastCharmEquipHash;
     internal void NativeEquipWatchStep() => CharmsTick();
     internal void NativeCompanionStep() => UpdateCompanion(Cameras.hudCamera);
+    internal void ClearCachedInventoryDetailStep() => ClearInvDetailLocal(invCloneCache); // Actual layout-bearing callee, not an injected outcome.
     internal void LoseNativeCharmNameDonor() { nativeCharmName=null;charmNameT=null; }
     internal string ThrowDetailText;
     internal int DetailTextAttempts;
@@ -59,7 +60,9 @@ internal partial class HKDualScreen
     readonly List<SpriteRenderer> notchSRs=new();
     object notchTexLit,notchTexEmpty,notchSprLitFb,notchSprEmptyFb,notchSprFull,notchSprEmpty;
     LineRenderer selBox;
-    object ctrlMyVerbTmp,ctrlTdT,ctrlTnR,ctrlTdR,ctrlHkRs,ctrlHkRsFor,ctrlSrcIconT;
+    Component ctrlMyVerbTmp;Transform ctrlTdT,ctrlSrcIconT,ctrlHkRsFor,ctrlMyVerbT;
+    Renderer ctrlTnR,ctrlTdR;Renderer[] ctrlHkRs;
+    Vector3 ctrlGlyphFinal,ctrlVerbFinal;float ctrlGlyphScale;int ctrlVerbKind;
     Transform paneCursor;GameObject paneCursorFor;
     Transform selCurTL,selCurTR,selCurBL,selCurBR,selCurFor,selectionMoveTarget;
     SpriteRenderer nativeSelectionTL,nativeSelectionBR,nativeSelectionGlow;
@@ -88,8 +91,8 @@ internal partial class HKDualScreen
     void ReleaseLowerHudFixtureInputLock() { } // No live menu input owner in host tests.
     internal void NativeDetailStep(int kind,Transform item,int charm=0)
     { sel.kind=kind;sel.item=item;sel.invKey=item?.name;sel.charmN=charm;RefreshSelectedDetail(paneClone); }
-    // Localization, TMP access and gameplay prompt owner. Prompt rendering is not
-    // part of native pane layout and is not represented as layout integration.
+    // Localization/native prompt selection remains an engine ingress. Previously
+    // selected overlays exercise the real extracted final prompt bodies below.
     string CharmString(string key) => NativeLabels.TryGetValue("UI/"+key,out var s) ? s : key;
     void SetTmpTextByName(Transform pane,string name,string text)
     {
@@ -108,8 +111,10 @@ internal partial class HKDualScreen
         PlayerData.instance.equippedCharms.Clear();PlayerData.instance.equippedCharms.AddRange(ids);
         _charmsFrame=-1;
     }
+    internal bool NativeShellAssetsAvailable=true;
     void EnsureNativeShellAssets()
     {
+        if(!NativeShellAssetsAvailable) return;
         // Shell asset owner admission only. No shell/native layout algorithm.
         // Replenish the owned donors after actual TeardownFrame resets them.
         if(frameRoot==null) frameRoot=new GameObject("FixtureShellAssets");
@@ -119,10 +124,11 @@ internal partial class HKDualScreen
         if(mapMaskTopR==null) mapMaskTopR=mapMaskTopT.gameObject.AddComponent<MeshRenderer>();
         mapMaskTopR.sharedMaterial ??=new object();
     }
-    internal GameObject NewNativePane(bool charms,int slots=21)
+    internal GameObject NewNativePane(bool charms,int slots=21,bool populate=true)
     {
         var pane=new GameObject(charms ? "NativeCharms" : "NativeInventory");pane.transform.SetParent(compRoot);
         if(charms) charmCloneCache=pane;else invCloneCache=pane;
+        var supplied=RunFor(charms);supplied.finalized=true;supplied.kicks=supplied.settle=0;
         foreach(var name in new[]{"Text Name","Text Desc","Text Desc Low","Divider L","Divider R","Percentage","Text Completion"})
         {
             var t=new GameObject(name);t.transform.SetParent(pane.transform);var r=t.AddComponent<Renderer>();
@@ -155,8 +161,65 @@ internal partial class HKDualScreen
         // The real BuildPaneClone -> CharmsPaneInit boundary populates detail
         // before first dispatch. Exercise that actual callee, including clearing
         // lastDetailCharmN from the retired ownership epoch.
-        if(charms) PopulateCharmDetail(pane);
+        SetLayerRecursive(pane.transform,ATTR_LAYER);
+        if(charms && populate) PopulateCharmDetail(pane);
         return pane;
+    }
+    // Cache-supplied typed ingress: native construction/OnEnable is outside this fixture.
+    // No layout/resource/readiness result is assigned here. All lifecycle decisions
+    // after this point are the extracted production dispatcher, builder and settle.
+    internal GameObject ColdNativeOwner(bool charms,bool finalized=true,int slots=21)
+    {
+        NativeFinalPositioning=true;
+        foreach(var name in new[]{"Inv","Charms"})
+            if(Manager.inventoryFSM.transform.Find(name)==null) { var node=new GameObject(name);node.transform.SetParent(Manager.inventoryFSM.transform); }
+        var pane=NewNativePane(charms,slots,false);
+        var run=RunFor(charms);run.finalized=finalized;run.kicks=finalized || charms ? 0 : 8;run.settle=finalized ? 0 : charms ? 20 : 45;
+        paneSrcRef=Manager.inventoryFSM;prewarmDone=true;
+        tab.cur=tab.built=-1;tab.tap=-1;tab.lastCfg=charms ? 2 : 1;cfg.compTab=charms ? 2 : 1;
+        EnsureNativeShellAssets();
+        for(int i=0;i<5;i++) { tabIcons[i]=new Sprite();frameTabs[i]=ShellSprite("F_Tab"+i,frameRoot.transform,tabIcons[i]); }
+        tabTL=new();tabBR=new();tabGlow=new();
+        iconRetry.Resolved();
+        Resources.Sprites=new[]{new Sprite{name="No_Map_symbol"},new Sprite{name="map_mark_0000_scarab"},new Sprite{name="map_mark_0001_pill"},new Sprite{name="map_mark_0002_chit"},new Sprite{name="map_mark_0003_shell"}};
+        BuildMapControls(Manager.inventoryFSM.transform);
+        return pane;
+    }
+    internal void PromptIngress(bool pending=false)
+    {
+        // Previously selected overlay inputs, including the independent owned
+        // subtree boundary; no visibility/readiness outcome is supplied here.
+        var root=new GameObject("Owned prompt").transform;root.SetParent(compRoot);
+        typeof(HKDualScreen).GetField("ctrlPromptRoot",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance)?.SetValue(this,root);
+        var glyph=new GameObject("Prompt glyph");glyph.transform.SetParent(root);glyph.layer=ATTR_LAYER;
+        ctrlMyGlyph=glyph.AddComponent<SpriteRenderer>();
+        ctrlMyVerbT=new GameObject("Prompt verb").transform;ctrlMyVerbT.SetParent(root);
+        ctrlMyVerbT.gameObject.layer=ATTR_LAYER;var r=ctrlMyVerbT.gameObject.AddComponent<Renderer>();
+        ctrlMyVerbTmp=new Component(r);ctrlMyVerbT.TextComponents.Add(ctrlMyVerbTmp);ctrlMyVerbTmp.text="PRESS";
+        typeof(HKDualScreen).GetField("ctrlMyVerbRenderer",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance)?.SetValue(this,r);
+        ctrlGlyphFinal=ctrlMyGlyph.transform.position;ctrlVerbFinal=ctrlMyVerbT.position;
+        ctrlActive=true;ctrlPlaced=!pending;ctrlLayoutPending=pending ? 1 : 0;
+    }
+    internal Renderer GeneratePromptSubmesh(bool enabled=true)
+    {
+        // Existing TMP engine-generation ingress creates the fallback child;
+        // production owns its inherited visibility, not a fixture callback.
+        ctrlMyVerbTmp.SpawnFallbackOnMesh=true;ctrlMyVerbTmp.ForceMeshUpdate();
+        var renderer=ctrlMyVerbTmp.LastFallback;renderer.gameObject.layer=ATTR_LAYER;
+        renderer.enabled=enabled;return renderer;
+    }
+    internal Renderer[] PromptRenderers => ctrlMyGlyph.transform.parent.GetComponentsInChildren<Renderer>(true);
+    internal int PromptPending => ctrlLayoutPending;
+    internal bool PromptSelected => ctrlActive;
+    internal Renderer PromptGlyph => ctrlMyGlyph;
+    internal Renderer PromptVerb => ctrlMyVerbTmp?.GetComponent<Renderer>();
+    internal bool PromptRetained => ctrlActive && ctrlPlaced;
+    internal void SupplyNativeCacheInputs()
+    {
+        // After a tested retirement, supply replacement caches at the explicit
+        // engine boundary. No build/OnEnable/layout outcome is simulated here.
+        NewNativePane(false,populate:false);NewNativePane(true,populate:false);
+        prewarmDone=true;paneSrcRef=Manager.inventoryFSM;InitializeOwnership();
     }
     internal Component NativeSource(GameObject pane,string name) => TmpOn(FindDeep(pane.transform,name));
     internal void NativeLayoutStep(int id) { tab.cur=id;paneClone=CloneForTab(id);if(id==1) LayoutNativeInventory(paneClone);else ApplyFit(LayoutCharmsRedesign(paneClone));ApplyCompanionCamera(compRoot.position); }

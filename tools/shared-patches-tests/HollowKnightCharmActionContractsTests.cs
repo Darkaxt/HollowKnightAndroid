@@ -136,7 +136,7 @@ public sealed class HollowKnightCharmActionContractsTests
             case "multitouch":Feed(f,Contact(p.x,p.y),Contact(p.x+.01f,p.y,1));break;
             case "slide":f.slideT=.5f;f.TouchStep();f.slideT=1;break;
             case "pause":f.Step(true);f.Step(false);break;
-            case "hidden":f.compOn=0;f.Step(false);f.compOn=1;f.Step(false);break;
+            case "hidden":f.compOn=0;f.Step(false);f.SupplyNativeCacheInputs();f.compOn=1;f.Step(false);break;
             case "tab":f.tab.cur=1;f.TouchStep();f.tab.cur=2;break;
             case "selection":f.NativeDetailStep(1,f.nativeCharmGrid.Children.First(t=>t.name=="CharmBoard2"),2);break;
             case "transport":f.transport=new(){Owner=f};break;
@@ -181,7 +181,7 @@ public sealed class HollowKnightCharmActionContractsTests
         long before=GC.GetAllocatedBytesForCurrentThread();for(int i=0;i<300;i++) f.Step(false);
         Assert.Equal(0,GC.GetAllocatedBytesForCurrentThread()-before);Assert.Equal(hierarchy,DiscoveryCounters.Hierarchy);
         Assert.Equal(resources,Resources.Discoveries);Assert.Equal(reads,pd.Reads);NoWrites(f,0);
-        f.compOn=1;f.tab.cur=f.tab.tap=f.tab.built=1;f.NewNativePane(false);f.NativeLayoutRouteStep(1);f.Step(false);f.Step(false);
+        f.SupplyNativeCacheInputs();f.compOn=1;f.tab.cur=f.tab.tap=f.tab.built=1;f.NativeLayoutRouteStep(1);f.Step(false);f.Step(false);
         hierarchy=DiscoveryCounters.Hierarchy;resources=Resources.Discoveries;reads=pd.Reads;before=GC.GetAllocatedBytesForCurrentThread();
         for(int i=0;i<300;i++) f.Step(false);
         Assert.Equal(0,GC.GetAllocatedBytesForCurrentThread()-before);Assert.Equal(hierarchy,DiscoveryCounters.Hierarchy);

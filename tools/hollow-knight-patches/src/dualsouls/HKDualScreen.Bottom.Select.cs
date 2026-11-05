@@ -28,6 +28,13 @@ public partial class HKDualScreen
 
     // Control-prompt is drawn with OUR OWN overlay (glyph SpriteRenderer + cloned verb TMP) — we only READ HK's
     // resolved icon sprite; we never let HK's ActionButtonIcon lay out anything visible (it fights us / breaks).
+    Transform ctrlPromptRoot; // Owned visibility boundary also covers late TMP fallback submeshes.
+    void GateControlPrompt()
+    {
+        if(ctrlPromptRoot==null) return;
+        bool show=NativeBodyReady() && ctrlActive && ctrlPlaced && ctrlLayoutPending==0 && tab.cur==COMP_INV;
+        if(ctrlPromptRoot.gameObject.activeSelf!=show) ctrlPromptRoot.gameObject.SetActive(show);
+    }
     SpriteRenderer ctrlMyGlyph; Transform ctrlMyVerbT, ctrlSrcIconT; Component ctrlMyVerbTmp;
     bool ctrlGlyphPending;   // ActionButtonIcon hadn't resolved a sprite at populate -> keep mirroring until it does, then freeze
     int ctrlLayoutPending;   // >0: measure + lay out on the NEXT tick (TMP bounds are one frame stale right after ForceMeshUpdate; measuring then caused the visible settle-in). Renderers stay hidden until placed.
@@ -173,7 +180,7 @@ public partial class HKDualScreen
         // selected-item highlight — HK's OWN corner-bracket cursor (Inv_0014_selection_cursor + Glow), moved and
         // scaled onto the tapped item (just like the real menu). A LineRenderer box is the fallback if the clone
         // has no Cursor object.
-        bool showSel = cfg.compSelHighlight == 1 && sel.item != null && (tab.cur == COMP_INV || tab.cur == COMP_CHARM);
+        bool showSel = NativeBodyReady() && cfg.compSelHighlight == 1 && sel.item != null && (tab.cur == COMP_INV || tab.cur == COMP_CHARM);
         Bounds selBB=default;
         bool selOk=showSel && TrySelectionBounds(out selBB);
         if (selOk) selBB = AnimateSelectionBounds(selBB, sel.item);
@@ -338,7 +345,7 @@ public partial class HKDualScreen
         if (cfg.debug == 1) lastSimTapN = cfg.compSimTapN;
         if (dispatchDebugSimulation && cfg.compSimTapX >= 0f && slideT >= 1f)
         {
-            if(tab.cur == COMP_INV || tab.cur == COMP_CHARM) PollItemTap(cfg.compSimTapX,cfg.compSimTapY);
+            if((tab.cur == COMP_INV || tab.cur == COMP_CHARM) && NativeBodyReady()) PollItemTap(cfg.compSimTapX,cfg.compSimTapY);
             else if(tab.cur == COMP_JOURNAL) JournalTap(cfg.compSimTapX,cfg.compSimTapY);
             else if(tab.cur == COMP_GUIDE) GuideTap(cfg.compSimTapX,cfg.compSimTapY);
         }
@@ -354,7 +361,7 @@ public partial class HKDualScreen
                 lastTapSeq=seq;
                 float x=transport.TouchX*g.Width, y=transport.TouchY*g.Height;
                 lowerTabGesture.Down(g.HitColumn(x,y));
-                lowerTouchDownBody=g.InBody(x,y);
+                lowerTouchDownBody=g.InBody(x,y) && NativeBodyReady();
                 supplementaryDragValid=lowerTouchDownBody && tab.cur!=COMP_MAP;
                 supplementaryDragRegion=0;
                 if(tab.cur==COMP_INV || tab.cur==COMP_CHARM)
@@ -375,6 +382,7 @@ public partial class HKDualScreen
             }
             if(contacts>=2 || slideT < 1f || (mapMarkerMode && tab.cur == COMP_MAP))
             { lowerTabGesture.Cancel(); lowerTouchDownBody=false; supplementaryDragValid=false; }
+            if(!NativeBodyReady()) { lowerTouchDownBody=false;supplementaryDragValid=false; }
             if(contacts==1 && supplementaryDragValid)
             {
                 if(tab.cur==COMP_INV || tab.cur==COMP_CHARM) ScrollNativePane(transport.T0Y-supplementaryDragY);
@@ -405,7 +413,7 @@ public partial class HKDualScreen
     // the current pane clone's item renderers, and select the tapped item (fills the right detail + highlight box).
     void PollItemTap(float nx, float ny)
     {
-        var pane = paneClone; if (pane == null || attrCam == null) return;
+        var pane = paneClone; if (pane == null || attrCam == null || !NativeBodyReady()) return;
         var g=LowerGeometry();var columns=HKLowerLayout.NativeColumns(g,tab.cur==COMP_CHARM);
         float px=nx*g.Width,py=ny*g.Height;
         if(px<columns.SubjectX || px>=columns.DetailX || py<columns.Top || py>=columns.Top+columns.Height) return;
@@ -594,15 +602,20 @@ public partial class HKDualScreen
     {
         try
         {
-            if (ctrlMyGlyph == null && compRoot != null)
+            if(ctrlPromptRoot==null && compRoot!=null)
             {
-                var g = new GameObject("HKCtrlGlyph"); g.transform.SetParent(compRoot, false); SetLayerRecursive(g.transform, ATTR_LAYER);
+                var root=new GameObject("HKCtrlPrompt");root.transform.SetParent(compRoot,false);
+                root.SetActive(false);ctrlPromptRoot=root.transform;
+            }
+            if (ctrlMyGlyph == null && ctrlPromptRoot != null)
+            {
+                var g = new GameObject("HKCtrlGlyph"); g.transform.SetParent(ctrlPromptRoot, false); SetLayerRecursive(g.transform, ATTR_LAYER);
                 ctrlMyGlyph = g.AddComponent<SpriteRenderer>(); ctrlMyGlyph.sortingOrder = 60; ctrlMyGlyph.enabled = false;
             }
-            if (ctrlMyVerbT == null && compRoot != null)
+            if (ctrlMyVerbT == null && ctrlPromptRoot != null)
             {
                 var src = FindDeep(pane.transform, "Text Name"); if (src == null) return;
-                var v = Instantiate(src.gameObject, compRoot); v.name = "HKCtrlVerb";
+                var v = Instantiate(src.gameObject, ctrlPromptRoot); v.name = "HKCtrlVerb";
                 SanitizeDetachedTmpClone(v);
                 SetLayerRecursive(v.transform, ATTR_LAYER); v.SetActive(true);
                 foreach (var r in v.GetComponentsInChildren<Renderer>(true)) { r.gameObject.SetActive(true); r.enabled = true; try { r.sortingOrder = 60; } catch { } }
@@ -623,6 +636,7 @@ public partial class HKDualScreen
     void HideControlPrompt(GameObject pane)
     {
         ctrlActive = false; ctrlSrcIconT = null; ctrlGlyphPending = false; ctrlLayoutPending = 0; ctrlPlaced = false;
+        GateControlPrompt();
         try { if (ctrlMyGlyph != null) ctrlMyGlyph.enabled = false; } catch { }
         try { if (ctrlMyVerbTmp != null) { var r = (ctrlMyVerbTmp as Component).GetComponent<Renderer>(); if (r != null) r.enabled = false; } } catch { }
         try { var ic = FindDeep(pane.transform, "Item Control"); if (ic != null && ic.gameObject.activeSelf) ic.gameObject.SetActive(false); } catch { }
@@ -652,6 +666,8 @@ public partial class HKDualScreen
     // bounds, and chasing live bounds every frame after made the line visibly drift into place over seconds.
     void ReassertControlPrompt()
     {
+        GateControlPrompt();
+        if(!NativeBodyReady()) return; // Retain renderer states, selection and pending layout for recovery.
         if (!ctrlActive || tab.cur != COMP_INV) return;
         try
         {
@@ -675,6 +691,9 @@ public partial class HKDualScreen
                 // wait for the glyph sprite (usually already there), then lay out ONCE on this settled frame
                 if (ctrlGlyphPending && ++ctrlLayoutWait < 60) return;   // renderers stay hidden — no half-placed flash
                 ctrlLayoutPending = 0;
+                // Allow TMP's normal active generation during this admitted
+                // one-shot layout; the final subtree gate runs even on failure.
+                if(ctrlPromptRoot!=null) ctrlPromptRoot.gameObject.SetActive(true);
                 LayoutCtrlPrompt();
                 return;
             }
@@ -684,6 +703,7 @@ public partial class HKDualScreen
             if (ctrlMyVerbT != null) ctrlMyVerbT.position = ctrlVerbFinal;
         }
         catch { }
+        finally { GateControlPrompt(); }
     }
 
     // One-shot measurement + placement, run one tick after PopulateControlPrompt (TMP meshes settled). Places the
@@ -801,6 +821,9 @@ public partial class HKDualScreen
             }
 
             EnsureCtrlOverlay(pane);
+            // Event-only generation remains active; final gating below hides all
+            // owned submeshes until layout has placed the complete prompt.
+            if(ctrlPromptRoot!=null) ctrlPromptRoot.gameObject.SetActive(true);
             var tn = FindDeep(pane.transform, "Text Name"); var td = FindDeep(pane.transform, "Text Desc");
             string verbTxt = ItemControlVerb(icon);
             ctrlVerbKind = verbTxt == "PRESS" ? 0 : verbTxt == "HOLD" ? 1 : 2;
@@ -831,5 +854,6 @@ public partial class HKDualScreen
             ctrlLayoutPending = 1; ctrlLayoutWait = 0;   // measure + place + show on the next tick (settled TMP bounds)
         }
         catch (Exception e) { Dbg($"HKDS ctrlprompt err {e.Message}"); }
+        finally { GateControlPrompt(); }
     }
 }

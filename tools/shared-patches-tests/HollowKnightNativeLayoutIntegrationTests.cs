@@ -190,6 +190,289 @@ public sealed class HollowKnightNativeLayoutIntegrationTests
         lower.NativeRetireStep();Assert.Contains(rebuiltInv,lower.Destroyed);Assert.Contains(rebuiltCharm,lower.Destroyed);
         Assert.Null(lower.refsInv);Assert.Null(lower.nativeCharmGrid);Assert.Null(lower.paneClone);
     }
+    // Readiness regressions: removing actual-outcome admission must expose the
+    // native-unit incoming body in the canonical pixel camera, even with valid chrome.
+    static void InvalidGlyph(Component tmp)
+    {
+        tmp.AutomaticGlyphInput=false;tmp.text="M";
+        Vector3[] q={new(0,0,0),new(0,1,0),new(1,1,0),new(1,0,0)};
+        tmp.textInfo=new() { textComponent=tmp,characterCount=1,materialCount=1,
+            characterInfo=new[]{new TMProOld.TMP_CharacterInfo { isVisible=true,materialReferenceIndex=0,vertexIndex=0,
+                vertex_BL=new(){position=q[0]},vertex_TL=new(){position=q[1]},vertex_TR=new(){position=q[2]},vertex_BR=new(){position=q[3]}}},
+            meshInfo=new[]{new TMProOld.TMP_MeshInfo { mesh=new(),vertices=q,vertexCount=3 }} };
+    }
+    static void Withheld(HK lower,GameObject pane)
+    {
+        Assert.True(pane.activeSelf);Close(lower.BOTTOM_H/2f,lower.attrCam.orthographicSize);
+        Assert.Equal(1<<HK.ATTR_LAYER,lower.attrCam.cullingMask);
+        // Geometric camera exclusion, not Drawn's mask-only approximation.
+        foreach(var r in pane.GetComponentsInChildren<Renderer>(true))
+        {
+            var b=r.bounds;var lo=lower.attrCam.WorldToViewportPoint(b.min);var hi=lower.attrCam.WorldToViewportPoint(b.max);
+            Assert.True(hi.y<0 || lo.y>1 || hi.x<0 || lo.x>1,"Uncalibrated incoming renderer intersects pixel camera: "+r.gameObject.name);
+        }
+        Assert.True(lower.NativeTab(0).enabled);Assert.True(lower.NativeTab(4).enabled);
+        Assert.InRange(lower.attrCam.WorldToViewportPoint(lower.NativeTab(0).bounds.center).y,0,1);
+    }
+    [Theory]
+    [InlineData(false,"Text Name")] [InlineData(false,"Text Desc")]
+    [InlineData(true,"Text Name")] [InlineData(true,"Text Desc")]
+    public void Readiness_ActualFailedGlyphAdmissionWithholdsIncomingAndRecoversSameOwnerOnlyAtDeadline(bool charms,string label)
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(charms);var donor=lower.NativeSource(pane,label);InvalidGlyph(donor);
+        Assert.Null(lower.CopyLabelStep(donor.transform,32));
+        lower.Step(false);Withheld(lower,pane);Assert.False(lower.fit.valid);Assert.False(lower.Ready(charms ? 2 : 1));
+        int attempts=lower.NativeInventoryLayouts+lower.NativeCharmLayouts;
+        donor.AutomaticGlyphInput=true;
+        while(Time.frameCount<119) lower.Step(false);
+        Assert.Equal(attempts,lower.NativeInventoryLayouts+lower.NativeCharmLayouts);Withheld(lower,pane);
+        lower.Step(false);Assert.Same(pane,lower.paneClone);Assert.True(lower.fit.valid);Assert.True(lower.Ready(charms ? 2 : 1));
+        Close(0,pane.transform.localPosition.y);
+        var p=HKLowerLayout.NativeColumns(lower.LowerGeometry(),charms);
+        var b=Occupied(charms ? lower.nativeCharmGrid : lower.refsInv.subject);
+        Close((charms ? p.ChooserX+p.ChooserWidth/2 : p.SubjectX+p.SubjectWidth/2)-620,b.center.x);
+        Assert.True(b.size.y<=p.Height+.02f);
+    }
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void Readiness_RealActiveSettleCompletesAndReleasesExactCacheOwner(bool charms)
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(charms,false);
+        var fsm=new HkPauseContracts.PlayMakerFSM{FsmName=charms ? "UI Charms" : "Build Equipment List",ActiveStateName="Init"};pane.transform.FsMs.Add(fsm);
+        int frames=charms ? 20 : 45;lower.Step(false);Withheld(lower,pane);Assert.False(lower.Ready(charms ? 2 : 1));
+        if(!charms) { Assert.Contains("INVENTORY OPENED",fsm.Events);Assert.Contains("FINISHED",fsm.Events); }
+        for(int i=1;i<frames;i++) lower.Step(false);
+        Assert.False(fsm.enabled);Assert.True((charms ? lower.charmRun : lower.invRun).finalized);
+        Assert.Same(pane,lower.paneClone);Assert.True(lower.Ready(charms ? 2 : 1));Close(0,pane.transform.localPosition.y);
+    }
+    [Fact]
+    public void Readiness_MissingSubjectRetriesUnchangedOwnerWithoutDirtyOrTabChange()
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(false,slots:0);
+        var subject=pane.transform.Find("Inv_Items");subject.SetParent(null);
+        lower.Step(false);Withheld(lower,pane);Assert.False(lower.fit.valid);
+        int attempts=lower.NativeInventoryLayouts;subject.SetParent(pane.transform);
+        while(Time.frameCount<119) lower.Step(false);
+        Assert.Equal(attempts,lower.NativeInventoryLayouts);lower.Step(false);
+        Assert.Same(pane,lower.paneClone);Assert.True(lower.fit.valid);Assert.True(lower.Ready(1));
+    }
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void Readiness_PreviouslyCalibratedOwnerRevokesActualFailedOccupiedFit(bool charms)
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(charms);lower.Step(false);Assert.True(lower.Ready(charms ? 2 : 1));
+        var root=charms ? lower.nativeCharmGrid : lower.refsInv.subject;
+        foreach(var r in root.GetComponentsInChildren<Renderer>(true))
+        { if(r is SpriteRenderer sr) sr.sprite=new Sprite{bounds=new(Vector3.zero,Vector3.zero)};else r.BoundsSize=Vector3.zero; }
+        lower.SetSelectedContentDirty();lower.Step(false);
+        Assert.False(lower.fit.valid);Assert.False(lower.Ready(charms ? 2 : 1));Withheld(lower,pane);
+    }
+    [Fact]
+    public void Readiness_HealthyOutgoingAndInvalidIncomingUseRealTabCaptureCompensationAndRestore()
+    {
+        Time.frameCount=1;HK lower=new();lower.cfg.compTabSlide=1;var outgoing=lower.ColdNativeOwner(false);lower.Step(false);
+        var renderer=lower.refsInv.subjectRenderers[0];var before=renderer.bounds;
+        var corners=new[]{before.min,before.max}.Select(lower.attrCam.WorldToViewportPoint).ToArray();
+        var normal=outgoing.transform.localPosition;var scale=outgoing.transform.localScale;
+        var incoming=lower.NewNativePane(true,populate:false);InvalidGlyph(lower.NativeSource(incoming,"Text Name"));
+        lower.cfg.compTab=2;lower.Step(false);
+        Assert.Same(outgoing,lower.slideOutClone);Assert.True(outgoing.activeSelf);Withheld(lower,incoming);
+        float e=1-MathF.Pow(1-lower.slideT,3);
+        var after=renderer.bounds;var actual=new[]{after.min,after.max}.Select(lower.attrCam.WorldToViewportPoint).ToArray();
+        for(int i=0;i<2;i++) { Close(corners[i].x-lower.slideDir*1.075f*e,actual[i].x);Close(corners[i].y,actual[i].y); }
+        while(lower.slideT<1) lower.Step(false);
+        Assert.Null(lower.slideOutClone);Assert.False(outgoing.activeSelf);Close(normal.x,outgoing.transform.localPosition.x);Close(normal.y,outgoing.transform.localPosition.y);Close(scale.x,outgoing.transform.localScale.x);
+        lower.cfg.compTab=1;lower.Step(false);Assert.Null(lower.slideOutClone);Assert.True(lower.Ready(1));
+    }
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void Readiness_UnreadyBodyRejectsDebugTapCleanTapDragAndActionButRetainsTabNavigation(bool charms)
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(charms);InvalidGlyph(lower.NativeSource(pane,"Text Name"));
+        lower.Step(false);lower.cfg.debug=1;lower.cfg.compSimTapX=.5f;lower.cfg.compSimTapY=.5f;lower.cfg.compSimTapN++;
+        int taps=lower.ItemTaps,details=lower.DetailRefreshes;lower.Step(false);
+        lower.transport.contacts=1;lower.transport.TapSequence++;lower.transport.TouchX=.5f;lower.transport.TouchY=.5f;lower.transport.T0Y=.5f;lower.Step(false);
+        lower.transport.T0Y=.3f;lower.Step(false);
+        lower.transport.contacts=0;lower.transport.CleanTapSequence++;lower.transport.CleanTapX=.5f;lower.transport.CleanTapY=.5f;lower.Step(false);
+        Assert.Equal(taps,lower.ItemTaps);Assert.Equal(details,lower.DetailRefreshes);Assert.Null(lower.SelectedItem);Assert.Empty(HkPlayerData.instance.equippedCharms);
+        Withheld(lower,pane);
+        lower.transport.contacts=1;lower.transport.TapSequence++;lower.transport.TouchX=.1f;lower.transport.TouchY=.95f;lower.Step(false);
+        lower.transport.contacts=0;lower.transport.CleanTapSequence++;lower.transport.CleanTapX=.1f;lower.transport.CleanTapY=.95f;lower.Step(false);
+        Assert.Equal(1,lower.tab.tap); // Canonical first tab is Inventory; strip admission survives withholding.
+    }
+    [Fact]
+    public void Readiness_ExternalPromptAndSelectionStayHiddenWithoutDestructiveRetirementThenRecover()
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(false);lower.Step(false);
+        var item=lower.refsInv.subject;lower.NativeSelectionStep(item);lower.PromptIngress();
+        var subject=lower.refsInv.subjectRenderers[0];subject.BoundsSize=Vector3.zero;
+        lower.SetSelectedContentDirty();lower.Step(false);
+        Assert.False(PromptVisible(lower.PromptGlyph));Assert.False(PromptVisible(lower.PromptVerb));Assert.True(lower.PromptRetained);Withheld(lower,pane);
+        subject.BoundsSize=new(20,10,1);while(Time.frameCount<119) lower.Step(false);
+        Assert.True(lower.PromptRetained);lower.Step(false);Assert.True(lower.Ready(1));Assert.True(lower.PromptVerb.enabled);Assert.True(lower.PromptGlyph.enabled);
+    }
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void Readiness_FailedOwnerInterDeadlineDoesNoDiscoveryGenerationAllocationOrLayout(bool charms)
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(charms);InvalidGlyph(lower.NativeSource(pane,"Text Name"));
+        lower.Step(false);for(int i=0;i<5;i++) lower.Step(false);
+        int hierarchy=DiscoveryCounters.Hierarchy,resources=Resources.Discoveries,meshes=DiscoveryCounters.MeshGenerations,attempts=lower.NativeInventoryLayouts+lower.NativeCharmLayouts;
+        long before=GC.GetAllocatedBytesForCurrentThread();for(int i=0;i<50;i++) lower.Step(false);
+        Assert.Equal(0,GC.GetAllocatedBytesForCurrentThread()-before);Assert.Equal(hierarchy,DiscoveryCounters.Hierarchy);Assert.Equal(resources,Resources.Discoveries);Assert.Equal(meshes,DiscoveryCounters.MeshGenerations);
+        Assert.Equal(attempts,lower.NativeInventoryLayouts+lower.NativeCharmLayouts);Withheld(lower,pane);
+    }
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void Readiness_ActualMissingShellGraphicsCanRecoverWithoutPaneReplacement(bool charms)
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(charms);
+        lower.NativeShellAssetsAvailable=false;var sprite=lower.shellRule.sprite;lower.shellRule.sprite=null;
+        lower.Step(false);Withheld(lower,pane);Assert.False(lower.Ready(charms ? 2 : 1));
+        lower.shellRule.sprite=sprite;while(Time.frameCount<119) lower.Step(false);Withheld(lower,pane);
+        lower.Step(false);Assert.Same(pane,lower.paneClone);Assert.True(lower.Ready(charms ? 2 : 1));
+    }
+    [Fact]
+    public void Readiness_SwitchMidSlideNeverPromotesFailedNativeToOutgoing()
+    {
+        Time.frameCount=1;HK lower=new();lower.cfg.compTabSlide=1;
+        var inv=lower.ColdNativeOwner(false);lower.Step(false);var pos=inv.transform.localPosition;
+        var charm=lower.NewNativePane(true,populate:false);InvalidGlyph(lower.NativeSource(charm,"Text Name"));
+        lower.cfg.compTab=2;lower.Step(false);Assert.Same(inv,lower.slideOutClone);Withheld(lower,charm);
+        lower.cfg.compTab=3;lower.Step(false);
+        Assert.Null(lower.slideOutClone);Assert.False(charm.activeSelf);Assert.False(inv.activeSelf);
+        Close(pos.x,inv.transform.localPosition.x);Close(pos.y,inv.transform.localPosition.y);
+    }
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void Readiness_ReadyOwnerAndUnfinishedOwnerRetainExactStateThroughPauseAndRetireOnSourceBoundary(bool finalized)
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(false,finalized);lower.Step(false);
+        var run=lower.invRun;int settle=run.settle,kicks=run.kicks,attempts=lower.NativeInventoryLayouts;
+        bool ready=lower.Ready(1);var pos=pane.transform.localPosition;
+        for(int i=0;i<150;i++) lower.Step(true);
+        Assert.Same(pane,lower.invCloneCache);Assert.Equal(ready,lower.Ready(1));Assert.Equal(settle,run.settle);Assert.Equal(kicks,run.kicks);
+        Assert.Equal(attempts,lower.NativeInventoryLayouts);Close(pos.y,pane.transform.localPosition.y);
+        lower.Manager.inventoryFSM=new NativeOwner();lower.Step(true);
+        Assert.Null(lower.invCloneCache);Assert.False(lower.Ready(1));Assert.Contains(pane,lower.Destroyed);
+        var replacement=lower.ColdNativeOwner(false);InvalidGlyph(lower.NativeSource(replacement,"Text Name"));lower.Step(false);
+        Assert.NotSame(pane,replacement);Assert.False(lower.Ready(1));Withheld(lower,replacement);
+    }
+    [Fact]
+    public void Readiness_SelectedCharmActionRevokesAfterRealChooserFitFailure()
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(true);lower.Step(false);
+        var item=lower.nativeCharmGrid.Children.First(t=>t.name=="CharmBoard1");lower.NativeDetailStep(1,item,1);lower.Step(false);lower.Step(false);
+        foreach(var r in lower.nativeCharmGrid.GetComponentsInChildren<Renderer>(true))
+        { if(r is SpriteRenderer sr) sr.sprite=new Sprite{bounds=new(Vector3.zero,Vector3.zero)};else r.BoundsSize=Vector3.zero; }
+        lower.SetSelectedContentDirty();lower.Step(false);
+        int equips=lower.Manager.Equips,details=lower.DetailRefreshes;
+        var p=HKLowerLayout.NativeColumns(lower.LowerGeometry(),true);float x=(p.DetailX+p.DetailWidth/2)/1240,y=(p.Top+p.Height-39)/1080;
+        lower.transport.contacts=1;lower.transport.TapSequence++;lower.transport.TouchX=lower.transport.T0X=x;lower.transport.TouchY=lower.transport.T0Y=y;lower.Step(false);
+        lower.transport.contacts=0;lower.transport.CleanTapSequence++;lower.transport.CleanTapX=x;lower.transport.CleanTapY=y;lower.Step(false);
+        Assert.Equal(equips,lower.Manager.Equips);Assert.Equal(details,lower.DetailRefreshes);Assert.False(lower.Ready(2));Withheld(lower,pane);
+    }
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void Readiness_HealthyFinalPositioningRemainsZeroCostAcrossMultipleRetryDeadlines(bool charms)
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(charms);lower.Step(false);
+        for(int i=0;i<150;i++) lower.Step(false);
+        int hierarchy=DiscoveryCounters.Hierarchy,resources=Resources.Discoveries,meshes=DiscoveryCounters.MeshGenerations,attempts=lower.NativeInventoryLayouts+lower.NativeCharmLayouts;
+        long before=GC.GetAllocatedBytesForCurrentThread();for(int i=0;i<360;i++) lower.Step(false);
+        Assert.Equal(0,GC.GetAllocatedBytesForCurrentThread()-before);Assert.Equal(hierarchy,DiscoveryCounters.Hierarchy);Assert.Equal(resources,Resources.Discoveries);Assert.Equal(meshes,DiscoveryCounters.MeshGenerations);
+        Assert.Equal(attempts,lower.NativeInventoryLayouts+lower.NativeCharmLayouts);Assert.Same(pane,lower.paneClone);Assert.True(lower.Ready(charms ? 2 : 1));
+    }
+    [Fact]
+    public void Readiness_OptionalEmptyEquipmentAndEmptyProseRemainValid()
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(false,slots:0);lower.Step(false);
+        Assert.True(lower.Ready(1));Assert.True(lower.fit.valid);Assert.Empty(lower.refsInv.slots);Assert.False(lower.refsInv.nameLabel.Renderer.enabled);Assert.False(lower.refsInv.descLabel.Renderer.enabled);
+    }
+    static bool PromptVisible(Renderer renderer) => renderer.enabled && renderer.gameObject.activeInHierarchy;
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void Readiness_ReviewFixOwnedPromptSubtreePreservesRendererStatesAndPendingLayout(bool pending)
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(false);lower.Step(false);
+        lower.NativeSelectionStep(lower.refsInv.subject);lower.PromptIngress(pending);
+        var fallback=lower.GeneratePromptSubmesh();var disabled=lower.GeneratePromptSubmesh(false);
+        var selected=lower.SelectedItem;int pendingBefore=lower.PromptPending;
+        var subject=lower.refsInv.subjectRenderers[0];subject.BoundsSize=Vector3.zero;
+        lower.SetSelectedContentDirty();lower.Step(false);
+        Assert.All(lower.PromptRenderers,r=>Assert.False(PromptVisible(r)));
+        Assert.True(lower.PromptVerb.enabled);Assert.True(fallback.enabled);Assert.False(disabled.enabled);
+        Assert.True(lower.PromptSelected);Assert.Equal(pendingBefore,lower.PromptPending);Assert.Same(selected,lower.SelectedItem);
+        var late=lower.GeneratePromptSubmesh();Assert.False(PromptVisible(late));
+        int hierarchy=DiscoveryCounters.Hierarchy,resources=Resources.Discoveries,meshes=DiscoveryCounters.MeshGenerations;
+        long before=GC.GetAllocatedBytesForCurrentThread();for(int i=0;i<50;i++) lower.Step(false);
+        Assert.Equal(0,GC.GetAllocatedBytesForCurrentThread()-before);Assert.Equal(hierarchy,DiscoveryCounters.Hierarchy);
+        Assert.Equal(resources,Resources.Discoveries);Assert.Equal(meshes,DiscoveryCounters.MeshGenerations);
+        Assert.All(lower.PromptRenderers,r=>Assert.False(PromptVisible(r)));Withheld(lower,pane);
+        subject.BoundsSize=new(20,10,1);while(Time.frameCount<119) lower.Step(false);
+        lower.Step(false);Assert.Same(pane,lower.paneClone);Assert.True(lower.Ready(1));Assert.Same(selected,lower.SelectedItem);
+        Assert.True(PromptVisible(lower.PromptVerb));Assert.True(PromptVisible(fallback));Assert.True(PromptVisible(late));
+        Assert.False(PromptVisible(disabled));Assert.False(disabled.enabled);Assert.True(lower.PromptRetained);Assert.Equal(0,lower.PromptPending);
+        lower.NativeRetireStep();Assert.All(lower.PromptRenderers,r=>Assert.False(PromptVisible(r)));
+    }
+    [Fact]
+    public void Readiness_ReviewFixPostPollTouchDragRevokesAlreadyPositionedOwnerAndRecoversAtDeadline()
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(false);lower.Step(false);
+        lower.NativeSelectionStep(lower.refsInv.subject);lower.PromptIngress();var fallback=lower.GeneratePromptSubmesh();
+        var selected=lower.SelectedItem;Assert.True(lower.Ready(1));Assert.True(PromptVisible(fallback));
+        lower.transport.contacts=1;lower.transport.TapSequence++;lower.transport.TouchX=670f/1240;lower.transport.TouchY=.5f;lower.transport.T0Y=.5f;
+        lower.Step(false);Assert.True(lower.Ready(1));Close(0,pane.transform.localPosition.y);
+        var subject=lower.refsInv.subjectRenderers[0];subject.BoundsSize=Vector3.zero;
+        int attempts=lower.NativeInventoryLayouts;Assert.False(lower.PendingCharmFit);
+        // No dirty/config/identity event. UpdateCompanion sees its previous ready
+        // outcome; the actual chooser drag fails layout later, inside PollTouch.
+        lower.transport.T0Y=.4f;lower.Step(false);
+        Assert.Equal(attempts+1,lower.NativeInventoryLayouts);Assert.False(lower.Ready(1));Assert.False(lower.fit.valid);
+        Withheld(lower,pane);Assert.All(lower.PromptRenderers,r=>Assert.False(PromptVisible(r)));Assert.Same(selected,lower.SelectedItem);
+        lower.transport.contacts=0;subject.BoundsSize=new(20,10,1);
+        attempts=lower.NativeInventoryLayouts;while(Time.frameCount<119) lower.Step(false);
+        Assert.Equal(attempts,lower.NativeInventoryLayouts);Withheld(lower,pane);
+        lower.Step(false);Assert.Equal(attempts+1,lower.NativeInventoryLayouts);Assert.Same(pane,lower.paneClone);
+        Assert.True(lower.Ready(1));Close(0,pane.transform.localPosition.y);Assert.True(PromptVisible(fallback));Assert.True(lower.PromptRetained);
+    }
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void Readiness_OutgoingLayoutRevocationCannotReuseCapturedAdmissionAndRecoversSameOwner(bool afterFirstSlideFrame)
+    {
+        Time.frameCount=1;HK lower=new();lower.cfg.compTabSlide=1;
+        var outgoing=lower.ColdNativeOwner(false);lower.Step(false);Assert.True(lower.Ready(1));
+        var normal=outgoing.transform.localPosition;var scale=outgoing.transform.localScale;
+        var subject=lower.refsInv.subjectRenderers[0];var shape=subject.BoundsSize;
+        var incoming=lower.NewNativePane(true,populate:false);
+        Assert.False(lower.PendingCharmFit);
+        if(!afterFirstSlideFrame) subject.BoundsSize=Vector3.zero;
+        lower.cfg.compTab=2;lower.Step(false);
+        if(afterFirstSlideFrame)
+        {
+            Assert.Same(outgoing,lower.slideOutClone);Assert.True(outgoing.activeSelf);
+            // Revoke through the real cache-local detail/layout callee after a
+            // healthy capture; no readiness field or final result is injected.
+            subject.BoundsSize=Vector3.zero;lower.ClearCachedInventoryDetailStep();
+            Assert.False(lower.Ready(1));lower.Step(false);
+        }
+        // The real transition's ClearInvDetail can revoke the formerly ready
+        // owner AFTER capture. Its old permission must never reactivate it.
+        Assert.False(lower.Ready(1));Assert.Null(lower.slideOutClone);Assert.False(outgoing.activeSelf);
+        Close(normal.x,outgoing.transform.localPosition.x);Close(normal.y,outgoing.transform.localPosition.y);
+        Close(scale.x,outgoing.transform.localScale.x);Close(scale.y,outgoing.transform.localScale.y);
+        Assert.Same(incoming,lower.paneClone);Assert.True(lower.Ready(2));Assert.True(incoming.activeSelf);
+        Close(0,incoming.transform.localPosition.x);Close(0,incoming.transform.localPosition.y);
+        Close(lower.BOTTOM_H/2f,lower.attrCam.orthographicSize);Assert.True(lower.NativeTab(0).enabled);Assert.True(lower.NativeTab(4).enabled);
+        // Revisit the same failed cache, then restore the actual ingress without
+        // dirty/config/cache replacement. Existing cadence must release it.
+        lower.cfg.compTab=1;lower.Step(false);Assert.Same(outgoing,lower.paneClone);Withheld(lower,outgoing);
+        subject.BoundsSize=shape;int attempts=lower.NativeInventoryLayouts;
+        while(Time.frameCount<119) lower.Step(false);
+        Assert.Equal(attempts,lower.NativeInventoryLayouts);Withheld(lower,outgoing);
+        lower.Step(false);Assert.Equal(attempts+1,lower.NativeInventoryLayouts);Assert.True(lower.Ready(1));Assert.Same(outgoing,lower.paneClone);
+        Close(0,outgoing.transform.localPosition.y);
+    }
     [Fact]
     public void WarmNativeDispatcherDoesNotAllocateOrRelayout()
     {

@@ -77,8 +77,8 @@ public partial class HKDualScreen
     {
         var clone = CloneForTab(id);
         if(clone == null) return false;
-        if(id == COMP_INV) return invRun.finalized;
-        if(id == COMP_CHARM) return charmRun.finalized;
+        if(id == COMP_INV) return NativePaneReady(clone,false);
+        if(id == COMP_CHARM) return NativePaneReady(clone,true);
         return true;
     }
     void StowSupplementaryExcept(int id)

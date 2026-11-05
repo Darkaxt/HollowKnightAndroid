@@ -165,7 +165,7 @@ public partial class HKDualScreen
     {
         available &= directDisplayActive && cfg.dualScreen != 0 && (compOn >= 0 ? compOn : cfg.companion) == 1 &&
                      cfg.compTouch == 1 && transport != null && transport.IsTransportActive &&
-                     tab.cur == COMP_CHARM && slideT >= 1f && charmRun.finalized &&
+                     tab.cur == COMP_CHARM && slideT >= 1f && NativePaneReady(paneClone,true) &&
                      paneClone != null && paneClone == charmCloneCache && paneClone.activeInHierarchy &&
                      attrCam != null && attrCam.enabled && (attrCam.cullingMask & (1 << ATTR_LAYER)) != 0;
         if(charmActionVisible == available && ReferenceEquals(charmActionTransport,transport) &&
@@ -224,7 +224,7 @@ public partial class HKDualScreen
     bool CharmActionSelectionVisible()
     {
         Bounds bounds;
-        return charmActionVisible && nativeCharmAction != null && VisibleItemRenderer(nativeCharmAction.Renderer) &&
+        return charmActionVisible && NativePaneReady(paneClone,true) && nativeCharmAction != null && VisibleItemRenderer(nativeCharmAction.Renderer) &&
                nativeCharmAction.Renderer.gameObject.layer == ATTR_LAYER &&
                sel.kind == 1 && sel.charmN > 0 && sel.charmN <= 40 &&
                selectionMoveShown && selectionMoveT >= 1f && selectionMoveTarget == sel.item &&
@@ -619,6 +619,7 @@ public partial class HKDualScreen
     // grid alone fits the chooser; selection/prose/legacy JSON never move its target.
     FitResult LayoutCharmsRedesign(GameObject pane)
     {
+        BeginNativeLayout(pane,true);
         if(pane == null || compRoot == null) return default;
         try
         {
@@ -671,7 +672,7 @@ public partial class HKDualScreen
             }
             var g=LowerGeometry();var p=HKLowerLayout.NativeColumns(g,true);
             // The chooser shares the exact padded column bounds with its masks.
-            FitOccupiedNative(nativeCharmGrid,nativeCharmGridRenderers,new Rect(p.ChooserX,p.Top,p.ChooserWidth,p.Height));
+            if(!FitOccupiedNative(nativeCharmGrid,nativeCharmGridRenderers,new Rect(p.ChooserX,p.Top,p.ChooserWidth,p.Height))) return default;
             if(nativeCharmRetired!=null) foreach(var r in nativeCharmRetired)
                 if(r!=null && r!=nativeCharmPortrait && !r.transform.IsChildOf(nativeCharmGrid) && !IsUnderNamed(r.transform,"Cursor")) r.enabled=false;
             if(charmNameR != null) charmNameR.enabled=false;if(charmDescR != null) charmDescR.enabled=false;
@@ -699,7 +700,7 @@ public partial class HKDualScreen
                     if(i<cost) FitSprite(t.GetComponent<SpriteRenderer>(),PanePixel(p.DetailX+12+i*26,p.Top+76),20,20);
                 }
             CharmActionLayout(pane,cs);
-            return new FitResult { center=compRoot.position,ortho=BOTTOM_H/2f,valid=true };
+            return PublishNativeLayout(pane,true,true);
         }
         catch(Exception e) { Dbg("HKDS canonical charms: "+e.Message);return default; }
     }
