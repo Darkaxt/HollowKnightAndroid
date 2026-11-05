@@ -159,8 +159,17 @@ namespace SkinUnityNativeModel
     }
     public class GameManager : Object
     {
-        public static GameManager instance;
-        public static GameManager UnsafeInstance => instance;
+        static GameManager current;
+        public static int MissingOwnerLookups;
+        // The native SS instance getter reports an error when no manager exists;
+        // nullable owner probes must use its side-effect-free accessor instead.
+        public static GameManager instance
+        {
+            get { if (current == null) MissingOwnerLookups++; return current; }
+            set => current = value;
+        }
+        public static GameManager UnsafeInstance => current;
+        public static GameManager SilentInstance => current;
     }
     public class GameCameras : Component
     {

@@ -67,14 +67,37 @@ public sealed class SkinUnityCallerContractsTests
         Assert.Equal(SkinApplyStatus.Applied, rig.Apply(rig.Pack("A")).Status);
         var owner = GameManager.instance;
         GameManager.instance = null;
+        GameManager.MissingOwnerLookups = 0;
         Time.unscaledTime += 3;
         rig.Tick();
         Assert.Equal(SkinApplyStatus.AwaitingTargets, rig.Last().Status);
+        Assert.Equal(0, GameManager.MissingOwnerLookups);
         GameManager.instance = owner;
         Time.unscaledTime += 3;
         rig.Tick();
         Assert.Contains(rig.Last().Status, new[] { SkinApplyStatus.Applied, SkinApplyStatus.Unchanged });
         Assert.NotSame(rig.Vanilla, rig.Material.mainTexture);
+    }
+
+    [Fact]
+    public void SS_ownerless_title_polls_remain_quiet_without_discovery_or_decode()
+    {
+        using var rig = new Rig(true);
+        var idle = rig.Last();
+        HeroController.instance = null;
+        GameCameras.instance = null;
+        GameManager.instance = null;
+        GameManager.MissingOwnerLookups = 0;
+        for (int poll = 0; poll < 4; poll++)
+        {
+            Time.unscaledTime += 2;
+            rig.Tick();
+        }
+        Assert.Same(idle, rig.Last());
+        Assert.Equal(0, GameManager.MissingOwnerLookups);
+        Assert.Equal(0, Resources.Scans);
+        Assert.Equal(0, ImageConversion.Decodes);
+        Assert.Same(rig.Vanilla, rig.Material.mainTexture);
     }
 
     [Theory]

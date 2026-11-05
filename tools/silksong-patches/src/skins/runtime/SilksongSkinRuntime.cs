@@ -284,7 +284,7 @@ namespace DualSouls.Skins.Silksong.Runtime
         {
             heroOwners = CaptureHeroOwners(heroOwners);
             hudOwners = CaptureHudOwners(hudOwners);
-            ownerManager = GameManager.instance;
+            ownerManager = GameManager.SilentInstance;
             if (heroOwners == null || hudOwners == null || ownerManager == null)
                 return ownerRefresh.UpdateOwners(null);
             var identities = ownerIdentities;
