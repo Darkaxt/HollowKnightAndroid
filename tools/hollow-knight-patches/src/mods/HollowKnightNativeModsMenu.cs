@@ -1758,9 +1758,52 @@ namespace DualSouls.Mods.HollowKnight
         internal int Generation;
         internal int Role;
         internal int DataIndex = -1;
+        int _inputObservations;
+        bool _inputObservationDisabled;
+
+        static int ObservedId(UnityObject value) => value != null ? value.GetInstanceID() : 0;
+
+        // Only actual Mods-driver ingress, including rejected stale callbacks.
+        // Raw parent-local RectTransform values are NOT screen hit geometry;
+        // supplied pointer/raycast state is NOT a successful runtime operation.
+        // Each driver has a lifetime budget, with no Update hook or reset/poll.
+        void ObserveInput(string kind, BaseEventData eventData)
+        {
+            if (_inputObservationDisabled || _inputObservations >= 32) return;
+            _inputObservations++;
+            try
+            {
+                EventSystem events = EventSystem.current;
+                PointerEventData pointer = eventData as PointerEventData;
+                AxisEventData axis = eventData as AxisEventData;
+                RectTransform rect = transform as RectTransform;
+                string pointerState = pointer != null
+                    ? FormattableString.Invariant($" pointerX={pointer.position.x} pointerY={pointer.position.y}")
+                    : " pointer=unavailable";
+                string rectState = rect != null
+                    ? FormattableString.Invariant($" rectSpace=recipient-parent-local anchoredX={rect.anchoredPosition.x} anchoredY={rect.anchoredPosition.y} sizeDeltaX={rect.sizeDelta.x} sizeDeltaY={rect.sizeDelta.y}")
+                    : " rectSpace=unavailable";
+                Debug.Log($"[HK Mods Input] event={kind} recipient={ObservedId(gameObject)} " +
+                    $"selected={ObservedId(events != null ? events.currentSelectedGameObject : null)} " +
+                    $"press={ObservedId(pointer != null ? pointer.pointerPress : null)} " +
+                    $"raycast={ObservedId(pointer != null ? pointer.pointerCurrentRaycast.gameObject : null)} " +
+                    $"role={Role} dataIndex={DataIndex} generation={Generation} " +
+                    $"current={Owner != null && Owner.DriverIsCurrent(this, Generation)} " +
+                    $"interactable={Selectable != null && Selectable.interactable} " +
+                    $"direction={(axis != null ? axis.moveDir.ToString() : "unavailable")}" +
+                    pointerState + rectState + " hitGeometry=unavailable");
+            }
+            catch (Exception)
+            {
+                // Diagnostic failure alone disables this observer. The original
+                // handler below still owns all validation, dispatch and errors.
+                _inputObservationDisabled = true;
+            }
+        }
 
         void ISubmitHandler.OnSubmit(BaseEventData eventData)
         {
+            ObserveInput("submit", eventData);
             if (Selectable == null || !Selectable.interactable || Owner == null ||
                 !Owner.DriverIsCurrent(this, Generation)) return;
             Owner.Submit(this);
@@ -1768,12 +1811,14 @@ namespace DualSouls.Mods.HollowKnight
 
         void IPointerClickHandler.OnPointerClick(PointerEventData eventData)
         {
+            ObserveInput("pointer", eventData);
             if (Owner != null && Owner.DriverIsCurrent(this, Generation)) Owner.Select(this);
             ((ISubmitHandler)this).OnSubmit(eventData);
         }
 
         void IMoveHandler.OnMove(AxisEventData eventData)
         {
+            ObserveInput("move", eventData);
             if (Selectable == null || !Selectable.interactable || Owner == null ||
                 !Owner.DriverIsCurrent(this, Generation)) return;
             Owner.Move(this, eventData.moveDir);
@@ -1782,6 +1827,7 @@ namespace DualSouls.Mods.HollowKnight
 
         void ICancelHandler.OnCancel(BaseEventData eventData)
         {
+            ObserveInput("cancel", eventData);
             if (Selectable == null || !Selectable.interactable || Owner == null ||
                 !Owner.DriverIsCurrent(this, Generation)) return;
             Selectable.ForceDeselect();
@@ -1791,6 +1837,7 @@ namespace DualSouls.Mods.HollowKnight
 
         void ISelectHandler.OnSelect(BaseEventData eventData)
         {
+            ObserveInput("select", eventData);
             if (Owner != null && Owner.DriverIsCurrent(this, Generation)) Owner.Select(this);
         }
     }

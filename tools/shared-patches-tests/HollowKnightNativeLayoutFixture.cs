@@ -86,7 +86,7 @@ internal partial class HKDualScreen
     int tabColorCol,tabFleurMoveCol,lastEquipStamp,lastNotchTotal,lastNotchUsed,invStamp,charmStamp;
     float tabFleurMoveT,frameInnerBotFrac,frameInnerTopFrac,notchScanT,nudgedFocusAmt;
     bool mapAreaBValid,ctrlPlaced,ctrlGlyphPending,prewarmDone;
-    string mapAreaBFor;object mapSrcRef,paneSrcRef;GameObject nudgedFocusFor;
+    string mapAreaBFor;object mapSrcRef;UnityEngine.Object paneSrcRef;GameObject nudgedFocusFor;
     void DestroyOwnedAssets() { } // Native asset disposal ABI, no geometry/owner policy.
     void ReleaseLowerHudFixtureInputLock() { } // No live menu input owner in host tests.
     internal void NativeDetailStep(int kind,Transform item,int charm=0)

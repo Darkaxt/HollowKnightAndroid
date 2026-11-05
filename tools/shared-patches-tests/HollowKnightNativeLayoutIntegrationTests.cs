@@ -473,6 +473,102 @@ public sealed class HollowKnightNativeLayoutIntegrationTests
         lower.Step(false);Assert.Equal(attempts+1,lower.NativeInventoryLayouts);Assert.True(lower.Ready(1));Assert.Same(outgoing,lower.paneClone);
         Close(0,outgoing.transform.localPosition.y);
     }
+    // Missing/misplaced observer calls must fail these real owner/settle/layout
+    // contracts; logging is observed only at the external Unity Debug boundary.
+    static string[] LowerTrace(int start) => Debug.Logs.Skip(start).Where(s=>s.StartsWith("HKDS lower ")).ToArray();
+    static string[] LowerOwnerTrace(int start,GameObject pane) => LowerTrace(start).Where(s=>s.Contains("pane="+pane.GetInstanceID()+" ")).ToArray();
+    static string TraceEvent(string[] lines,string kind) => Assert.Single(lines,s=>s.Contains("event="+kind+" "));
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void LowerTrace_ActualOwnerBindPrecedesSettleAndNeverClaimsCameraCommit(bool charms)
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(charms,false);int start=Debug.Logs.Count;
+        lower.Step(false);
+        var lines=LowerTrace(start);var bound=TraceEvent(lines,"owner-bound");
+        Assert.Contains("pane="+pane.GetInstanceID()+" ",bound);
+        Assert.Contains("route="+(charms ? 2 : 1)+" ",bound);Assert.Contains("finalized=False ",bound);
+        // Charms can have placed pixels before its settle window finalizes;
+        // neither value is a camera-commit or complete-pane certificate.
+        Assert.Contains("pixelReady="+(charms ? "True" : "False")+" ",bound);Assert.Contains("cameraObservation=current ",bound);
+        Assert.Contains("hudObservation=cached ",bound);Assert.Contains("hudCacheFrame=unavailable ",bound);
+        Assert.DoesNotContain(lines,s=>s.Contains("event=settle-finalized "));
+        Assert.DoesNotContain(lines,s=>s.Contains("cameraCommitted="));
+        int frames=charms ? 20 : 45;for(int i=1;i<frames;i++) lower.Step(false);
+        var settled=TraceEvent(LowerTrace(start),"settle-finalized");
+        Assert.Contains("finalized=True ",settled);Assert.Contains("pixelReady="+(charms ? "True" : "False")+" ",settled);
+        Assert.Contains("pane="+pane.GetInstanceID()+" ",settled);Assert.True(lower.Ready(charms ? 2 : 1));
+        int attempts=Debug.LowerLogAttempts;
+        for(int i=0;i<240;i++) lower.Step(false);
+        Assert.Equal(attempts,Debug.LowerLogAttempts);
+    }
+    [Fact]
+    public void LowerTrace_FirstLayoutSuccessIsNotSyntheticSettleFinalizationAndCapturesExistingFitLocals()
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(false);int start=Debug.Logs.Count;
+        lower.Step(false);var lines=LowerTrace(start);
+        // Tab-change ClearInvDetail performs a real cache-local layout before
+        // incoming binding. Observe it too; it is not a synthetic owner bind.
+        var result=lines.First(s=>s.Contains("event=layout-result "));
+        Assert.DoesNotContain(lines,s=>s.Contains("event=settle-finalized "));
+        Assert.Contains("ready=True ",result);Assert.Contains("finalized=True ",result);Assert.Contains("pixelReady=True ",result);
+        Assert.Contains("fitMeasured=True ",result);Assert.Contains("occupiedSize=20,10 ",result);
+        Assert.Contains("target=20,260,420,660 ",result);Assert.Contains("cachedRefs=True ",result);
+        Assert.Same(pane,lower.paneClone);Assert.True(lower.Ready(1));
+    }
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void LowerTrace_FailedLayoutPublishesBoundedOutcomeAndRecoversWithoutDiscoveryForObservation(bool charms)
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(charms);var donor=lower.NativeSource(pane,"Text Name");InvalidGlyph(donor);
+        int start=Debug.Logs.Count;lower.Step(false);var failed=LowerOwnerTrace(start,pane).Last(s=>s.Contains("event=layout-result "));
+        Assert.Contains("ready=False ",failed);Assert.Contains("pixelReady=False ",failed);Assert.False(lower.Ready(charms ? 2 : 1));
+        int initialOutcomes=LowerOwnerTrace(start,pane).Count(s=>s.Contains("event=layout-result "));Assert.InRange(initialOutcomes,1,2);
+        for(int i=0;i<10;i++) {lower.SetSelectedContentDirty();lower.Step(false);}
+        Assert.Equal(initialOutcomes,LowerOwnerTrace(start,pane).Count(s=>s.Contains("event=layout-result ")));
+        donor.AutomaticGlyphInput=true;lower.SetSelectedContentDirty();Time.frameCount+=120;lower.Step(false);
+        var outcomes=LowerOwnerTrace(start,pane).Where(s=>s.Contains("event=layout-result ")).ToArray();Assert.Equal(initialOutcomes+1,outcomes.Length);
+        Assert.Contains("ready=True ",outcomes.Last());Assert.True(lower.Ready(charms ? 2 : 1));
+        int attempts=Debug.LowerLogAttempts,hierarchy=DiscoveryCounters.Hierarchy,meshes=DiscoveryCounters.MeshGenerations;
+        for(int i=0;i<5;i++) lower.Step(false);
+        long before=GC.GetAllocatedBytesForCurrentThread();for(int i=0;i<240;i++) lower.Step(false);
+        Assert.Equal(0,GC.GetAllocatedBytesForCurrentThread()-before);Assert.Equal(attempts,Debug.LowerLogAttempts);
+        Assert.Equal(hierarchy,DiscoveryCounters.Hierarchy);Assert.Equal(meshes,DiscoveryCounters.MeshGenerations);
+        lower.cfg.compTab=charms ? 1 : 2;lower.Step(false); // Other native cache is deliberately unready but owns a real bind.
+        lower.cfg.compTab=charms ? 2 : 1;lower.Step(false);
+        Assert.Equal(2,LowerTrace(start).Count(s=>s.Contains("event=owner-bound ") && s.Contains("pane="+pane.GetInstanceID()+" ")));
+    }
+    [Fact]
+    public void LowerTrace_EventContextUsesRealBoundDonorCachedHudAndCurrentCameraWithoutInventedCommit()
+    {
+        Time.frameCount=1;HK lower=new();int attempts=Debug.LowerLogAttempts;
+        lower.NativeHudCameraStep();Assert.Equal(attempts,Debug.LowerLogAttempts); // No per-cull diagnostic event.
+        var pane=lower.ColdNativeOwner(false);int start=Debug.Logs.Count;lower.Step(false);
+        var line=TraceEvent(LowerOwnerTrace(start,pane),"owner-bound");
+        Assert.Contains("paneSource="+lower.Manager.inventoryFSM.GetInstanceID()+" ",line);
+        Assert.Contains("invCache="+pane.GetInstanceID()+" ",line);Assert.Contains("tabBuilt=-1 tabTap=-1 ",line);
+        Assert.Contains("cameraId="+lower.attrCam.GetInstanceID()+" ",line);Assert.Contains("cameraAspect=1 cameraRect=0,0,1,1 ",line);
+        Assert.Contains("cameraPositionSpace=world ",line);
+        Assert.Contains("hudRoot="+lower.Cameras.hudCanvas.GetInstanceID()+" ",line);
+        Assert.Contains("hudCamera="+lower.hudCam2.GetInstanceID()+" ",line);
+        Assert.Contains("hudNodes=4 ",line);Assert.Contains("hudReservations=0 ",line);
+        Assert.Contains("hudOwnerReadiness=unavailable-no-scan ",line);
+        Assert.Contains("hudViewSpace=cached-camera-rotation-world ",line);Assert.Contains("hudDestinationSpace=bottom-pixels ",line);
+        Assert.DoesNotContain("cameraCommitted=",line);
+        Assert.All(LowerOwnerTrace(start,pane).Where(s=>s.Contains("event=layout-result ")),s=>
+        { Assert.Contains("occupiedSpace=world-before-fit ",s);Assert.Contains("targetSpace=bottom-pixels ",s); });
+    }
+    [Fact]
+    public void LowerTrace_DiagnosticSinkFailureDisablesOnlyObserverAndPreservesRealSettleAndLayout()
+    {
+        Time.frameCount=1;HK lower=new();var pane=lower.ColdNativeOwner(false,false);int attempts=Debug.LowerLogAttempts;
+        Debug.ThrowLowerLog=true;
+        try { lower.Step(false); }
+        finally { Debug.ThrowLowerLog=false; }
+        Assert.Equal(attempts+1,Debug.LowerLogAttempts);Assert.Same(pane,lower.paneClone);
+        for(int i=1;i<45;i++) lower.Step(false);
+        Assert.True(lower.invRun.finalized);Assert.True(lower.Ready(1));Assert.True(lower.fit.valid);
+        lower.SetSelectedContentDirty();lower.Step(false);Assert.Equal(attempts+1,Debug.LowerLogAttempts);
+    }
     [Fact]
     public void WarmNativeDispatcherDoesNotAllocateOrRelayout()
     {

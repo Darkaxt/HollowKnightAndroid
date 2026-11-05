@@ -1045,6 +1045,7 @@ public partial class HKDualScreen
                 else if (invRun.finalized) { ReassertEquipment(cur); RefreshInvCounters(cur); }   // cached INV re-show: equipment visibility (e.g. used Elegant Key) + counters current, no rebuild
             }
             paneClone = cur;
+            ObserveLowerPane(cur,charms,"owner-bound");
         }
     }
 

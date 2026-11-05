@@ -109,5 +109,8 @@ namespace UnityEngine
 
     public class Object
     {
+        static int nextIdentity;
+        readonly int identity=++nextIdentity;
+        public int GetInstanceID() => identity;
     }
 }

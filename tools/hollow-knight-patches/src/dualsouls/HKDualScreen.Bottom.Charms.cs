@@ -620,7 +620,12 @@ public partial class HKDualScreen
     FitResult LayoutCharmsRedesign(GameObject pane)
     {
         BeginNativeLayout(pane,true);
-        if(pane == null || compRoot == null) return default;
+        if(pane == null || compRoot == null)
+        {
+            ObserveLowerPane(pane,true,"layout-result",false);lowerTraceLayoutActive=false;
+            return default;
+        }
+        bool published=false;
         try
         {
             EnsureCharmRefs(pane);
@@ -700,8 +705,15 @@ public partial class HKDualScreen
                     if(i<cost) FitSprite(t.GetComponent<SpriteRenderer>(),PanePixel(p.DetailX+12+i*26,p.Top+76),20,20);
                 }
             CharmActionLayout(pane,cs);
-            return PublishNativeLayout(pane,true,true);
+            var result=PublishNativeLayout(pane,true,true);published=true;return result;
         }
         catch(Exception e) { Dbg("HKDS canonical charms: "+e.Message);return default; }
+        finally
+        {
+            // Failure already revoked readiness in BeginNativeLayout. Observe
+            // its known result without publishing a different fit/owner state.
+            if(!published) ObserveLowerPane(pane,true,"layout-result",false);
+            lowerTraceLayoutActive=false;
+        }
     }
 }

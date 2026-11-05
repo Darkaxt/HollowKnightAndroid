@@ -550,7 +550,22 @@ internal static class JsonUtility
         }
     }
 }
-internal static class Debug { internal static readonly List<string> Logs = new(); internal static void Log(string text) => Logs.Add(text); internal static void LogError(object value) => Logs.Add(value.ToString()); }
+internal static class Debug
+{
+    internal static readonly List<string> Logs = new();
+    internal static bool ThrowLowerLog;
+    internal static int LowerLogAttempts;
+    internal static void Log(string text)
+    {
+        if(text.StartsWith("HKDS lower "))
+        {
+            LowerLogAttempts++;
+            if(ThrowLowerLog) throw new InvalidOperationException("native lower diagnostic sink unavailable");
+        }
+        Logs.Add(text);
+    }
+    internal static void LogError(object value) => Logs.Add(value.ToString());
+}
 
 internal sealed class Layout
 {
@@ -735,7 +750,7 @@ internal struct Matrix4x4
     public override bool Equals(object value) => value is Matrix4x4 b && Equals(b);
     public override int GetHashCode() => HashCode.Combine(m00,m11,m22,m23,m33);
 }
-internal sealed class Camera
+internal sealed class Camera:UnityEngine.Object
 {
     internal static event Action<Camera> onPreCull;
     internal static void PreCull(Camera camera) => onPreCull?.Invoke(camera);
@@ -759,7 +774,7 @@ internal sealed class Camera
     internal Vector3 WorldToViewportPoint(Vector3 p) { DiscoveryCounters.Projections++;var q=Quaternion.Inverse(transform.rotation)*(p-transform.position);return new(.5f+q.x/(2*orthographicSize*aspect),.5f+q.y/(2*orthographicSize),q.z); }
     internal Vector3 ViewportToWorldPoint(Vector3 p) => transform.position+transform.rotation*new Vector3((p.x-.5f)*orthographicSize*2*aspect,(p.y-.5f)*orthographicSize*2,p.z);
 }
-internal sealed class GameObject
+internal sealed class GameObject:UnityEngine.Object
 {
     internal bool activeSelf = true, Persistent;
     internal bool activeInHierarchy => activeSelf && (transform.parent == null || transform.parent.gameObject.activeInHierarchy);

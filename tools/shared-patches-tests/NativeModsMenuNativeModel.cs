@@ -29,6 +29,8 @@ namespace NativeMenuFixture.PROFILE.Engine
         public static int AudioSubmit, AudioSelect, CursorSelect, BenchWrites;
         public static bool OpenLowerAvailable = true, LowerSuppressed;
         public static int LowerOpened;
+        public static bool ThrowInputTraceLog;
+        public static int InputTraceAttempts;
         public static void Hit(string point)
         {
             if (Instantiating) return;
@@ -47,6 +49,7 @@ namespace NativeMenuFixture.PROFILE.Engine
             NativeGameActions = ForeignCancelActions = ForeignSubmitActions = 0;
             AudioSubmit = AudioSelect = CursorSelect = BenchWrites = LowerOpened = 0;
             OpenLowerAvailable = true; LowerSuppressed = false; Time.unscaledTime = 0;
+            ThrowInputTraceLog = false; InputTraceAttempts = 0;
             GameManager.UnsafeInstance = new GameManager { playerData = new PlayerData(), hero_ctrl = new HeroController() };
             HeroController.UnsafeInstance = GameManager.UnsafeInstance.hero_ctrl;
             EventSystems.EventSystem.current = new EventSystems.EventSystem();
@@ -107,6 +110,9 @@ namespace NativeMenuFixture.PROFILE.Engine
     public class Object
     {
         public bool Dead;
+        static int nextInstanceId;
+        readonly int instanceId = ++nextInstanceId;
+        public int GetInstanceID() => instanceId;
         public static implicit operator bool(Object o) => !ReferenceEquals(o, null) && !o.Dead;
         public static bool operator ==(Object a, Object b) => (ReferenceEquals(a, null) || a.Dead) ? (ReferenceEquals(b, null) || b.Dead) : ReferenceEquals(a, b);
         public static bool operator !=(Object a, Object b) => !(a == b);
@@ -280,7 +286,19 @@ namespace NativeMenuFixture.PROFILE.Engine
     public static class Resources { public static T[] FindObjectsOfTypeAll<T>() where T : class => World.Objects.Where(o => !o.Dead).SelectMany(o => o.Components.OfType<T>()).ToArray(); }
     public static class Time { public static float unscaledTime; }
     public static class Mathf { public static float Clamp(float value, float min, float max) => Math.Max(min, Math.Min(max, value)); }
-    public static class Debug { public static void Log(string message) { World.Hit("admission:" + message); World.Logs.Add(message); } public static void LogError(string message) => World.Logs.Add(message); public static void LogWarning(string message) => World.Logs.Add(message); }
+    public static class Debug
+    {
+        public static void Log(string message)
+        {
+            if (message.StartsWith("[HK Mods Input]", StringComparison.Ordinal)) {
+                World.InputTraceAttempts++;
+                if (World.ThrowInputTraceLog) throw new InvalidOperationException("diagnostic log unavailable");
+            }
+            World.Hit("admission:" + message); World.Logs.Add(message);
+        }
+        public static void LogError(string message) => World.Logs.Add(message);
+        public static void LogWarning(string message) => World.Logs.Add(message);
+    }
     public static class Application { public static string persistentDataPath = "D:/Temp/native-mods-menu-build-01/no-sidecar"; }
     public static class JsonUtility
     {
@@ -412,7 +430,13 @@ namespace NativeMenuFixture.PROFILE.Engine.Events
 namespace NativeMenuFixture.PROFILE.Engine.EventSystems
 {
     public class BaseEventData { public void Use() { } }
-    public class PointerEventData : BaseEventData { }
+    public struct RaycastResult { public GameObject gameObject; }
+    public class PointerEventData : BaseEventData
+    {
+        public Vector2 position;
+        public GameObject pointerPress;
+        public RaycastResult pointerCurrentRaycast;
+    }
     public class AxisEventData : BaseEventData { public MoveDirection moveDir; }
     public enum MoveDirection { None, Left, Right, Up, Down }
     public interface ISubmitHandler { void OnSubmit(BaseEventData e); }

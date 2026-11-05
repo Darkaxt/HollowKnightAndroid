@@ -53,9 +53,16 @@ for filename, names in methods.items():
                          "declaration_utf8_lf_sha256":hashlib.sha256(declaration.encode()).hexdigest(),
                          "declaration_identical":True})
     if filename == "HKDualScreen.Bottom.Inventory.cs":
-        for name in ("NativePaneReady", "NativeBodyReady", "BeginNativeLayout", "PublishNativeLayout"):
+        for name in ("NativePaneReady", "NativeBodyReady", "BeginNativeLayout", "PublishNativeLayout", "ObserveLowerPane"):
             if re.search(r"\b" + name + r"\s*\(", source):
                 names += (name,)
+        if "    // Event-only lower observations." in source:
+            declaration=source[source.index("    // Event-only lower observations."):source.index("    void ObserveLowerPane(")]
+            parts.append(declaration)
+            identity.append({"source":str(root / filename),"declaration":"event-only lower observation state",
+                             "source_file_sha256":hashlib.sha256((root / filename).read_bytes()).hexdigest(),
+                             "declaration_utf8_lf_sha256":hashlib.sha256(declaration.encode()).hexdigest(),
+                             "declaration_identical":True})
     if filename == "HKDualScreen.Bottom.Frame.cs":
         for name in ("GateNativePresentation", "GateNativeOutgoing"):
             if "void " + name + "(" in source:

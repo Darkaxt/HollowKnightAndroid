@@ -11,7 +11,48 @@ public partial class HKDualScreen
     // settle = frames left before we FREEZE the pane's FSMs (once content has populated) — stops their per-frame Update
     // from NRE-ing on the detached clone and leaking FsmExecutionStack. (finalized / focusDY: reserved for the per-clone
     // finalize + live Focus-lift tracking.)
-    class PaneRun { public int kicks, settle; public bool finalized; public GameObject owner; public bool pixelReady; }
+    class PaneRun
+    {
+        public int kicks, settle; public bool finalized; public GameObject owner; public bool pixelReady;
+        public GameObject traceOwner; public int traceEpoch, traceLayoutMask;
+    }
+    // Event-only lower observations. No observer is called from healthy frame,
+    // camera or HUD update paths. HUD values below are explicitly cached, with no
+    // invented observation frame. The first existing occupied fit supplies locals.
+    bool lowerTraceDisabled, lowerTraceLayoutActive, lowerTraceFitAttempted, lowerTraceFitMeasured;
+    int lowerTraceEpoch;
+    Bounds lowerTraceOccupied;
+    Rect lowerTraceTarget;
+    void ObserveLowerPane(GameObject pane,bool charms,string boundary,bool ready=false)
+    {
+        if(lowerTraceDisabled) return;
+        try
+        {
+            var run=RunFor(charms);
+            if(boundary=="owner-bound" || run.traceOwner!=pane)
+            {
+                run.traceOwner=pane;run.traceEpoch=++lowerTraceEpoch;run.traceLayoutMask=0;
+            }
+            bool layout=boundary=="layout-result";
+            if(layout)
+            {
+                // First failure and first success at each initialization phase,
+                // at most four outcomes per actual owner/selection epoch.
+                int bit=1<<((run.finalized ? 2 : 0)+(ready ? 1 : 0));
+                if((run.traceLayoutMask & bit)!=0) return;
+                run.traceLayoutMask|=bit;
+            }
+            var cached=charms ? refsCharm : refsInv;
+            bool cachedRefs=cached!=null && cached.pane==pane;
+            var cameraPosition=attrCam!=null ? attrCam.transform.position : Vector3.zero;
+            var cameraRect=attrCam!=null ? attrCam.rect : default;
+            string measured=layout ? $"fitAttempted={lowerTraceFitAttempted} fitMeasured={lowerTraceFitMeasured} occupiedSpace=world-before-fit occupiedCenter={lowerTraceOccupied.center.x},{lowerTraceOccupied.center.y} occupiedSize={lowerTraceOccupied.size.x},{lowerTraceOccupied.size.y} targetSpace=bottom-pixels target={lowerTraceTarget.x},{lowerTraceTarget.y},{lowerTraceTarget.width},{lowerTraceTarget.height} " : "";
+            Debug.Log($"HKDS lower event={boundary} pane={(pane!=null ? pane.GetInstanceID() : 0)} paneSource={(paneSrcRef!=null ? paneSrcRef.GetInstanceID() : 0)} invCache={(invCloneCache!=null ? invCloneCache.GetInstanceID() : 0)} charmCache={(charmCloneCache!=null ? charmCloneCache.GetInstanceID() : 0)} route={(charms ? COMP_CHARM : COMP_INV)} selectedRoute={tab.cur} tabBuilt={tab.built} tabTap={tab.tap} epoch={run.traceEpoch} frame={Time.frameCount} current={pane==paneClone} finalized={run.finalized} pixelReady={run.pixelReady} layoutResultKnown={layout} ready={ready} ownerMatches={run.owner==pane} kicks={run.kicks} settle={run.settle} cachedRefs={cachedRefs} cachedRenderers={(cachedRefs && cached.renderers!=null ? cached.renderers.Length : 0)} " +
+                $"cameraObservation=current cameraId={(attrCam!=null ? attrCam.GetInstanceID() : 0)} cameraPresent={attrCam!=null} cameraEnabled={attrCam!=null && attrCam.enabled} cameraMask={(attrCam!=null ? attrCam.cullingMask : 0)} cameraOrtho={(attrCam!=null ? attrCam.orthographicSize : 0)} cameraOrthoSpace=world-half-height cameraAspect={(attrCam!=null ? attrCam.aspect : 0)} cameraRect={cameraRect.x},{cameraRect.y},{cameraRect.width},{cameraRect.height} cameraRectSpace=normalized-viewport cameraPositionSpace=world cameraPosition={cameraPosition.x},{cameraPosition.y},{cameraPosition.z} " + measured +
+                $"hudObservation=cached hudCacheFrame=unavailable hudRoot={(nativeHudRoot!=null ? nativeHudRoot.gameObject.GetInstanceID() : 0)} hudCamera={(nativeHudCamera!=null ? nativeHudCamera.GetInstanceID() : 0)} hudBound={nativeHudBound} hudFitReady={nativeHudFitReady} hudBlocked={nativeHudBlocked} hudOwners={nativeHudOwnerCount} hudNodes={nativeHudNodeCount} hudReservations={nativeHudReservationCount} hudOwnerReadiness=unavailable-no-scan hudDestinationSpace=bottom-pixels hudDestination={nativeHudDestination.x},{nativeHudDestination.y},{nativeHudDestination.width},{nativeHudDestination.height} hudViewSpace=cached-camera-rotation-world hudViewMin={nativeHudViewMin.x},{nativeHudViewMin.y} hudViewMax={nativeHudViewMax.x},{nativeHudViewMax.y} ");
+        }
+        catch { lowerTraceDisabled=true; } // Diagnostic failure only; never wrap the real operation.
+    }
     // Initialization, resource admission and successful pixel placement are distinct.
     // A cached sibling cannot borrow the current route's shared fit.
     bool NativePaneReady(GameObject pane,bool charms)
@@ -26,6 +67,8 @@ public partial class HKDualScreen
     void BeginNativeLayout(GameObject pane,bool charms)
     {
         var run=RunFor(charms);run.owner=pane;run.pixelReady=false;
+        lowerTraceLayoutActive=!lowerTraceDisabled;
+        lowerTraceFitAttempted=lowerTraceFitMeasured=false;lowerTraceOccupied=default;lowerTraceTarget=default;
         if(pane==paneClone) fit.valid=false;
     }
     FitResult PublishNativeLayout(GameObject pane,bool charms,bool ready)
@@ -34,6 +77,8 @@ public partial class HKDualScreen
         if(run.owner==pane) run.pixelReady=ready;
         var result=new FitResult { center=compRoot!=null ? compRoot.position : Vector3.zero,ortho=BOTTOM_H/2f,valid=ready };
         if(pane==paneClone) fit=result;
+        ObserveLowerPane(pane,charms,"layout-result",ready);
+        lowerTraceLayoutActive=false;
         return result;
     }
     PaneRun invRun = new PaneRun(), charmRun = new PaneRun();   // ONE per cached clone: a tab switch mid-settle no longer cross-wires them (the stowed clone's window pauses and resumes)
@@ -408,6 +453,7 @@ public partial class HKDualScreen
                 if (!inv) { if (isCurrent) PopulateCharmDetail(pane); }   // (a warming charms clone is parked: its layout would place boards at compRoot -> re-populated on first show instead)
                 else FinalizeInvPane(pane, isCurrent);
                 run.finalized = true;
+                ObserveLowerPane(pane,!inv,"settle-finalized");
                 if (isCurrent) paneNeedsFit = true;   // fix2: one clean FINAL fit now that content is fully populated + detail cleared, then lock
                 else pane.SetActive(false);           // pre-warmed clone: fully built + laid out -> stow until its tab is shown (instant show, no settle)
             }
@@ -498,6 +544,8 @@ public partial class HKDualScreen
     // detail, cursor, divider and inactive authored containers never enter this fit.
     bool FitOccupiedNative(Transform root,Renderer[] renderers,Rect target)
     {
+        bool capture=!lowerTraceDisabled && lowerTraceLayoutActive && !lowerTraceFitAttempted;
+        if(capture) { lowerTraceFitAttempted=true;lowerTraceTarget=target; }
         if(root == null || renderers == null) return false;
         Bounds bounds=default; bool have=false;
         foreach(var r in renderers)
@@ -507,6 +555,7 @@ public partial class HKDualScreen
             if(b.size.x<=.001f || b.size.y<=.001f || float.IsNaN(b.size.x) || float.IsInfinity(b.size.x)) continue;
             if(!have) { bounds=b;have=true; } else bounds.Encapsulate(b);
         }
+        if(capture) { lowerTraceFitMeasured=have;lowerTraceOccupied=bounds; }
         if(!have) return false;
         float scale=Mathf.Min(target.width/Mathf.Max(.001f,bounds.size.x),target.height/Mathf.Max(.001f,bounds.size.y));
         Vector3 offset=bounds.center-root.position;
