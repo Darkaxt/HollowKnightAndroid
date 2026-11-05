@@ -40,6 +40,12 @@ public class PlayerActivity extends Activity implements IUnityPlayerLifecycleEve
     // Name fixed by the engine's native code. Do not rename.
     protected UnityPlayerForActivityOrService mUnityPlayer;
     private SecondaryDisplay secondaryDisplay;
+    private PlayerSurfaceTrace surfaceTrace;
+
+    private void tracePlayerSurface(String event)
+    {
+        if (surfaceTrace != null) surfaceTrace.record(event);
+    }
 
     @Override protected void onCreate(Bundle savedInstanceState)
     {
@@ -50,6 +56,8 @@ public class PlayerActivity extends Activity implements IUnityPlayerLifecycleEve
         // is done by GameActivity before it calls up into here.
         secondaryDisplay = new SecondaryDisplay(this);
         mUnityPlayer = new UnityPlayerForActivityOrService(this, this);
+        try { surfaceTrace = PlayerSurfaceTrace.attach(this, mUnityPlayer.getSurfaceView()); }
+        catch (RuntimeException ignored) { } // A diagnostic read cannot block startup.
         setContentView(mUnityPlayer.getFrameLayout());
         mUnityPlayer.getFrameLayout().requestFocus();
     }
@@ -59,6 +67,12 @@ public class PlayerActivity extends Activity implements IUnityPlayerLifecycleEve
         // Before super: the player tears down the native side, and the
         // Activity is still fully alive for that.
         if (secondaryDisplay != null) secondaryDisplay.onDestroy();
+        if (surfaceTrace != null)
+        {
+            try { surfaceTrace.detach(); }
+            catch (RuntimeException ignored) { } // Remove only our observer; never the engine's.
+            surfaceTrace = null;
+        }
         if (mUnityPlayer != null) mUnityPlayer.destroy();
         super.onDestroy();
     }
@@ -67,7 +81,9 @@ public class PlayerActivity extends Activity implements IUnityPlayerLifecycleEve
     {
         super.onStart();
         if (secondaryDisplay != null) secondaryDisplay.onStart();
+        tracePlayerSurface("start-before");
         if (mUnityPlayer != null) mUnityPlayer.onStart();
+        tracePlayerSurface("start-after");
     }
 
     @Override protected void onStop()
@@ -76,7 +92,9 @@ public class PlayerActivity extends Activity implements IUnityPlayerLifecycleEve
         // Unity owns the secondary Presentation and its SurfaceView. Stop the
         // player first, then suspend only our monitor and touch bookkeeping;
         // the SurfaceView must stay attached across the lifecycle transition.
+        tracePlayerSurface("stop-before");
         if (mUnityPlayer != null) mUnityPlayer.onStop();
+        tracePlayerSurface("stop-after");
         if (secondaryDisplay != null) secondaryDisplay.onStop();
     }
 
@@ -94,13 +112,17 @@ public class PlayerActivity extends Activity implements IUnityPlayerLifecycleEve
     @Override protected void onResume()
     {
         super.onResume();
+        tracePlayerSurface("resume-before");
         if (mUnityPlayer != null) mUnityPlayer.onResume();
+        tracePlayerSurface("resume-after");
     }
 
     @Override protected void onPause()
     {
         super.onPause();
+        tracePlayerSurface("pause-before");
         if (mUnityPlayer != null) mUnityPlayer.onPause();
+        tracePlayerSurface("pause-after");
     }
 
     @Override protected void onNewIntent(Intent intent)
@@ -121,7 +143,9 @@ public class PlayerActivity extends Activity implements IUnityPlayerLifecycleEve
     @Override public void onWindowFocusChanged(boolean hasFocus)
     {
         super.onWindowFocusChanged(hasFocus);
+        tracePlayerSurface(hasFocus ? "focus-gain-before" : "focus-loss-before");
         if (mUnityPlayer != null) mUnityPlayer.windowFocusChanged(hasFocus);
+        tracePlayerSurface(hasFocus ? "focus-gain-after" : "focus-loss-after");
     }
 
     @Override public void onRequestPermissionsResult(

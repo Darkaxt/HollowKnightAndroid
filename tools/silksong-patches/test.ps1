@@ -30,7 +30,8 @@ try {
     New-Item -ItemType Directory -Path $javaOut | Out-Null
     $cp = $unityJar + [System.IO.Path]::PathSeparator + $androidJar.FullName
     javac --release 17 -nowarn -cp $cp -d $javaOut `
-        (Join-Path $shell 'PlayerActivity.java') (Join-Path $shell 'SecondaryDisplay.java') `
+        (Join-Path $shell 'PlayerActivity.java') (Join-Path $shell 'PlayerSurfaceTrace.java') `
+        (Join-Path $shell 'SecondaryDisplay.java') `
         (Join-Path $tests 'SecondaryDisplayTest.java')
     if ($LASTEXITCODE -ne 0) { throw 'Secondary-display test compilation failed' }
     java -cp ($javaOut + [System.IO.Path]::PathSeparator + $cp) dev.silksong.shell.SecondaryDisplayTest
