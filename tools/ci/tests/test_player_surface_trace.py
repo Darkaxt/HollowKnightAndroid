@@ -62,9 +62,12 @@ STUBS = {
             public boolean onGenericMotionEvent(MotionEvent e){return false;} public boolean onTouchEvent(MotionEvent e){return false;}
         }""",
     "com/unity3d/player/IUnityPlayerLifecycleEvents.java": "package com.unity3d.player; public interface IUnityPlayerLifecycleEvents {void onUnityPlayerUnloaded();void onUnityPlayerQuitted();}",
+    "com/unity3d/player/UnityPlayer.java": """package com.unity3d.player;
+        public abstract class UnityPlayer { public abstract android.view.SurfaceView getSurfaceView(); }
+    """,
     "com/unity3d/player/UnityPlayerForActivityOrService.java": """package com.unity3d.player;
         import android.app.*; import android.content.*; import android.content.res.*; import android.view.*; import android.widget.*; import java.util.*;
-        public class UnityPlayerForActivityOrService {
+        public class UnityPlayerForActivityOrService extends UnityPlayer {
             public final SurfaceView surface=new SurfaceView(); public final List<String> calls=new ArrayList<>();
             public UnityPlayerForActivityOrService(Activity a,IUnityPlayerLifecycleEvents e){
                 surface.holder.addCallback(new SurfaceHolder.Callback(){
@@ -175,6 +178,63 @@ class PlayerSurfaceTraceTest(unittest.TestCase):
         self.assertEqual((SHELL / "PlayerSurfaceTrace.java").read_bytes(), staged.read_bytes())
         self.assertIn(staged.as_posix(), result.stdout.splitlines(),
                       "Staged observer was omitted from the actual javac source array")
+
+    def test_compiled_activity_observes_surface_across_unity_return_type_changes(self):
+        # Real retained SDKs override UnityPlayer's stable SurfaceView getter
+        # with these different covariant return types. The JVM descriptor includes
+        # that return type. Compile the real Activity once, then replace ONLY the
+        # external Unity boundary; recompiling our Activity would hide the bug.
+        player_path = "com/unity3d/player/UnityPlayerForActivityOrService.java"
+        profiles = (("ss50", "com.unity3d.player.f"),
+                    ("hk61", "com.unity3d.player.a.f"))
+
+        def player_sources(return_type):
+            source = STUBS[player_path].replace(
+                "surface=new SurfaceView()", f"surface=new {return_type}()")
+            source = source.replace(
+                "public SurfaceView getSurfaceView(){return surface;}",
+                f"public {return_type} getSurfaceView(){{return ({return_type})surface;}}")
+            package, name = return_type.rsplit(".", 1)
+            return {player_path: source,
+                    return_type.replace(".", "/") + ".java":
+                    f"package {package}; public class {name} extends android.view.SurfaceView {{}}"}
+
+        def compile_sources(directory, sources, classpath=None, real_shell=False):
+            files = []
+            for relative, text in sources.items():
+                path = directory / "src" / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text, encoding="utf-8")
+                files.append(str(path))
+            if real_shell:
+                files.extend(str(SHELL / name) for name in
+                             ("PlayerActivity.java", "PlayerSurfaceTrace.java"))
+            command = [self.javac, "--release", "17", "-d", str(directory / "out")]
+            if classpath is not None:
+                command.extend(("-cp", str(classpath)))
+            result = subprocess.run(command + files, capture_output=True, text=True, timeout=60)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            return directory / "out"
+
+        for index, (compiled_profile, compiled_return) in enumerate(profiles):
+            runtime_profile, runtime_return = profiles[1 - index]
+            with self.subTest(compiled=compiled_profile, runtime=runtime_profile):
+                directory = self.root / ("abi-" + compiled_profile)
+                classes = compile_sources(directory, {**STUBS, **player_sources(compiled_return)},
+                                          real_shell=True)
+                baseline = subprocess.run(
+                    [self.java, "-cp", str(classes),
+                     "dev.silksong.shell.PlayerSurfaceTraceTest", "surface"],
+                    capture_output=True, text=True, timeout=30)
+                self.assertEqual(0, baseline.returncode, baseline.stdout + baseline.stderr)
+                runtime = compile_sources(directory / "runtime", player_sources(runtime_return),
+                                          classpath=classes)
+                for scenario in ("surface", "lifecycle", "failure"):
+                    result = subprocess.run(
+                        [self.java, "-cp", os.pathsep.join((str(runtime), str(classes))),
+                         "dev.silksong.shell.PlayerSurfaceTraceTest", scenario],
+                        capture_output=True, text=True, timeout=30)
+                    self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
     def test_public_surface_observations_do_not_invent_native_generation(self):
         self.scenario("surface")

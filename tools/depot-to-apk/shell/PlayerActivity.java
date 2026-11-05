@@ -8,6 +8,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 
 import com.unity3d.player.IUnityPlayerLifecycleEvents;
+import com.unity3d.player.UnityPlayer;
 import com.unity3d.player.UnityPlayerForActivityOrService;
 
 // Hosts the Unity player in an Activity.
@@ -56,7 +57,9 @@ public class PlayerActivity extends Activity implements IUnityPlayerLifecycleEve
         // is done by GameActivity before it calls up into here.
         secondaryDisplay = new SecondaryDisplay(this);
         mUnityPlayer = new UnityPlayerForActivityOrService(this, this);
-        try { surfaceTrace = PlayerSurfaceTrace.attach(this, mUnityPlayer.getSurfaceView()); }
+        // Bind the shared public SurfaceView return type, not the subclass's
+        // covariant return descriptor, whose internal class differs by SDK.
+        try { surfaceTrace = PlayerSurfaceTrace.attach(this, ((UnityPlayer)mUnityPlayer).getSurfaceView()); }
         catch (RuntimeException ignored) { } // A diagnostic read cannot block startup.
         setContentView(mUnityPlayer.getFrameLayout());
         mUnityPlayer.getFrameLayout().requestFocus();
