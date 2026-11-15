@@ -353,6 +353,7 @@ namespace NativeMenuFixture.PROFILE.Engine
         public IEnumerator HideMenu(MenuScreen menu) { World.Hit("HideMenu"); yield return null; if (menu != null) menu.gameObject.SetActive(false); }
         public IEnumerator ShowMenu(MenuScreen menu) { World.Hit("ShowMenu"); if (menu != null) menu.gameObject.SetActive(true); yield return null; menu?.defaultHighlight?.Select(); }
         public void UIGoToGameOptionsMenu() { World.NativeGameActions++; }
+        public void UIGoToOptionsMenu() { World.Hit("UIGoToOptionsMenu"); }
         public void UILeaveOptionsMenu() { World.ForeignCancelActions++; }
     }
     public class PlayerData

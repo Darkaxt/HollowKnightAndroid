@@ -217,6 +217,12 @@ public static partial class DsTheme
                 }
                 else if (n.Contains("perpetua") || n.Contains("amor"))
                 {
+                    // HK ships perpetua_tmpro and Perpetua-SDF with identical glyph
+                    // tables, but on device only the SDF asset draws 'M' from the
+                    // right part of its atlas ("Map" rendered as "``ap"); A/B-tested
+                    // on Thor 2026-11-15 through the font_body knob. The bonus outranks
+                    // any glyph-count difference but not the missing/unsound penalties.
+                    if (n.Contains("sdf")) score += 20000;
                     if (score > bestBody) { bestBody = score; _body = f; }
                 }
             }

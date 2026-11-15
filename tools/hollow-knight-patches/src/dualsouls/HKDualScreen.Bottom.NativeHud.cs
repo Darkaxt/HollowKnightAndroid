@@ -48,6 +48,9 @@ public partial class HKDualScreen
         public Vector2 SpriteSize;
         public SpriteDrawMode DrawMode;
         public bool FlipX, FlipY, Included, Ready, UpperEffect;
+        // Drawn but never measured: the soul fill parks below the orb when empty and
+        // is only ever visible inside the orb frame, which the fit already covers.
+        public bool FitExempt;
         public int SpriteId, ParticleCount;
         public Vector3 SpriteScale;
         public object Collection;
@@ -208,6 +211,7 @@ public partial class HKDualScreen
                 for (var p = t; p != null; p = p.parent)
                 {
                     if (animator == null) animator = p.GetComponent<Animator>();
+                    if (p.name == "SoulOrb_fill") o.FitExempt = true;
                     if (p == nativeHudRoot) break;
                 }
                 if (animator != null)
@@ -417,7 +421,7 @@ public partial class HKDualScreen
         int minX = -1, maxX = -1, minY = -1, maxY = -1, dropped = 0;
         for (int i = 0; i < nativeHudOwnerCount; i++)
         {
-            var o = nativeHudOwners[i]; if (!o.Included) continue;
+            var o = nativeHudOwners[i]; if (!o.Included || o.FitExempt) continue;
             if (!o.Ready) return false;
             var olo = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
             var ohi = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);

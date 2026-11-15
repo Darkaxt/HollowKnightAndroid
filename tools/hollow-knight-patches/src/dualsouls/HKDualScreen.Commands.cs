@@ -11,7 +11,7 @@ public partial class HKDualScreen
 {
     const string CommandHelp =
         "help | state | pause | mods | skins | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
-        "mods-list | mod <id> <value> | pd <field>... | save | quit-menu | fonts | hudfit";
+        "mods-list | mod <id> <value> | pd <field>... | save | quit-menu | fonts | hudfit | sprites <text>";
 
     void PollCommands() { DsCommandFile.Poll(RunCommand); }
 
@@ -59,6 +59,7 @@ public partial class HKDualScreen
                 return "ok";
             case "fonts": return DsTheme.Report();
             case "hudfit": return CommandHudFit();
+            case "sprites": return a.Length < 2 ? "error sprites <text>" : HollowKnightPatches.Lower.HkSprites.List(a[1], 60);
             default: return "error unknown command; " + CommandHelp;
         }
     }
@@ -126,7 +127,7 @@ public partial class HKDualScreen
         {
             var o = nativeHudOwners[i];
             if (o == null || !o.Included) continue;
-            sb.Append('\n').Append(NativeHudOwnerName(i)).Append(" ready=").Append(o.Ready)
+            sb.Append('\n').Append(NativeHudOwnerName(i)).Append(o.FitExempt ? " (fit-exempt)" : "").Append(" ready=").Append(o.Ready)
               .Append(" c=").Append(o.Bounds.center).Append(" s=").Append(o.Bounds.size);
         }
         return sb.ToString();

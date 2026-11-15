@@ -1374,8 +1374,28 @@ namespace DualSouls.Mods.HollowKnight
             if (!current.BindingIsAlive()) return "error Mods menu not bound";
             if (current._binding.Ui.uiState != UIState.PAUSED) return "error game not paused (uiState=" + current._binding.Ui.uiState + ")";
             if (current._transitioning) return "error menu transitioning";
-            current.OpenEntry(route);
-            return "ok";
+            if (current._nativeOpen) return "error a Mods/Skins menu is already open";
+            GameObject entry = route == 0 ? current._binding.ModsEntryRoot : current._binding.SkinsEntryRoot;
+            if (entry == null) return "error entry not bound";
+            if (entry.activeInHierarchy) { current.OpenEntry(route); return "ok"; }
+            // The entries live on the Options screen; go there the way a player would.
+            current._binding.Ui.UIGoToOptionsMenu();
+            current.StartCoroutine(current.OpenWhenEntryShown(entry, route, current._generation));
+            return "ok via options";
+        }
+
+        IEnumerator OpenWhenEntryShown(GameObject entry, int route, int generation)
+        {
+            float until = Time.unscaledTime + 5f;
+            while (Time.unscaledTime < until && generation == _generation && entry != null &&
+                   (!entry.activeInHierarchy || _transitioning || !OpenTransitionStillAvailable(_binding, generation)))
+                yield return null;
+            if (generation != _generation || entry == null || !entry.activeInHierarchy)
+            {
+                Debug.LogWarning("[HKMods] command open: entry never became visible");
+                yield break;
+            }
+            OpenEntry(route);
         }
 
         internal void SelectSkin(HollowKnightNativeSkinButton button)
