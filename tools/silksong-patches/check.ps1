@@ -43,7 +43,7 @@ $sharedSrc = Join-Path $repo 'tools\shared-patches\src'
 # scene object does not exist yet.  A catch block cannot suppress that log, so
 # polling one from Update() turns an expected intro/loading state into a stream
 # of false errors.  Keep the title-card lookup on Unity's quiet object scan.
-$titleCardSource = Get-Content (Join-Path $src 'dualscreen\DsTitleCard.cs') -Raw
+$titleCardSource = Get-Content (Join-Path $sharedSrc 'DsFrame\DsTitleCard.cs') -Raw
 if ($titleCardSource -match 'UIManager') {
     if ($titleCardSource -match 'var\s+ui\s*=\s*UIManager\.instance') {
         throw '[check] DsTitleCard must not poll UIManager.instance before the menu scene exists'

@@ -13,6 +13,12 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
 SOURCE = ROOT / 'tools/silksong-patches/src/dualscreen'
+FRAME = ROOT / 'tools/shared-patches/src/DsFrame'
+
+
+def src(file):
+    path = SOURCE/file
+    return path if path.exists() else FRAME/file
 GENERATOR = ROOT / 'tools/shared-patches-tests/generate_ss_shell_fixture.py'
 _spec = importlib.util.spec_from_file_location('ss_shell_extractor', GENERATOR)
 extractor = importlib.util.module_from_spec(_spec)
@@ -38,7 +44,7 @@ class SilksongProductionShellContracts(unittest.TestCase):
                 ('DsLayout.cs', 'DsLayout'), ('DsLayout.cs', 'DsShellInput'),
                 ('DsInput.cs', 'DsInput'), ('DsActions.cs', 'DsActionBar'),
             ):
-                source = (SOURCE/file).read_text(encoding='utf-8')
+                source = src(file).read_text(encoding='utf-8')
                 body = extractor.class_text(source, name)
                 self.assertEqual(hashlib.sha256(body[body.index('{'):].encode()).hexdigest(), identities[name]['body_utf8_lf_sha256'])
                 self.assertTrue(identities[name]['body_identical'])
@@ -47,7 +53,7 @@ class SilksongProductionShellContracts(unittest.TestCase):
                 ('DsTasksScreen.cs', 'DsTasksScreen'), ('DsJournalScreen.cs', 'DsJournalScreen'),
                 ('DsIconGrid.cs', 'DsIconGrid'),
             ):
-                cls = extractor.class_text((SOURCE/file).read_text(encoding='utf-8'), name)
+                cls = extractor.class_text(src(file).read_text(encoding='utf-8'), name)
                 build = extractor.member(cls, 'Build')
                 self.assertIn(build, output.read_text(encoding='utf-8'))
                 self.assertTrue(identities[name+'.Build']['body_identical'])
@@ -60,7 +66,7 @@ class SilksongProductionShellContracts(unittest.TestCase):
             self.assertIn('DsHudView.Suspend', identities)
             self.assertIn('DsHudView.BeforeCamera', identities)
             self.assertIn('DsHudView.RestoreAllScopes', identities)
-            shell = extractor.class_text((SOURCE/'DsShell.cs').read_text(encoding='utf-8'), 'DsShell')
+            shell = extractor.class_text(src('DsShell.cs').read_text(encoding='utf-8'), 'DsShell')
             generated = extractor.class_text(output.read_text(encoding='utf-8'), 'DsShell')
             for name in ('SetPaused', 'EndSlide', 'SettleSlide', 'SuspendPresentation'):
                 value = extractor.member(shell, name)

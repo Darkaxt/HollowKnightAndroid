@@ -93,7 +93,9 @@ def generate(output, source_root, manifest, shared_source_root=None, frame_sourc
     if src('DsFrame.cs').exists():
         whole('DsFrame.cs',('IDsHeaderHud','DsCursorArt','IDsFrameHost','DsFrame'))
         whole('SilksongFrameHost.cs',('SilksongFrameHost',))
-        whole('DsInputJni.cs',('DsInput',))
+        value=class_text(src('DsInputJni.cs').read_text(encoding='utf-8'),'DsInput')
+        parts.append(value.replace('class DsInput','partial class DsInput',1))
+        record('DsInputJni.cs','DsInput.JniPoll',value,parts[-1])
     whole('DsTitleCard.cs',('DsTitleCard',))
     whole('DsZoomSlider.cs',('DsZoomSlider',))
     whole('DsHudRouting.cs',('DsHudRouting','DsHudRenderScope','DsHudSuppressionScope','DsHudFrame'))

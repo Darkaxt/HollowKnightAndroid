@@ -101,7 +101,7 @@ class ExactAssemblyInputContracts(unittest.TestCase):
             elif authority is not False:
                 target.write_text(authority, encoding="utf-8")
             if profile == "silksong":
-                title_path = "tools/silksong-patches/src/dualscreen/DsTitleCard.cs"
+                title_path = "tools/shared-patches/src/DsFrame/DsTitleCard.cs"
                 title = root / title_path
                 title.parent.mkdir(parents=True)
                 title.write_bytes((ROOT / title_path).read_bytes())

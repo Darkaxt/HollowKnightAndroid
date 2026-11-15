@@ -614,3 +614,10 @@ public static class DsPresentation
     public static Vector2 FromSurface(Vector2 point) =>
         DsTouch.MapToCanvas(point, new Vector2(1240, 1080), 1080);
 }
+
+// The shared frame's host seam, reduced to the geometry the layout reads.
+public static class DsFrame
+{
+    public static Vector2 LayoutSize => DsPresentation.LayoutSize;
+    public static float InputHeight => DsPresentation.PanelH;
+}

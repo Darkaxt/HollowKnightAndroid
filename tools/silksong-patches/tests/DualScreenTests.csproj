@@ -9,11 +9,12 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
-    <Compile Include="..\src\dualscreen\DsInput.cs" Link="DsInput.cs" />
+    <Compile Include="..\..\shared-patches\src\DsFrame\DsInput.cs" Link="DsInput.cs" />
     <Compile Include="..\src\dualscreen\DsTouch.cs" Link="DsTouch.cs" />
-    <Compile Include="..\src\dualscreen\DsLayout.cs" Link="DsLayout.cs" />
+    <Compile Include="..\..\shared-patches\src\DsFrame\DsTouchPoint.cs" Link="DsTouchPoint.cs" />
+    <Compile Include="..\..\shared-patches\src\DsFrame\DsLayout.cs" Link="DsLayout.cs" />
     <Compile Include="..\src\dualscreen\DsHudRouting.cs" Link="DsHudRouting.cs" />
-    <Compile Include="..\src\dualscreen\DsZoomSlider.cs" Link="DsZoomSlider.cs" />
+    <Compile Include="..\..\shared-patches\src\DsFrame\DsZoomSlider.cs" Link="DsZoomSlider.cs" />
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>$(Player)\UnityEngine.CoreModule.dll</HintPath>
     </Reference>
