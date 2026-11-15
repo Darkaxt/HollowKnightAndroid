@@ -139,6 +139,11 @@ namespace DualSouls.Mods.HollowKnight
             stateTransferPreparation = prepare;
         }
 
+        public static void PrepareForSave()
+        {
+            stateTransferPreparation?.Invoke();
+        }
+
         public static void RestorePlayerOwnedForStateTransfer()
         {
             RestorePlayerOwned();

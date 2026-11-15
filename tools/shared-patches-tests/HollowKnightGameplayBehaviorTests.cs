@@ -38,7 +38,7 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
             Assert.False(api.Readback(id).Success);
             Assert.Empty(adapter.TickWithOutcomes());
         }
-        finally { DualSoulsHollowKnightHookGate.Mask = 63; }
+        finally { DualSoulsHollowKnightHookGate.Mask = 127; }
     }
 
     static readonly string[] RequiredRows =
@@ -49,10 +49,10 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
 
     [Theory]
     [InlineData(1)] [InlineData(2)] [InlineData(4)]
-    [InlineData(8)] [InlineData(16)] [InlineData(32)]
-    [InlineData(62)] [InlineData(61)] [InlineData(59)]
-    [InlineData(55)] [InlineData(47)] [InlineData(31)]
-    [InlineData(127)] [InlineData(-1)]
+    [InlineData(8)] [InlineData(16)] [InlineData(32)] [InlineData(64)]
+    [InlineData(126)] [InlineData(125)] [InlineData(123)]
+    [InlineData(119)] [InlineData(111)] [InlineData(95)]
+    [InlineData(63)] [InlineData(255)] [InlineData(-1)]
     public void IncompleteOrUnknownProofRejectsEveryRequiredRow(int mask)
     {
         DualSoulsHollowKnightHookGate.Mask = mask;
@@ -83,7 +83,7 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
         Assert.Equal(1, DualSoulsHollowKnightHookGate.Reads);
         var unavailable = new HollowKnightGameTweakApi();
         AssertRequiredRows(unavailable, false);
-        DualSoulsHollowKnightHookGate.Mask = 63;
+        DualSoulsHollowKnightHookGate.Mask = 127;
         AssertRequiredRows(unavailable, false);
         Assert.Equal(2, DualSoulsHollowKnightHookGate.Reads);
     }
@@ -435,7 +435,7 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
 
     static void ResetGame()
     {
-        DualSoulsHollowKnightHookGate.Mask = 63;
+        DualSoulsHollowKnightHookGate.Mask = 127;
         DualSoulsHollowKnightHookGate.Reads = 0;
         DualSoulsHollowKnightHookGate.FailRead = false;
         PlayerData.instance = null;

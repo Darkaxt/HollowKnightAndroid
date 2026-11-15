@@ -261,7 +261,7 @@ internal static class Builtin
     }
 
     const string HollowKnightHookGate = "DualSoulsHollowKnightHookGate";
-    const int HollowKnightVerifiedMask = 63;
+    const int HollowKnightVerifiedMask = 127;
 
     static bool WeaveHollowKnightRequiredHooks(
         AssemblyDefinition game, AssemblyDefinition patches, List<string> notes)
@@ -290,6 +290,7 @@ internal static class Builtin
         }
         var hero = Type(module, "HeroController");
         var player = Type(module, "PlayerData");
+        var gameManager = Type(module, "GameManager");
         var health = Type(module, HealthManagerType);
         Type(module, HitInstanceType);
         var hooks = Type(patches.MainModule, hookTypeName);
@@ -303,6 +304,8 @@ internal static class Builtin
         var journal = Exact(player, "SetInt", false, "System.Void", "System.String", "System.Int32");
         var setBool = Exact(player, "SetBool", false, "System.Void", "System.String", "System.Boolean");
         var map = Exact(player, "UpdateGameMap", false, "System.Boolean");
+        // Every save path funnels through this private overload before serializing PlayerData.
+        var save = Exact(gameManager, "SaveGame", false, "System.Void", "System.Int32", "System.Action`1<System.Boolean>");
         // The exact native SetBool implementation writes the singleton, not its receiver.
         var currentPlayer = Exact(player, "get_instance", true, "PlayerData");
         var beforeHit = Hook(oneHit, OneHitPatchMethod, "HealthManager", "HitInstance&");
@@ -313,11 +316,12 @@ internal static class Builtin
         var beforeBool = Hook(hooks, "BeforeAuthoritativeMapBoolSet", "PlayerData", "System.String", "System.Boolean");
         var beginMap = Hook(hooks, "BeginAuthoritativeMapUpdate", "PlayerData");
         var endMap = Hook(hooks, "EndAuthoritativeMapUpdate", "PlayerData");
+        var beforeSave = Hook(hooks, "BeforeSaveGame");
         var expected = new[]
         {
             (hit, beforeHit), (damage, beforeDamage), (geo, beforeGeo),
             (quietGeo, beforeGeo), (die, beforeDeath), (journal, beforeJournal),
-            (setBool, beforeBool), (map, beginMap), (map, endMap),
+            (setBool, beforeBool), (map, beginMap), (map, endMap), (save, beforeSave),
         };
         bool Same(MethodReference called, MethodDefinition hook) => called.FullName == hook.FullName &&
             !called.HasThis && !called.HasGenericParameters &&
@@ -341,6 +345,7 @@ internal static class Builtin
             (journal, beforeJournal, new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldarg, journal.Parameters[0]), Instruction.Create(OpCodes.Ldarga, journal.Parameters[1]) }),
             (setBool, beforeBool, new[] { Instruction.Create(OpCodes.Call, currentPlayer), Instruction.Create(OpCodes.Ldarg, setBool.Parameters[0]), Instruction.Create(OpCodes.Ldarg, setBool.Parameters[1]) }),
             (map, beginMap, new[] { Instruction.Create(OpCodes.Ldarg_0) }),
+            (save, beforeSave, Array.Empty<Instruction>()),
         };
         bool LoadMatches(Instruction actual, Instruction required) => actual.OpCode == required.OpCode &&
             (actual.Operand is MethodReference called && required.Operand is MethodReference method
@@ -445,7 +450,7 @@ internal static class Builtin
         getter.Body.GetILProcessor().Emit(OpCodes.Ret);
         gate.Methods.Add(getter);
         module.Types.Add(gate);
-        notes.Add("Hollow Knight one-hit/gameplay hooks: all nine exact sites woven; damage, Geo, journal, death, and map rebase capability verified");
+        notes.Add("Hollow Knight one-hit/gameplay hooks: all ten exact sites woven; damage, Geo, journal, death, map rebase, and save-baseline capability verified");
         return true;
     }
 

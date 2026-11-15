@@ -52,7 +52,7 @@ namespace DualSouls.Mods.HollowKnight
         public bool IsReady => true;
 
         // The weaver publishes this immutable game-assembly proof only after all
-        // nine typed call sites pass preflight. Resolve once per API generation;
+        // ten typed call sites pass preflight. Resolve once per API generation;
         // no IL inspection, process scanning, or healthy-frame capability polling.
         static bool ReadVerifiedHookCapability()
         {
@@ -66,7 +66,7 @@ namespace DualSouls.Mods.HollowKnight
                     "GetVerifiedMask", System.Reflection.BindingFlags.Public |
                     System.Reflection.BindingFlags.Static, null, System.Type.EmptyTypes, null);
                 return proof != null && !proof.IsGenericMethod && proof.ReturnType == typeof(int) &&
-                    (int)proof.Invoke(null, null) == 63;
+                    (int)proof.Invoke(null, null) == 127;
             }
             catch { return false; }
         }
@@ -638,6 +638,21 @@ namespace DualSouls.Mods.HollowKnight
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
             HollowKnightGameplayFeatures.EndAuthoritativeMapUpdate(player);
+#endif
+        }
+
+        // Woven at the head of GameManager.SaveGame(int, Action<bool>): cheat-owned
+        // PlayerData values revert to their captured baselines before serialization,
+        // and the next gameplay tick re-captures and re-applies them (#18).
+        public static void BeforeSaveGame()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try { HollowKnightGameplayFeatures.PrepareForSave(); }
+            catch (System.Exception error)
+            {
+                // A save must never fail because of a mod; log and let it proceed.
+                UnityEngine.Debug.LogError("Dual Souls: restoring cheat baselines before save failed: " + error);
+            }
 #endif
         }
 

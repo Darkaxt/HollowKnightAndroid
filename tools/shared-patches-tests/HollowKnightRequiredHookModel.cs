@@ -2,7 +2,7 @@
 // game assembly; mod-weaver creates it only after all exact required sites verify.
 public static class DualSoulsHollowKnightHookGate
 {
-    public static int Mask = 63;
+    public static int Mask = 127;
     public static int Reads;
     public static bool FailRead;
     public static int GetVerifiedMask()
