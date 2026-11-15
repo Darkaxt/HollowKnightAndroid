@@ -1,9 +1,8 @@
 # Dual Souls product contract
 
 This is the sole product contract for the dual-screen UI, built-in Mods, and
-Custom Knight skin experience. The audited Hollow Knight implementation is the
-behavioral reference. Silksong must receive the same experience while retaining
-its direct-display transport and accommodating its additional mechanics.
+Custom Knight skin experience. Both games share Silksong's direct-display
+transport and v2 lower-screen frame; each keeps its own mechanics.
 
 A plan, stage label, host build, or deferred ledger cannot narrow this contract.
 A required feature that is absent is **missing**, not complete. Historical test
@@ -13,52 +12,50 @@ receipts record only what they directly prove.
 
 - The upper display remains the game view. HUD elements assigned to the lower
   display must not remain duplicated on the upper display.
-- The lower display uses its full renderable surface for the resident HUD and
-  game pages rather than placing them in a small panel inside unused space.
-- Hollow Knight is the implementation and validation oracle. Hollow Knight must
-  work first; shared behavior is then adapted to Silksong without regressing it.
-- Silksong-specific health, Silk, currency, Crests, Tools, Tasks, and other
-  mechanics occupy or extend the corresponding Hollow Knight layout instead of
-  restoring Silksong's original upper-screen HUD or stacking a second HUD.
-- The lower display provides the complete resident HUD and the original page
-  set: Inventory, Map, Charms for Hollow Knight, Crest/Tools for Silksong,
-  Tasks, Journal, and the original overlays and transitions.
-- Page actions remain functional, including item use, equip/unequip operations,
-  map pan/zoom and marker handling where the game permits them.
-- Pause, resume, scene changes, display loss, and app restore must not leave
-  duplicated, missing, frozen, or stale UI.
+- Both games host their lower display on one shared, game-neutral frame
+  (`tools/shared-patches/src/DsFrame/`: DsShell tab strip, header HUD band,
+  title card, page slides, cursor, action column, zoom slider). Silksong v2's
+  layout is canonical; each game supplies only an `IDsFrameHost` (in-game
+  state, layout size, content layer, cursor art, header HUD, title logo) and
+  its own pages.
+- The lower display uses its full renderable surface for the resident HUD band
+  and the pages rather than a small panel inside unused space.
+- Silksong pages: Inventory, Crest/Tools, Tasks, Journal, Map.
+  Hollow Knight pages: Inventory, Charms, Guide, Journal, Map, using HK's own
+  data, art, text and rules. Mechanics of one game are never invented for the
+  other.
+- Page actions remain functional where the game permits them: item details,
+  charm equip/unequip, journal entries, map pan/zoom/reset, markers and bench
+  travel (bench travel only while the Mods tweak menu is open).
+- The Hollow Knight lower screen shows no FPS counter or battery readout.
+- Pause hides the gameplay HUD and pages; the title card shows the game's own
+  logo. Resume, scene changes, quit to menu, display loss and app restore must
+  not leave duplicated, missing, frozen or stale UI.
+- With the companion display turned off the pages are hidden while the HUD
+  stays in the header band.
 
-Visual acceptance requires side-by-side comparison with the Hollow Knight
-reference in ordinary gameplay. Source similarity and synthetic host tests do
-not substitute for that comparison.
+Visual acceptance requires device comparison of both games in ordinary
+gameplay. Source similarity and synthetic host tests do not substitute for it.
 
-### Hollow Knight v2 parity ledger
+### Hollow Knight lower-screen ledger (2026-11 reset)
 
-- **HK-V2-01 — closed, retained:** Hollow Knight already owns the full lower
-  surface, resident HUD, Inventory/Map/Charms pages, dynamic panel geometry,
-  dividers, item details/actions, map pan/pinch, and animated reset.
-- **HK-V2-02 — closed, implemented:** page slides now preserve outgoing-pane
-  camera compensation; tab and item carets travel over the native 150 ms cursor
-  interval instead of teleporting.
-- **HK-V2-03 — closed, implemented:** the Map page has a visible touch zoom
-  slider and a marker mode that switches to the full-world view before placing
-  or removing the game’s native blue, red, yellow, and white markers while
-  respecting owned types and spare counts.
-- **HK-V2-04 — not applicable:** Silk, Crests, Tools, and Tasks are
-  Silksong-only mechanics and must not be invented for Hollow Knight.
-- **HK-V2-05 — closed, implemented:** the Map page switches explicitly between
-  the mature current-area quick map and Hollow Knight’s native full-world map.
-  Each view receives its own stable fit while preserving compass, marker editing,
-  pan/zoom, animated reset, and a direct return to the current-area map.
-- **HK-V2-06 — closed, profile-correct:** the duplicate upper health-HUD option
-  remains available to Silksong only. Hollow Knight hides that inert setting and
-  keeps transferred HUD ownership on the lower display.
-- **HK-V2-07 — device-visual target:** Silksong’s map picture uses a narrow soft
-  fade at its four edges; Hollow Knight currently uses its established hard clip
-  at the context-box boundary. Do not replace that proven clip blind. The next
-  batched map comparison must decide whether a fade improves Hollow Knight
-  without dimming labels, markers, or the compass; closure requires a bounded
-  fade on all four edges with no map bleed during pan or zoom.
+The pre-reset world-space HK lower screen (companion pane clones, native layout
+engine, HK-V2-01..07) was retired by reset step 4 (#19) and replaced by the
+shared frame above. Its parity claims no longer describe shipped code.
+
+- **HK-LOWER-01 — implemented, device-unverified (#19, #23):** five HK pages on
+  DsShell via `HKDualScreen.Shell`; HUD framed into the header band; pause and
+  title-logo behaviour as above.
+- **HK-LOWER-02 — device checklist (#23):** map copy render texture, camera
+  depth and fit; marker placement and compass tint; tk2d sprite residency for
+  cursor, tab and page art outside the native menu; FSM execution-stack growth
+  on the map copy; HUD band size versus the action column; charm/inventory text
+  keys and journal frame art.
+- **HK-LOWER-03 — missing (#16):** scenery backdrop behind the lower screen when
+  General → Black background is off (`DsFrame.BlackBackground` exists; no
+  backdrop is drawn yet).
+- **HK-V2-06 — retained:** the duplicate upper health-HUD option remains
+  Silksong-only.
 - **HK-MODS-01 — reopened under the reset plan:** the shared controller/model
   tests cover grouped rows, unavailable explanations, Choice mutation,
   reset/Back and controller routing. The source-grep catalog suite was retired
@@ -209,8 +206,8 @@ contain a Skins UI, shortcut, pane, modal, selector, or duplicate presenter.
 The deliverable remains incomplete until all of the following are demonstrated:
 
 1. Exact host compiles and focused tests pass for both supported game builds.
-2. Hollow Knight ordinary gameplay shows the reference HUD/pages on the lower
-   display with no duplicate upper HUD and no lower-display Mods wheel, gear,
+2. Hollow Knight ordinary gameplay shows the header HUD and its five pages on
+   the shared lower-screen frame with no duplicate upper HUD and no lower-display Mods wheel, gear,
    pane, or presenter. Its upper Pause → Options → Mods screen uses the full
    available upper menu window, is fully controller-operable, exposes the
    complete catalog, and proves persistence/reset. Its upper Pause → Options →
@@ -219,7 +216,7 @@ The deliverable remains incomplete until all of the following are demonstrated:
    also demonstrated.
 3. Silksong demonstrates the equivalent upper-display Mods and Skins ownership
    and lower-display HUD/page experience, with its additional mechanics
-   integrated into the same design and no Hollow Knight regression.
+   on the same frame, and neither game regresses the other.
 4. Repeated launch, pause/resume, scene transition, display interruption, and
    process restore preserve correct ownership and profile isolation.
 5. Production artifacts use the persistent release signer. Publishing a public
