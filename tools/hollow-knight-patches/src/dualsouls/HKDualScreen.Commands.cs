@@ -11,7 +11,8 @@ public partial class HKDualScreen
 {
     const string CommandHelp =
         "help | report | state | pause | mods | skins | skin <list|row N|left N|right N> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
-        "mods-list | mod <id> <value> | pd <field>... | geo <amount> | die | save | quit-menu | fonts | hudfit | sprites <text>";
+        "mods-list | mod <id> <value> | pd <field>... | charm give <id>... | geo <amount> | die | save | quit-menu | fonts | hudfit | sprites <text>\n" +
+        "geo, charm, die and save refuse slot 1 (the player's own save); use a disposable slot.";
 
     void PollCommands() { DsCommandFile.Poll(RunCommand); }
 
@@ -55,8 +56,11 @@ public partial class HKDualScreen
                 return (r.Success ? "ok" : "error " + r.Error) + (r.Pending ? " pending" : "") + " value=" + c.Value(a[1]);
             }
             case "pd": return CommandPlayerData(a);
+            case "charm": return SaveSlotGuard(gm) ?? CommandCharm(a);
             case "geo":
             {
+                string guard = SaveSlotGuard(gm);
+                if (guard != null) return guard;
                 int amount;
                 if (a.Length < 2 || !int.TryParse(a[1], out amount) || amount <= 0) return "error geo <amount>";
                 var hero = HeroController.instance;
@@ -71,6 +75,8 @@ public partial class HKDualScreen
                 var pd = PlayerData.instance;
                 if (hero == null || pd == null) return "error no HeroController";
                 if (gm == null || gm.gameState != GlobalEnums.GameState.PLAYING) return "error not playing";
+                string guard = SaveSlotGuard(gm);
+                if (guard != null) return guard;
                 pd.healthBlue = 0;
                 pd.health = 1;
                 hero.TakeDamage(hero.gameObject, GlobalEnums.CollisionSide.top, 1, 1);
@@ -78,6 +84,10 @@ public partial class HKDualScreen
             }
             case "save":
                 if (gm == null) return "error no GameManager";
+                {
+                    string guard = SaveSlotGuard(gm);
+                    if (guard != null) return guard;
+                }
                 gm.SaveGame();
                 return "ok slot=" + gm.profileID;
             case "quit-menu":
@@ -120,7 +130,8 @@ public partial class HKDualScreen
         sb.Append("mods: ").Append(mods != null ? "\n" + CommandModsList() : "not ready").Append('\n');
         var skins = DualSouls.Skins.HollowKnight.Runtime.HollowKnightSkinRuntime.Current;
         sb.Append("skins: stamp=").Append(DualSouls.Skins.HollowKnight.Runtime.HollowKnightSkinRuntime.SkinStamp)
-          .Append(' ').Append(skins != null ? DsQaReport.Fields(skins.LastResult, "Status", "Detail") : "no runtime").Append('\n');
+          .Append(' ').Append(skins != null ? DsQaReport.Fields(skins.LastResult, "Status", "Detail") : "no runtime")
+          .Append(" pack: ").Append(skins != null ? DsQaReport.Fields(skins.CurrentPack, "Id", "Mode", "SpriteScope") : "none").Append('\n');
         sb.Append(DsQaReport.Frames()).Append('\n');
         sb.Append(DsQaReport.Errors());
         return sb.ToString();
@@ -149,15 +160,34 @@ public partial class HKDualScreen
 
     static string CommandPlayerData(string[] a)
     {
+        if (a.Length < 2) return "error pd <field>...";
+        var names = new string[a.Length - 1];
+        Array.Copy(a, 1, names, 0, names.Length);
+        return PlayerData.instance != null ? DsQaReport.Fields(PlayerData.instance, names) : "error no PlayerData";
+    }
+
+    // QA commands that change the save refuse slot 1, which holds the player's own game.
+    static string SaveSlotGuard(GameManager gm)
+    {
+        if (gm == null) return "error no GameManager";
+        return gm.profileID == 1 ? "error refused on slot 1 (player save); use a disposable slot" : null;
+    }
+
+    // QA: own charms on a disposable save so the Charms pane can be exercised without playing to them.
+    static string CommandCharm(string[] a)
+    {
         var pd = PlayerData.instance;
         if (pd == null) return "error no PlayerData";
-        if (a.Length < 2) return "error pd <field>...";
-        var sb = new StringBuilder();
-        for (int i = 1; i < a.Length; i++)
+        if (a.Length < 3 || a[1] != "give") return "error charm give <id>...";
+        var sb = new StringBuilder("ok");
+        for (int i = 2; i < a.Length; i++)
         {
-            var f = typeof(PlayerData).GetField(a[i], BindingFlags.Public | BindingFlags.Instance);
-            if (i > 1) sb.Append(' ');
-            sb.Append(a[i]).Append('=').Append(f != null ? Convert.ToString(f.GetValue(pd)) : "?");
+            int id;
+            FieldInfo f = int.TryParse(a[i], out id)
+                ? typeof(PlayerData).GetField("gotCharm_" + id, BindingFlags.Public | BindingFlags.Instance) : null;
+            if (f == null || f.FieldType != typeof(bool)) { sb.Append(' ').Append(a[i]).Append("=?"); continue; }
+            f.SetValue(pd, true);
+            sb.Append(' ').Append(id).Append("=owned");
         }
         return sb.ToString();
     }

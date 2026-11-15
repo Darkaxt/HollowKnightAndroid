@@ -34,6 +34,8 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         public static HollowKnightSkinRuntime Current { get; private set; }
         public static int SkinStamp { get; private set; }
         public SkinApplyResult LastResult => refreshSchedule.LastResult;
+        /// <summary>The applied pack (id, mode, sprite scope) for QA reports; null when vanilla.</summary>
+        public SkinPack CurrentPack => session.CurrentPack;
         internal bool TargetsReady => !disposed && hero != null && hud != null;
 
         public HollowKnightSkinRuntime()

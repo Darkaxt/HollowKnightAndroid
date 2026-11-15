@@ -83,6 +83,8 @@ namespace DualSouls.Skins.Silksong.Runtime
 
         public static SilksongSkinRuntime Current { get; private set; }
         public SkinApplyResult LastResult => ownerRefresh.LastResult;
+        /// <summary>The applied pack (id, mode, sprite scope) for QA reports; null when vanilla.</summary>
+        public SkinPack CurrentPack => session.CurrentPack;
         public bool TeardownComplete => disposed;
         public string LastError { get; private set; } = "";
         internal Func<bool> SaveVisualRefreshAllowed;

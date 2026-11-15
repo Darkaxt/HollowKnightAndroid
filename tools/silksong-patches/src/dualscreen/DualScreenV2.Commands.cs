@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | tab <id> | mods-list | mod <id> <value> | pd <field>... | die";
+        "help | report | state | pause | tab <id> | mods-list | mod <id> <value> | pd <field>... | die (refused on slot 1)";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -88,6 +88,7 @@ public partial class DualScreenV2
         var skins = SilksongSkinRuntime.Current;
         sb.Append("skins: ").Append(skins != null
             ? DsQaReport.Fields(skins.LastResult, "Status", "Detail") + " lastError=" + skins.LastError
+              + " pack: " + DsQaReport.Fields(skins.CurrentPack, "Id", "Mode", "SpriteScope")
             : "no runtime").Append('\n');
         sb.Append(DsQaReport.Frames()).Append('\n');
         sb.Append(DsQaReport.Errors());
@@ -101,6 +102,7 @@ public partial class DualScreenV2
         var pd = PlayerData.instance;
         if (hero == null || pd == null) return "error no HeroController";
         if (gm == null || gm.GameState != GlobalEnums.GameState.PLAYING) return "error not playing";
+        if (gm.profileID == 1) return "error refused on slot 1 (player save); use a disposable slot";
         FieldInfo health = typeof(PlayerData).GetField("health", BindingFlags.Public | BindingFlags.Instance);
         FieldInfo blue = typeof(PlayerData).GetField("healthBlue", BindingFlags.Public | BindingFlags.Instance);
         if (health == null) return "error no PlayerData.health";
