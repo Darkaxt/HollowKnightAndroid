@@ -880,7 +880,7 @@ public class DsIconGrid
 
     public void OnGesture(DsGesture g)
     {
-        Vector2 p = DsPresentation.ToLayout(g.Position);
+        Vector2 p = DsFrame.ToLayout(g.Position);
 
         switch (g.Type)
         {

@@ -22,7 +22,7 @@ public class DsShell
     class Entry
     {
         public IDsScreen Screen;
-        public InventoryPaneList.PaneTypes Pane;
+        public Func<Sprite> TabArt;
         public RectTransform Host;
         public RectTransform Tab;
         public Image TabIcon;
@@ -46,7 +46,7 @@ public class DsShell
     RectTransform _body;
     RectTransform _header;
     RectTransform _actionHost;
-    DsHudView _hud;
+    IDsHeaderHud _hud;
     bool _paused;
     bool _visible;
     bool _transitioning;
@@ -122,7 +122,7 @@ public class DsShell
     {
         get
         {
-            Vector2 size = DsPresentation.LayoutSize;
+            Vector2 size = DsFrame.LayoutSize;
             return size.x > 0f && size.y > 0f && !_layout.MatchesSize(size);
         }
     }
@@ -139,8 +139,8 @@ public class DsShell
 
         _header = DsWidgets.Box(_root, "hud-header", DsTheme.Ground).rectTransform;
         DsWidgets.Place(_header, _layout.Hud);
-        _hud = _header.gameObject.AddComponent<DsHudView>();
-        _hud.Build(_header, _layout.Hud.width, _layout.Hud.height);
+        if (DsFrame.Host != null)
+            _hud = DsFrame.Host.CreateHud(_header, _layout.Hud.width, _layout.Hud.height);
         DsWidgets.HRule(_header, "rule", DsTheme.Pad, _layout.Hud.height,
                         _w - DsTheme.Pad * 2f);
 
@@ -314,13 +314,14 @@ public class DsShell
         _gestures.Reset();
     }
 
-    public void Register(IDsScreen screen, InventoryPaneList.PaneTypes pane)
+    /// <param name="tabArt">The game's own icon for this page; null until it is resident.</param>
+    public void Register(IDsScreen screen, Func<Sprite> tabArt)
     {
         var host = DsWidgets.Rect(_body, "screen-" + screen.Id);
         DsWidgets.Stretch(host);
         host.gameObject.SetActive(false);
 
-        _entries.Add(new Entry { Screen = screen, Pane = pane, Host = host });
+        _entries.Add(new Entry { Screen = screen, TabArt = tabArt, Host = host });
     }
 
     /// <summary>Lay the tabs out once every screen has registered.</summary>
@@ -376,7 +377,7 @@ public class DsShell
 
     void RefreshTabArt()
     {
-        if (!DsGameData.InGame || Time.unscaledTime < _nextArtRefresh) return;
+        if (!DsFrame.InGame || Time.unscaledTime < _nextArtRefresh) return;
         _nextArtRefresh = Time.unscaledTime + 1f;
         if (_artWaitSince < 0f) _artWaitSince = Time.unscaledTime;
 
@@ -385,7 +386,7 @@ public class DsShell
             for (int i = 0; i < _entries.Count; i++)
             {
                 var e = _entries[i];
-                var sprite = DsGameArt.TabIcon(e.Pane);
+                var sprite = e.TabArt != null ? e.TabArt() : null;
                 if (e.TabIcon.sprite != sprite)
                 {
                     e.TabIcon.sprite = sprite;
@@ -748,7 +749,7 @@ public class DsShell
     /// </summary>
     void PlaceStripCaret(Rect box)
     {
-        var art = DsGameArt.SelectionCursor();
+        var art = DsFrame.SelectionCursor();
         if (!art.Ok) { HideStripCaret(); return; }
 
         if (_stripCaretTL == null)

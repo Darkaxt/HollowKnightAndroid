@@ -7,16 +7,8 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-public static class DsTouch
+public static partial class DsTouch
 {
-    public struct Point
-    {
-        public int FingerId;
-        public TouchPhase Phase;
-        public Vector2 Position;
-        public double Time;
-    }
-
     const int Header = 4, Stride = 5;
     static AndroidJavaObject _activity;
     static double[] _batch = Array.Empty<double>();

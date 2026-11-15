@@ -7,7 +7,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TmpText = TMProOld.TextMeshProUGUI;
 
-public sealed class DsHudView : MonoBehaviour
+public sealed class DsHudView : MonoBehaviour, IDsHeaderHud
 {
     readonly List<Transform> _roots = new List<Transform>();
     readonly List<Renderer> _renderers = new List<Renderer>();

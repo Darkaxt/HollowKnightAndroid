@@ -21,7 +21,7 @@ public struct DsGesture
         Type + "@" + Position.x.ToString("F0") + "," + Position.y.ToString("F0");
 }
 
-public class DsInput
+public partial class DsInput
 {
     const float TapSlop = 34f;
     const float FlingMinSpeed = 900f;
@@ -38,12 +38,6 @@ public class DsInput
 
     public IList<DsGesture> Gestures => _out;
     public bool SingleTouchActive => _active.Count == 1;
-
-    public void Poll()
-    {
-        DsTouch.CollectSecondScreen(_events);
-        Poll(_events, DsTouch.Generation);
-    }
 
     public void Poll(IList<DsTouch.Point> events, long generation)
     {

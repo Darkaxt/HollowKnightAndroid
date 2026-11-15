@@ -20,7 +20,7 @@ public static class DsWidgets
 {
     public static RectTransform Rect(Transform parent, string name)
     {
-        var go = new GameObject(name) { layer = DsPresentation.LAYER };
+        var go = new GameObject(name) { layer = DsFrame.ContentLayer };
         var rt = go.AddComponent<RectTransform>();
         rt.SetParent(parent, false);
         return rt;

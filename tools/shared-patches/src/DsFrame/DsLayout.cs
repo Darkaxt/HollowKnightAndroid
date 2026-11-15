@@ -19,11 +19,8 @@ public readonly struct DsLayout
     {
         get
         {
-            Vector2 size = DsPresentation.LayoutSize;
-            if (size.x == 0f || size.y == 0f)
-                size = new Vector2(DsPresentation.PanelW > 0 ? DsPresentation.PanelW : 1240,
-                                   DsPresentation.PanelH > 0 ? DsPresentation.PanelH : 1080);
-            return new DsLayout(size.x, size.y, DsPresentation.PanelH > 0 ? DsPresentation.PanelH : size.y);
+            Vector2 size = DsFrame.LayoutSize;
+            return new DsLayout(size.x, size.y, DsFrame.InputHeight);
         }
     }
 

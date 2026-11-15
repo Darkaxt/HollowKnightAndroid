@@ -153,7 +153,7 @@ public class DsCursor
     public void Adopt()
     {
         if (_hasArt) return;
-        var art = DsGameArt.SelectionCursor();
+        var art = DsFrame.SelectionCursor();
         if (!art.Ok) return;
         _hasArt = true;
 

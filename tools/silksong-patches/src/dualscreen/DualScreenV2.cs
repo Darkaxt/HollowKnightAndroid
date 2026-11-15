@@ -61,6 +61,7 @@ public class DualScreenV2 : MonoBehaviour
     {
         if (DsHudReleasePump.BlocksReplacement) { Destroy(gameObject); return; }
         Instance = this;
+        DsFrame.Host = SilksongFrameHost.Instance;
         _managerCallbacks = new DsHudManagerCallbacks(
             () => GameManager.SilentInstance,
             () => { if (_shellContent != null) _shellContent.RestoreNative(); },
@@ -176,11 +177,11 @@ public class DualScreenV2 : MonoBehaviour
 
     static void RegisterScreens(DsShell shell)
     {
-        shell.Register(new DsInventoryScreen(), InventoryPaneList.PaneTypes.Inv);
-        shell.Register(new DsLoadoutScreen(), InventoryPaneList.PaneTypes.Tools);
-        shell.Register(new DsTasksScreen(), InventoryPaneList.PaneTypes.Quests);
-        shell.Register(new DsJournalScreen(), InventoryPaneList.PaneTypes.Journal);
-        shell.Register(new DsMapScreen(), InventoryPaneList.PaneTypes.Map);
+        shell.Register(new DsInventoryScreen(), () => DsGameArt.TabIcon(InventoryPaneList.PaneTypes.Inv));
+        shell.Register(new DsLoadoutScreen(), () => DsGameArt.TabIcon(InventoryPaneList.PaneTypes.Tools));
+        shell.Register(new DsTasksScreen(), () => DsGameArt.TabIcon(InventoryPaneList.PaneTypes.Quests));
+        shell.Register(new DsJournalScreen(), () => DsGameArt.TabIcon(InventoryPaneList.PaneTypes.Journal));
+        shell.Register(new DsMapScreen(), () => DsGameArt.TabIcon(InventoryPaneList.PaneTypes.Map));
     }
 
     void Update()

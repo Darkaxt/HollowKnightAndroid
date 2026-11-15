@@ -195,33 +195,12 @@ public static class DsGameArt
 
     // ── the selection cursor ────────────────────────────────────────────────
 
-    /// <summary>
-    /// The game's own selection cursor: two corner brackets and a glow.
-    ///
-    /// InventoryCursor names four corner transforms, but only two carry art --
-    /// the others resolved to nothing and rendered as blank squares. The
-    /// bottom-right is the top-left sprite ROTATED, which is why it is stored
-    /// once and turned by the caller rather than fetched twice.
-    /// </summary>
-    public class Cursor
-    {
-        public Sprite Corner, Glow;
-        /// <summary>
-        /// InventoryCursor's defaultGlowColor -- the tint it restores whenever
-        /// the thing selected does not ask for one of its own. Taken from the
-        /// live renderer rather than guessed, so the light behind an ordinary
-        /// item is the colour the game lights it.
-        /// </summary>
-        public Color GlowColor = new Color(1f, 0.94f, 0.72f, 0.30f);
-        public bool Ok { get { return Corner != null; } }
-    }
+    static DsCursorArt _cursor;
 
-    static Cursor _cursor;
-
-    public static Cursor SelectionCursor()
+    public static DsCursorArt SelectionCursor()
     {
         if (_cursor != null && _cursor.Ok) return _cursor;
-        _cursor = new Cursor();
+        _cursor = new DsCursorArt();
 
         try
         {
