@@ -164,9 +164,12 @@
                 android:paddingTop="6dp"
                 android:paddingBottom="6dp" />
 
+            <!-- Controller focus starts here, not in the account field: focusing a text field opens the
+                 autofill dropdown, which captures the D-pad and B. QR sign-in needs no input here. -->
             <Button
                 android:id="@+id/btn_cancel"
                 style="@style/DualSouls.Button.Secondary"
+                android:focusedByDefault="true"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/login_cancel"
