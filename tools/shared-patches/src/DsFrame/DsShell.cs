@@ -594,6 +594,8 @@ public class DsShell
 
     public void Tick(float dt)
     {
+        if (_disposed) return;
+        _title.Tick();
         if (!_operational || _paused) return;
         TickOperational(dt);
     }

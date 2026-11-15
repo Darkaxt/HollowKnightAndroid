@@ -69,6 +69,8 @@ public static class SilksongProcessStartup
     public static void Run(Action mods,Func<bool> eligible,Action create){mods();if(eligible())create();}
 }
 public static class SilksongModsRuntime{public static void EnsureStarted(){}}
+// Silksong installs its frame host at boot; the fixture models that default.
+public static partial class DsFrame{static DsFrame(){Host=SilksongFrameHost.Instance;}}
 public static class DsGameData{public static bool InGame=true;public static string IdleReason=>"No save";}
 public static partial class DsTouch
 {
@@ -109,9 +111,8 @@ public static class DsSliderArt{public static readonly Sprite Track=new(),Thumb=
 public static class DsTrashArt{public static readonly Sprite Sprite=new();}
 public static class DsGameArt
 {
-    public sealed class CursorArt{public bool Ok=false;public Sprite Corner,Glow;public Color GlowColor=Color.white;}
-    static readonly CursorArt Cursor=new();
-    public static CursorArt SelectionCursor()=>Cursor;
+    static readonly DsCursorArt Cursor=new();
+    public static DsCursorArt SelectionCursor()=>Cursor;
     public static Sprite TabIcon(InventoryPaneList.PaneTypes pane)=>null;
     public static Sprite MarkerIcon(int index)=>null;
 }
@@ -267,7 +268,7 @@ public class GameManager
     public int PauseSubscriptions=>GamePausedChange?.GetInvocationList().Length??0;
 }
 public class UIManager{public GlobalEnums.UIState uiState=GlobalEnums.UIState.PLAYING;public string VisibleNativeMenu="Pause";}
-public partial class DsHudView
+public partial class DsHudView : IDsHeaderHud
 {
     readonly DsHudRenderScope<GameObject> _scope=new(go=>go!=null,go=>go.layer,(go,v)=>go.layer=v);
     readonly DsHudRenderScope<GameObject> _canvasScope=new(go=>go!=null,go=>go.layer,(go,v)=>go.layer=v);

@@ -1,4 +1,4 @@
-"""Authenticate lifecycle entry bodies; graphics and Android remain unmodeled."""
+"""Authenticate Silksong presentation bodies; graphics and Android remain unmodeled."""
 import hashlib
 import importlib.util
 import json
@@ -48,63 +48,49 @@ class LifecycleEntryFixtureTest(unittest.TestCase):
                 path.unlink()
             directory.rmdir()
 
-    def test_complete_hk_entry_and_ss_presentation_bodies_are_unchanged(self):
+    def test_ss_presentation_bodies_are_unchanged(self):
         temp = Path(os.environ["DUALSOULS_HOST_TEST_TEMP"])
         directory = Path(tempfile.mkdtemp(prefix="lifecycle-identity-", dir=temp))
         try:
-            for generator, label in (("generate_hk_pause_fixture.py", "hk"),
-                                     ("generate_ss_shell_fixture.py", "ss")):
-                output = directory / (label + ".cs")
-                manifest = directory / (label + ".json")
-                args = [sys.executable, str(TOOLS / generator), str(output)]
-                args += [str(manifest)] if label == "hk" else ["--manifest", str(manifest)]
-                subprocess.run(args, check=True, capture_output=True, text=True)
-                data = json.loads(manifest.read_text(encoding="utf-8"))
-                self.assertEqual(hashlib.sha256(output.read_bytes()).hexdigest(), data["output_sha256"])
-                records = data.get("methods", data.get("bodies"))
-                for record in records:
-                    if "source_file_sha256" in record:
-                        self.assertEqual(hashlib.sha256(Path(record["source"]).read_bytes()).hexdigest(),
-                                         record["source_file_sha256"])
-                    if "body_identical" in record:
-                        self.assertTrue(record["body_identical"])
-                required = ({"Boot", "EnsureStarted", "Start", "TickError", "BindDirectDisplay",
-                             "OnDirectPanelGeometry", "ShutdownDirectDisplayAndRestore",
-                             "RetryPendingDirectDisplayRestore", "CompleteDirectDisplayTeardown",
-                             "Tick", "PrewarmTick", "BuildCompanionTab", "PaneSettleTick", "FinalizeInvPane",
-                             "ReassertEquipment", "RefreshInvCounters", "LayoutNativeInventory", "LayoutCharmsRedesign",
-                             "NativePaneReady", "NativeBodyReady", "BeginNativeLayout", "PublishNativeLayout",
-                             "ApplyFit", "GateNativePresentation", "GateNativeOutgoing", "ReadyForTab", "PositionFrame", "PollTouch",
-                             "ReassertControlPrompt", "GateControlPrompt", "LayoutCtrlPrompt", "LayoutCanonicalControlPrompt"}
-                            if label == "hk" else
-                            {"DualScreenV2", "DsPresentation", "DirectDisplayPresentation",
-                             "DirectDisplayCanvasScaler", "DsTouch.MapToCanvas"})
-                by_name = {r.get("method", r.get("member")): r for r in records}
-                self.assertTrue(required.issubset(by_name))
-                # Re-extract independently using the token-aware source member parser,
-                # and authenticate the entire executable body, not tokens alone.
-                spec = importlib.util.spec_from_file_location("lifecycle_parser", TOOLS / "generate_ss_shell_fixture.py")
-                parser = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(parser)
-                text = output.read_text(encoding="utf-8")
-                for name in required:
-                    record = by_name[name]
-                    source = Path(record["source"]).read_text(encoding="utf-8")
-                    if label == "hk":
-                        original = parser.member(parser.class_text(source, "HKDualScreen"), name)
-                    elif name == "DsTouch.MapToCanvas":
-                        original = parser.member(parser.class_text(source, "DsTouch"), "MapToCanvas")
-                    else:
-                        original = parser.class_text(source, name)
-                    body = original[original.index("{"):]
-                    self.assertIn(body, text)
-                    self.assertEqual(hashlib.sha256(body.encode()).hexdigest(), record["body_utf8_lf_sha256"])
+            output = directory / "ss.cs"
+            manifest = directory / "ss.json"
+            args = [sys.executable, str(TOOLS / "generate_ss_shell_fixture.py"), str(output),
+                    "--manifest", str(manifest)]
+            subprocess.run(args, check=True, capture_output=True, text=True)
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            self.assertEqual(hashlib.sha256(output.read_bytes()).hexdigest(), data["output_sha256"])
+            records = data["bodies"]
+            for record in records:
+                if "source_file_sha256" in record:
+                    self.assertEqual(hashlib.sha256(Path(record["source"]).read_bytes()).hexdigest(),
+                                     record["source_file_sha256"])
+                if "body_identical" in record:
+                    self.assertTrue(record["body_identical"])
+            required = {"DualScreenV2", "DsPresentation", "DirectDisplayPresentation",
+                        "DirectDisplayCanvasScaler", "DsTouch.MapToCanvas"}
+            by_name = {r.get("member"): r for r in records}
+            self.assertTrue(required.issubset(by_name))
+            # Re-extract independently using the token-aware source member parser,
+            # and authenticate the entire executable body, not tokens alone.
+            spec = importlib.util.spec_from_file_location("lifecycle_parser", TOOLS / "generate_ss_shell_fixture.py")
+            parser = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(parser)
+            text = output.read_text(encoding="utf-8")
+            for name in required:
+                record = by_name[name]
+                source = Path(record["source"]).read_text(encoding="utf-8")
+                if name == "DsTouch.MapToCanvas":
+                    original = parser.member(parser.class_text(source, "DsTouch"), "MapToCanvas")
+                else:
+                    original = parser.class_text(source, name)
+                body = original[original.index("{"):]
+                self.assertIn(body, text)
+                self.assertEqual(hashlib.sha256(body.encode()).hexdigest(), record["body_utf8_lf_sha256"])
         finally:
             for path in directory.iterdir():
                 self.assertTrue(path.is_file())
                 path.unlink()
             directory.rmdir()
-
 
 if __name__ == "__main__":
     unittest.main()

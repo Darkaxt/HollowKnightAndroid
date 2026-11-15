@@ -43,7 +43,7 @@ public partial class SilksongGameplayPerformanceTests
         var root = new GameObject("perf-shell").AddComponent<RectTransform>();
         var shell = new DsShell(root);
         var page = new Screen();
-        shell.Register(page, InventoryPaneList.PaneTypes.Map);
+        shell.Register(page, () => null);
         shell.Finish("perf"); shell.SetIdle(false); shell.SetVisible(true);
         for (int i = 0; i < 10; i++) shell.Tick(.016f);
         return (shell, page);

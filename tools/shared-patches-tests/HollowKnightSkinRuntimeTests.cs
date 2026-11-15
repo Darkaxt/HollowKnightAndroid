@@ -811,11 +811,9 @@ public sealed class HollowKnightSkinRuntimeTests
     }
 
     [Fact]
-    public void Companion_clones_are_derived_consumers_not_original_capture_authority()
+    public void Lower_screen_map_copy_is_a_derived_consumer_not_original_capture_authority()
     {
-        Assert.False(HollowKnightSkinTargets.IsAuthoritativeHierarchy(new[] { "Knight", "HKCompanionRoot" }));
-        Assert.False(HollowKnightSkinTargets.IsAuthoritativeHierarchy(new[] { "CharmDisplay", "HKPaneCloneStaging" }));
-        Assert.False(HollowKnightSkinTargets.IsAuthoritativeHierarchy(new[] { "HUD Cln", "HKCompFrame" }));
+        Assert.False(HollowKnightSkinTargets.IsAuthoritativeHierarchy(new[] { "Knight Icon", "Map Copy", "HkMapRig" }));
         Assert.True(HollowKnightSkinTargets.IsAuthoritativeHierarchy(new[] { "CharmDisplay", "HudCamera", "_GameCameras" }));
     }
 

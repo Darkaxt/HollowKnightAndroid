@@ -12,6 +12,8 @@ public sealed class SilksongFrameHost : IDsFrameHost
     public int ContentLayer { get { return DsPresentation.LAYER; } }
     public DsCursorArt SelectionCursor() { return DsGameArt.SelectionCursor(); }
 
+    public Sprite TitleLogo() { return DsLogoArt.Sprite; }
+
     public IDsHeaderHud CreateHud(RectTransform header, float width, float height)
     {
         var hud = header.gameObject.AddComponent<DsHudView>();

@@ -30,10 +30,6 @@ namespace HollowKnightPatches
 
         readonly List<DirectDisplayPixelContact> _pixelContacts =
             new List<DirectDisplayPixelContact>(4);
-        readonly List<DirectDisplayContact> _contacts =
-            new List<DirectDisplayContact>(4);
-        readonly DirectDisplayGestureTracker _gestures =
-            new DirectDisplayGestureTracker();
         readonly List<Camera> _extraCameras = new List<Camera>(2);
 
         DirectDisplayPresentation _presentation;
@@ -56,17 +52,18 @@ namespace HollowKnightPatches
         internal int TargetDisplayIndex => DisplayIndex;
         internal bool IsTransportActive => _host != null && _host.IsActive;
 
-        internal int TouchCount => _gestures.TouchCount;
-        internal float TouchX => _gestures.TouchX;
-        internal float TouchY => _gestures.TouchY;
-        internal float T0X => _gestures.T0X;
-        internal float T0Y => _gestures.T0Y;
-        internal float T1X => _gestures.T1X;
-        internal float T1Y => _gestures.T1Y;
-        internal int TapSequence => _gestures.TapSequence;
-        internal int CleanTapSequence => _gestures.CleanTapSequence;
-        internal float CleanTapX => _gestures.CleanTapX;
-        internal float CleanTapY => _gestures.CleanTapY;
+        /// <summary>The content canvas root the lower-screen shell is built in.</summary>
+        internal RectTransform ContentRoot =>
+            _presentation != null && _presentation.Ready ? _presentation.Root : null;
+        /// <summary>This frame's lower-panel contacts in panel pixels (bottom-left).</summary>
+        internal IReadOnlyList<DirectDisplayPixelContact> PixelContacts => _pixelContacts;
+        /// <summary>The frame PixelContacts were collected on.</summary>
+        internal int TouchFrame => _touchFrame;
+        internal bool TouchCanceledThisFrame =>
+            _touchFrame == Time.frameCount && _touchCanceled;
+
+        int _touchFrame = -1;
+        bool _touchCanceled;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         public static void Bootstrap()
@@ -202,15 +199,8 @@ namespace HollowKnightPatches
                 return;
 
             DirectDisplayTouch.CollectTargetDisplay(_pixelContacts);
-            _contacts.Clear();
-            float width = PanelWidth;
-            float height = PanelHeight;
-            for (int i = 0; i < _pixelContacts.Count; i++)
-                _contacts.Add(_pixelContacts[i].ToTopLeftNormalized(width, height));
-            _gestures.Update(
-                _contacts,
-                Time.unscaledTime,
-                DirectDisplayTouch.TargetCanceledThisFrame);
+            _touchCanceled = DirectDisplayTouch.TargetCanceledThisFrame;
+            _touchFrame = Time.frameCount;
 
             DirectDisplayTouch.InstallFence(gameObject);
         }
@@ -350,9 +340,9 @@ namespace HollowKnightPatches
             if (active) DirectDisplayTouch.InstallFence(gameObject);
             else
             {
-                _gestures.Cancel();
                 _pixelContacts.Clear();
-                _contacts.Clear();
+                _touchCanceled = true;
+                _touchFrame = Time.frameCount;
                 DirectDisplayTouch.RemoveFence();
             }
         }

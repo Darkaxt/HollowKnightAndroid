@@ -41,10 +41,17 @@ def member(text, name):
     return text[match.start():text.index(';', match.end())+1]
 
 
-def generate(output, source_root, manifest, shared_source_root=None):
+def generate(output, source_root, manifest, shared_source_root=None, frame_source_root=None):
     if shared_source_root is None:
         shared_source_root = source_root.parents[2] / 'shared-patches/src/dualscreen'
+    if frame_source_root is None:
+        frame_source_root = source_root.parents[2] / 'shared-patches/src/DsFrame'
     identity, parts = [], []
+    def src(file):
+        # The game-neutral frame moved to shared-patches/src/DsFrame; an older
+        # replay snapshot still carries it beside the Silksong sources.
+        path = source_root / file
+        return path if path.exists() or not (frame_source_root / file).exists() else frame_source_root / file
     def record(file, label, original, extracted):
         # Imports and partial access are outside executable type bodies.
         def executable(value):
@@ -52,12 +59,12 @@ def generate(output, source_root, manifest, shared_source_root=None):
                 return value[value.index('{'):]
             return value[value.index('=>'):]
         assert executable(original) == executable(extracted), (file, label)
-        identity.append(dict(source=str(source_root/file), member=label,
-                             source_file_sha256=hashlib.sha256((source_root/file).read_bytes()).hexdigest(),
+        identity.append(dict(source=str(src(file)), member=label,
+                             source_file_sha256=hashlib.sha256(src(file).read_bytes()).hexdigest(),
                              body_utf8_lf_sha256=hashlib.sha256(executable(original).encode()).hexdigest(),
                              body_identical=True, signature_only_partial_access=original != extracted))
     def whole(file, names):
-        text=(source_root/file).read_text(encoding='utf-8')
+        text=src(file).read_text(encoding='utf-8')
         for name in names:
             value=class_text(text,name)
             adapted=value.replace('class '+name, 'partial class '+name, 1)
@@ -65,14 +72,14 @@ def generate(output, source_root, manifest, shared_source_root=None):
             record(file,name,value,parts[-1])
     whole('DualScreenV2.cs',('DualScreenV2','DsHudReleasePump'))
     whole('DsPresentation.cs',('DsPresentation',))
-    touch = class_text((source_root/'DsTouch.cs').read_text(encoding='utf-8'), 'DsTouch')
+    touch = class_text(src('DsTouch.cs').read_text(encoding='utf-8'), 'DsTouch')
     mapping = member(touch, 'MapToCanvas')
     parts.append('public static partial class DsTouch {\n' + mapping + '\n}')
     record('DsTouch.cs', 'DsTouch.MapToCanvas', mapping, mapping)
     whole(shared_source_root / 'DirectDisplayPresentation.cs',
           ('DirectDisplayPresentation', 'DirectDisplayCanvasScaler'))
     whole('DsShell.cs',('DsShell',))
-    shell = class_text((source_root/'DsShell.cs').read_text(encoding='utf-8'), 'DsShell')
+    shell = class_text(src('DsShell.cs').read_text(encoding='utf-8'), 'DsShell')
     for name in ('SetPaused', 'EndSlide', 'SettleSlide', 'SuspendPresentation'):
         # Extra per-method identity only; the complete class above is always the
         # compiled authority. Frozen pre-fix replay simply lacks the new helpers.
@@ -81,17 +88,23 @@ def generate(output, source_root, manifest, shared_source_root=None):
             record('DsShell.cs', 'DsShell.'+name, value, value)
     whole('DsLayout.cs',('DsLayout','DsGestureTarget','DsShellInput'))
     whole('DsInput.cs',('DsGestureType','DsGesture','DsInput'))
+    # The frame/host seam and Silksong's host and JNI polling partial (absent
+    # from replay snapshots that predate the shared frame).
+    if src('DsFrame.cs').exists():
+        whole('DsFrame.cs',('IDsHeaderHud','DsCursorArt','IDsFrameHost','DsFrame'))
+        whole('SilksongFrameHost.cs',('SilksongFrameHost',))
+        whole('DsInputJni.cs',('DsInput',))
     whole('DsTitleCard.cs',('DsTitleCard',))
     whole('DsZoomSlider.cs',('DsZoomSlider',))
     whole('DsHudRouting.cs',('DsHudRouting','DsHudRenderScope','DsHudSuppressionScope','DsHudFrame'))
-    theme=(source_root/'DsTheme.cs').read_text(encoding='utf-8')
+    theme=src('DsTheme.cs').read_text(encoding='utf-8')
     declarations=re.findall(r'^    public (?:const [^;]+|static readonly Color [^;]+);',theme,re.M)
     parts.append('public static partial class DsTheme {\n'+'\n'.join(declarations)+'\n}')
-    identity.append(dict(source=str(source_root/'DsTheme.cs'),member='DsTheme.production-metrics-colors',
-                         source_file_sha256=hashlib.sha256((source_root/'DsTheme.cs').read_bytes()).hexdigest(),
+    identity.append(dict(source=str(src('DsTheme.cs')),member='DsTheme.production-metrics-colors',
+                         source_file_sha256=hashlib.sha256(src('DsTheme.cs').read_bytes()).hexdigest(),
                          declaration_utf8_lf_sha256=hashlib.sha256('\n'.join(declarations).encode()).hexdigest(),declaration_identical=True))
     whole('IDsScreen.cs',('IDsHeaderTitle','DsStripItem','IDsTabStrip','IDsScreen'))
-    text=(source_root/'IDsScreen.cs').read_text(encoding='utf-8')
+    text=src('IDsScreen.cs').read_text(encoding='utf-8')
     if 'interface IDsPresentationSuspend' in text:
         whole('IDsScreen.cs',('IDsPresentationSuspend',))
     whole('DsActions.cs',('DsActionPlace','DsAction','IDsActionBar','DsActionBar'))
@@ -108,14 +121,14 @@ def generate(output, source_root, manifest, shared_source_root=None):
         ('DsJournalScreen.cs','DsJournalScreen',('Build','OnShow','OnHide','Tick','OnGesture','HitTest'),()),
     )
     for file,name,names,_ in panes:
-        source=(source_root/file).read_text(encoding='utf-8')
+        source=src(file).read_text(encoding='utf-8')
         cls=class_text(source,name)
         build=member(cls,'Build')
         end=cls.index(build)+len(build)
         prefix=cls[:end]
         # Hash the prefix as a declaration slice and the full Build separately.
-        identity.append(dict(source=str(source_root/file),member=name+'.production-prefix',
-                             source_file_sha256=hashlib.sha256((source_root/file).read_bytes()).hexdigest(),
+        identity.append(dict(source=str(src(file)),member=name+'.production-prefix',
+                             source_file_sha256=hashlib.sha256(src(file).read_bytes()).hexdigest(),
                              declaration_utf8_lf_sha256=hashlib.sha256(prefix.encode()).hexdigest(),declaration_identical=True))
         pieces=[prefix.replace('class '+name,'partial class '+name,1)]
         record(file,name+'.Build',build,build)
@@ -135,30 +148,30 @@ def generate(output, source_root, manifest, shared_source_root=None):
                 if not match: raise ValueError('Missing crest state ' + pattern)
                 value = match.group()
                 pieces.append(value)
-                identity.append(dict(source=str(source_root/file), member=name+'.'+value.strip(),
-                    source_file_sha256=hashlib.sha256((source_root/file).read_bytes()).hexdigest(),
+                identity.append(dict(source=str(src(file)), member=name+'.'+value.strip(),
+                    source_file_sha256=hashlib.sha256(src(file).read_bytes()).hexdigest(),
                     declaration_utf8_lf_sha256=hashlib.sha256(value.encode()).hexdigest(), declaration_identical=True))
         parts.append('\n'.join(pieces)+'\n}')
     whole('DsMapScreen.cs',('DsMapScreen',))
     # Engine camera construction/native map discovery remains modeled, while
     # actual camera admission/late-render policy executes unchanged.
-    text=(source_root/'DsMapView.cs').read_text(encoding='utf-8')
+    text=src('DsMapView.cs').read_text(encoding='utf-8')
     bodies=[class_text(text,'Frame')]
-    identity.append(dict(source=str(source_root/'DsMapView.cs'),member='DsMapView.Frame',
+    identity.append(dict(source=str(src('DsMapView.cs')),member='DsMapView.Frame',
                          declaration_utf8_lf_sha256=hashlib.sha256(bodies[0].encode()).hexdigest(),declaration_identical=True))
     for field in ('MinZoom','MaxZoom','_pan','_zoom','_mapUnitsPerPixel','_worldLatched','_worldAreas','_nextAssert','_forceAssert'):
         match=re.search(r'^    (?:public const )?(?:float|Vector2|bool|int) '+field+r'\b[^;]*;',text,re.M)
         if not match: raise ValueError('Missing map declaration '+field)
         value=match.group()
         bodies.append(value)
-        identity.append(dict(source=str(source_root/'DsMapView.cs'),member='DsMapView.'+field,
+        identity.append(dict(source=str(src('DsMapView.cs')),member='DsMapView.'+field,
                              declaration_utf8_lf_sha256=hashlib.sha256(value.encode()).hexdigest(),declaration_identical=True))
     for field in ('_cameraOwner','_cameraHud','_nextSourceCameraFrame','_sourceCamerasBound'):
         match=re.search(r'^    (?:GameCameras|Transform|int|bool) '+field+r'\b[^;]*;',text,re.M)
         if match:
             value=match.group();bodies.append(value)
-            identity.append(dict(source=str(source_root/'DsMapView.cs'),member='DsMapView.'+field,
-                source_file_sha256=hashlib.sha256((source_root/'DsMapView.cs').read_bytes()).hexdigest(),
+            identity.append(dict(source=str(src('DsMapView.cs')),member='DsMapView.'+field,
+                source_file_sha256=hashlib.sha256(src('DsMapView.cs').read_bytes()).hexdigest(),
                 declaration_utf8_lf_sha256=hashlib.sha256(value.encode()).hexdigest(),declaration_identical=True))
     for name in ('SetVisible','LateTick','Mode','Pan','Zoom','ZoomLevel','SetZoom','ResetPan','ResetZoom','ViewMoved','ResetView','SetMode','Poll','Rebind','FindSourceCameras','Classify'):
         value=member(class_text(text,'DsMapView'),name)
@@ -167,7 +180,7 @@ def generate(output, source_root, manifest, shared_source_root=None):
         record('DsMapView.cs','DsMapView.'+name,value,adapted)
     parts.append('public partial class DsMapView {\n'+'\n'.join(bodies)+'\n}')
     # HUD render suppression/event lifecycle bodies, not a fake capture policy.
-    text=(source_root/'DsHudView.cs').read_text(encoding='utf-8')
+    text=src('DsHudView.cs').read_text(encoding='utf-8')
     bodies=[]
     for name in ('OnEnable','OnDisable','SetVisible','Stop','StopCanvasCleanup','Suspend','LateUpdate','BeforeCamera','AfterCamera','RestoreScope','RestoreAllScopes','CanPresent','NativeVisible','Hide','CollectRenderers','SuppressOverlay','RestoreOverlay','PrepareCanvasScope','FrameCamera','MeasureToolSplit','LayoutPosition','HasArtwork','Fail'):
         value=member(class_text(text,'DsHudView'),name)
@@ -178,8 +191,8 @@ def generate(output, source_root, manifest, shared_source_root=None):
     if inventory_start is not None:
         value=text[inventory_start:text.index('    readonly DsHudRenderScope')]
         bodies.append(value)
-        identity.append(dict(source=str(source_root/'DsHudView.cs'),member='native inventory declarations',
-            source_file_sha256=hashlib.sha256((source_root/'DsHudView.cs').read_bytes()).hexdigest(),
+        identity.append(dict(source=str(src('DsHudView.cs')),member='native inventory declarations',
+            source_file_sha256=hashlib.sha256(src('DsHudView.cs').read_bytes()).hexdigest(),
             declaration_utf8_lf_sha256=hashlib.sha256(value.encode()).hexdigest(),declaration_identical=True))
         start=text.index('    static bool Retired<T>')
         value=text[start:end_brace(text,text.index('{',start))]
@@ -188,7 +201,7 @@ def generate(output, source_root, manifest, shared_source_root=None):
             if name=='RetireInventoryWatches' and name not in text: continue
             value=member(text,name);bodies.append(value);record('DsHudView.cs',name,value,value)
     parts.append('public partial class DsHudView : MonoBehaviour {\n'+'\n'.join(bodies)+'\n}')
-    text=(source_root/'DsWidgets.cs').read_text(encoding='utf-8')
+    text=src('DsWidgets.cs').read_text(encoding='utf-8')
     cls=class_text(text,'DsWidgets')
     bodies=[]
     for name in ('Rect','Box','Circle','HRule','VRule','RuleImage','Icon','Stretch','SetActive'):
@@ -201,7 +214,7 @@ def generate(output, source_root, manifest, shared_source_root=None):
         bodies.append(value)
         record('DsWidgets.cs','DsWidgets.Place',value,value)
     parts.append('public static partial class DsWidgets {\n'+'\n'.join(bodies)+'\n}')
-    text=(source_root/'DsPortHudState.cs').read_text(encoding='utf-8')
+    text=src('DsPortHudState.cs').read_text(encoding='utf-8')
     for name in ('DsHudManagerCallbacks','DsHudReleaseState'):
         value=class_text(text,name)
         record('DsPortHudState.cs',name+' (compiled directly)',value,value)
@@ -231,5 +244,6 @@ if __name__=='__main__':
     parser.add_argument('--source-root',type=Path,default=Path(__file__).resolve().parents[1]/'silksong-patches/src/dualscreen')
     parser.add_argument('--manifest',type=Path)
     parser.add_argument('--shared-source-root',type=Path)
+    parser.add_argument('--frame-source-root',type=Path)
     args=parser.parse_args()
-    generate(args.output,args.source_root,args.manifest or args.output.with_suffix('.manifest.json'),args.shared_source_root)
+    generate(args.output,args.source_root,args.manifest or args.output.with_suffix('.manifest.json'),args.shared_source_root,args.frame_source_root)

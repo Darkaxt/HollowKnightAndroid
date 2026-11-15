@@ -8,13 +8,6 @@ using UnityEngine;
 // localization lookups, and the texture bake/cache used for the frame art and the title logo.
 public partial class HKDualScreen
 {
-    // Assets WE create for the frame (Materials, Meshes, Texture2Ds, Sprites): Destroy(frameRoot) frees the GameObjects
-    // but never these -> they leaked on every frame rebuild (companion toggle, compFrame toggle, config-driven rebuild).
-    // Register each one; TeardownFrame destroys them.
-    readonly List<UnityEngine.Object> frameAssets = new List<UnityEngine.Object>();
-    T Own<T>(T o) where T : UnityEngine.Object { if (o != null) frameAssets.Add(o); return o; }
-    void DestroyOwnedAssets() { foreach (var o in frameAssets) if (o != null) Destroy(o); frameAssets.Clear(); }
-
     // Once-per-site warning for swallowed exceptions on PER-FRAME paths. A bare `catch { }` there hides a PERMANENT
     // failure (a renamed HK object, a missing FSM) forever; this logs the first hit per site (always, not just debug=1)
     // and stays silent after — costs nothing steady-state, but the failure is visible in logcat.
@@ -24,47 +17,6 @@ public partial class HKDualScreen
         if (!_warned.Add(site)) return;
         Debug.Log($"HKDS {site} err (first occurrence, further ones suppressed): {e.GetType().Name}: {e.Message}");
     }
-
-    // CHARM STATE, frame-cached. Three separate 40-iteration `pd.GetBool("equippedCharm_" + i)` loops used to run
-    // EVERY frame (equipped-charm row on every tab, the Charms equip watch, the first-equipped scan) = ~120 string
-    // allocations + ~120 reflection lookups per frame. Now: PlayerData.equippedCharms (HK's own List<int> of equipped
-    // ids, kept in sync by EquipCharm/UnequipCharm) is folded into a bitmask ONCE per frame; got/broken use pre-built
-    // key strings (read only on tab show / layout).
-    struct CharmState { public ulong equipped; public int hash, count; public bool Has(int id) => id > 0 && id < 64 && ((equipped >> id) & 1UL) != 0; }
-    CharmState _charms; int _charmsFrame = -1;
-    static readonly string[] K_GOT = new string[41], K_BROKEN = new string[41], K_EQ = new string[41];
-    static bool _charmKeysBuilt;
-    static void BuildCharmKeys() { if (_charmKeysBuilt) return; for (int i = 1; i <= 40; i++) { K_GOT[i] = "gotCharm_" + i; K_BROKEN[i] = "brokenCharm_" + i; K_EQ[i] = "equippedCharm_" + i; } _charmKeysBuilt = true; }
-    CharmState Charms()
-    {
-        if (_charmsFrame == Time.frameCount) return _charms;
-        _charmsFrame = Time.frameCount;
-        var cs = new CharmState { hash = 17 };
-        try
-        {
-            var pd = PlayerData.instance;
-            var list = pd != null ? pd.equippedCharms : null;
-            if (list != null)
-            {
-                for (int k = 0; k < list.Count; k++) { int id = list[k]; if (id > 0 && id < 64) cs.equipped |= 1UL << id; }
-                for (int i = 1; i <= 40; i++) if (((cs.equipped >> i) & 1UL) != 0) { cs.hash = cs.hash * 31 + i; cs.count++; }   // same ordered hash the old loops produced
-            }
-            else if (pd != null)   // fallback: the bools (allocation-free thanks to K_EQ)
-            {
-                BuildCharmKeys();
-                for (int i = 1; i <= 40; i++) if (pd.GetBool(K_EQ[i])) { cs.equipped |= 1UL << i; cs.hash = cs.hash * 31 + i; cs.count++; }
-            }
-        }
-        catch { }
-        _charms = cs;
-        return cs;
-    }
-    void InvalidateCharmsFrame() { _charmsFrame=-1;lastCharmEquipHash=int.MinValue; }
-    bool CharmGot(PlayerData pd, int id)    { BuildCharmKeys(); return id > 0 && id <= 40 && pd != null && pd.GetBool(K_GOT[id]); }
-    // Hollow Knight 1.5.12620 only defines brokenCharm_23..25 (the three
-    // fragile charms). PlayerData.GetBool logs a full stack trace for an
-    // unknown key, so probing brokenCharm_1..40 during prewarm floods logcat.
-    bool CharmBroken(PlayerData pd, int id) { BuildCharmKeys(); return id >= 23 && id <= 25 && pd != null && pd.GetBool(K_BROKEN[id]); }
 
     // TMP reflection, CACHED. HK's TextMeshPro isn't referenced at compile time, so we drive TMPs by reflection —
     // but `c.GetType().GetProperty("color")` was being re-resolved on ~7 labels EVERY frame. Resolve once per (Type, name).
@@ -271,21 +223,6 @@ public partial class HKDualScreen
             try { var col = c.GetType().GetProperty("color")?.GetValue(c); if (col is Color cc) return cc.a; } catch { }
         }
         return 1f;
-    }
-
-    // PlayMaker's global static FsmExecutionStack (HutongGames.PlayMaker) wraps FSM execution in a bare
-    // PushFsm(this) ... PopFsm() with NO try/finally. Our detached Inventory/Charms clones run/kick their
-    // populate FSMs while missing the real inventory's singleton wiring, so those actions throw NREs; the
-    // throw unwinds straight past PopFsm() and STRANDS a live Fsm graph (its states/actions/variables) on
-    // the static stack. Destroy(clone) frees the GameObjects but never that managed graph -> every pane
-    // build (INV kick) and every frame a pane is shown (CHARM's enabled FSMs) grows the managed heap ->
-    // GC pauses lengthen -> the progressive tab-switch stutter. Between top-level Update calls this stack
-    // is ALWAYS empty except for those leaked entries (real FSMs push+pop within one synchronous call), so
-    // draining it to zero here strands nothing real and restores a correct (empty) ExecutingFsm for events.
-    static void DrainFsmStack()
-    {
-        try { int g = 0; while (HutongGames.PlayMaker.FsmExecutionStack.StackCount > 0 && g++ < 1024) HutongGames.PlayMaker.FsmExecutionStack.PopFsm(); }
-        catch { }
     }
 
     void SetTmpFont(Transform t, float size)

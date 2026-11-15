@@ -37,6 +37,8 @@ public interface IDsFrameHost
     DsCursorArt SelectionCursor();
     /// <summary>Build the resident HUD inside the header; null for none.</summary>
     IDsHeaderHud CreateHud(RectTransform header, float width, float height);
+    /// <summary>The title card's logo; null while the game's art is not loaded yet.</summary>
+    Sprite TitleLogo();
 }
 
 public static class DsFrame
@@ -72,6 +74,18 @@ public static class DsFrame
     }
 
     public static Vector2 ToLayout(Vector2 panelPoint) { return DirectDisplayPresentation.ToLayout(panelPoint); }
+
+    /// <summary>The host's title-card logo; the port's own art when no host is installed.</summary>
+    public static Sprite TitleLogo()
+    {
+        if (Host == null) return DsLogoArt.Sprite;
+        try { return Host.TitleLogo(); }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[DsFrame] title logo unavailable: " + e.Message);
+            return null;
+        }
+    }
 
     public static DsCursorArt SelectionCursor()
     {

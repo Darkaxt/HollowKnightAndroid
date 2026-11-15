@@ -22,22 +22,15 @@ using UnityEngine;
 //                                         L3+R3 combo, HK HUD re-layer, tutorial/heal/lore routing to the
 //                                         bottom, legacy flash-config publication, backdrop capture, hero halo,
 //                                         bottom title logo, attribution.
-//   HKDualScreen.Bottom.Layering.cs  [B1] BOTTOM SCREEN 1: RT + the 4 bottom cameras, private layers, native blit
-//                                         (libhkgpu), dual-screen toggle, the companion SHOW/HIDE gate, RT dump.
-//   HKDualScreen.Bottom.Frame.cs     [B2] BOTTOM SCREEN 2: area/context-box management — frame chrome, tab row,
-//                                         tab state, clone-cache lifecycle, pane fit, UpdateCompanion/PositionFrame
-//                                         orchestration, companion camera.
-//   HKDualScreen.Bottom.Hud.cs       [B3] BOTTOM SCREEN 3: persistent HUD — hudCam2 mirror of HK's masks/soul/geo
-//                                         + our widgets: area name, equipped-charm row, no-map label.
-//   HKDualScreen.Bottom.Inventory.cs [B4] BOTTOM SCREEN 4: Inventory tab — clone init/settle/finalize, equipment
-//                                         grid, counters, Focus lift, item->detail resolution.
-//   HKDualScreen.Bottom.Select.cs    [B5] tap/select (touch bridge, hit-test, HK cursor) + the control-prompt line.
-//   HKDualScreen.Bottom.Map.cs       [B6] BOTTOM SCREEN 6: Map tab — clone, quick-map, compass, watchers, framing.
-//   HKDualScreen.Bottom.Charms.cs    [B7] BOTTOM SCREEN 7: Charms tab — redesign layout, detail, notch pips.
+//   HKDualScreen.Bottom.Layering.cs  [B1] BOTTOM SCREEN: the bottom cameras, private layers, dual-screen toggle,
+//                                         pause gate, popup/fade observation.
+//   HKDualScreen.Shell.cs            [B2] the shared DsShell lower screen (pages in src/lower): build, touch,
+//                                         idle/pause/visibility, header band for the live HUD, title-card logo.
+//   HKDualScreen.Bottom.Hud.cs       [B3] hudCam2 mirror of HK's masks/soul/geo + tutorial/dialogue framing.
+//   HKDualScreen.Bottom.NativeHud.cs [B3] the live HUD's fit into the shell's header band.
 //   HKDualScreen.Util.cs             [U]  shared helpers (find/bounds/layer/TMP/localization/texture bake).
 public partial class HKDualScreen : MonoBehaviour
 {
-    GameObject logoGo;
 
     bool logoNeedsBake;            // title art wasn't loaded yet at boot -> retry the bake periodically
 
@@ -462,7 +455,6 @@ public partial class HKDualScreen : MonoBehaviour
                 return;
             }
             cfg = parsed; cfgMtime = mt;
-            OnConfigReloaded();    // module re-apply hooks (B2 frame rebuild for build-time knobs, B4 grid, fit)
             LogUnknownConfigKeys(txt);
         }
         catch (Exception e) { Debug.Log($"HKDS cfg error {e.Message}"); }
@@ -544,23 +536,17 @@ public partial class HKDualScreen : MonoBehaviour
         }
     }
 
-    // The per-frame body (runs at end-of-frame from the Start() coroutine). This is the ORCHESTRATOR: it owns the
-    // frame's control flow and calls into the modules in a fixed order. ORDER MATTERS:
-    //   bgShow before SyncBgCapture; RouteLoreDialogue (sets loreDialogueOpen) before the companion gate; dsOn before
-    //   the camera enables; PollTouch AFTER UpdateCompanion (a tap takes effect next frame); PushToBottom LAST.
+    // The per-frame body (runs at end-of-frame from the Start() coroutine). This is the ORCHESTRATOR. ORDER MATTERS:
+    //   dsOn before the camera enables; RouteLoreDialogue (sets loreDialogueOpen) before the popup gate;
+    //   the HUD framing before ShellTick, which decides the lower screen's visibility from this frame's popups.
     void Tick()
     {
         LoadConfig(false);
         GameCameras gc;
         GameManager gm;
-        if (!TryResolveSceneManagers(out gc, out gm)) { RestoreHudCameraState(); CharmActionVisibility(false);return; }
+        if (!TryResolveSceneManagers(out gc, out gm)) { RestoreHudCameraState(); HideShell(); return; }
         ValidateHudCameraState(gc);
-        if (TryRunLowerHudFixture(gc, gm)) { CharmActionVisibility(false);return; }
         HkStageHooks.Tick(cfg, cfg.debug == 1);
-        SyncDumpHook();   // B1: RT->PNG dump hook only while compDumpRT=1
-        // A touch tab-select (tab.tap) overrides cfg.compTab indefinitely; if the config tab actually
-        // changes (hot-reload), clear the override so config regains control instead of being stuck.
-        if (cfg.compTab != tab.lastCfg) { tab.lastCfg = cfg.compTab; tab.tap = -1; }
         PushInputSettings();      // M : config -> HKControllerService / HKInputDebug
 
         bool paused = false;
@@ -572,40 +558,27 @@ public partial class HKDualScreen : MonoBehaviour
         bool dsOn = ApplyDualScreenToggle();              // B1: dual-screen master + camera enables (BEFORE companionOn)
         // Display loss, pause teardown, or a product toggle has already run
         // SetTransportActive(false), which restores the live HUD and every
-        // routed overlay. Stop here so none of the reference bottom-screen
-        // hooks can route those objects again while transport is inactive.
-        if (!dsOn) { RestoreHudCameraState(); CharmActionVisibility(false);return; }
+        // routed overlay. Stop here so none of the bottom-screen hooks can
+        // route those objects again while transport is inactive.
+        if (!dsOn) { RestoreHudCameraState(); HideShell(); return; }
         StripPrivateLayers();     // B1: keep the 3 private layers off every on-screen camera
-        bool companionOn = dsOn && (compOn >= 0 ? compOn : cfg.companion) == 1;
+        bool companionOn = (compOn >= 0 ? compOn : cfg.companion) == 1;
 
-        bool presentationOverlay = paused || invOpen;
-        // Pause suppresses lower gameplay roles; native Inventory retains its existing HUD/page policy.
-        // Both overlays suppress the captured gameplay backdrop so the intended logo can draw on black.
-        bgShow = gc != null && gc.hudCanvas != null && gc.hudCanvas.transform.gameObject.activeInHierarchy && !presentationOverlay;
+        bgShow = gc != null && gc.hudCanvas != null && gc.hudCanvas.transform.gameObject.activeInHierarchy && !paused && !invOpen;
         bool hudFadedInGameplay = HudFadedInGameplay(gc);   // B1: HK faded its HUD (lore tablet / cutscene) -> hide companion
 
-        // Session boundary: QUIT-TO-MENU tears the companion down and re-arms the startup tab, so the next game
-        // load starts fresh on cfg.compTab (Map) with re-cloned panes — the new save's data and any language
-        // changed in the menu included. Pause hides the resident clones without resetting them; Inventory
-        // keeps them visible. The menu is the one real reset point. Without this the old tab + stale-language clones survived.
-        SyncSupplementarySource(); // identity-only while healthy; retire all five owners even during pause
         bool atMenu = false; try { atMenu = gm.gameState == GlobalEnums.GameState.MAIN_MENU; } catch { }
         if (atMenu) RestoreHudCameraState();
-        if (atMenu && !wasAtMenu)
-        {
-            if(mapClone != null || invCloneCache != null || charmCloneCache != null || journalCloneCache != null || guideCloneCache != null || frameRoot != null || tab.built != -1) TeardownCompanion();
-            tab.tap = -1;   // back to the configured startup tab (Map)
-            Dbg("HKDS session reset: quit-to-menu -> companion torn down, tab -> cfg.compTab");
-        }
+        // QUIT-TO-MENU is the session boundary: the next save starts fresh on the Map page
+        // with its own data and any language chosen in the menu.
+        if (atMenu && !wasAtMenu && shell != null) { DisposeShell(); Dbg("HKDS session reset: quit-to-menu -> shell rebuilt on next use"); }
         wasAtMenu = atMenu;
 
         ApplyLowerPauseGate(gc, paused); // B1: route HUD before tutorial hooks; paused gameplay roles stay hidden
-        if(paused || atMenu) CharmActionVisibility(false);
+        bool popupAny = false;
         if (!paused && !atMenu && gc != null && gc.hudCamera != null)
         {
             var src = gc.hudCamera;
-            // Active transport keeps HUD ownership below; the pause gate selects its render role.
-            // RestoreReferenceRouting hands it back to the upper UI only when product/transport ownership ends.
             bool dsOff = cfg.dualScreen == 0;
             if (dsOff)
             {
@@ -615,61 +588,31 @@ public partial class HKDualScreen : MonoBehaviour
             }
             else MainGameHooks(gc);   // M : tutorial/flash/heal/lore routing (RouteLoreDialogue sets loreDialogueOpen)
             // Popup gate, computed ONCE per frame after the routing hooks: a dialogue box, a tutorial prompt or
-            // the attribution card drawing on the bottom hides the companion AND (compPopupBlack) blanks the HUD
-            // mirror + backdrop, so the popup reads on clean black.
+            // the attribution card drawing on the bottom hides the shell AND (compPopupBlack) blanks the HUD,
+            // so the popup reads on clean black.
             bool creditShowing = CreditShowing();
             creditNow = creditShowing;
-            // fix#3(157-fb): the attribution no longer blanks the whole bottom — the companion stays up
-            // and only the map content + "Map not acquired yet" hide (UpdateCompanion / PositionHudStrip),
-            // with the credit drawing over it on promptCam (depth 101 > companion 99/100).
-            bool popupAny = loreDialogueOpen || BottomOverlayActive();
+            popupAny = loreDialogueOpen || BottomOverlayActive();
             popupBlack = cfg.compPopupBlack == 1 && popupAny;
             SyncBgCapture(gc);        // black shell; never construct or render a second scenery camera
-            ApplyMainFocusLift();      // M : lift the REAL inventory's Focus+3-spells cluster (edits the Check Active FSMs' Up Y/Down Y once)
-            if (invOpen) FixEmptyCounterDetail();   // M : mask-shard / vessel counters with 0 found: swap HK's empty *_NONE convo keys for the informative *_0 ones (match the bottom screen)
-            // fix#6(161-fb): skin textures changed -> the clones hold material copies frozen at clone
-            // time; rebuild them so the bottom screen wears the skin too.
-            if (cfg.debug == 1) { InvStateDiag(); DebugPopupTick(); }   // M : debug — inventory FSM trace + popup glyph repro/diag
-            FrameHudCams(src, popupBlack, creditShowing);   // B3: hudCam2 (HUD mirror; blanked behind popups) + promptCam framing (credit zoom + dialogue centring)
+            ApplyMainFocusLift();      // M : lift the REAL inventory's Focus+3-spells cluster
+            if (invOpen) FixEmptyCounterDetail();   // M : mask-shard / vessel counters with 0 found: informative *_0 keys
+            // The live HUD draws in the shell's header band; with the companion off it keeps that band alone.
+            bool hudBlocked = popupBlack || (companionOn && !shellHudWanted) || !shellHudDestinationValid;
+            FrameHudCams(src, hudBlocked, creditShowing);   // B3: hudCam2 (HUD in the header) + promptCam framing
             SyncBottomFade();          // B1: mirror the main screen's CameraFade (room/death/cutscene dims) onto the bottom
-
-            if (companionOn) PrewarmTick();   // B2: build/settle the Inventory+Charms clones in the background (during the black load fade-in if possible)
-
-            // attrCam belongs to the companion. (The opening attribution used to time-share it, but now
-            // lives on tutLayer/promptCam — see ScanNode/CreditShowing.)
-            bool companionVisible=CompanionVisible(companionOn, paused, invOpen, hudFadedInGameplay, popupAny);
-            if(!companionVisible) CharmActionVisibility(false);
-            if (companionVisible)
-            {
-                attrCam.cullingMask = 1 << ATTR_LAYER;   // show companion
-                try { UpdateCompanion(src);PollTouch(); }
-                finally { GateNativePresentation(); } // Input or a throwing layout can revoke readiness after positioning.
-            }
-            else if (companionOn)
-            {
-                // A routed lore/tutorial popup or an in-gameplay HUD fade needs the lower surface. Keep the clone
-                // alive so it returns without rebuilding once that transient content is gone.
-                attrCam.cullingMask = 0;
-            }
-            else
-            {
-                // Companion OFF -> tear it down; nothing renders on ATTR_LAYER.
-                if (mapClone != null || invCloneCache != null || charmCloneCache != null || journalCloneCache != null || guideCloneCache != null || frameRoot != null || tab.built != -1) TeardownCompanion();
-                attrCam.cullingMask = 0;
-            }
             if (creditShowing) CenterAttribution();   // M : keep the credit card on promptCam's view axis
             if (!wired) { Dbg($"HKDS wired (direct display) hud={hudLayer} tut={tutLayer}"); wired = true; }
             ApplyHalo();
         }
         else
         {
-            CharmActionVisibility(false);
-            hudCam2.cullingMask = 1 << hudLayer;   // menu/intro: just the logo on the bottom
+            if (hudCam2 != null) hudCam2.cullingMask = 0;   // menu/intro/pause: the shell's title card carries the logo
             popupBlack = false;
         }
 
-        LogoTick();      // M : bottom title logo bake/retry + tab-fleur bake + logo visibility
-        PushToBottom();  // B1: native blit — LAST
+        ShellTick(gm, paused, companionOn, hudFadedInGameplay, popupAny);
+        LogoTick();      // M : title logo bake/retry for the shell's title card
     }
 
     // [M] Push virtual-controller / glyph settings to the input bridge (it owns the on-screen touch overlay).
@@ -746,12 +689,11 @@ public partial class HKDualScreen : MonoBehaviour
             // A replaced live root belongs to native upper UI again, not the lower role it last used.
             if (hudRootApplied != null && hudRootApplied != hudRoot)
                 SetLayerRecursive(hudRootApplied, UI_LAYER);
-            // While paused, park only the live HUD on the suppressed companion role. The separately
-            // parented logo stays on hudLayer; native Inventory alone does not change HUD visibility.
-            // Product/transport restoration still returns this subtree to the original upper UI layer.
+            // Pause keeps the live HUD on hudLayer; ApplyLowerPauseGate culls it from hudCam2.
+            // Product/transport restoration returns this subtree to the original upper UI layer.
             // New resident children are handled by the bounded structural-edge cache,
             // not an unchanged-gameplay periodic hierarchy walk.
-            int wantLayer = restoreToUpperDisplay ? UI_LAYER : suppressForPause ? ATTR_LAYER : hudLayer;
+            int wantLayer = restoreToUpperDisplay ? UI_LAYER : hudLayer;
             if (wantLayer != hudLayerApplied || hudRoot != hudRootApplied)
             { SetLayerRecursive(hudRoot, wantLayer); hudLayerApplied = wantLayer; hudRootApplied = hudRoot; }
             PreserveNativeHudVignette(hudRoot);
@@ -841,16 +783,11 @@ public partial class HKDualScreen : MonoBehaviour
         catch (Exception e) { WarnOnce("tilemap fix", e); }
     }
 
-    // [M] Show the menu logo whenever the real HUD isn't up (menus, intro, in-engine cutscenes), hide it once the
-    // HUD canvas is active (bgShow). The title art (vheart_title) only loads once the menu scene is up, so a
-    // boot-time bake can miss it: retry ~once a second until it succeeds (SetupLogo caches the bake). Also grabs
-    // the start-screen fleur while its atlas is resident (intro/menu) and caches it for the in-game frame.
+    // [M] The shell's title card shows HK's own title art (vheart_title), which only loads once the menu scene is
+    // up, so a boot-time bake can miss it: retry ~once a second until it succeeds (SetupLogo caches the bake).
     void LogoTick()
     {
-        if (logoGo == null && logoNeedsBake && (Time.frameCount % 60) == 0) { logoNeedsBake = false; SetupLogo(); }
-        if (!fleurBaked && (Time.frameCount % 30) == 0) { TryBakeTabFleurs(); if (fleurBaked && frameRoot != null) TeardownFrame(); }   // fleurs baked AFTER the frame was built (first-ever run, empty cache) -> rebuild once so the real art replaces the tk2d fallback
-        if (logoGo != null && logoGo.activeSelf == bgShow)
-            logoGo.SetActive(!bgShow);
+        if (titleLogoSprite == null && logoNeedsBake && (Time.frameCount % 60) == 0) { logoNeedsBake = false; SetupLogo(); }
     }
 
     // Opening attribution: recentre the (freely animating) "Credits" onto promptCam's view axis via its
@@ -976,17 +913,7 @@ public partial class HKDualScreen : MonoBehaviour
                 Dbg($"HKDS logo bake src={(src != null ? src.name : "none")} ok={(tex != null)}");
             }
             if (tex == null) { logoNeedsBake = true; return; }   // title art not loaded yet — retry later
-            var sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
-            logoGo = new GameObject("HKLogo");
-            DontDestroyOnLoad(logoGo);
-            logoGo.layer = hudLayer;   // private layer -> only hudCam2 (bottom), never the main screen
-            logoGo.transform.SetParent(hudCam2.transform, false);
-            logoGo.transform.localPosition = new Vector3(0f, 0f, 10f);
-            float worldW = hudCam2.orthographicSize * hudCam2.aspect * 2f * 0.7f * cfg.logoScale;
-            logoGo.transform.localScale = Vector3.one * (worldW / (tex.width / 100f));
-            var sr = logoGo.AddComponent<SpriteRenderer>();
-            sr.sprite = sprite;
-            sr.sortingOrder = 32000;
+            titleLogoSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
             Dbg($"HKDS logo {tex.width}x{tex.height} loaded");
         }
         catch (Exception e) { Debug.Log($"HKDS logo error {e.Message}"); }

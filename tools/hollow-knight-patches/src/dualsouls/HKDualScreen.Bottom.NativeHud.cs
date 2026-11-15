@@ -7,7 +7,14 @@ public partial class HKDualScreen
     // Discovery is limited to ownership/structural edges. A changed native phase can
     // measure its own current bounds; it is not a settled-state/FPS certificate.
     const int NativeHudRendererLimit = 256, NativeHudNodeLimit = 384, NativeHudAnimatorLayers = 8;
-    const int NativeHudReservationLimit = 32;
+    // A failed measurement retries every 120 frames until it resolves.
+    sealed class NativeHudRetry
+    {
+        int next; bool ready;
+        public bool Due(int frame) { if (ready || frame < next) return false; next = frame + 120; return true; }
+        public void Resolved() { ready = true; }
+        public void Reset() { ready = false; next = 0; }
+    }
     sealed class NativeHudAnimation
     {
         public Animator Owner;
@@ -47,7 +54,7 @@ public partial class HKDualScreen
         public string Content;
         public float ParticleTime;
         public Bounds Bounds;
-        public readonly HKLowerLayout.Retry Retry = new HKLowerLayout.Retry();
+        public readonly NativeHudRetry Retry = new NativeHudRetry();
     }
     // HUD-local structural notification only; no registry or general event bus.
     public sealed class NativeHudChildrenWatch : MonoBehaviour
@@ -59,39 +66,16 @@ public partial class HKDualScreen
     struct NativeHudNode { public Transform Transform; public NativeHudChildrenWatch Watch; }
     bool nativeHudStructureDirty;
     void NativeHudStructureChanged() { nativeHudStructureDirty = true; nativeHudVignetteLookupRoot = null; }
-    struct NativeHudHeaderSprite
-    {
-        public SpriteRenderer Owner;
-        public Sprite Sprite;
-        public Matrix4x4 Matrix;
-        public Vector2 Size;
-        public SpriteDrawMode Mode;
-        public Bounds Bounds;
-    }
-    struct NativeHudHeaderLabel
-    {
-        public Transform Owner;
-        public Matrix4x4 Matrix;
-        public Bounds Ink, World;
-    }
-    readonly NativeHudHeaderLabel[] nativeHudHeaderLabels = new NativeHudHeaderLabel[3];
-    readonly Bounds[] nativeHudReservationWorld = new Bounds[NativeHudReservationLimit];
-    readonly Rect[] nativeHudReservationPixels = new Rect[NativeHudReservationLimit];
-    readonly bool[] nativeHudReservationKnown = new bool[NativeHudReservationLimit], nativeHudReservationIncluded = new bool[NativeHudReservationLimit];
-    Matrix4x4 nativeHudHeaderProjection, nativeHudHeaderMatrix;
-    bool nativeHudHeaderCameraChanged;
     readonly NativeHudOwner[] nativeHudOwners = new NativeHudOwner[NativeHudRendererLimit];
     readonly NativeHudAnimation[] nativeHudAnimations = new NativeHudAnimation[NativeHudRendererLimit];
     int nativeHudAnimationCount;
     readonly NativeHudNode[] nativeHudNodes = new NativeHudNode[NativeHudNodeLimit];
-    readonly NativeHudHeaderSprite[] nativeHudHeaderSprites = new NativeHudHeaderSprite[23];
-    readonly Rect[] nativeHudReservations = new Rect[NativeHudReservationLimit];
     readonly Transform[] nativeHudRoleScratch = new Transform[NativeHudNodeLimit];
     Transform nativeHudVignetteLookupRoot;
-    readonly HKLowerLayout.Retry nativeHudBindRetry = new HKLowerLayout.Retry();
+    readonly NativeHudRetry nativeHudBindRetry = new NativeHudRetry();
     Transform nativeHudRoot, nativeHudHide, nativeHudVignette;
     Camera nativeHudCamera;
-    int nativeHudOwnerCount, nativeHudNodeCount, nativeHudReservationCount, nativeHudSkinStamp;
+    int nativeHudOwnerCount, nativeHudNodeCount, nativeHudSkinStamp;
     bool nativeHudBound, nativeHudBlocked, nativeHudFitReady;
     Rect nativeHudDestination;
     Vector3 nativeHudViewMin, nativeHudViewMax;
@@ -114,10 +98,7 @@ public partial class HKDualScreen
             if (watch != null && watch.Owner == this) watch.Owner = null;
             nativeHudNodes[i] = default;
         }
-        for (int i = 0; i < nativeHudHeaderSprites.Length; i++) nativeHudHeaderSprites[i] = default;
-        for (int i = 0; i < nativeHudHeaderLabels.Length; i++) nativeHudHeaderLabels[i] = default;
-        for (int i = 0; i < NativeHudReservationLimit; i++) nativeHudReservationKnown[i] = false;
-        nativeHudOwnerCount = nativeHudNodeCount = nativeHudReservationCount = 0;
+        nativeHudOwnerCount = nativeHudNodeCount = 0;
         nativeHudBound = nativeHudFitReady = false; nativeHudBindRetry.Reset();
     }
 
@@ -360,6 +341,57 @@ public partial class HKDualScreen
         return o.Ready;
     }
 
+    static bool SamePoint(Vector3 a, Vector3 b) { return a.x == b.x && a.y == b.y && a.z == b.z; }
+    static bool SameBounds(Bounds a, Bounds b) { return SamePoint(a.center, b.center) && SamePoint(a.size, b.size); }
+
+    // Already-bound native consumers reuse generated buffers without discovery or
+    // generation. The same four-corner validation owns both call paths.
+    static bool TryGeneratedGlyphBoundsWorld(TMProOld.TMP_Text tmp, Transform tmpT, out Vector3 wMin, out Vector3 wMax)
+    {
+        wMin = wMax = Vector3.zero;
+        try
+        {
+            if (tmp == null || tmpT == null) return false;
+            var info = tmp.textInfo;
+            if (info == null || !ReferenceEquals(info.textComponent, tmp) || info.characterInfo == null ||
+                info.characterCount <= 0 || info.characterCount > info.characterInfo.Length ||
+                info.meshInfo == null || info.materialCount <= 0 || info.materialCount > info.meshInfo.Length) return false;
+            Vector3 min = Vector3.zero, max = Vector3.zero;
+            bool have = false;
+            for (int i = 0; i < info.characterCount; i++)
+            {
+                var character = info.characterInfo[i];
+                if (!character.isVisible) continue;
+                int material = character.materialReferenceIndex, vertex = character.vertexIndex;
+                if (material < 0 || material >= info.materialCount || vertex < 0) return false;
+                var mesh = info.meshInfo[material];
+                if (mesh.mesh == null || mesh.vertices == null || mesh.vertexCount < 4 ||
+                    mesh.vertexCount > mesh.vertices.Length || vertex > mesh.vertexCount - 4) return false;
+                // Four generated vertices, including overhang, skew and fallback material groups.
+                // Do not substitute ascender/descender/xAdvance or the padded/decorated material mesh extent.
+                for (int corner = 0; corner < 4; corner++)
+                {
+                    Vector3 local = corner == 0 ? character.vertex_BL.position : corner == 1 ? character.vertex_TL.position :
+                                    corner == 2 ? character.vertex_TR.position : character.vertex_BR.position;
+                    Vector3 buffer = mesh.vertices[vertex + corner];
+                    if (float.IsNaN(local.x) || float.IsInfinity(local.x) || float.IsNaN(local.y) || float.IsInfinity(local.y) ||
+                        float.IsNaN(local.z) || float.IsInfinity(local.z) || local.x != buffer.x || local.y != buffer.y || local.z != buffer.z) return false;
+                    Vector3 world = tmpT.TransformPoint(local);
+                    if (float.IsNaN(world.x) || float.IsInfinity(world.x) || float.IsNaN(world.y) || float.IsInfinity(world.y) ||
+                        float.IsNaN(world.z) || float.IsInfinity(world.z)) return false;
+                    if (!have) { min = max = world; have = true; }
+                    else { min = Vector3.Min(min, world); max = Vector3.Max(max, world); }
+                }
+            }
+            Vector3 extent = max - min;
+            if (!have || float.IsNaN(extent.x) || float.IsInfinity(extent.x) || float.IsNaN(extent.y) || float.IsInfinity(extent.y) ||
+                float.IsNaN(extent.z) || float.IsInfinity(extent.z) || extent.sqrMagnitude <= 1e-8f) return false;
+            wMin = min; wMax = max;
+            return true;
+        }
+        catch { return false; }
+    }
+
     static Vector3 NativeHudCorner(Bounds b, int i)
     { return new Vector3((i & 1) == 0 ? b.min.x : b.max.x, (i & 2) == 0 ? b.min.y : b.max.y, (i & 4) == 0 ? b.min.z : b.max.z); }
 
@@ -393,110 +425,15 @@ public partial class HKDualScreen
         nativeHudViewMin = lo; nativeHudViewMax = hi; return true;
     }
 
-    Bounds NativeHudHeaderInk(NativePaneLabel label, Bounds ink, int slot)
-    {
-        var old = nativeHudHeaderLabels[slot]; var matrix = label.Root.localToWorldMatrix;
-        if (old.Owner != label.Root || !NativeHudSameMatrix(old.Matrix, matrix) || !SameBounds(old.Ink, ink))
-        {
-            var lo = label.Root.TransformPoint(NativeHudCorner(ink, 0)); var hi = lo;
-            for (int i = 1; i < 8; i++)
-            { var p = label.Root.TransformPoint(NativeHudCorner(ink, i)); lo = Vector3.Min(lo, p); hi = Vector3.Max(hi, p); }
-            old = new NativeHudHeaderLabel { Owner = label.Root, Matrix = matrix, Ink = ink, World = new Bounds((lo + hi) * .5f, hi - lo) };
-            nativeHudHeaderLabels[slot] = old;
-        }
-        return old.World;
-    }
-
-    bool AddNativeHudReservation(Bounds world, int slot, ref int count, ref bool changed)
-    {
-        if (!NativeHudBoundsValid(world) || attrCam == null) return false;
-        if (!nativeHudReservationKnown[slot] || nativeHudHeaderCameraChanged || !SameBounds(world, nativeHudReservationWorld[slot]))
-        {
-            var lo = new Vector3(float.PositiveInfinity, float.PositiveInfinity, 0);
-            var hi = new Vector3(float.NegativeInfinity, float.NegativeInfinity, 0);
-            for (int i = 0; i < 8; i++)
-            {
-                var p = attrCam.WorldToViewportPoint(NativeHudCorner(world, i));
-                var pixel = new Vector3(p.x * BOTTOM_W, (1 - p.y) * BOTTOM_H, 0);
-                lo = Vector3.Min(lo, pixel); hi = Vector3.Max(hi, pixel);
-            }
-            var g = LowerGeometry();
-            nativeHudReservationIncluded[slot] = hi.y > 0 && lo.y < g.HudHeight && hi.x > 0 && lo.x < g.Width;
-            nativeHudReservationPixels[slot] = new Rect(lo.x, lo.y, hi.x - lo.x, hi.y - lo.y);
-            nativeHudReservationWorld[slot] = world; nativeHudReservationKnown[slot] = true;
-        }
-        if (!nativeHudReservationIncluded[slot]) return true;
-        if (count == NativeHudReservationLimit) return false;
-        var rect = nativeHudReservationPixels[slot];
-        changed |= count >= nativeHudReservationCount || !NativeHudSameRect(nativeHudReservations[count], rect);
-        nativeHudReservations[count++] = rect; return true;
-    }
-
-    bool AddNativeHudHeaderSprite(SpriteRenderer r, int slot, ref int count, ref bool changed)
-    {
-        if (r == null || !r.enabled || !r.gameObject.activeInHierarchy || r.color.a <= 0) return true;
-        if (r.sprite == null) return false;
-        var old = nativeHudHeaderSprites[slot]; var matrix = r.transform.localToWorldMatrix;
-        if (old.Owner != r || old.Sprite != r.sprite || !NativeHudSameMatrix(old.Matrix, matrix) ||
-            old.Size.x != r.size.x || old.Size.y != r.size.y || old.Mode != r.drawMode)
-        {
-            old = new NativeHudHeaderSprite { Owner = r, Sprite = r.sprite, Matrix = matrix, Size = r.size, Mode = r.drawMode, Bounds = r.bounds };
-            nativeHudHeaderSprites[slot] = old;
-        }
-        return AddNativeHudReservation(old.Bounds, 1 + slot, ref count, ref changed);
-    }
-
-    bool AddNativeHudAction(MapActionButton button, int slot, ref int count, ref bool changed)
-    {
-        if (button == null || button.Root == null || !button.Root.gameObject.activeInHierarchy || !button.InkReady ||
-            button.Plate == null || !button.Plate.enabled) return true;
-        if (!AddNativeHudReservation(button.Hit, 24 + slot * 2, ref count, ref changed)) return false;
-        return AddNativeHudReservation(NativeHudHeaderInk(button.Graphic, button.Ink, 1 + slot), 25 + slot * 2, ref count, ref changed);
-    }
-
+    // The shell's header band (HKDualScreen.Shell.cs) is the HUD's destination.
     bool RefreshNativeHudDestination(out bool changed)
     {
-        changed = false; int count = 0;
-        if (attrCam == null) return false;
-        var projection = attrCam.projectionMatrix; var matrix = attrCam.transform.localToWorldMatrix;
-        nativeHudHeaderCameraChanged = nativeHudWidth != BOTTOM_W || nativeHudHeight != BOTTOM_H ||
-            !NativeHudSameMatrix(projection, nativeHudHeaderProjection) || !NativeHudSameMatrix(matrix, nativeHudHeaderMatrix);
-        nativeHudHeaderProjection = projection; nativeHudHeaderMatrix = matrix;
-        if (shellTitle != null && shellTitle.Root != null && shellTitle.Root.gameObject.activeInHierarchy &&
-            shellTitleInkReady && shellTitle.Renderer != null && shellTitle.Renderer.enabled)
-            if (!AddNativeHudReservation(NativeHudHeaderInk(shellTitle, shellTitleInk, 0), 0, ref count, ref changed)) return false;
-        if (!AddNativeHudHeaderSprite(benchPillSR, 0, ref count, ref changed)) return false;
-        if (equipCharmSRs.Count > 11 || notchSRs.Count > 11) return false;
-        for (int i = 0; i < equipCharmSRs.Count; i++) if (!AddNativeHudHeaderSprite(equipCharmSRs[i], 1 + i, ref count, ref changed)) return false;
-        for (int i = 0; i < notchSRs.Count; i++) if (!AddNativeHudHeaderSprite(notchSRs[i], 12 + i, ref count, ref changed)) return false;
-        if (!AddNativeHudAction(mapViewAction, 0, ref count, ref changed) || !AddNativeHudAction(mapMarkerAction, 1, ref count, ref changed)) return false;
-        changed |= count != nativeHudReservationCount || nativeHudWidth != BOTTOM_W || nativeHudHeight != BOTTOM_H;
-        nativeHudReservationCount = count; nativeHudWidth = BOTTOM_W; nativeHudHeight = BOTTOM_H;
-        if (!changed && nativeHudFitReady) return true;
-        var g = LowerGeometry();
-        // Subpixel inward bias keeps the six-pixel margin after float viewport conversion.
-        const float pad = 6.01f;
-        float maxW = Mathf.Min(g.Width - 2 * pad, g.Width * .74f), maxH = g.HudHeight - 2 * pad;
-        float best = 0; Rect destination = default;
-        // At most 33x33 candidates and 32 intersections on a relevant layout edge.
-        // Both dimensions may shrink, but the native HUD remains top-left anchored.
-        for (int x = -1; x < count; x++) for (int y = -1; y < count; y++)
-        {
-            // Keep candidate edges strictly inside obstacle edges after float rounding.
-            float w = x < 0 ? maxW : Mathf.Min(maxW, nativeHudReservations[x].x - 2 * pad - .01f);
-            float h = y < 0 ? maxH : Mathf.Min(maxH, nativeHudReservations[y].y - 2 * pad - .01f);
-            if (w <= 0 || h <= 0 || w * h <= best) continue;
-            bool free = true;
-            for (int i = 0; i < count; i++)
-            {
-                var r = nativeHudReservations[i];
-                if (r.x - pad < pad + w && r.x + r.width + pad > pad && r.y - pad < pad + h && r.y + r.height + pad > pad)
-                { free = false; break; }
-            }
-            if (free) { best = w * h; destination = new Rect(pad, pad, w, h); }
-        }
-        if (best <= 0) return false;
-        nativeHudDestination = destination; return true;
+        changed = false;
+        if (!shellHudDestinationValid) return false;
+        var d = shellHudDestination;
+        changed = !NativeHudSameRect(d, nativeHudDestination) || nativeHudWidth != BOTTOM_W || nativeHudHeight != BOTTOM_H;
+        nativeHudDestination = d; nativeHudWidth = BOTTOM_W; nativeHudHeight = BOTTOM_H;
+        return d.width > 0f && d.height > 0f;
     }
 
     void BeforeNativeHudCamera(Camera camera)

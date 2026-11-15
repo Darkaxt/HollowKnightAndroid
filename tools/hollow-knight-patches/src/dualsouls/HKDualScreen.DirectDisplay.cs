@@ -69,7 +69,6 @@ public partial class HKDualScreen
         // Display retirement can occur with no current scene managers. Restore the captured
         // camera independently, before route-back and any subsequent logo/menu presentation.
         TryDirectStep(RestoreHudCameraState, failures);
-        TryDirectStep(ReleaseLowerHudFixtureInputLockOrThrow, failures);
         TryDirectStep(() =>
         {
             var cameras = resolvedGameCameras;
@@ -133,7 +132,8 @@ public partial class HKDualScreen
         if (directDisplayShuttingDown) return;
         try
         {
-            TeardownCompanion();
+            DisposeShell();
+            if (ReferenceEquals(DsFrame.Host, shellHost)) DsFrame.Host = null;
         }
         catch (Exception)
         {
@@ -151,11 +151,6 @@ public partial class HKDualScreen
             bgDimmer = null;
             bgCaptureCam = null;
             bgSetup = false;
-        }, failures);
-        TryDirectStep(() =>
-        {
-            if (logoGo != null) Destroy(logoGo);
-            logoGo = null;
         }, failures);
 
         var completedTransport = transport;

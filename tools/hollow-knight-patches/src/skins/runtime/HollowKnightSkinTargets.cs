@@ -124,12 +124,12 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             }
             return found;
         }
-        // These owned roots are created by HKDualScreen.Bottom.Frame.cs. Companion clones consume
-        // SkinStamp; they must never become a second authority for capturing game originals.
+        // HkMapRig is the lower-screen map copy (lower/HkMapView.cs). Copies consume SkinStamp;
+        // they must never become a second authority for capturing game originals.
         public static bool IsAuthoritativeHierarchy(IEnumerable<string> ancestors)
         {
             foreach (var name in ancestors)
-                if (name == "HKCompanionRoot" || name == "HKPaneCloneStaging" || name == "HKCompFrame") return false;
+                if (name == "HkMapRig") return false;
             return true;
         }
         static readonly HashSet<string> Supported = new HashSet<string>(SupportedTargets(), StringComparer.OrdinalIgnoreCase);

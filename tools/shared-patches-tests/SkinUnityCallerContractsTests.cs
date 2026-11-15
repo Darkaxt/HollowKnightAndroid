@@ -204,10 +204,10 @@ public sealed class SkinUnityCallerContractsTests
     }
 
     [Fact]
-    public void HK_companion_collection_is_never_an_original_owner()
+    public void HK_lower_map_copy_collection_is_never_an_original_owner()
     {
         using var rig = new Rig(false);
-        rig.Collection.transform.SetParent(new GameObject("HKCompanionRoot").transform);
+        rig.Collection.transform.SetParent(new GameObject("HkMapRig").transform);
         Assert.Equal(SkinApplyStatus.AwaitingTargets, rig.Apply(rig.Pack("A")).Status);
         Assert.Equal(1, ImageConversion.Decodes);
         Assert.Same(rig.Vanilla, rig.Material.mainTexture);

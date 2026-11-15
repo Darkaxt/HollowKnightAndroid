@@ -153,7 +153,7 @@ public partial class HKDualScreen
     }
 
     // [B1] Gameplay pause gate, before the gameplay render/update branch. Preserve the existing unpaused
-    // HUD-then-tutorial routing order; park the paused live HUD on ATTR so hudCam2 draws only its separate logo.
+    // HUD-then-tutorial routing order; the paused live HUD is culled while the shell shows its title card.
     // Never alter role-camera enables or resident pages: normal policy restores them on the first unpaused Tick.
     void ApplyLowerPauseGate(GameCameras gc, bool paused)
     {
@@ -162,24 +162,10 @@ public partial class HKDualScreen
         RelayerHud(gc, false, paused);
         if (promptCam != null) promptCam.cullingMask = paused ? 0 : 1 << tutLayer;
         if (!paused) return;
-        if (hudCam2 != null) hudCam2.cullingMask = 1 << hudLayer;
-        if (attrCam != null) attrCam.cullingMask = 0;
+        if (hudCam2 != null) hudCam2.cullingMask = 0;   // the shell's title card carries the logo
         bgShow = false;
         if (bgCaptureCam != null) bgCaptureCam.enabled = false;
         if (clearCam != null) clearCam.clearFlags = CameraClearFlags.SolidColor;
-    }
-
-    // [B1] Pause hides gameplay while retaining its resident page. Native Inventory keeps that page visible.
-    // A gameplay HUD fade or a routed lore/tutorial popup still suppresses the companion as before.
-    bool CompanionVisible(
-        bool companionOn,
-        bool paused,
-        bool inventoryOpen,
-        bool hudFaded,
-        bool popupAny)
-    {
-        bool gameplayHudFaded = hudFaded && !paused && !inventoryOpen;
-        return companionOn && !paused && !gameplayHudFaded && !popupAny;
     }
 
     // [B1] True while the opening attribution ("Team Cherry presents" / the title card) actually draws on the
@@ -397,14 +383,5 @@ public partial class HKDualScreen
             }
         }
         catch { }
-    }
-
-    // The shared direct renderer does not expose an intermediate composited RT.
-    // Keep the diagnostic hook callable so the oracle orchestrator remains intact.
-    void SyncDumpHook() { }
-
-    void PushToBottom()
-    {
-        // Cameras target display 1 directly. Rendering is submitted by Unity.
     }
 }
