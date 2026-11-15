@@ -17,7 +17,7 @@ using UnityEngine.UI;
 using TmpText = TMProOld.TextMeshProUGUI;
 using TmpAlign = TMProOld.TextAlignmentOptions;
 
-public class DsShell
+public partial class DsShell
 {
     class Entry
     {

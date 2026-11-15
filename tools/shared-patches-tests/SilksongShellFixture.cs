@@ -69,6 +69,9 @@ public static class SilksongProcessStartup
     public static void Run(Action mods,Func<bool> eligible,Action create){mods();if(eligible())create();}
 }
 public static class SilksongModsRuntime{public static void EnsureStarted(){}}
+// The QA command channel (DualScreenV2.Commands.cs, DsQaReport.cs) is outside the shell fixture.
+public static class DsQaReport{public static int Ticks;public static void Tick(){Ticks++;}}
+partial class DualScreenV2{public int CommandPolls;void PollCommands(){CommandPolls++;}}
 // Silksong installs its frame host at boot; the fixture models that default.
 public static partial class DsFrame{static DsFrame(){Host=SilksongFrameHost.Instance;}}
 public static class DsGameData{public static bool InGame=true;public static string IdleReason=>"No save";}

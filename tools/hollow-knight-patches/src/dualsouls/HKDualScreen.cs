@@ -540,6 +540,7 @@ public partial class HKDualScreen : MonoBehaviour
     void Tick()
     {
         LoadConfig(false);
+        DsQaReport.Tick();        // Q : frame pacing + error census for the QA report
         PollCommands();           // Q : QA command file (adb-reachable)
         GameCameras gc;
         GameManager gm;

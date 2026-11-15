@@ -10,7 +10,7 @@ using UnityEngine;
 public partial class HKDualScreen
 {
     const string CommandHelp =
-        "help | state | pause | mods | skins | skin <list|row N|left N|right N> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
         "mods-list | mod <id> <value> | pd <field>... | geo <amount> | die | save | quit-menu | fonts | hudfit | sprites <text>";
 
     void PollCommands() { DsCommandFile.Poll(RunCommand); }
@@ -23,6 +23,7 @@ public partial class HKDualScreen
         switch (a[0].ToLowerInvariant())
         {
             case "help": return CommandHelp;
+            case "report": return CommandReport(gm, ui);
             case "state": return CommandState(gm, ui);
             case "pause":
                 if (gm == null) return "error no GameManager";
@@ -100,6 +101,28 @@ public partial class HKDualScreen
           .Append(" inGame=").Append(shellInGame).Append(" shellPaused=").Append(shell != null && shell.Paused)
           .Append(" companion=").Append(compOn).Append(" credit=").Append(creditNow).Append(" popupBlack=").Append(popupBlack)
           .Append(" hudWanted=").Append(shellHudWanted).Append(" hudFit=").Append(nativeHudFitReady);
+        return sb.ToString();
+    }
+
+    // One call for device QA: everything the per-candidate checklist reads, so no UI navigation is needed.
+    string CommandReport(GameManager gm, UIManager ui)
+    {
+        var sb = new StringBuilder();
+        sb.Append("report: game=Hollow Knight version=").Append(Application.version)
+          .Append(" time=").Append(DateTime.Now.ToString("HH:mm:ss")).Append('\n');
+        sb.Append(CommandState(gm, ui)).Append('\n');
+        sb.Append(shell != null ? shell.Report() : "panes: no shell").Append('\n');
+        sb.Append("hudfit: ").Append(CommandHudFit()).Append('\n');
+        sb.Append("player: ").Append(DsQaReport.Fields(PlayerData.instance,
+            "health", "maxHealth", "healthBlue", "MPCharge", "MPReserve", "geo", "charmSlots", "charmSlotsFilled",
+            "equippedCharms", "overcharmed")).Append('\n');
+        var mods = ModsController();
+        sb.Append("mods: ").Append(mods != null ? "\n" + CommandModsList() : "not ready").Append('\n');
+        var skins = DualSouls.Skins.HollowKnight.Runtime.HollowKnightSkinRuntime.Current;
+        sb.Append("skins: stamp=").Append(DualSouls.Skins.HollowKnight.Runtime.HollowKnightSkinRuntime.SkinStamp)
+          .Append(' ').Append(skins != null ? DsQaReport.Fields(skins.LastResult, "Status", "Detail") : "no runtime").Append('\n');
+        sb.Append(DsQaReport.Frames()).Append('\n');
+        sb.Append(DsQaReport.Errors());
         return sb.ToString();
     }
 

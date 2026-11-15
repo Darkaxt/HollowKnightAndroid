@@ -10,7 +10,7 @@ using DualSouls.Skins.Silksong.Runtime;
 using UnityEngine;
 
 [DefaultExecutionOrder(10000)]
-public class DualScreenV2 : MonoBehaviour
+public partial class DualScreenV2 : MonoBehaviour
 {
     const string KEY_DUAL_SCREEN = "dualscreen_enabled";
     const float IDLE_GRACE = 0.75f;
@@ -186,6 +186,8 @@ public class DualScreenV2 : MonoBehaviour
 
     void Update()
     {
+        DsQaReport.Tick();   // QA report: frame pacing + error census
+        PollCommands();      // QA command file (adb-reachable), also before routing is ready
         if (_releaseState == null || !_releaseState.CanRoute) return;
         BindGameManager();
         // Native pause/menu scalars reconcile missed callbacks and replacements
