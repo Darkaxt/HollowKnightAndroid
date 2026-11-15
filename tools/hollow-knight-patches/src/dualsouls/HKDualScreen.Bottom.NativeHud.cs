@@ -49,7 +49,8 @@ public partial class HKDualScreen
         public SpriteDrawMode DrawMode;
         public bool FlipX, FlipY, Included, Ready, UpperEffect;
         // Drawn but never measured: the soul fill parks below the orb when empty and
-        // is only ever visible inside the orb frame, which the fit already covers.
+        // is only ever visible inside the orb frame, which the fit already covers; the
+        // geo Add/Subtract popups sit below the counter and only flash during a change.
         public bool FitExempt;
         public int SpriteId, ParticleCount;
         public Vector3 SpriteScale;
@@ -211,7 +212,7 @@ public partial class HKDualScreen
                 for (var p = t; p != null; p = p.parent)
                 {
                     if (animator == null) animator = p.GetComponent<Animator>();
-                    if (p.name == "SoulOrb_fill") o.FitExempt = true;
+                    if (p.name == "SoulOrb_fill" || p.name == "Add Text" || p.name == "Subtract Text") o.FitExempt = true;
                     if (p == nativeHudRoot) break;
                 }
                 if (animator != null)

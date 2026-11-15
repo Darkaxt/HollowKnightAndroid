@@ -11,7 +11,7 @@ public partial class HKDualScreen
 {
     const string CommandHelp =
         "help | state | pause | mods | skins | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
-        "mods-list | mod <id> <value> | pd <field>... | save | quit-menu | fonts | hudfit | sprites <text>";
+        "mods-list | mod <id> <value> | pd <field>... | geo <amount> | save | quit-menu | fonts | hudfit | sprites <text>";
 
     void PollCommands() { DsCommandFile.Poll(RunCommand); }
 
@@ -49,6 +49,15 @@ public partial class HKDualScreen
                 return (r.Success ? "ok" : "error " + r.Error) + (r.Pending ? " pending" : "") + " value=" + c.Value(a[1]);
             }
             case "pd": return CommandPlayerData(a);
+            case "geo":
+            {
+                int amount;
+                if (a.Length < 2 || !int.TryParse(a[1], out amount) || amount <= 0) return "error geo <amount>";
+                var hero = HeroController.instance;
+                if (hero == null) return "error no HeroController";
+                hero.AddGeo(amount);
+                return "ok geo=" + (PlayerData.instance != null ? PlayerData.instance.geo : -1);
+            }
             case "save":
                 if (gm == null) return "error no GameManager";
                 gm.SaveGame();
@@ -129,6 +138,8 @@ public partial class HKDualScreen
             if (o == null || !o.Included) continue;
             sb.Append('\n').Append(NativeHudOwnerName(i)).Append(o.FitExempt ? " (fit-exempt)" : "").Append(" ready=").Append(o.Ready)
               .Append(" c=").Append(o.Bounds.center).Append(" s=").Append(o.Bounds.size);
+            if (o.Text != null)
+                sb.Append(" text='").Append(o.Text()).Append("' a=").Append(o.TextColor != null ? o.TextColor().a.ToString("F2") : "?");
         }
         return sb.ToString();
     }
