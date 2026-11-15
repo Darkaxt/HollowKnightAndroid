@@ -227,6 +227,7 @@ namespace DualSouls.Mods.HollowKnight
         public void SetInnateCompass(bool enabled) { _innateCompass = enabled; }
         public void OpenBenchTeleport(long operationToken)
         {
+            RequireLoadedSave("Bench Teleport");
             _benchOperation.Begin(operationToken, UnityEngine.Time.unscaledTime);
             _benchRequestToken = operationToken;
             try
@@ -274,6 +275,7 @@ namespace DualSouls.Mods.HollowKnight
         }
         public void SaveState()
         {
+            RequireLoadedSave("Save to slot");
 #if UNITY_ANDROID && !UNITY_EDITOR
             EnsureStateTransferPreparation();
             HollowKnightGameplayFeatures.SaveState(_stateSlot);
@@ -283,6 +285,7 @@ namespace DualSouls.Mods.HollowKnight
         }
         public void LoadState(long operationToken)
         {
+            RequireLoadedSave("Load from slot");
             _stateLoadOperation.Begin(operationToken, UnityEngine.Time.unscaledTime);
             try
             {
@@ -348,18 +351,18 @@ namespace DualSouls.Mods.HollowKnight
                 case "companion_backdrop":
                     return Choice(_companionBackdropBlack ? "black" : "dimmed");
                 case "run_speed":
-                    return Choice(_runSpeedMultiplier == 1.5f ? "plus_50" :
-                                  _runSpeedMultiplier == 1.25f ? "plus_25" : "vanilla");
+                    return Live(Choice(_runSpeedMultiplier == 1.5f ? "plus_50" :
+                                  _runSpeedMultiplier == 1.25f ? "plus_25" : "vanilla"), RunSpeedMismatch());
                 case "fast_transitions": return OnOff(_fastTransitions);
                 case "auto_map": return OnOff(_autoMap);
                 case "innate_compass": return OnOff(_innateCompass);
                 case "secret_radar": return OnOff(_secretRadar);
-                case "nail_damage": return Choice(MultiplierChoice(_nailMultiplier));
+                case "nail_damage": return Live(Choice(MultiplierChoice(_nailMultiplier)), NailMismatch());
                 case "damage_received":
-                    return Choice(!_damageMode.HasValue ? "vanilla" :
+                    return Live(Choice(!_damageMode.HasValue ? "vanilla" :
                         _damageMode.Value == HollowKnightDamageMode.NoMaskLoss
                             ? "no_mask_loss"
-                            : "invincible");
+                            : "invincible"), InvincibleMismatch());
                 case "damage_cap": return OnOff(HollowKnightGameplayHooks.DamageCapEnabled);
                 case "one_hit_kills": return OnOff(_oneHitKills);
                 case "unlimited_soul": return OnOff(_unlimitedSoul);
@@ -367,7 +370,7 @@ namespace DualSouls.Mods.HollowKnight
                 case "damage_numbers": return OnOff(_damageNumbers);
                 case "boss_retry": return OnOff(_bossRetry);
                 case "equip_anywhere": return OnOff(_equipAnywhere);
-                case "charm_costs": return Choice(_charmCostsFree ? "free" : "vanilla");
+                case "charm_costs": return Live(Choice(_charmCostsFree ? "free" : "vanilla"), CharmCostMismatch());
                 case "unlimited_notches": return OnOff(_unlimitedNotches);
                 case "state_slot":
                     return Choice(_stateSlot.ToString(
@@ -433,6 +436,62 @@ namespace DualSouls.Mods.HollowKnight
             for (int index = 0; index < completed.Length; index++)
                 completed[index] = _completedOperations.Dequeue();
             return completed;
+        }
+
+        // Real-game readback: while a save is loaded, a choice row that changes game state
+        // reports the game's own value, so a cheat that silently failed to apply
+        // shows as an error instead of the requested setting. Without a loaded save
+        // (title screen) the setting is reported as configured and applies on load.
+        static global::PlayerData LoadedSave()
+        {
+            global::GameManager game = global::GameManager.UnsafeInstance;
+            if (game == null || game.playerData == null || game.hero_ctrl == null) return null;
+            try { return game.IsNonGameplayScene() ? null : game.playerData; }
+            catch { return null; }
+        }
+
+        static void RequireLoadedSave(string action)
+        {
+            if (LoadedSave() == null)
+                throw new System.InvalidOperationException(action + " works only with a save loaded.");
+        }
+
+        static TweakActionResult Live(TweakActionResult configured, string mismatch) =>
+            mismatch == null ? configured : TweakActionResult.Fail(mismatch);
+
+        string NailMismatch()
+        {
+            global::PlayerData player = LoadedSave();
+            if (player == null || _nailMultiplier == 1) return null;
+            int wanted = _nailBaseline * _nailMultiplier;
+            if (ReferenceEquals(player, _nailPlayer) && player.nailDamage == wanted) return null;
+            return "Game nail damage is " + player.nailDamage + ", expected " + wanted + ".";
+        }
+
+        string RunSpeedMismatch()
+        {
+            global::HeroController hero = global::HeroController.UnsafeInstance;
+            if (LoadedSave() == null || hero == null || _runSpeedMultiplier == 1f) return null;
+            float wanted = _runSpeedBaseline * _runSpeedMultiplier;
+            if (ReferenceEquals(hero, _runHero) && System.Math.Abs(hero.RUN_SPEED - wanted) < 0.001f) return null;
+            return "Game run speed is " + hero.RUN_SPEED + ", expected " + wanted + ".";
+        }
+
+        string InvincibleMismatch()
+        {
+            global::PlayerData player = LoadedSave();
+            if (player == null || _damageMode != HollowKnightDamageMode.Invincible || player.isInvincible) return null;
+            return "The game is not treating the Knight as invincible.";
+        }
+
+        string CharmCostMismatch()
+        {
+            global::PlayerData player = LoadedSave();
+            if (player == null || !_charmCostsFree) return null;
+            for (int charm = 1; charm <= 40; charm++)
+                if (player.GetInt("charmCost_" + charm) != 0)
+                    return "Charm " + charm + " still costs " + player.GetInt("charmCost_" + charm) + " notches.";
+            return null;
         }
 
         static TweakActionResult Choice(string value) =>

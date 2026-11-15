@@ -22,6 +22,7 @@ public sealed class PlayerData
     public int health;
     public int nailDamage;
     public int nailSmithUpgrades;
+    public int charmSlots;
     public int MPCharge;
     public int geo;
     public int geoPool;
@@ -63,6 +64,8 @@ public sealed class GameManager : UnityEngine.Object
 
     public PlayerData playerData;
     public HeroController hero_ctrl;
+    public bool NonGameplayScene;
+    public bool IsNonGameplayScene() => NonGameplayScene;
 }
 
 public struct HitInstance

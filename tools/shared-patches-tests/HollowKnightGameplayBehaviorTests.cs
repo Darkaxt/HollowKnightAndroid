@@ -143,6 +143,7 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
     [Fact]
     public void BenchRouteOwnerPublishesCorrelatedTimeoutInsteadOfRemainingPending()
     {
+        LoadSave();
         var api = new HollowKnightGameTweakApi();
         UnityEngine.Time.unscaledTime = 10f;
         api.OpenBenchTeleport(71);
@@ -159,6 +160,57 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
         Assert.Equal(71, completion.OperationToken);
         Assert.False(completion.Result.Success);
         Assert.Contains("timed out", completion.Result.Error, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SaveBoundActionsRefuseWithoutALoadedSave(bool titleScene)
+    {
+        if (titleScene) LoadSave().NonGameplayScene = true;
+        var api = new HollowKnightGameTweakApi();
+
+        Assert.Throws<System.InvalidOperationException>(() => api.OpenBenchTeleport(5));
+        Assert.Throws<System.InvalidOperationException>(() => api.SaveState());
+        Assert.Throws<System.InvalidOperationException>(() => api.LoadState(6));
+        Assert.Empty(api.DrainCompletedOperations());
+    }
+
+    [Fact]
+    public void NailReadbackReportsTheGameValueWhenItDiverges()
+    {
+        GameManager game = LoadSave();
+        var api = new HollowKnightGameTweakApi();
+        api.SetNailDamageMultiplier(2);
+        TweakActionResult applied = api.Readback("nail_damage");
+        Assert.True(applied.Success);
+        Assert.Equal("x2", applied.Readback.Value);
+
+        game.playerData.nailDamage = 7;
+        TweakActionResult diverged = api.Readback("nail_damage");
+        Assert.False(diverged.Success);
+        Assert.Contains("is 7", diverged.Error, System.StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReadbackOnTheTitleScreenReportsTheConfiguredValue()
+    {
+        var api = new HollowKnightGameTweakApi();
+        api.SetNailDamageMultiplier(3);
+        TweakActionResult configured = api.Readback("nail_damage");
+        Assert.True(configured.Success);
+        Assert.Equal("x3", configured.Readback.Value);
+    }
+
+    static GameManager LoadSave()
+    {
+        var player = new PlayerData { health = 5, nailDamage = 5 };
+        var hero = new HeroController { RUN_SPEED = 8f, WALK_SPEED = 4f };
+        PlayerData.instance = player;
+        HeroController.instance = hero;
+        var game = new GameManager { playerData = player, hero_ctrl = hero };
+        GameManager.UnsafeInstance = game;
+        return game;
     }
 
     [Fact]

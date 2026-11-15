@@ -330,7 +330,7 @@ namespace DualSouls.Mods.HollowKnight
                 CancelAndClearBinding();
                 return;
             }
-            bool available = binding.Ui.uiState == UIState.PAUSED;
+            bool available = MenuStateAllowsMods(binding.Ui.uiState);
             if (binding.ModsEntryRoot.activeSelf != available)
                 binding.ModsEntryRoot.SetActive(available);
             if (binding.SkinsEntryRoot.activeSelf != available)
@@ -901,7 +901,7 @@ namespace DualSouls.Mods.HollowKnight
         internal bool DriverIsCurrent(MonoBehaviour driver, int generation)
         {
             if (driver == null || generation != _generation || !BindingIsAlive() ||
-                !_binding.Session.IsReady || _binding.Ui.uiState != UIState.PAUSED ||
+                !_binding.Session.IsReady || !MenuStateAllowsMods(_binding.Ui.uiState) ||
                 !driver.gameObject.activeInHierarchy) return false;
             HollowKnightNativeModsEntryButton entry = driver as HollowKnightNativeModsEntryButton;
             if (entry != null) return !_nativeOpen &&
@@ -1002,7 +1002,7 @@ namespace DualSouls.Mods.HollowKnight
             yield return binding.Ui.HideMenu(screen);
             if (!BindingIsAlive(binding, generation)) yield break;
 
-            if (showOptions && binding.Ui.uiState == UIState.PAUSED)
+            if (showOptions && MenuStateAllowsMods(binding.Ui.uiState))
             {
                 yield return binding.Ui.ShowMenu(binding.OptionsScreen);
                 if (!BindingIsAlive(binding, generation)) yield break;
@@ -1011,10 +1011,18 @@ namespace DualSouls.Mods.HollowKnight
             CompleteTransition(binding, generation);
         }
 
+        // The Options screen is shared by the pause menu and the title screen; both
+        // host MODS and SKINS. Gameplay-only actions refuse on their own (the API
+        // checks for a loaded save), so the title screen needs no separate model.
+        static bool MenuStateAllowsMods(UIState state)
+        {
+            return state == UIState.PAUSED || state == UIState.MAIN_MENU_HOME;
+        }
+
         bool OpenTransitionStillAvailable(NativeMenuBinding binding, int generation)
         {
             return BindingIsAlive(binding, generation) && binding.Session.IsReady &&
-                   binding.Ui.uiState == UIState.PAUSED;
+                   MenuStateAllowsMods(binding.Ui.uiState);
         }
 
         void CancelOpenTransition(NativeMenuBinding binding, int generation)
@@ -1366,13 +1374,13 @@ namespace DualSouls.Mods.HollowKnight
             Open((NativeMenuRoute)route);
         }
 
-        /// <summary>Opens Mods (0) or Skins (1) for the QA command channel, from the paused Options menu.</summary>
+        /// <summary>Opens Mods (0) or Skins (1) for the QA command channel, from the pause menu or the title screen.</summary>
         internal static string OpenForCommand(int route)
         {
             HollowKnightNativeModsMenu current = _current;
             if (current == null) return "error no Mods menu";
             if (!current.BindingIsAlive()) return "error Mods menu not bound";
-            if (current._binding.Ui.uiState != UIState.PAUSED) return "error game not paused (uiState=" + current._binding.Ui.uiState + ")";
+            if (!MenuStateAllowsMods(current._binding.Ui.uiState)) return "error not paused or on the title screen (uiState=" + current._binding.Ui.uiState + ")";
             if (current._transitioning) return "error menu transitioning";
             if (current._nativeOpen) return "error a Mods/Skins menu is already open";
             GameObject entry = route == 0 ? current._binding.ModsEntryRoot : current._binding.SkinsEntryRoot;

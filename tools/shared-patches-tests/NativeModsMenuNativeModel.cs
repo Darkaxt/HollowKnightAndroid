@@ -366,11 +366,13 @@ namespace NativeMenuFixture.PROFILE.Engine
         public void SetBenchRespawn(string marker, string scene, int type, bool facingRight)
         { RespawnCalls++; LastRespawn = new object[] { marker, scene, type, facingRight }; BeforeRespawn?.Invoke(); if (ThrowRespawn) throw new InvalidOperationException("typed respawn failed"); }
         public bool GetBool(string field) => false;
+        public int GetInt(string field) => 0;
     }
     public class GameManager
     {
         public static GameManager UnsafeInstance; public PlayerData playerData; public HeroController hero_ctrl;
         public int ReadyCalls; public bool ThrowReady; public bool? LastReady;
+        public bool NonGameplayScene; public bool IsNonGameplayScene() => NonGameplayScene;
         public void ReadyForRespawn(bool fromDeath) { ReadyCalls++; LastReady = fromDeath; if (ThrowReady) throw new InvalidOperationException("typed ReadyForRespawn failed"); }
     }
     public class HeroController
@@ -411,7 +413,7 @@ namespace NativeMenuFixture.PROFILE.Engine
 }
 namespace NativeMenuFixture.PROFILE.Engine.GlobalEnums
 {
-    public enum UIState { PAUSED, PLAYING, MAIN_MENU }
+    public enum UIState { PAUSED, PLAYING, MAIN_MENU, MAIN_MENU_HOME }
     public enum CancelAction { DoNothing, LeaveOptionsMenu, GoToPauseMenu }
 }
 namespace NativeMenuFixture.PROFILE.Engine.Events
