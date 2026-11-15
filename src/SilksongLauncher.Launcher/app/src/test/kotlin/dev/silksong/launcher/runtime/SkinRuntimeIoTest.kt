@@ -128,6 +128,19 @@ class SkinRuntimeIoTest {
         } finally { release.countDown(); io.close() }
     }
 
+    @Test fun `steady read lane serves its last completed value while the same key refreshes`() {
+        val io = SkinRuntimeIo(); var calls = 0
+        try {
+            val limit = System.nanoTime() + TimeUnit.SECONDS.toNanos(5); var first = "pending"
+            while (first == "pending" && System.nanoTime() < limit) { first = io.pollLatest(1, "menu:0", "pending") { calls++; "v${calls}" }; Thread.sleep(5) }
+            assertEquals("v1", first)
+            // Every later poll of the same key is a value (never the pending reply) and keeps refreshing.
+            for (poll in 0 until 50) { assertNotEquals("pending", io.pollLatest(1, "menu:0", "pending") { calls++; "v${calls}" }); Thread.sleep(2) }
+            assertTrue(calls > 1)
+            // A new configuration edge waits for its own read, never the previous edge's value.
+            assertEquals("pending", io.pollLatest(1, "menu:1", "pending") { "fresh" })
+        } finally { io.close() }
+    }
     @Test fun `queued timeout cancels without running obsolete slot writer`() {
         var time = 0L
         val io = SkinRuntimeIo { time }; val entered = CountDownLatch(1); val release = CountDownLatch(1)

@@ -10,7 +10,7 @@ using UnityEngine;
 public partial class HKDualScreen
 {
     const string CommandHelp =
-        "help | state | pause | mods | skins | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
+        "help | state | pause | mods | skins | skin <list|row N|left N|right N> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
         "mods-list | mod <id> <value> | pd <field>... | geo <amount> | die | save | quit-menu | fonts | hudfit | sprites <text>";
 
     void PollCommands() { DsCommandFile.Poll(RunCommand); }
@@ -31,6 +31,11 @@ public partial class HKDualScreen
                 return "ok was-paused=" + was;
             case "mods": return HollowKnightNativeModsMenu.OpenForCommand(0);
             case "skins": return HollowKnightNativeModsMenu.OpenForCommand(1);
+            case "skin":
+                if (a.Length < 2) return "error skin <list|row N|left N|right N>";
+                if (a[1] != "list" && (a.Length < 3 || (a[1] != "row" && a[1] != "left" && a[1] != "right")))
+                    return "error skin <list|row N|left N|right N>";
+                return HollowKnightNativeModsMenu.SkinCommand(a[1], a.Length > 2 ? a[2] : "");
             case "tab":
                 if (a.Length < 2) return "error tab <id>";
                 if (shell == null) return "error no shell";

@@ -201,6 +201,36 @@ public sealed class NativeSkinsSnapshotAuthorityTests
         finally { Retire(f); }
     }
 
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void Submitted_change_is_confirmed_only_by_a_changed_checked_snapshot(bool ss)
+    {
+        var f = Open(ss);
+        try {
+            int before = MutationCalls(f);
+            SetSnapshot(f, Failure(ss, "blocked")); // the writer is still queued behind the read
+            f.Call("SubmitSkin", Button(f, NativeSkinMenuRowKind.Mode));
+            Assert.Equal(before + 1, MutationCalls(f));
+            Assert.Equal("APPLYING CHANGE", (string)f.Field("_skinError"));
+            Assert.True((bool)f.Field("_skinMutationInFlight"));
+            Assert.Equal(NativeSkinMenuRowKind.Mode, ((NativeSkinMenuModel)f.Field("_skinMenu")).Selected.Kind);
+            f.SkinSnapshot(); f.Call("RefreshSkinMenu"); // same configuration: the change did not land
+            Assert.Equal("CHANGE NOT APPLIED · TRY AGAIN", (string)f.Field("_skinError"));
+            Assert.False((bool)f.Field("_skinMutationInFlight"));
+            SetSnapshot(f, JsonSerializer.Serialize(new {
+                ok = true, profileId = ss ? "silksong" : "hollow-knight", configSha256 = new string('b', 64),
+                mode = "ON", spriteScope = "ALL", selectedPackId = "host-model-pack", eligiblePackIds = new[] { "host-model-pack" },
+                packs = new[] { new { id = "host-model-pack", name = "HOST MODEL PACK", author = "BOUNDARY FIXTURE" } },
+                evidenceState = "PENDING", observation = new { status = "", featureId = "SKIN-MODE", operationId = "x", operationGeneration = 2 } }));
+            f.Call("SubmitSkin", Button(f, NativeSkinMenuRowKind.Mode));
+            Assert.Equal(before + 2, MutationCalls(f));
+            Assert.Equal("WAITING FOR GAME TO APPLY", (string)f.Field("_skinError"));
+            Assert.False((bool)f.Field("_skinMutationInFlight"));
+            Assert.True((bool)Button(f, NativeSkinMenuRowKind.Mode).Selectable.interactable);
+        }
+        finally { Retire(f); }
+    }
+
     static dynamic ColdBack(NativeMenuFixture f)
     {
         dynamic back = Assert.Single(((IEnumerable)f.Field("_skinButtons")).Cast<dynamic>()

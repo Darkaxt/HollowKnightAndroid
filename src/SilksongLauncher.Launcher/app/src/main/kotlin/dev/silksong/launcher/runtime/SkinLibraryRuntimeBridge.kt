@@ -33,7 +33,7 @@ object SkinLibraryRuntimeBridge {
     } catch (error: Exception) { failure("PROFILE_REJECTED", error.message.orEmpty()) }
     @JvmStatic fun readMenuSnapshot(profileId: String): String = try {
         requireProfile(profileId)
-        io.poll(1, "menu:$profileId:$configurationEdge", pending) { runtimeAccess().readMenuSnapshot(profileId) }
+        io.pollLatest(1, "menu:$profileId:$configurationEdge", pending) { runtimeAccess().readMenuSnapshot(profileId) }
     } catch (error: Exception) { failure("PROFILE_REJECTED", error.message.orEmpty()) }
     @JvmStatic fun setMode(profileId: String, expectedConfiguration: String, mode: String): Boolean = try {
         requireProfile(profileId)

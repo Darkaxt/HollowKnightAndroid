@@ -17,6 +17,7 @@ internal class SkinRuntimeIo(private val now: () -> Long = System::nanoTime) {
         var future: Future<*>? = null
     }
     private val jobs = arrayOfNulls<Job>(5)
+    private val latest = arrayOfNulls<Pair<String, Any?>>(5)
     private var closed = false
     private val executor = ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, LinkedBlockingQueue<Runnable>(),
         java.util.concurrent.ThreadFactory { work -> Thread(work, "skin-library-io").apply { isDaemon = true } })
@@ -60,9 +61,21 @@ internal class SkinRuntimeIo(private val now: () -> Long = System::nanoTime) {
         }
         return pending
     }
+    /** Read lanes only: while the same key refreshes, serve its last completed value instead of
+     * [pending], so a steadily polled reader never alternates value/pending. A new key (a newer
+     * configuration edge) still waits for its own completed read. */
+    @Synchronized fun <T> pollLatest(lane: Int, key: String, pending: T, action: () -> T): T {
+        val value = poll(lane, key, pending, action)
+        if (closed) { latest[lane] = null; return value }
+        if (value !== pending) { latest[lane] = key to value; return value }
+        val cached = latest[lane]
+        @Suppress("UNCHECKED_CAST")
+        return if (cached != null && cached.first == key) cached.second as T else pending
+    }
     @Synchronized fun close() {
         if (closed) return
         closed = true
+        latest.fill(null)
         jobs.forEach { it?.cancelled = true }
         executor.shutdownNow()
         jobs.fill(null)

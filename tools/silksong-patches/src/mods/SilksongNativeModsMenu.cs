@@ -95,6 +95,10 @@ namespace DualSouls.Mods.Silksong
         TweakMenuModel _menu;
         NativeSkinMenuModel _skinMenu;
         bool _skinSnapshotReady;
+        // A submitted change stays unconfirmed until a fresh snapshot (read after the
+        // one-shot native writer) arrives; its expected configuration identifies it.
+        bool _skinMutationInFlight;
+        string _skinMutationExpected = "";
         readonly SkinNativeTransportWindow _skinTransport = new SkinNativeTransportWindow();
         AndroidJavaClass _skinBridge;
         UIManager _ui;
@@ -160,6 +164,11 @@ namespace DualSouls.Mods.Silksong
         void Update()
         {
             if (_skinTransport.Due(Time.unscaledTime)) RefreshSkinMenu();
+            else if (_skinMutationInFlight && _skinTransport.TimedOut) {
+                _skinMutationInFlight = false;
+                _skinError = "CHANGE NOT CONFIRMED · REOPEN SKINS";
+                if (BindingIsAlive()) PaintSkins();
+            }
             if (!BindingIsAlive())
             {
                 CancelAndClearBinding();
@@ -803,6 +812,7 @@ namespace DualSouls.Mods.Silksong
             else
             {
                 _skinError = "";
+                _skinMutationInFlight = false;
                 _skinTransport.Start(Time.unscaledTime);
                 RefreshSkinMenu();
                 PaintSkins();
@@ -1375,11 +1385,16 @@ namespace DualSouls.Mods.Silksong
             {
                 SilksongModsRuntime runtime = SilksongModsRuntime.Current;
                 if (runtime != null) runtime.InvalidateSkinLibrary();
-                _skinError = "";
             }
-            else if (string.IsNullOrEmpty(_skinError))
-                _skinError = "CHANGE NOT APPLIED · REFRESHED";
-            // A false result is stale/busy authority: repaint only from a new checked snapshot.
+            if (!_skinError.StartsWith("CHANGE FAILED", StringComparison.Ordinal))
+            {
+                // The native writer is asynchronous (its first call reports false): wait for the
+                // next checked snapshot instead of declaring the change lost.
+                _skinMutationInFlight = true;
+                _skinMutationExpected = expected;
+                _skinError = "APPLYING CHANGE";
+            }
+            _skinSnapshotReady = false;
             RefreshSkinMenu();
             PaintSkins();
             FocusSkin();
@@ -1390,6 +1405,7 @@ namespace DualSouls.Mods.Silksong
 
         void RefreshSkinMenu()
         {
+            bool inFlightRead = false;
             _skinSnapshotReady = false;
             try
             {
@@ -1398,7 +1414,10 @@ namespace DualSouls.Mods.Silksong
                     throw new InvalidOperationException("Invalid native skin snapshot length.");
                 WireSkinSnapshot wire = JsonUtility.FromJson<WireSkinSnapshot>(json);
                 if (wire != null && !wire.ok && wire.code == "LIFECYCLE_BLOCKED") {
-                    _skinError = "SKIN EVENT PENDING · BOUNDED RETRY";
+                    // Busy authority retires mutation; a submitted change keeps its row focused
+                    // while the next checked snapshot confirms or rejects it.
+                    inFlightRead = _skinMutationInFlight;
+                    if (!_skinMutationInFlight) _skinError = "SKIN LIBRARY BUSY · RETRYING";
                     return;
                 }
                 if (wire == null || !wire.ok)
@@ -1425,51 +1444,46 @@ namespace DualSouls.Mods.Silksong
                     wire.eligiblePackIds ?? Array.Empty<string>(), packs);
                 if (_skinMenu == null) _skinMenu = new NativeSkinMenuModel(snapshot, VisibleRows);
                 else _skinMenu.Replace(snapshot);
-                bool preserveMutationError =
-                    _skinError.StartsWith("CHANGE FAILED", StringComparison.Ordinal) ||
-                    _skinError.StartsWith("CHANGE NOT APPLIED", StringComparison.Ordinal);
-                if (!preserveMutationError)
+                if (_skinMutationInFlight) {
+                    _skinMutationInFlight = false;
+                    _skinError = wire.configSha256 != _skinMutationExpected
+                        ? FormatSkinEvidence(wire) : "CHANGE NOT APPLIED · TRY AGAIN";
+                }
+                else if (!_skinError.StartsWith("CHANGE", StringComparison.Ordinal))
                     _skinError = FormatSkinEvidence(wire);
                 _skinSnapshotReady = true;
             }
             catch (Exception error)
             {
                 _skinTransport.Cancel();
+                _skinMutationInFlight = false;
                 _skinError = "SKINS UNAVAILABLE · " + error.GetBaseException().Message;
                 Debug.LogWarning("[Silksong Skins] " + _skinError);
             }
             finally
             {
                 if (!_skinSnapshotReady && _skinMenu != null && BindingIsAlive()) {
-                    _skinMenu.SelectRow(_skinMenu.Rows.Count - 1);
+                    if (!inFlightRead) _skinMenu.SelectRow(_skinMenu.Rows.Count - 1);
                     PaintSkins();
                     if (_nativeOpen && _openRoute == NativeMenuRoute.Skins) FocusSkin();
                 }
             }
         }
 
+        // One short line: internal operation/feature hashes stay in the native evidence log.
         static string FormatSkinEvidence(WireSkinSnapshot wire)
         {
-            string correlation = (wire.featureId ?? "") + " · " +
-                (wire.operationId ?? "") + "/" + wire.operationGeneration;
             if (string.Equals(wire.evidenceState, "TERMINAL", StringComparison.Ordinal) &&
-                wire.observation != null)
+                wire.observation != null && !string.IsNullOrEmpty(wire.observation.status))
             {
-                string terminalCorrelation = (wire.observation.featureId ?? "") + " · " +
-                    (wire.observation.operationId ?? "") + "/" + wire.observation.operationGeneration;
-                string value = wire.observation.status + " · " + terminalCorrelation;
-                if (!string.IsNullOrEmpty(wire.observation.detail))
-                    value += " · " + wire.observation.detail;
-                return value;
+                string value = "LAST RESULT · " + wire.observation.status;
+                string detail = wire.observation.detail ?? "";
+                if (detail.Length > 40) detail = detail.Substring(0, 40) + "...";
+                return detail.Length == 0 ? value : value + " · " + detail;
             }
-            if (string.Equals(wire.evidenceState, "STALE", StringComparison.Ordinal))
-                return "PENDING · " + correlation + " · PRIOR EVIDENCE STALE";
             if (string.Equals(wire.evidenceState, "UNREADABLE", StringComparison.Ordinal))
-                return "PENDING · " + correlation + " · EVIDENCE UNREADABLE";
-            string pending = "PENDING · " + correlation;
-            if (wire.observation != null && !string.IsNullOrEmpty(wire.observation.status))
-                pending += " · " + wire.observation.status;
-            return pending;
+                return "SKIN RESULT UNREADABLE";
+            return "WAITING FOR GAME TO APPLY";
         }
 
         void PaintSkins()

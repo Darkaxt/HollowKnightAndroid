@@ -76,14 +76,13 @@ public sealed class NativeSkinsSourceContractTests
         Assert.Contains("WireSkinObservation", source, StringComparison.Ordinal);
         Assert.Contains("evidenceState", source, StringComparison.Ordinal);
         Assert.Contains("TERMINAL", source, StringComparison.Ordinal);
-        Assert.Contains("PENDING", source, StringComparison.Ordinal);
-        Assert.Contains("STALE", source, StringComparison.Ordinal);
         Assert.Contains("operationGeneration", source, StringComparison.Ordinal);
         Assert.Contains("resultingConfigSha256", source, StringComparison.Ordinal);
-        Assert.Contains("string terminalCorrelation = (wire.observation.featureId ?? \"\")", source,
-            StringComparison.Ordinal);
-        Assert.Contains("wire.observation.operationId", source, StringComparison.Ordinal);
-        Assert.Contains("wire.observation.operationGeneration", source, StringComparison.Ordinal);
+        // The player-facing status is one short line: correlation hashes stay in native evidence.
+        Assert.Contains("\"LAST RESULT · \" + wire.observation.status", source, StringComparison.Ordinal);
+        Assert.Contains("\"WAITING FOR GAME TO APPLY\"", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("wire.observation.operationId", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("wire.operationId", source, StringComparison.Ordinal);
         Assert.DoesNotContain("outcomes", source, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("SkinOperationJournal", source, StringComparison.Ordinal);
         Assert.DoesNotContain("UpdateSkin", source, StringComparison.Ordinal);
