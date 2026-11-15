@@ -73,7 +73,7 @@ public partial class SilksongShellProductionTests
         for(int i=0;i<5;i++)
         {
             Assert.Equal(ids[i],Page(shell,i).Id);Assert.Equal(types[i],Page(shell,i).GetType());
-            Assert.Equal((InventoryPaneList.PaneTypes)i,Field<InventoryPaneList.PaneTypes>(Entries(shell)[i],"Pane"));
+            Assert.NotNull(Field(Entries(shell)[i],"TabArt"));
         }
         var host=Field<DualSouls.DualScreen.DirectDisplayHost>(live.Owner,"_host");
         Assert.True(host.IsActive);Assert.Same(Field(live.Owner,"_shellContent"),Field(host,"_content"));

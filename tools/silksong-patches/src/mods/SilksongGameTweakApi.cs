@@ -104,7 +104,7 @@ namespace DualSouls.Mods.Silksong
             _completedOperations.Clear();
             Enqueue(_stateLoadOperation.Cancel(
                 "Silksong save-state load was canceled by baseline restoration."));
-            DsFrame.BlackBackground = true;
+            DsFrame.BlackBackground = false;
             SilksongGameplayHooks.Reset();
             SilksongGameplayFeatures.RestoreAll();
             SilksongGameplayFeatures.SetStateTransferPreparation(null);

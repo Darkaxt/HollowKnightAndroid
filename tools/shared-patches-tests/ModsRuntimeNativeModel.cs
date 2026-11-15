@@ -136,7 +136,7 @@ public sealed class GameCameras
     public SilkSpool silkSpool;
 }
 public sealed class SilkSpool { public void RefreshSilk() { } }
-public static class DsSceneryOptions { public static bool BlackBackground; }
+public static class DsFrame { public static bool BlackBackground; }
 public static class SilksongGameplayHooks
 {
     public static bool InnateCompassEnabled, DamageCapEnabled, ToolCostsFreeEnabled,

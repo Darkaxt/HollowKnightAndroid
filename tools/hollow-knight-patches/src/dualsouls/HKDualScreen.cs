@@ -51,7 +51,6 @@ public partial class HKDualScreen : MonoBehaviour
     Transform dlgBoxT; PlayMakerFSM dlgBoxFsm; bool loreDialogueOpen;   // B4/B5: DialogueManager/DialogueBox ("Box Open" FSM) -> route to bottom + hide companion while reading a lore tablet
     Transform dlgNameT; int dlgNameOrigLayer = -1; Vector3 dlgNameOrigLocal; bool dlgNameRouted; float dlgNameHoldT = -1f; float dlgBoxDownT = -1f;   // fix#4(157-fb): the SPEAKER NAME plate follows the box to the bottom
     public static bool GameInventoryOpen;               // B8: true while HK's own (top-screen) inventory is open
-    int lastSkinStamp;                                  // fix#6(161-fb): rebuild companion clones when skins change
     bool creditNow;                                     // fix#3(157-fb): attribution overlays the live companion
 
     readonly List<Transform> tutRoots = new List<Transform>();          // tutorial/focus-prompt subtrees moved to the bottom (tutLayer) -> hide companion while any is actually drawing
@@ -423,7 +422,6 @@ public partial class HKDualScreen : MonoBehaviour
     }
     static HKDualScreen activeInstance;
 
-    bool lowerHudFixtureActive;
 
     // Config hot-reload: check the file's mtime a few times a second and only re-parse on change
     // (avoids per-frame disk I/O + GC while keeping the adb-push live-tuning workflow).

@@ -392,6 +392,7 @@ namespace NativeMenuFixture.PROFILE.Engine
         public static bool StateExists(int slot) => false;
         public static void Tick(params object[] flags) { }
         public static void RestorePlayerOwnedForStateTransfer() { }
+        public static void PrepareForSave() { }
         public static void BeforeAuthoritativeMapBoolSet(PlayerData player, string name, bool value) { }
         public static void BeginAuthoritativeMapUpdate(PlayerData player) { }
         public static void EndAuthoritativeMapUpdate(PlayerData player) { }

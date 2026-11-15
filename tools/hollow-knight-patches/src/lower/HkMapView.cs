@@ -284,7 +284,7 @@ namespace HollowKnightPatches.Lower
             try
             {
                 if (_miSceneChanged != null && _map != null)
-                    SceneManager.activeSceneChanged -= (UnityAction<Scene, Scene>)Delegate.CreateDelegate(
+                    UnityEngine.SceneManagement.SceneManager.activeSceneChanged -= (UnityAction<Scene, Scene>)Delegate.CreateDelegate(
                         typeof(UnityAction<Scene, Scene>), _map, _miSceneChanged);
                 else if (_miSceneChanged == null)
                     Debug.LogWarning("[HkMap] GameMap.OnActiveSceneChanged not found; clone stays subscribed");

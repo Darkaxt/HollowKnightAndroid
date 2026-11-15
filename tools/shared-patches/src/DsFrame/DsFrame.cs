@@ -51,7 +51,7 @@ public static class DsFrame
     /// The Mods menu's General → Black background row. On, the lower screen
     /// is the opaque ground; off, the host may show the game world behind it.
     /// </summary>
-    public static bool BlackBackground { get; set; } = true;
+    public static bool BlackBackground { get; set; }
 
     public static bool InGame { get { return Host != null && Host.InGame; } }
 
