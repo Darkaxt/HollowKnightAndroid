@@ -97,6 +97,18 @@ class LoginActivity : Activity() {
         startQr()
     }
 
+    private val lowerDisplay by lazy { LowerDisplayLog.forScreen(this, "Steam sign-in") }
+
+    override fun onResume() {
+        super.onResume()
+        lowerDisplay.show()
+    }
+
+    override fun onPause() {
+        lowerDisplay.hide()
+        super.onPause()
+    }
+
     override fun onDestroy() {
         submitCode = null
         scope.cancel()

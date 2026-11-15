@@ -134,6 +134,7 @@
 
             <Button
                 android:id="@+id/btn_guard"
+                style="@style/DualSouls.Button.Secondary"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/login_guard_submit"
@@ -142,7 +143,6 @@
                 android:paddingEnd="16dp"
                 android:paddingTop="4dp"
                 android:paddingBottom="4dp"
-                android:minHeight="0dp"
                 android:minWidth="0dp"
                 android:layout_marginStart="8dp" />
         </LinearLayout>
@@ -154,6 +154,7 @@
 
             <Button
                 android:id="@+id/btn_sign_in"
+                style="@style/DualSouls.Button.Secondary"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/login_sign_in"
@@ -161,11 +162,11 @@
                 android:paddingStart="24dp"
                 android:paddingEnd="24dp"
                 android:paddingTop="6dp"
-                android:paddingBottom="6dp"
-                android:minHeight="0dp" />
+                android:paddingBottom="6dp" />
 
             <Button
                 android:id="@+id/btn_cancel"
+                style="@style/DualSouls.Button.Secondary"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/login_cancel"
@@ -174,7 +175,6 @@
                 android:paddingEnd="24dp"
                 android:paddingTop="6dp"
                 android:paddingBottom="6dp"
-                android:minHeight="0dp"
                 android:layout_marginStart="8dp" />
         </LinearLayout>
 
