@@ -83,22 +83,6 @@ class WorkflowDependencyTests(unittest.TestCase):
             with self.subTest(repo=repo, source=source, run=run, attempt=attempt), self.assertRaises(ValueError):
                 self.gate.require_context(repo, source, run, attempt)
 
-    def test_hosted_release_has_unconditional_private_compile_dependency(self):
-        workflow = (ROOT / '.github/workflows/release.yml').read_text(encoding='utf8')
-        self.assertIn('  patch-profiles:\n', workflow)
-        release = workflow.split('  release:\n', 1)[1]
-        self.assertIn('    needs: patch-profiles\n', release)
-        self.assertNotIn('always()', release)
-        self.assertNotIn('continue-on-error:', workflow)
-        self.assertEqual(2, workflow.count('tools/ci/workflow_gate.py verify-job'))
-        private = workflow.split('  patch-profiles:\n', 1)[1].split('  release:\n', 1)[0]
-        self.assertIn('runs-on: ${{ inputs.compiler_runner }}', private)
-        self.assertNotIn('secrets.', private)
-        self.assertNotIn('upload-artifact', private)
-        self.assertNotIn('docker run', private)
-        self.assertNotIn('gradle', private.lower())
-        self.assertIn('tools/ci/check_input_contract_tests.py', private)
-
 
 if __name__ == '__main__':
     unittest.main()

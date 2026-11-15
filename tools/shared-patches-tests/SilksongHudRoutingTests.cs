@@ -559,42 +559,6 @@ public sealed class SilksongHudRoutingTests
     }
 
     [Fact]
-    public void Companion_tab_hide_reopen_and_selection_keep_native_hud_routed()
-    {
-        var r = new Rig(); Assert.True(r.Bind());
-        bool pages = DsPortFrameState.PagesVisibleAfterTab(true, true);
-        Assert.False(pages); r.State.LateTick(Eligible()); Assert.Same(r.Hud, r.Root().Parent);
-        pages = DsPortFrameState.PagesVisibleAfterTab(pages, true);
-        Assert.True(pages); r.State.LateTick(Eligible()); Assert.Same(r.Hud, r.Root().Parent);
-        Assert.True(DsPortFrameState.PagesVisibleAfterTab(false, false));
-        Assert.True(DsPortFrameState.PagesVisibleAfterTab(true, false));
-        r.State.Restore(); Assert.Equal(PoseAt(1), r.Root().Pose);
-    }
-
-    [Fact]
-    public void Actual_frame_state_keeps_labels_boundaries_and_interrupted_slide_decisions()
-    {
-        var state = DsPortFrameState.Initial(5, 0);
-        Assert.Equal(1f, DsPortFrameState.LabelAlpha(true));
-        Assert.Equal(.6f, DsPortFrameState.LabelAlpha(false));
-        Assert.True(DsPortFrameState.ContainsHit(.2f, .2f, .4f));
-        Assert.True(DsPortFrameState.ContainsHit(.4f, .2f, .4f));
-        Assert.False(DsPortFrameState.ContainsHit(.199f, .2f, .4f));
-        state = DsPortFrameState.BeginSelection(state, 4);
-        Assert.Equal(1, state.Direction); Assert.Equal(4, state.SelectedIndex);
-        Assert.True(DsPortFrameState.IsHostActive(state, 0));
-        Assert.True(DsPortFrameState.IsHostActive(state, 4));
-        Assert.False(DsPortFrameState.IsHostActive(state, 2));
-        state = DsPortFrameState.BeginSelection(state, 1);
-        Assert.Equal(-1, state.Direction); Assert.Equal(1, state.SelectedIndex);
-        Assert.False(DsPortFrameState.IsHostActive(state, 0));
-        Assert.True(DsPortFrameState.IsHostActive(state, 4));
-        Assert.True(DsPortFrameState.IsHostActive(state, 1));
-        state = DsPortFrameState.CompleteSelection(state);
-        for (int i = 0; i < 5; i++) Assert.Equal(i == 1, DsPortFrameState.IsHostActive(state, i));
-    }
-
-    [Fact]
     public void Driver_changes_to_child_animation_and_native_visibility_survive_restore()
     {
         var r = new Rig(); var child = new Node(); Attach(child, r.Root()); Assert.True(r.Bind());

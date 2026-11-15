@@ -22,9 +22,6 @@
   <ItemGroup>
     <Content Include="fixtures/skin-runtime-chain.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../docs/superpowers/specs/data/hollow-knight-skin-catalog-v1.txt" Link="docs/superpowers/specs/data/hollow-knight-skin-catalog-v1.txt" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../skin-goldens/v1/launch-descriptors.json" Link="skin-goldens/v1/launch-descriptors.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../skin-goldens/v1/lifecycle.json" Link="skin-goldens/v1/lifecycle.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../skin-goldens/v1/transactions.json" Link="skin-goldens/v1/transactions.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/mods/HollowKnightGameplayFeatures.cs" Link="source-contracts/HollowKnightGameplayFeatures.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/mods/HollowKnightGameTweakApi.cs" Link="source-contracts/HollowKnightGameTweakApi.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/dualsouls/HkStageHooks.cs" Link="source-contracts/HkStageHooks.cs" CopyToOutputDirectory="PreserveNewest" />
@@ -41,13 +38,6 @@
     <Compile Include="..\shared-patches\src\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="$(HollowKnightPauseSourceRoot)/HKLowerLayout.cs" Link="HollowKnight/HKLowerLayout.cs" Condition="Exists('$(HollowKnightPauseSourceRoot)/HKLowerLayout.cs')" />
     <Compile Include="../silksong-patches/src/dualscreen/DsPortHudState.cs" Link="Silksong/DsPortHudState.cs" />
-    <Compile Include="../silksong-patches/src/dualscreen/DsPortSelectState.cs" Link="Silksong/DsPortSelectState.cs" />
-    <Compile Include="../silksong-patches/src/dualscreen/DsPortOverlays.cs" Link="Silksong/DsPortOverlays.cs" />
-    <Compile Include="../silksong-patches/src/dualscreen/DsPortJournalState.cs" Link="Silksong/DsPortJournalState.cs" />
-    <Compile Include="../silksong-patches/src/dualscreen/DsPortMap.cs" Link="Silksong/DsPortMap.cs" />
-    <Compile Include="../silksong-patches/src/dualscreen/DsPortCollectableManager.cs" Link="Silksong/DsPortCollectableManager.cs" />
-    <Compile Include="../silksong-patches/src/dualscreen/DsPortFrameState.cs" Link="Silksong/DsPortFrameState.cs" />
-    <Compile Include="../hollow-knight-patches/src/skins/core/**/*.cs" Link="HollowKnightSkins/Core/%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="../hollow-knight-patches/src/skins/runtime/*.cs" Link="HollowKnightSkins/Runtime/%(Filename)%(Extension)" />
     <Compile Include="../silksong-patches/src/skins/runtime/*.cs" Link="SilksongSkins/Runtime/%(Filename)%(Extension)" />
     <Compile Include="..\silksong-patches\src\mods\SilksongTweakAdapter.cs" Link="Silksong\SilksongTweakAdapter.cs" Condition="Exists('..\silksong-patches\src\mods\SilksongTweakAdapter.cs')" />

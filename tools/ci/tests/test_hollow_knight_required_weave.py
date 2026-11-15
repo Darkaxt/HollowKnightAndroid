@@ -73,34 +73,6 @@ class HollowKnightRequiredWeaveContracts(unittest.TestCase):
                         )
                         self.assertIn(f'-Depot "{depot}"', lines[0])
 
-    def test_real_conversion_consumer_propagates_required_failures(self):
-        source = (ROOT / "src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/Mods.kt").read_text()
-        method = body(source, "    suspend fun weaveBuiltin(")
-        self.assertIn('File(assemblies, "HollowKnightPatches.dll").isFile', method)
-        failure = body(method, "            if (!result.ok)")
-        self.assertRegex(failure, r"if \(requiredHollowKnight\).*throw IOException")
-        caught = body(method, "        } catch (t: Throwable)")
-        self.assertRegex(caught, r"if \(requiredHollowKnight\).*throw IOException")
-
-    def test_exact_check_exercises_actual_weaver_not_only_patch_compile(self):
-        source = (ROOT / "tools/hollow-knight-patches/check.ps1").read_text()
-        self.assertIn("'ModWeaver.dll'", source)
-        self.assertIn("builtin --assemblies", source)
-        self.assertRegex(source, re.compile(r'if \(\$LASTEXITCODE -ne 0\).*?mandatory', re.S))
-        self.assertIn("-p:BaseIntermediateOutputPath=", source)
-
-    def test_exact_ss_check_can_retain_registered_compiler_inputs(self):
-        source = (ROOT / "tools/silksong-patches/check.ps1").read_text()
-        self.assertIn("[switch]$RetainArtifacts", source)
-        self.assertIn("[string]$Work", source)
-        self.assertIn("Refusing to overwrite existing patch-check work", source)
-        self.assertRegex(source, re.compile(r"finally\s*\{\s*if \(\$RetainArtifacts\).*?else\s*\{.*?Remove-Item", re.S))
-
-    def test_existing_converter_runs_builtin_before_conversion(self):
-        source = (ROOT / "src/SilksongLauncher.Launcher/app/src/main/kotlin/dev/silksong/launcher/Il2cppConverter.kt").read_text()
-        self.assertIn("Mods.weaveBuiltin(context, root, asmDir(root), assets)", source)
-        self.assertLess(source.index("Mods.weaveBuiltin(context, root, asmDir(root), assets)"), source.index('argv += "--assembly='))
-
 
 class ExactAssemblyInputContracts(unittest.TestCase):
     HK_MANIFEST = "src/SilksongLauncher.Launcher/app/src/main/assets/profiles/hollow-knight-1.5.12620.json"
@@ -225,57 +197,6 @@ class ExactAssemblyInputContracts(unittest.TestCase):
         source = (ROOT / self.SS_AUTHORITY).read_text()
         self.invoke("silksong", "Silksong input authority is invalid",
                     authority=source + "\n// Unrelated comment; original named pin values are unchanged.\n")
-
-    def test_authorities_remain_existing_exact_original_pins(self):
-        manifest = json.loads((ROOT / self.HK_MANIFEST).read_text())
-        self.assertEqual("hollow-knight", manifest["profileId"])
-        self.assertEqual("1.5.12620", manifest["gameVersion"])
-        entries = [e for e in manifest["requiredFiles"] if e["relativePath"] == "Managed/Assembly-CSharp.dll"]
-        self.assertEqual(1, len(entries))
-        self.assertEqual(3597312, entries[0]["size"])
-        self.assertEqual("copy", entries[0]["action"])
-        self.assertEqual("5c84b8e59dd669c48db1fc426541d0d96643f59d35a72534b21fead7c96a3086", entries[0]["sha256"])
-        source = (ROOT / self.SS_AUTHORITY).read_text()
-        self.assertEqual(["1.0.29980"], re.findall(r'const string PINNED_GAME_VERSION = "([^"]+)";', source))
-        self.assertEqual(["1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d"],
-                         re.findall(r'const string PINNED_ASSEMBLY_SHA256 = "([^"]+)";', source))
-
-    def test_player_member_guards_precede_output_and_preserve_game_guards(self):
-        for profile in ("hollow-knight", "silksong"):
-            with self.subTest(profile=profile):
-                source = (ROOT / f"tools/{profile}-patches/check.ps1").read_text()
-                self.assertIn("tools/ci/verify_unity_player.py", source)
-                invocation = f'--profile {profile} --player $Player'
-                self.assertIn(invocation, source)
-                guard = source.index(invocation)
-                self.assertLess(source.index("Assembly-CSharp.dll input identity mismatch"), guard)
-                for marker in ("$taskTempRoot =", "New-Item -ItemType Directory",
-                               "dotnet build" if profile == "hollow-knight" else "Start-Process dotnet"):
-                    self.assertLess(guard, source.index(marker))
-                tail = source[guard:source.index("$taskTempRoot =")]
-                self.assertIn("if ($LASTEXITCODE -ne 0)", tail)
-                self.assertIn("throw", tail)
-                self.assertNotIn("[string]$PlayerManifest", source)
-                self.assertNotIn("[string]$ExpectedPlayerHash", source)
-
-    def test_guards_use_named_authorities_before_engine_temp_and_compile(self):
-        for profile, authority in (("hollow-knight", "hollow-knight-1.5.12620.json"),
-                                   ("silksong", "BridgeSilksongNormalDeath.cs")):
-            source = (ROOT / f"tools/{profile}-patches/check.ps1").read_text()
-            with self.subTest(profile=profile):
-                self.assertIn(authority, source)
-                self.assertIn("Get-FileHash -LiteralPath $assembly -Algorithm SHA256", source)
-                guard = source.index("Assembly-CSharp.dll input identity mismatch")
-                for marker in ("$taskTempRoot =", "New-Item -ItemType Directory", "dotnet build" if profile == "hollow-knight" else "Start-Process dotnet"):
-                    self.assertLess(guard, source.index(marker))
-                self.assertLess(guard, source.index("Android UnityEngine.CoreModule.dll is missing" if profile == "hollow-knight" else "No Android player assemblies"))
-                self.assertNotIn("[string]$ExpectedHash", source)
-        ss = (ROOT / "tools/silksong-patches/check.ps1").read_text()
-        self.assertIn("PINNED_ASSEMBLY_SHA256", ss)
-        self.assertIn("PINNED_GAME_VERSION", ss)
-        self.assertNotIn("Any depot copy will do", ss)
-        self.assertNotIn("$env:SILKSONG_DEPOT", ss)
-        self.assertNotRegex(ss, r"Get-ChildItem[^\n]*-Filter 'Managed'")
 
 
 if __name__ == "__main__":

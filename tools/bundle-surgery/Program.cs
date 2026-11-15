@@ -79,7 +79,6 @@ internal static class Program
             Console.Error.WriteLine("  set-build-version <globalgamemanagers> <version> — set BuildSettings.m_Version (must match the SerializedFile version)");
             Console.Error.WriteLine("  patch-catalog-path <in.bin> <out.bin> <abs-path> — repoint an Addressables catalog's content root at an absolute path");
             Console.Error.WriteLine("  redirect-file-replace <Assembly-CSharp.dll> <SilksongIo.dll> — point the game's File.Replace calls at SafeIo (fixes saving where ReplaceFile is unsupported)");
-            Console.Error.WriteLine("  bridge-ui-message-dismiss <Assembly-CSharp.dll> <patched.dll> — add an exact-instance companion request to UIMsgBase.DoMsg's native wait");
             Console.Error.WriteLine("  bridge-silksong-normal-death <Assembly-CSharp.dll> <patched.dll> — publish exact normal HeroController.Die occurrences");
             Console.Error.WriteLine("  verify-silksong-normal-death <patched.dll>         — verify canonical strict-death bridge identity and IL");
             Console.Error.WriteLine("  verify-silksong-normal-death-final <patched.dll>   — structurally verify the bridge after all managed rewrites");
@@ -99,7 +98,6 @@ internal static class Program
             "set-build-version" when args.Length >= 3 => SetBuildVersion(args[1], args[2]),
             "patch-catalog-path" when args.Length >= 4 => PatchCatalogPath(args[1], args[2], args[3]),
             "redirect-file-replace" when args.Length >= 3 => RedirectFileReplace.Run(args[1], args[2]),
-            "bridge-ui-message-dismiss" when args.Length == 3 => RedirectUIMsgDismiss.Run(args[1], args[2]),
             "bridge-silksong-normal-death" when args.Length == 3 => BridgeSilksongNormalDeath.Run(args[1], args[2]),
             "verify-silksong-normal-death" when args.Length == 2 => BridgeSilksongNormalDeath.Verify(args[1]),
             "verify-silksong-normal-death-final" when args.Length == 2 => BridgeSilksongNormalDeath.VerifyFinal(args[1]),

@@ -105,7 +105,7 @@ class HollowKnightBuildPlanTest {
     }
 
     @Test
-    fun `Hollow Knight conversion cache does not require the Silksong message bridge`() {
+    fun `Hollow Knight conversion cache does not require the Silksong death bridge`() {
         val root = temp.newFolder("hollow-knight-conversion-cache")
         File(Il2cppConverter.cppDir(root), "complete.cpp").apply {
             parentFile.mkdirs()
@@ -118,7 +118,6 @@ class HollowKnightBuildPlanTest {
         Il2cppConverter.markComplete(root)
 
         assertTrue(Il2cppConverter.isComplete(hollowKnight, root))
-        assertFalse(Il2cppConverter.isComplete(silksong, root))
         assertFalse(Il2cppConverter.isStale(hollowKnight, root))
         assertTrue(Il2cppConverter.isStale(silksong, root))
     }
@@ -127,132 +126,6 @@ class HollowKnightBuildPlanTest {
     fun `classic conversion reads its source without requiring in-place writes`() {
         assertFalse(DepotLocation.requiresWritableContent(hollowKnight))
         assertTrue(DepotLocation.requiresWritableContent(silksong))
-    }
-
-    @Test
-    fun `conversion cache requires exact managed bridge provenance`() {
-        val root = temp.newFolder("uimsg-bridge-provenance")
-        File(Il2cppConverter.cppDir(root), "complete.cpp").apply { parentFile.mkdirs(); writeText("// complete") }
-        Il2cppConverter.metadata(root).apply { parentFile.mkdirs(); writeBytes(byteArrayOf(1)) }
-        val assembly = File(Il2cppConverter.asmDir(root), "Assembly-CSharp.dll").apply {
-            parentFile.mkdirs(); writeBytes(byteArrayOf(0x4d, 0x5a, 1, 2))
-        }
-        val surgery = File(root, "bundle-surgery/BundleSurgery.dll").apply {
-            parentFile.mkdirs(); writeBytes(byteArrayOf(3, 4, 5))
-        }
-
-        Il2cppConverter.markComplete(root)
-        assertFalse(Il2cppConverter.isComplete(silksong, root))
-        Il2cppConverter.invalidateCompletion(root)
-        Il2cppConverter.recordUiMessageDismissProvenance(root, surgery, assembly, sha256(byteArrayOf(7)))
-        Il2cppConverter.recordSilksongDeathBridgeProvenance(
-            root, surgery, assembly,
-            "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d",
-        )
-        assertFalse(Il2cppConverter.hasSilksongDeathBridgeProvenance(root))
-        runBlocking {
-            Il2cppConverter.verifyFinalStagedSilksongNormalDeath(root, surgery) { verified ->
-                assertEquals(assembly, verified)
-            }
-        }
-        assertTrue(Il2cppConverter.hasSilksongDeathBridgeProvenance(root, sha256(assembly)))
-        Il2cppConverter.markComplete(root)
-        assertTrue(Il2cppConverter.isComplete(silksong, root))
-
-        assembly.writeBytes(byteArrayOf(0x4d, 0x5a, 9))
-        assertFalse(Il2cppConverter.isComplete(silksong, root))
-        assembly.writeBytes(byteArrayOf(0x4d, 0x5a, 1, 2))
-        assertTrue(Il2cppConverter.isComplete(silksong, root))
-        surgery.writeBytes(byteArrayOf(8))
-        assertFalse(Il2cppConverter.isComplete(silksong, root))
-        surgery.writeBytes(byteArrayOf(3, 4, 5))
-        assertTrue(Il2cppConverter.isComplete(silksong, root))
-        assertTrue(
-            Il2cppConverter.uiMessageDismissToolMatches(
-                root,
-                sha256(byteArrayOf(3, 4, 5)),
-            ),
-        )
-        assertFalse(
-            Il2cppConverter.uiMessageDismissToolMatches(
-                root,
-                sha256(byteArrayOf(8)),
-            ),
-        )
-
-        Il2cppConverter.uiMessageDismissMarker(root).writeText("algorithm=old\n")
-        assertFalse(Il2cppConverter.isComplete(silksong, root))
-    }
-
-    @Test
-    fun `ui message bridge runner failure or empty output preserves staged input`() = runBlocking {
-        for (mode in listOf("runner", "empty")) {
-            val root = temp.newFolder("uimsg-$mode")
-            val original = byteArrayOf(0x4d, 0x5a, 1, 2)
-            val assembly = File(Il2cppConverter.asmDir(root), "Assembly-CSharp.dll").apply {
-                parentFile.mkdirs(); writeBytes(original)
-            }
-            val surgery = File(root, "bundle-surgery/BundleSurgery.dll").apply {
-                parentFile.mkdirs(); writeBytes(byteArrayOf(3))
-            }
-            val failure = runCatching {
-                Il2cppConverter.rewriteStagedUiMessageDismissal(root, surgery) { _, output ->
-                    if (mode == "runner") throw java.io.IOException("runner failed")
-                    output.writeBytes(byteArrayOf())
-                }
-            }.exceptionOrNull()
-            assertTrue(failure is java.io.IOException)
-            assertTrue(assembly.readBytes().contentEquals(original))
-            assertFalse(File(assembly.parentFile, "${assembly.name}.uimsg-bridge.part").exists())
-            assertFalse(Il2cppConverter.uiMessageDismissMarker(root).exists())
-        }
-    }
-
-    @Test
-    fun `ui message bridge replacement interruption preserves staged input and rejects provenance`() = runBlocking {
-        val root = temp.newFolder("uimsg-replace-interrupted")
-        val original = byteArrayOf(0x4d, 0x5a, 1, 2)
-        val assembly = File(Il2cppConverter.asmDir(root), "Assembly-CSharp.dll").apply {
-            parentFile.mkdirs(); writeBytes(original)
-        }
-        val surgery = File(root, "bundle-surgery/BundleSurgery.dll").apply {
-            parentFile.mkdirs(); writeBytes(byteArrayOf(3))
-        }
-        val failure = runCatching {
-            Il2cppConverter.rewriteStagedUiMessageDismissal(
-                root, surgery,
-                runRewrite = { _, output -> output.writeBytes(byteArrayOf(0x4d, 0x5a, 9)) },
-                replace = { _, _ -> throw java.io.IOException("atomic replacement interrupted") },
-            )
-        }.exceptionOrNull()
-        assertTrue(failure is java.io.IOException)
-        assertTrue(assembly.readBytes().contentEquals(original))
-        assertFalse(File(assembly.parentFile, "${assembly.name}.uimsg-bridge.part").exists())
-        assertFalse(Il2cppConverter.uiMessageDismissMarker(root).exists())
-    }
-
-    @Test
-    fun `ui message bridge success atomically replaces staged input and records all identities`() = runBlocking {
-        val root = temp.newFolder("uimsg-success")
-        val original = byteArrayOf(0x4d, 0x5a, 1, 2)
-        val rewritten = byteArrayOf(0x4d, 0x5a, 9, 8)
-        val assembly = File(Il2cppConverter.asmDir(root), "Assembly-CSharp.dll").apply {
-            parentFile.mkdirs(); writeBytes(original)
-        }
-        val surgery = File(root, "bundle-surgery/BundleSurgery.dll").apply {
-            parentFile.mkdirs(); writeBytes(byteArrayOf(3, 4, 5))
-        }
-        Il2cppConverter.rewriteStagedUiMessageDismissal(root, surgery) { input, output ->
-            assertTrue(input.readBytes().contentEquals(original))
-            output.writeBytes(rewritten)
-        }
-        assertTrue(assembly.readBytes().contentEquals(rewritten))
-        val marker = Il2cppConverter.uiMessageDismissMarker(root).readText()
-        assertTrue(marker.contains("inputSha256=${sha256(original)}"))
-        assertTrue(marker.contains("assemblySha256=${sha256(rewritten)}"))
-        assertTrue(marker.contains("toolSha256=${sha256(byteArrayOf(3, 4, 5))}"))
-        assertTrue(marker.contains("algorithm="))
-        assertTrue(Il2cppConverter.hasUiMessageDismissProvenance(root))
     }
 
     @Test
@@ -357,7 +230,6 @@ class HollowKnightBuildPlanTest {
         val surgery = File(root, "bundle-surgery/BundleSurgery.dll").apply {
             parentFile.mkdirs(); writeBytes(byteArrayOf(3, 4, 5))
         }
-        Il2cppConverter.recordUiMessageDismissProvenance(root, surgery, assembly, sha256(byteArrayOf(7)))
         Il2cppConverter.recordSilksongDeathBridgeProvenance(
             root, surgery, assembly,
             "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d",
@@ -417,12 +289,6 @@ class HollowKnightBuildPlanTest {
             parentFile.mkdirs()
             writeBytes(byteArrayOf(2))
         }
-        Il2cppConverter.recordUiMessageDismissProvenance(
-            root,
-            surgery,
-            assembly,
-            sha256(byteArrayOf(7)),
-        )
         Il2cppConverter.recordSilksongDeathBridgeProvenance(
             root, surgery, assembly,
             "1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d",

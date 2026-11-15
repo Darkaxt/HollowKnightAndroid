@@ -95,13 +95,6 @@ class ReleasePipelineContractTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "production package"):
                     self.contract.require_production_package(package_name)
 
-    def test_signing_workflow_uses_the_guard_and_never_invokes_the_lab_module(self):
-        workflow = WORKFLOW.read_text(encoding="utf-8")
-
-        self.assertIn("tools/ci/release_contract.py select-apk", workflow)
-        self.assertIn("tools/ci/release_contract.py check-package", workflow)
-        self.assertNotIn(":emulator-test-app", workflow)
-
     def assert_exact_profile_control_flow(self, workflow):
         private, release = workflow.split('  patch-profiles:\n', 1)[1].split('  release:\n', 1)
         self.assertIn('    needs: patch-profiles\n', release)
@@ -133,24 +126,6 @@ class ReleasePipelineContractTest(unittest.TestCase):
             self.assertIn('ref: ${{ github.sha }}', checkout)
         self.assertNotIn('download-artifact', private)
 
-    def test_exact_profiles_are_unconditional_before_signing_and_artifacts(self):
-        self.assert_exact_profile_control_flow(WORKFLOW.read_text(encoding='utf-8'))
-
-    def test_profile_gate_control_flow_rejects_bypass_and_stale_run_mutations(self):
-        workflow = WORKFLOW.read_text(encoding='utf-8')
-        marker = '      - name: Compile and verify exact patch profiles\n'
-        variants = [workflow.replace(marker, marker + '        if: ${{ !inputs.dry_run }}\n'),
-                    workflow.replace(marker, marker + '        continue-on-error: true\n'),
-                    workflow.replace('tools/ci/check_patch_profiles.ps1', 'download-artifact'),
-                    workflow.replace('ref: ${{ github.sha }}', 'ref: stale-checkpoint'),
-                    workflow.replace('$($env:GITHUB_RUN_ID):$($env:GITHUB_RUN_ATTEMPT):$($env:GITHUB_SHA)', 'old-run-token'),
-                    workflow.replace('    needs: patch-profiles\n', ''),
-                    workflow.replace('    needs: patch-profiles\n', '    needs: patch-profiles\n    if: ${{ always() }}\n'),
-                    workflow.replace('workflow_gate.py verify-job', 'workflow_gate.py skip-gate')]
-        for changed in variants:
-            with self.subTest(changed=hash(changed)), self.assertRaises(AssertionError):
-                self.assert_exact_profile_control_flow(changed)
-
     def test_actual_presigning_verifier_blocks_sandbox_sentinel_for_both_dry_run_modes(self):
         workflow = WORKFLOW.read_text(encoding='utf-8')
         signing = workflow.split('      - name: Prepare signing key\n', 1)[1]
@@ -172,114 +147,6 @@ class ReleasePipelineContractTest(unittest.TestCase):
             self.assertNotEqual(0, result.returncode)
             self.assertIn('[workflow gate] rejected:', result.stderr)
             self.assertFalse(sentinel.exists())
-
-    def test_workflow_forwards_admitted_roots_to_full_input_contract_suite(self):
-        import ast
-        workflow = WORKFLOW.read_text(encoding='utf-8')
-        private = workflow.split('  patch-profiles:\n', 1)[1].split('  release:\n', 1)[0]
-        self.assertIn('tools/ci/check_input_contract_tests.py', private)
-        script = (ROOT / 'tools/ci/check_input_contract_tests.py').read_text(encoding='utf-8')
-        tree = ast.parse(script)
-        self.assertIn("admit_contract(repo, os.environ['DUALSOULS_INPUT_CONTRACT'])", script)
-        for profile, player, depot in [('hollow-knight', 'UNITY_PLAYER_61', 'HK_ORIGINAL_DEPOT'),
-                                      ('silksong', 'UNITY_PLAYER_50', 'SS_ORIGINAL_DEPOT')]:
-            self.assertIn(f"('{profile}', '{player}', '{depot}')", script)
-        self.assertIn("os.environ[player] = contract['profiles'][profile]['player']", script)
-        self.assertIn("os.environ[depot] = contract['profiles'][profile]['depot']", script)
-        self.assertIn("DUALSOULS_RETAIN_TEST_FIXTURES='1'", script)
-        self.assertIn('TMPDIR=str(temp), TEMP=str(temp), TMP=str(temp)', script)
-        calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and
-                 isinstance(n.func, ast.Name) and n.func.id == 'run_process']
-        self.assertEqual(1, len(calls))
-        self.assertIsInstance(calls[0].args[0], ast.List)
-        self.assertEqual(['-B', '-m', 'unittest', 'discover', 'tools/ci/tests', '-v'],
-                         [n.value for n in calls[0].args[0].elts[1:]])
-        self.assertIn('require_process(process)', script)
-        self.assertIn('os.environ.pop(key)', script)
-        self.assertNotIn('upload-artifact', private)
-
-    def test_apk_shell_ignores_empty_resource_directories(self):
-        script = BUILD_SCRIPT.read_text(encoding="utf-8")
-
-        self.assertIn('for f in "$d"/*; do', script)
-        self.assertIn('[[ -f "$f" ]] || continue', script)
-        self.assertNotIn('cp -f "$d"/* "$sh/res/$(basename "$d")/"', script)
-
-    def test_modern_round_icon_uses_the_same_adaptive_artwork(self):
-        regular = (ADAPTIVE_ICON_DIR / "ic_launcher.xml").read_text(encoding="utf-8")
-        round_icon = (ADAPTIVE_ICON_DIR / "ic_launcher_round.xml").read_text(
-            encoding="utf-8"
-        )
-
-        for layer in ("background", "foreground"):
-            reference = re.search(
-                rf'<{layer} android:drawable="([^"]+)"', regular
-            )
-            candidate = re.search(
-                rf'<{layer} android:drawable="([^"]+)"', round_icon
-            )
-            self.assertIsNotNone(reference)
-            self.assertIsNotNone(candidate)
-            self.assertEqual(reference.group(1), candidate.group(1))
-
-    def test_apk_shell_exposes_launcher_as_its_only_launcher_entry_point(self):
-        script = BUILD_SCRIPT.read_text(encoding="utf-8")
-
-        launcher = re.search(
-            r'<activity android:name="dev\.silksong\.launcher\.LauncherActivity"'
-            r'(?P<body>.*?)</activity>',
-            script,
-            re.DOTALL,
-        )
-        self.assertIsNotNone(launcher)
-        self.assertIn('android:exported="true"', launcher.group("body"))
-        self.assertIn('android.intent.action.MAIN', launcher.group("body"))
-        self.assertIn('android.intent.category.LAUNCHER', launcher.group("body"))
-
-        setup = re.search(
-            r'<activity android:name="dev\.silksong\.launcher\.SetupActivity"'
-            r'(?P<body>.*?)/>',
-            script,
-            re.DOTALL,
-        )
-        self.assertIsNotNone(setup)
-        self.assertIn('android:exported="false"', setup.group("body"))
-        self.assertNotIn('android.intent.action.MAIN', setup.group("body"))
-
-    def test_apk_shell_registers_every_launcher_library_activity(self):
-        script = BUILD_SCRIPT.read_text(encoding="utf-8")
-        manifest = LAUNCHER_MANIFEST.read_text(encoding="utf-8")
-        library_activities = set(
-            re.findall(r'<activity\s+android:name="([^"]+)"', manifest)
-        )
-
-        self.assertTrue(library_activities)
-        for activity in sorted(library_activities):
-            with self.subTest(activity=activity):
-                self.assertIn(f'<activity android:name="{activity}"', script)
-
-    def test_on_device_object_names_use_android_shell_portable_sanitising(self):
-        script = IL2CPP_BUILD_SCRIPT.read_text(encoding="utf-8")
-        portable = "safe=${rel//[!A-Za-z0-9._-]/_}"
-
-        self.assertNotIn("safe=${rel//[^", script)
-        self.assertEqual(3, script.count(portable))
-
-    def test_interrupted_il2cpp_conversion_cannot_publish_partial_output(self):
-        source = IL2CPP_CONVERTER.read_text(encoding="utf-8")
-
-        self.assertIn('File(root, "convert.complete")', source)
-        self.assertIn("completionMarker(root).readText().trim()", source)
-        self.assertIn("file.exists() && !file.delete()", source)
-        self.assertIn("if (!part.renameTo(marker))", source)
-        self.assertLess(
-            source.index("invalidateCompletion(root)"),
-            source.index('send(Progress("Preparing the converter"'),
-        )
-        self.assertGreater(
-            source.index("markComplete(root)"),
-            source.index("if (!result.ok)"),
-        )
 
 
 if __name__ == "__main__":

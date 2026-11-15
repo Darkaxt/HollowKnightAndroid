@@ -104,7 +104,7 @@ namespace DualSouls.Mods.Silksong
             _completedOperations.Clear();
             Enqueue(_stateLoadOperation.Cancel(
                 "Silksong save-state load was canceled by baseline restoration."));
-            DsPortSceneryState.BlackBackground = false;
+            DsSceneryOptions.BlackBackground = false;
             SilksongGameplayHooks.Reset();
             SilksongGameplayFeatures.RestoreAll();
             SilksongGameplayFeatures.SetStateTransferPreparation(null);
@@ -124,7 +124,7 @@ namespace DualSouls.Mods.Silksong
             }
         }
 
-        public void SetCompanionBackdropBlack(bool black) { DsPortSceneryState.BlackBackground = black; }
+        public void SetCompanionBackdropBlack(bool black) { DsSceneryOptions.BlackBackground = black; }
 
         public void SetRunSpeedMultiplier(float multiplier)
         {
@@ -299,7 +299,7 @@ namespace DualSouls.Mods.Silksong
         {
             switch (id)
             {
-                case "black_background": return OnOff(DsPortSceneryState.BlackBackground);
+                case "black_background": return OnOff(DsSceneryOptions.BlackBackground);
                 case "run_speed":
                     return Choice(_runSpeedMultiplier == 1.5f ? "plus_50" :
                                   _runSpeedMultiplier == 1.25f ? "plus_25" : "vanilla");

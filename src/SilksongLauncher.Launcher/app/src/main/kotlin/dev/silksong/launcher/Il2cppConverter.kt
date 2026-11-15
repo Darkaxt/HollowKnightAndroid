@@ -72,11 +72,6 @@ object Il2cppConverter {
     internal fun completionMarker(root: File): File = File(root, "convert.complete")
 
     private const val COMPLETE = "complete"
-    private const val UI_MESSAGE_DISMISS_SCHEMA = "1"
-    internal const val UI_MESSAGE_DISMISS_ALGORITHM =
-        "task105-v1;game=1.0.29980;tail=1886e0884a720b0b53412e04f912fb6d7c31d7c9da9cd365e9ac6b85fc4bc179;order=post-save-pre-mod"
-    private const val UI_MESSAGE_DISMISS_MARKER = "uimsg-bridge.properties"
-    private const val UI_MESSAGE_DISMISS_PART_SUFFIX = ".uimsg-bridge.part"
     private const val SILKSONG_DEATH_SCHEMA = "2"
     internal const val SILKSONG_DEATH_ALGORITHM =
         "task101-v4;game=1.0.29980;assembly=1af095416b89f73993058f9cbac3a93959d928314b735cc4acbca7bf1a952d2d;rewritten=86e8ffd402bb5e58c57d89ef2e0c3fa8dd3e89a9c1c049d4bf663484434b6a8e;site=post-normalization;owners=ring32;verify=canonical+final-structural;order=pre-save-through-post-mod"
@@ -85,9 +80,6 @@ object Il2cppConverter {
     private const val SILKSONG_DEATH_MARKER = "silksong-death-bridge.properties"
     private const val SILKSONG_DEATH_PART_SUFFIX = ".silksong-death-bridge.part"
     private val SHA256 = Regex("^[0-9a-f]{64}$")
-
-    internal fun requiresUiMessageDismissal(profile: GameProfile): Boolean =
-        profile.id == "silksong"
 
     /** How often the output directory is counted while il2cpp works. */
     private const val PROGRESS_POLL_MS = 2_000L
@@ -152,9 +144,6 @@ object Il2cppConverter {
      */
     private fun signatureMarker(root: File) = File(root, "cpp.done")
 
-    internal fun uiMessageDismissMarker(root: File): File =
-        File(root, UI_MESSAGE_DISMISS_MARKER)
-
     internal fun silksongDeathBridgeMarker(root: File): File =
         File(root, SILKSONG_DEATH_MARKER)
 
@@ -170,68 +159,6 @@ object Il2cppConverter {
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
-
-    private fun uiMessageDismissProperties(root: File): Properties? =
-        runCatching {
-            Properties().apply {
-                uiMessageDismissMarker(root).reader().use(::load)
-            }
-        }.getOrNull()
-
-    internal fun recordUiMessageDismissProvenance(
-        root: File,
-        surgery: File,
-        assembly: File,
-        inputSha256: String,
-    ) {
-        if (!SHA256.matches(inputSha256)) {
-            throw IOException("invalid ui message bridge input SHA-256")
-        }
-        if (surgery.length() <= 0 || assembly.length() <= 0) {
-            throw IOException("cannot record ui message bridge provenance for empty inputs")
-        }
-        val marker = uiMessageDismissMarker(root)
-        val part = File(root, "${marker.name}.part")
-        part.delete()
-        part.writeText(
-            buildString {
-                append("schema=").append(UI_MESSAGE_DISMISS_SCHEMA).append('\n')
-                append("algorithm=").append(UI_MESSAGE_DISMISS_ALGORITHM).append('\n')
-                append("inputSha256=").append(inputSha256).append('\n')
-                append("assemblySha256=").append(sha256(assembly)).append('\n')
-                append("toolSha256=").append(sha256(surgery)).append('\n')
-            },
-        )
-        try {
-            Files.move(part.toPath(), marker.toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
-        } catch (error: Exception) {
-            part.delete()
-            throw IOException("could not commit ui message bridge provenance", error)
-        }
-    }
-
-    internal fun hasUiMessageDismissProvenance(root: File): Boolean {
-        val values = uiMessageDismissProperties(root) ?: return false
-        val input = values.getProperty("inputSha256") ?: return false
-        val assemblyHash = values.getProperty("assemblySha256") ?: return false
-        val toolHash = values.getProperty("toolSha256") ?: return false
-        if (values.getProperty("schema") != UI_MESSAGE_DISMISS_SCHEMA ||
-            values.getProperty("algorithm") != UI_MESSAGE_DISMISS_ALGORITHM ||
-            !SHA256.matches(input) || !SHA256.matches(assemblyHash) || !SHA256.matches(toolHash)
-        ) return false
-        val assembly = File(asmDir(root), "Assembly-CSharp.dll")
-        val surgery = File(root, "bundle-surgery/BundleSurgery.dll")
-        return assembly.isFile && assembly.length() > 0 && sha256(assembly) == assemblyHash &&
-            surgery.isFile && surgery.length() > 0 && sha256(surgery) == toolHash
-    }
-
-    private fun recordedUiMessageDismissToolSha256(root: File): String? =
-        uiMessageDismissProperties(root)?.getProperty("toolSha256")
-            ?.takeIf(SHA256::matches)
-
-    internal fun uiMessageDismissToolMatches(root: File, assetSha256: String): Boolean =
-        SHA256.matches(assetSha256) &&
-            recordedUiMessageDismissToolSha256(root) == assetSha256
 
     private fun silksongDeathBridgeProperties(root: File): Properties? = runCatching {
         Properties().apply { silksongDeathBridgeMarker(root).reader().use(::load) }
@@ -338,11 +265,9 @@ object Il2cppConverter {
      * replaced, since the run that wrote this.
      */
     private fun completionSignature(root: File): String {
-        val bridge = uiMessageDismissMarker(root)
-        val bridgeHash = if (bridge.isFile) sha256(bridge) else "missing"
         val deathBridge = silksongDeathBridgeMarker(root)
         val deathBridgeHash = if (deathBridge.isFile) sha256(deathBridge) else "missing"
-        return "${cppDir(root).list()?.size ?: 0}:${metadata(root).length()}:$bridgeHash:$deathBridgeHash"
+        return "${cppDir(root).list()?.size ?: 0}:${metadata(root).length()}:$deathBridgeHash"
     }
 
     private fun hasCompletionSignature(root: File): Boolean =
@@ -358,9 +283,7 @@ object Il2cppConverter {
      * rebuilt -- and it is the direction to be wrong in.
      */
     fun isComplete(profile: GameProfile, root: File): Boolean =
-        (!requiresUiMessageDismissal(profile) ||
-            (uiMessageDismissMarker(root).isFile && hasUiMessageDismissProvenance(root))) &&
-            runCatching { completionMarker(root).readText().trim() }.getOrNull() == COMPLETE &&
+        runCatching { completionMarker(root).readText().trim() }.getOrNull() == COMPLETE &&
             hasCompletionSignature(root) &&
             metadata(root).length() > 0 &&
             cppDir(root).listFiles()?.any { it.name.endsWith(".cpp") } == true
@@ -393,13 +316,7 @@ object Il2cppConverter {
         mods: File? = null,
         assets: android.content.res.AssetManager? = null,
     ): Boolean {
-        if (requiresUiMessageDismissal(profile) && !hasUiMessageDismissProvenance(root)) return true
         if (profile.id == "silksong" && !hasSilksongDeathBridgeProvenance(root)) return true
-        if (requiresUiMessageDismissal(profile) && assets != null) {
-            val currentTool = runCatching { PlayerImage.surgeryAssetSha256(assets) }.getOrNull()
-                ?: return true
-            if (!uiMessageDismissToolMatches(root, currentTool)) return true
-        }
         if (mods != null && !Mods.candidateMetadataPresent(root)) return true
         if (mods != null && Mods.isStale(mods, root, assets)) return true
         val ours = buildList {
@@ -486,8 +403,6 @@ object Il2cppConverter {
         if (profile.id == "silksong") bridgeSilksongNormalDeath(context, root)
 
         if (PackageCompiler.requiresSaveIo(profile)) redirectSaveCalls(context, root)
-
-        if (requiresUiMessageDismissal(profile)) bridgeUiMessageDismissal(context, root)
 
         if (profile.id == "hollow-knight" && assets != null) {
             send(Progress("Weaving gameplay tweaks", -1f, "managed damage seam"))
@@ -822,66 +737,6 @@ object Il2cppConverter {
                 context,
                 listOf("verify-silksong-normal-death-final", assembly.absolutePath),
             ) { line -> LauncherLog.log("Final Silksong death verification: ${line.trim()}") }
-        }
-    }
-
-    internal suspend fun rewriteStagedUiMessageDismissal(
-        root: File,
-        surgery: File,
-        replace: (File, File) -> Unit = ::atomicReplaceStaged,
-        runRewrite: suspend (input: File, output: File) -> Unit,
-    ) {
-        val assembly = File(asmDir(root), "Assembly-CSharp.dll")
-        if (!assembly.isFile || assembly.length() <= 0) {
-            throw IOException("no staged Assembly-CSharp.dll for ui message bridge")
-        }
-        if (!surgery.isFile || surgery.length() <= 0) {
-            throw IOException("no BundleSurgery.dll for ui message bridge")
-        }
-        val marker = uiMessageDismissMarker(root)
-        val markerPart = File(root, "${marker.name}.part")
-        for (stale in listOf(marker, markerPart)) {
-            if (stale.exists() && !stale.delete()) {
-                throw IOException("could not invalidate stale ui message bridge provenance: $stale")
-            }
-        }
-        val output = File(assembly.parentFile, assembly.name + UI_MESSAGE_DISMISS_PART_SUFFIX)
-        if (output.exists() && !output.delete()) {
-            throw IOException("could not remove stale ui message bridge output: $output")
-        }
-        val inputSha256 = sha256(assembly)
-        try {
-            runRewrite(assembly, output)
-            if (!output.isFile || output.length() <= 0) {
-                throw IOException("ui message bridge produced no rewritten Assembly-CSharp.dll")
-            }
-            val managedImage = output.inputStream().use { input ->
-                input.read() == 'M'.code && input.read() == 'Z'.code
-            }
-            if (!managedImage) {
-                throw IOException("ui message bridge produced an invalid managed assembly")
-            }
-            replace(output, assembly)
-            if (!assembly.isFile || assembly.length() <= 0) {
-                throw IOException("ui message bridge replacement left no staged Assembly-CSharp.dll")
-            }
-            recordUiMessageDismissProvenance(root, surgery, assembly, inputSha256)
-        } finally {
-            output.delete()
-        }
-    }
-
-    private suspend fun bridgeUiMessageDismissal(
-        context: android.content.Context,
-        root: File,
-    ) {
-        val surgery = PlayerImage.stageSurgery(root, context.assets)
-        rewriteStagedUiMessageDismissal(root, surgery) { input, output ->
-            PlayerImage.run(
-                surgery,
-                context,
-                listOf("bridge-ui-message-dismiss", input.absolutePath, output.absolutePath),
-            ) { line -> LauncherLog.log("ui message bridge: ${line.trim()}") }
         }
     }
 

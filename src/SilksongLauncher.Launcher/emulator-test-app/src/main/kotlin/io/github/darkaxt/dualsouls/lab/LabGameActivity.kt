@@ -6,11 +6,13 @@ import android.os.Process
 import android.widget.Button
 import android.widget.TextView
 import dev.silksong.launcher.profiles.GameProfiles
-import dev.silksong.launcher.skins.SkinRotationStateMachine
 import io.github.darkaxt.dualsouls.emutest.R
 
 class LabGameActivity : Activity() {
-    private val rotation = SkinRotationStateMachine(activeSkinId = "blue")
+    // Lab-only stand-in for the game-side skin choice: death picks, respawn applies.
+    private val skins = listOf("blue", "red", "gold")
+    private var activeSkin: String? = "blue"
+    private var pendingSkin: String? = null
     private lateinit var lifecycle: TextView
     private lateinit var skin: TextView
 
@@ -27,11 +29,12 @@ class LabGameActivity : Activity() {
         lifecycle = findViewById(R.id.txt_lab_lifecycle)
         skin = findViewById(R.id.txt_lab_skin)
         findViewById<Button>(R.id.btn_lab_death).setOnClickListener {
-            rotation.onDeath(listOf("blue", "red", "gold"))
+            pendingSkin = skins.filter { it != activeSkin }.randomOrNull()
             render("DEAD")
         }
         findViewById<Button>(R.id.btn_lab_respawn).setOnClickListener {
-            rotation.onStableRespawn { true }
+            pendingSkin?.let { activeSkin = it }
+            pendingSkin = null
             render("STABLE_RESPAWN")
         }
         findViewById<Button>(R.id.btn_lab_exit).setOnClickListener {
@@ -44,8 +47,7 @@ class LabGameActivity : Activity() {
     }
 
     private fun render(event: String) {
-        val state = rotation.state()
-        lifecycle.text = "$event · ${state.phase}"
-        skin.text = "active=${state.activeSkinId ?: "none"} · pending=${state.pendingSkinId ?: "none"}"
+        lifecycle.text = event
+        skin.text = "active=${activeSkin ?: "none"} · pending=${pendingSkin ?: "none"}"
     }
 }

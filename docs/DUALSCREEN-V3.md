@@ -59,14 +59,13 @@ not substitute for that comparison.
   batched map comparison must decide whether a fade improves Hollow Knight
   without dimming labels, markers, or the compass; closure requires a bounded
   fade on all four edges with no map bleed during pan or zoom.
-- **HK-MODS-01 — host-complete; device validation deferred:** the exact required
-  catalog and metadata are enforced for both adapters by
-  `test_native_mods_catalog.py`, while the shared controller/model tests and both
-  native-menu contract suites prove grouped row/window reachability, visible
-  unavailable explanations, direct Choice mutation, reset/Back, command/route
-  dispatch, and controller event routing. The duplicate `SKINS OPEN` row is
-  excluded, and the obsolete lower-display Mods presenter and input owner are
-  removed. Final closure still requires live controller validation in both games.
+- **HK-MODS-01 — reopened under the reset plan:** the shared controller/model
+  tests cover grouped rows, unavailable explanations, Choice mutation,
+  reset/Back and controller routing. The source-grep catalog suite was retired
+  with the 2026-11 reset. Known gaps: the menu is reachable only while paused, and
+  readback reflects the menu's own state rather than live game values (cheat
+  fixes, reset step 5). Closure requires the per-candidate device checklist in
+  both games.
 
 ## Built-in Mods
 
