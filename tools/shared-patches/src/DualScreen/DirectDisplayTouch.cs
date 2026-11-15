@@ -56,6 +56,7 @@ namespace DualSouls.DualScreen
         // different update phase from the companion content.
         static int _frame = -1;
         static readonly HashSet<int> _ids = new HashSet<int>();
+        static readonly HashSet<int> _previousIds = new HashSet<int>();
         static readonly List<Vector2> _positions = new List<Vector2>();
         static readonly List<DirectDisplayPixelContact> _contacts =
             new List<DirectDisplayPixelContact>();
@@ -76,6 +77,7 @@ namespace DualSouls.DualScreen
             _targetDisplay = displayIndex;
             _frame = -1;
             _ids.Clear();
+            _previousIds.Clear();
             _positions.Clear();
             _contacts.Clear();
             _targetCanceled = false;
@@ -86,6 +88,8 @@ namespace DualSouls.DualScreen
         {
             if (_frame == Time.frameCount) return;
             _frame = Time.frameCount;
+            _previousIds.Clear();
+            _previousIds.UnionWith(_ids);
             _ids.Clear();
             _positions.Clear();
             _contacts.Clear();
@@ -107,10 +111,13 @@ namespace DualSouls.DualScreen
                         _targetCanceled = true;
                         continue;
                     }
-                    if (phase == UnityEngine.InputSystem.TouchPhase.None ||
-                        phase == UnityEngine.InputSystem.TouchPhase.Ended)
-                        continue;
+                    if (phase == UnityEngine.InputSystem.TouchPhase.None) continue;
                     int id = touch.touchId.ReadValue();
+                    // A press and release inside one frame would never be seen held;
+                    // report it for this frame so the next frame reads its release.
+                    if (phase == UnityEngine.InputSystem.TouchPhase.Ended &&
+                        (_previousIds.Contains(id) || !touch.press.wasReleasedThisFrame))
+                        continue;
                     Vector2 position = touch.position.ReadValue();
                     _ids.Add(id);
                     _positions.Add(position);

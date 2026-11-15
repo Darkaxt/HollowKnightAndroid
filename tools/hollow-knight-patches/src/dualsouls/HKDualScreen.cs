@@ -540,6 +540,7 @@ public partial class HKDualScreen : MonoBehaviour
     void Tick()
     {
         LoadConfig(false);
+        PollCommands();           // Q : QA command file (adb-reachable)
         GameCameras gc;
         GameManager gm;
         if (!TryResolveSceneManagers(out gc, out gm)) { RestoreHudCameraState(); HideShell(); return; }
@@ -590,7 +591,7 @@ public partial class HKDualScreen : MonoBehaviour
             // so the popup reads on clean black.
             bool creditShowing = CreditShowing();
             creditNow = creditShowing;
-            popupAny = loreDialogueOpen || BottomOverlayActive();
+            popupAny = loreDialogueOpen || creditShowing || BottomOverlayActive();
             popupBlack = cfg.compPopupBlack == 1 && popupAny;
             SyncBgCapture(gc);        // black shell; never construct or render a second scenery camera
             ApplyMainFocusLift();      // M : lift the REAL inventory's Focus+3-spells cluster

@@ -395,20 +395,36 @@ public partial class HKDualScreen
     static Vector3 NativeHudCorner(Bounds b, int i)
     { return new Vector3((i & 1) == 0 ? b.min.x : b.max.x, (i & 2) == 0 ? b.min.y : b.max.y, (i & 4) == 0 ? b.min.z : b.max.z); }
 
+    // HK's HUD camera never shows what lies outside its own view, and nothing that
+    // spans most of that view is HUD furniture (blankers, fades, glows): neither may
+    // widen the fit, or the real HUD shrinks to a sliver of the header band.
+    const float NativeHudOverlayFraction = .5f;
+    int nativeHudExtremeMinX = -1, nativeHudExtremeMaxX = -1, nativeHudExtremeMinY = -1, nativeHudExtremeMaxY = -1;
+    float nativeHudNextFitLog;
+
     bool MeasureNativeHudView(Quaternion rotation)
     {
         var inv = Quaternion.Inverse(rotation);
+        var src = hudCameraStateSource;
+        if (src == null || !src.orthographic) return false;
+        Vector3 eye = inv * src.transform.position;
+        float halfH = src.orthographicSize, halfW = halfH * src.aspect;
+        if (!NativeHudFinite(halfW) || halfW <= 0f || halfH <= 0f) return false;
+        float viewMinX = eye.x - halfW, viewMaxX = eye.x + halfW, viewMinY = eye.y - halfH, viewMaxY = eye.y + halfH;
         var lo = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         var hi = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
         bool have = false;
+        int minX = -1, maxX = -1, minY = -1, maxY = -1, dropped = 0;
         for (int i = 0; i < nativeHudOwnerCount; i++)
         {
             var o = nativeHudOwners[i]; if (!o.Included) continue;
             if (!o.Ready) return false;
+            var olo = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+            var ohi = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
             for (int j = 0; j < 8; j++)
             {
                 var p = NativeHudCorner(o.Bounds, j); var current = inv * p;
-                lo = Vector3.Min(lo, current); hi = Vector3.Max(hi, current);
+                olo = Vector3.Min(olo, current); ohi = Vector3.Max(ohi, current);
                 if (nativeHudHide != null && HudGlobalHide.IsReduced)
                 {
                     // HudGlobalHide's native normal state is position zero/scale one
@@ -416,13 +432,42 @@ public partial class HKDualScreen
                     var local = nativeHudHide.InverseTransformPoint(p);
                     var normal = nativeHudHide.localRotation * local;
                     if (nativeHudHide.parent != null) normal = nativeHudHide.parent.TransformPoint(normal);
-                    normal = inv * normal; lo = Vector3.Min(lo, normal); hi = Vector3.Max(hi, normal);
+                    normal = inv * normal; olo = Vector3.Min(olo, normal); ohi = Vector3.Max(ohi, normal);
                 }
-                have = true;
             }
+            if (ohi.x - olo.x > 2f * halfW * NativeHudOverlayFraction || ohi.y - olo.y > 2f * halfH * NativeHudOverlayFraction)
+            { dropped++; continue; }
+            olo.x = Mathf.Max(olo.x, viewMinX); ohi.x = Mathf.Min(ohi.x, viewMaxX);
+            olo.y = Mathf.Max(olo.y, viewMinY); ohi.y = Mathf.Min(ohi.y, viewMaxY);
+            if (olo.x >= ohi.x || olo.y >= ohi.y) { dropped++; continue; }
+            if (olo.x < lo.x) minX = i; if (ohi.x > hi.x) maxX = i;
+            if (olo.y < lo.y) minY = i; if (ohi.y > hi.y) maxY = i;
+            lo = Vector3.Min(lo, olo); hi = Vector3.Max(hi, ohi);
+            have = true;
         }
         if (!have || !NativeHudFinite(lo.x) || !NativeHudFinite(hi.y)) return false;
-        nativeHudViewMin = lo; nativeHudViewMax = hi; return true;
+        nativeHudViewMin = lo; nativeHudViewMax = hi;
+        LogNativeHudFit(minX, maxX, minY, maxY, dropped, halfW, halfH);
+        return true;
+    }
+
+    // Names the owners that set each edge of the fit whenever they change (at most every two seconds).
+    void LogNativeHudFit(int minX, int maxX, int minY, int maxY, int dropped, float halfW, float halfH)
+    {
+        if (minX == nativeHudExtremeMinX && maxX == nativeHudExtremeMaxX && minY == nativeHudExtremeMinY && maxY == nativeHudExtremeMaxY) return;
+        if (Time.unscaledTime < nativeHudNextFitLog) return;
+        nativeHudNextFitLog = Time.unscaledTime + 2f;
+        nativeHudExtremeMinX = minX; nativeHudExtremeMaxX = maxX; nativeHudExtremeMinY = minY; nativeHudExtremeMaxY = maxY;
+        var size = nativeHudViewMax - nativeHudViewMin;
+        Debug.Log("[HKDS hudfit] fit=" + (size.x / (2f * halfW)).ToString("F2") + "x" + (size.y / (2f * halfH)).ToString("F2") +
+            " of view, dropped=" + dropped + " left='" + NativeHudOwnerName(minX) + "' right='" + NativeHudOwnerName(maxX) +
+            "' bottom='" + NativeHudOwnerName(minY) + "' top='" + NativeHudOwnerName(maxY) + "'");
+    }
+
+    string NativeHudOwnerName(int i)
+    {
+        var t = i >= 0 && i < nativeHudOwnerCount && nativeHudOwners[i] != null ? nativeHudOwners[i].Transform : null;
+        return t == null ? "?" : (t.parent != null ? t.parent.name + "/" : "") + t.name;
     }
 
     // The shell's header band (HKDualScreen.Shell.cs) is the HUD's destination.

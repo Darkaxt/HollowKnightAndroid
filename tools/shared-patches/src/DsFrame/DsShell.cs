@@ -560,6 +560,14 @@ public class DsShell
     /// <summary>The id of the visible screen, for persisting across runs.</summary>
     public string ActiveId => (_active >= 0 && _active < _entries.Count) ? _entries[_active].Screen.Id : null;
 
+    /// <summary>Shows the page with this id; false when no such page is registered.</summary>
+    public bool ShowId(string id)
+    {
+        for (int i = 0; i < _entries.Count; i++)
+            if (string.Equals(_entries[i].Screen.Id, id, StringComparison.OrdinalIgnoreCase)) { Show(i); return true; }
+        return false;
+    }
+
     void Paint()
     {
         for (int i = 0; i < _entries.Count; i++)

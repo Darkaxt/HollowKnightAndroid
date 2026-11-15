@@ -1,0 +1,134 @@
+using System;
+using System.Reflection;
+using System.Text;
+using DualSouls.Mods.HollowKnight;
+using UnityEngine;
+
+// [Q] QA COMMANDS — drives what device QA cannot reach through adb input (HK's
+// InControl ignores injected key events): pause, the Mods menu, lower tabs,
+// save, and reads back the real game state. See DsCommandFile for the channel.
+public partial class HKDualScreen
+{
+    const string CommandHelp =
+        "help | state | pause | mods | skins | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
+        "mods-list | mod <id> <value> | pd <field>... | save | quit-menu | fonts | hudfit";
+
+    void PollCommands() { DsCommandFile.Poll(RunCommand); }
+
+    string RunCommand(string line)
+    {
+        string[] a = line.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+        var gm = GameManager.instance;
+        var ui = UIManager.instance;
+        switch (a[0].ToLowerInvariant())
+        {
+            case "help": return CommandHelp;
+            case "state": return CommandState(gm, ui);
+            case "pause":
+                if (gm == null) return "error no GameManager";
+                bool was = gm.IsGamePaused();
+                gm.StartCoroutine(gm.PauseGameToggle());
+                return "ok was-paused=" + was;
+            case "mods": return HollowKnightNativeModsMenu.OpenForCommand(0);
+            case "skins": return HollowKnightNativeModsMenu.OpenForCommand(1);
+            case "tab":
+                if (a.Length < 2) return "error tab <id>";
+                if (shell == null) return "error no shell";
+                return shell.ShowId(a[1]) ? "ok active=" + shell.ActiveId : "error unknown tab";
+            case "companion":
+                if (a.Length < 2) return "error companion <0|1|config>";
+                compOn = a[1] == "config" ? -1 : (a[1] == "1" ? 1 : 0);
+                return "ok compOn=" + compOn;
+            case "mods-list": return CommandModsList();
+            case "mod":
+            {
+                if (a.Length < 3) return "error mod <id> <value>";
+                var c = ModsController();
+                if (c == null) return "error Mods session not ready";
+                var r = c.Set(a[1], a[2]);
+                return (r.Success ? "ok" : "error " + r.Error) + (r.Pending ? " pending" : "") + " value=" + c.Value(a[1]);
+            }
+            case "pd": return CommandPlayerData(a);
+            case "save":
+                if (gm == null) return "error no GameManager";
+                gm.SaveGame();
+                return "ok slot=" + gm.profileID;
+            case "quit-menu":
+                if (ui == null) return "error no UIManager";
+                ui.StartCoroutine(ui.ReturnToMainMenu());
+                return "ok";
+            case "fonts": return DsTheme.Report();
+            case "hudfit": return CommandHudFit();
+            default: return "error unknown command; " + CommandHelp;
+        }
+    }
+
+    string CommandState(GameManager gm, UIManager ui)
+    {
+        var sb = new StringBuilder();
+        sb.Append("scene=").Append(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
+        if (gm != null) sb.Append(" game=").Append(gm.gameState).Append(" paused=").Append(gm.IsGamePaused()).Append(" slot=").Append(gm.profileID);
+        if (ui != null) sb.Append(" ui=").Append(ui.uiState).Append(" menu=").Append(ui.menuState);
+        sb.Append("\nshell=").Append(shell != null ? shell.ActiveId : "-").Append(" shown=").Append(shellShown)
+          .Append(" inGame=").Append(shellInGame).Append(" shellPaused=").Append(shell != null && shell.Paused)
+          .Append(" companion=").Append(compOn).Append(" credit=").Append(creditNow).Append(" popupBlack=").Append(popupBlack)
+          .Append(" hudWanted=").Append(shellHudWanted).Append(" hudFit=").Append(nativeHudFitReady);
+        return sb.ToString();
+    }
+
+    static DualSouls.Mods.TweakController ModsController()
+    {
+        var runtime = HollowKnightModsRuntime.Current;
+        var session = runtime != null ? runtime.Session : null;
+        return session != null && session.IsReady ? session.Controller : null;
+    }
+
+    static string CommandModsList()
+    {
+        var c = ModsController();
+        if (c == null) return "error Mods session not ready";
+        var sb = new StringBuilder();
+        foreach (var d in c.Descriptors)
+        {
+            sb.Append(d.Group).Append('/').Append(d.Id).Append('=').Append(c.Value(d.Id));
+            if (!d.IsAvailable) sb.Append(" (unavailable: ").Append(d.UnavailableReason).Append(')');
+            sb.Append(" [").Append(string.Join(",", d.Values)).Append("]\n");
+        }
+        return sb.ToString().TrimEnd('\n');
+    }
+
+    static string CommandPlayerData(string[] a)
+    {
+        var pd = PlayerData.instance;
+        if (pd == null) return "error no PlayerData";
+        if (a.Length < 2) return "error pd <field>...";
+        var sb = new StringBuilder();
+        for (int i = 1; i < a.Length; i++)
+        {
+            var f = typeof(PlayerData).GetField(a[i], BindingFlags.Public | BindingFlags.Instance);
+            if (i > 1) sb.Append(' ');
+            sb.Append(a[i]).Append('=').Append(f != null ? Convert.ToString(f.GetValue(pd)) : "?");
+        }
+        return sb.ToString();
+    }
+
+    string CommandHudFit()
+    {
+        var sb = new StringBuilder();
+        var d = nativeHudDestination;
+        sb.Append("fitReady=").Append(nativeHudFitReady).Append(" bound=").Append(nativeHudBound)
+          .Append(" owners=").Append(nativeHudOwnerCount).Append(" dest=").Append(d.x.ToString("F0")).Append(',').Append(d.y.ToString("F0"))
+          .Append(' ').Append(d.width.ToString("F0")).Append('x').Append(d.height.ToString("F0"))
+          .Append(" view=").Append(nativeHudViewMin).Append("..").Append(nativeHudViewMax);
+        var src = hudCameraStateSource;
+        if (src != null) sb.Append(" srcOrtho=").Append(src.orthographicSize.ToString("F2")).Append(" srcAspect=").Append(src.aspect.ToString("F2"));
+        for (int i = 0; i < nativeHudOwnerCount; i++)
+        {
+            var o = nativeHudOwners[i];
+            if (o == null || !o.Included) continue;
+            sb.Append('\n').Append(NativeHudOwnerName(i)).Append(" ready=").Append(o.Ready)
+              .Append(" c=").Append(o.Bounds.center).Append(" s=").Append(o.Bounds.size);
+        }
+        return sb.ToString();
+    }
+}

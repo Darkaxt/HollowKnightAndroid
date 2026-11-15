@@ -54,9 +54,6 @@ namespace HollowKnightPatches.Lower
 
         readonly Action _toggleMode, _enterMarkers, _exitMarkers, _resetView;
 
-        static Sprite _tabArt;
-        static float _nextTabArtScan;
-
         public HkMapScreen()
         {
             _toggleMode = ToggleMode;
@@ -70,24 +67,7 @@ namespace HollowKnightPatches.Lower
         public bool Available { get { return DsFrame.InGame; } }
 
         /// <summary>The inventory's own Map and Quill art, once resident.</summary>
-        public static Sprite TabArt()
-        {
-            if (_tabArt != null) return _tabArt;
-            if (Time.unscaledTime < _nextTabArtScan) return null;
-            _nextTabArtScan = Time.unscaledTime + 5f;
-            try
-            {
-                var all = Resources.FindObjectsOfTypeAll<Sprite>();
-                for (int i = 0; i < all.Length; i++)
-                {
-                    var s = all[i];
-                    if (s != null && s.name == "inv_item_map_quill_combined" && s.rect.width > 0 && s.rect.height > 0)
-                        return _tabArt = s;
-                }
-            }
-            catch { }
-            return null;
-        }
+        public static Sprite TabArt() { return HkSprites.Find("inv_item_map_quill_combined"); }
 
         // ── build ───────────────────────────────────────────────────────────
 

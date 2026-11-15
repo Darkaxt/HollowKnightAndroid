@@ -192,13 +192,8 @@ namespace HollowKnightPatches.Lower
         }
 
         /// <summary>The hunter's mark from the game's journal pane, else an entry portrait.</summary>
-        public static Sprite TabArt()
-        {
-            if (!HkJournalSource.Ensure()) return null;
-            if (HkJournalSource.HunterSymbol != null) return HkJournalSource.HunterSymbol;
-            var records = HkJournalSource.Records;
-            return records.Count > 0 ? records[0].Sprite : null;
-        }
+        /// <summary>The inventory's Hunter's Journal book.</summary>
+        public static Sprite TabArt() { return HkSprites.Find("Hunter_journal_01"); }
 
         // ── build ───────────────────────────────────────────────────────────
 

@@ -1366,6 +1366,18 @@ namespace DualSouls.Mods.HollowKnight
             Open((NativeMenuRoute)route);
         }
 
+        /// <summary>Opens Mods (0) or Skins (1) for the QA command channel, from the paused Options menu.</summary>
+        internal static string OpenForCommand(int route)
+        {
+            HollowKnightNativeModsMenu current = _current;
+            if (current == null) return "error no Mods menu";
+            if (!current.BindingIsAlive()) return "error Mods menu not bound";
+            if (current._binding.Ui.uiState != UIState.PAUSED) return "error game not paused (uiState=" + current._binding.Ui.uiState + ")";
+            if (current._transitioning) return "error menu transitioning";
+            current.OpenEntry(route);
+            return "ok";
+        }
+
         internal void SelectSkin(HollowKnightNativeSkinButton button)
         {
             if (button == null || _skinMenu == null || !DriverIsCurrent(button, button.Generation)) return;

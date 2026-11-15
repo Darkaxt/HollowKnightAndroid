@@ -100,7 +100,47 @@ public static partial class DsTheme
             try { has = f.HasCharacter(Required[i]); } catch { }
             if (!has) missing++;
         }
-        return chars - missing * 100000;
+        return chars - missing * 100000 - (Sound(f) ? 0 : 50000);
+    }
+
+    /// <summary>
+    /// Whether the asset's glyphs can be drawn from what its material samples.
+    /// A font whose material points at another atlas, or whose capital M lies
+    /// outside its own atlas, still reports every character yet draws slivers
+    /// of the wrong texture ("Map" came out as two apostrophes and "ap").
+    /// </summary>
+    static bool Sound(TmpFont f)
+    {
+        try
+        {
+            var atlas = f.atlas;
+            var material = f.material;
+            if (atlas == null || material == null) return false;
+            if (material.HasProperty("_MainTex") && material.mainTexture != atlas) return false;
+            TMProOld.TMP_Glyph m;
+            if (f.characterDictionary == null || !f.characterDictionary.TryGetValue('M', out m) || m == null) return false;
+            return m.width > 0f && m.height > 0f && m.x >= 0f && m.y >= 0f &&
+                   m.x + m.width <= atlas.width + 1f && m.y + m.height <= atlas.height + 1f;
+        }
+        catch { return false; }
+    }
+
+    static string Describe(TmpFont f)
+    {
+        try
+        {
+            var atlas = f.atlas;
+            var material = f.material;
+            var tex = material != null && material.HasProperty("_MainTex") ? material.mainTexture : null;
+            TMProOld.TMP_Glyph m = null;
+            if (f.characterDictionary != null) f.characterDictionary.TryGetValue('M', out m);
+            return f.name + "#" + f.GetInstanceID() + " chars=" + (f.characterDictionary != null ? f.characterDictionary.Count : 0) +
+                   " atlas=" + (atlas != null ? atlas.name + " " + atlas.width + "x" + atlas.height : "-") +
+                   " matTex=" + (tex != null ? tex.name + (tex == atlas ? "(own)" : "(OTHER)") : "-") +
+                   " M=" + (m != null ? m.x + "," + m.y + " " + m.width + "x" + m.height : "-") +
+                   " sound=" + Sound(f);
+        }
+        catch (System.Exception e) { return f.name + " ?" + e.GetType().Name; }
     }
 
     static bool Complete(TmpFont f)
@@ -188,10 +228,18 @@ public static partial class DsTheme
             // incomplete asset found early is exactly the failure this fixes.
             // Give up after half a minute and take the best seen, because a
             // font that renders most things beats no text at all.
-            bool good = Complete(_body) && (_display == null || Complete(_display));
+            bool good = Complete(_body) && Sound(_body) && (_display == null || Complete(_display));
             if (!good && Time.unscaledTime - _firstSearch < 30f) return;
 
             _searched = true;
+            for (int i = 0; i < fonts.Length; i++)
+            {
+                var f = fonts[i];
+                if (f == null || string.IsNullOrEmpty(f.name)) continue;
+                string n = f.name.ToLowerInvariant();
+                if (n.Contains("trajan") || n.Contains("perpetua") || n.Contains("amor"))
+                    Debug.Log("[DsTheme] candidate " + Describe(f) + (f == _body ? " <body" : "") + (f == _display ? " <display" : ""));
+            }
             Debug.Log("[DsTheme] fonts: display='" + (_display != null ? _display.name : "-") +
                       "' body='" + (_body != null ? _body.name : "-") +
                       "' complete=" + good);
@@ -200,6 +248,13 @@ public static partial class DsTheme
         {
             Debug.LogWarning("[DsTheme] font lookup failed: " + e.Message);
         }
+    }
+
+    /// <summary>The chosen faces and their soundness, for the QA command channel.</summary>
+    public static string Report()
+    {
+        Search();
+        return "display=" + (_display != null ? Describe(_display) : "-") + "\nbody=" + (_body != null ? Describe(_body) : "-");
     }
 
     /// <summary>Fonts appear once the game has loaded its UI; allow a retry.</summary>
