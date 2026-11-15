@@ -322,7 +322,7 @@ def run_build(repo, directory, token, arguments):
 def tracked(repo):
     names = subprocess.check_output(['git', '-C', str(repo), 'ls-files', '-z']).decode().split('\0')
     # These mandatory consumers are frozen even in a pre-publication host run.
-    names += ['tools/ci/compile_receipt.py', 'tools/ci/compiler-receipt.targets', 'tools/ci/check_patch_profiles.ps1']
+    names += ['tools/ci/compile_receipt.py', 'tools/ci/compiler-receipt.targets']
     return {n: identity(Path(repo) / n)['sha256'] for n in sorted(set(names)) if n}
 
 

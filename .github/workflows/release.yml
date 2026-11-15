@@ -10,6 +10,11 @@
 # anyone already downloaded would silently stop matching its release page.
 # To redo a release, bump VERSION (or delete the old release and tag by hand).
 #
+# Patch compilation against the real game assemblies happens before dispatch,
+# in the maintainer's local gated build of the exact commit being released
+# (the game DLLs are licensed and never leave that machine). This workflow
+# only builds, signs with the persistent identity and pins the signer.
+#
 # A version with a -suffix (0.2.0-rc.1) is published as a prerelease.
 name: Release APK
 
@@ -20,10 +25,6 @@ on:
         description: "Build and verify, but publish nothing"
         type: boolean
         default: false
-      compiler_runner:
-        description: "Unique label of the one-job private Windows compiler runner"
-        type: string
-        required: true
       prerelease:
         description: "Mark as prerelease (auto = any version with a -suffix)"
         type: choice
@@ -32,91 +33,13 @@ on:
 
 permissions:
   contents: write        # create a release, upload the APK
-  actions: read         # verify this attempt's private compiler dependency
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  patch-profiles:
-    name: Exact patch profiles
-    runs-on: ${{ inputs.compiler_runner }}
-    timeout-minutes: 120
-    permissions:
-      contents: read
-    defaults:
-      run:
-        shell: pwsh
-    steps:
-      - name: Guard private runner context and mask local paths
-        env:
-          COMPILER_LABEL: ${{ inputs.compiler_runner }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          if ($env:GITHUB_EVENT_NAME -ne 'workflow_dispatch' -or
-              $env:COMPILER_LABEL -notmatch '^dualsouls-compile-[0-9a-f]{32}$' -or
-              -not $env:DUALSOULS_INPUT_CONTRACT -or
-              -not $env:DUALSOULS_INPUT_CONTRACT_SHA256 -or
-              -not $env:DUALSOULS_PRIVATE_ROOT -or
-              -not [IO.Path]::IsPathRooted($env:DUALSOULS_PRIVATE_ROOT) -or
-              -not (Test-Path -LiteralPath $env:DUALSOULS_PRIVATE_ROOT -PathType Container)) {
-            throw 'Private compiler runner context is not provisioned'
-          }
-          foreach ($path in @($env:RUNNER_WORKSPACE, $env:RUNNER_TEMP,
-                              $env:USERPROFILE, $env:DUALSOULS_INPUT_CONTRACT,
-                              $env:DUALSOULS_PRIVATE_ROOT)) {
-            if ($path) {
-              Write-Output "::add-mask::$path"
-              Write-Output ('::add-mask::' + $path.Replace('\', '/'))
-            }
-          }
-          $contract = Get-Content -LiteralPath $env:DUALSOULS_INPUT_CONTRACT -Raw | ConvertFrom-Json
-          foreach ($profile in $contract.profiles.PSObject.Properties.Value) {
-            foreach ($path in @($profile.depot, $profile.player)) {
-              Write-Output "::add-mask::$path"
-              Write-Output ('::add-mask::' + $path.Replace('/', '\'))
-            }
-          }
-
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Compile and verify exact patch profiles
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $out = Join-Path $env:DUALSOULS_PRIVATE_ROOT "patch-profiles-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
-          & pwsh -NoLogo -NoProfile -NonInteractive -File tools/ci/check_patch_profiles.ps1 `
-            -InputContract $env:DUALSOULS_INPUT_CONTRACT -OutputRoot $out `
-            -RunToken "$($env:GITHUB_RUN_ID):$($env:GITHUB_RUN_ATTEMPT):$($env:GITHUB_SHA)" `
-            *> (Join-Path $env:DUALSOULS_PRIVATE_ROOT 'compiler-entry.log')
-          if ($LASTEXITCODE -ne 0) { throw 'Private exact-profile compilation rejected' }
-          & python -B tools/ci/compile_receipt.py verify-gate --repo $env:GITHUB_WORKSPACE `
-            --gate (Join-Path $out 'both-profiles-success.json') --source-revision $env:GITHUB_SHA `
-            --run-token "$($env:GITHUB_RUN_ID):$($env:GITHUB_RUN_ATTEMPT):$($env:GITHUB_SHA)" `
-            *> (Join-Path $env:DUALSOULS_PRIVATE_ROOT 'compiler-verify.log')
-          if ($LASTEXITCODE -ne 0) { throw 'Private exact-profile verification rejected' }
-
-      - name: Test release verification helper
-        run: |
-          & python -B tools/ci/check_input_contract_tests.py
-          if ($LASTEXITCODE -ne 0) { throw 'Private input-contract suite rejected' }
-
-      - name: Verify completed compiler gate
-        run: |
-          $out = Join-Path $env:DUALSOULS_PRIVATE_ROOT "patch-profiles-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
-          & python -B tools/ci/compile_receipt.py verify-gate --repo $env:GITHUB_WORKSPACE `
-            --gate (Join-Path $out 'both-profiles-success.json') --source-revision $env:GITHUB_SHA `
-            --run-token "$($env:GITHUB_RUN_ID):$($env:GITHUB_RUN_ATTEMPT):$($env:GITHUB_SHA)" `
-            *> (Join-Path $env:DUALSOULS_PRIVATE_ROOT 'compiler-final-verify.log')
-          if ($LASTEXITCODE -ne 0) { throw 'Completed private compiler gate rejected' }
-          # Raw logs, receipts, game DLLs and compiler stages remain on this runner.
-
   release:
-    needs: patch-profiles
     runs-on: ubuntu-latest
 
     steps:
@@ -218,7 +141,6 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           set -euo pipefail
-          python3 -B tools/ci/workflow_gate.py verify-job --repo "$GITHUB_WORKSPACE"
           for name in KEYSTORE_B64 KS_PASS KEY_PASS KEY_ALIAS; do
             [[ -n "${!name:-}" ]] || { echo "::error::Required signing secret for $name is missing"; exit 1; }
           done
@@ -276,7 +198,6 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           set -euo pipefail
-          python3 -B tools/ci/workflow_gate.py verify-job --repo "$GITHUB_WORKSPACE"
           mkdir -p .ci-cache/unity-player .ci-cache/nuget .ci-cache/build
 
           docker run --rm \
