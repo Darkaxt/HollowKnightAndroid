@@ -130,6 +130,17 @@ class SkinNormalizerTest {
     }
 
     @Test
+    fun `undecodable legacy folder names fall back to the archive name`() {
+        // GBK bytes without the UTF-8 flag: not decodable as a name.
+        val legacy = byteArrayOf(0xC4.toByte(), 0xE3.toByte(), 0xBA.toByte(), 0xC3.toByte())
+        val prepared = prepare(
+            listOf(RawZipFixture.Entry(legacy + "/Knight.png".toByteArray(), TinyPngFixture.rgba(), utf8 = false)),
+            archiveName = "Dead Cells Knight.zip",
+        ).single() as CandidatePreparationResult.Ready
+        assertEquals("Dead Cells Knight", prepared.candidate.name)
+    }
+
+    @Test
     fun preservesReadySiblingsWhenCandidateIsRejected() {
         val results = prepare(
             listOf(

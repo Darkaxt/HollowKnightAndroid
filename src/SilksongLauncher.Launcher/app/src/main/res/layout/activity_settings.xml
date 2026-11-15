@@ -171,37 +171,6 @@
         android:layout_marginBottom="24dp"
         android:layout_marginStart="4dp" />
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="16dp">
-
-        <Button
-            android:id="@+id/btn_settings_skins"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/action_skins"
-            android:textSize="15sp"
-            android:textColor="@color/text_on_control"
-            android:backgroundTint="@color/surface_control"
-            android:minHeight="48dp" />
-
-        <Button
-            android:id="@+id/btn_settings_mods"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="10dp"
-            android:text="@string/action_plugins"
-            android:textSize="15sp"
-            android:textColor="@color/text_on_control"
-            android:backgroundTint="@color/surface_control"
-            android:minHeight="48dp" />
-    </LinearLayout>
-
     <!-- ───── Clear the build ─────
          Last, and visually separated, because it is the only control here
          that destroys anything. -->
@@ -232,21 +201,6 @@
             android:paddingTop="10dp"
             android:paddingBottom="10dp"
             android:minHeight="0dp" />
-
-        <Button
-            android:id="@+id/btn_settings_logs"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/action_logs"
-            android:textSize="15sp"
-            android:textColor="@color/text_on_control"
-            android:backgroundTint="@color/surface_control"
-            android:paddingStart="20dp"
-            android:paddingEnd="20dp"
-            android:paddingTop="10dp"
-            android:paddingBottom="10dp"
-            android:minHeight="0dp"
-            android:layout_marginStart="10dp" />
     </LinearLayout>
 
     <TextView
@@ -261,13 +215,11 @@
 
     <Button
         android:id="@+id/btn_settings_back"
+        style="@style/DualSouls.Button.Secondary"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="end"
-        android:text="@string/settings_back"
-        android:textSize="14sp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp"
-        android:minHeight="0dp" />
+        android:minWidth="120dp"
+        android:text="@string/settings_back" />
 </LinearLayout>
 </ScrollView>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Secondary launcher actions: dark fill, white text, white focus ring. -->
+    <style name="DualSouls.Button.Secondary" parent="@android:style/Widget.DeviceDefault.Button">
+        <item name="android:background">@drawable/button_secondary</item>
+        <item name="android:foreground">@drawable/focus_on_dark</item>
+        <item name="android:textColor">@color/button_text_secondary</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">44dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <!-- The single primary action on a screen. -->
+    <style name="DualSouls.Button.Primary" parent="@android:style/Widget.DeviceDefault.Button">
+        <item name="android:background">@drawable/button_primary</item>
+        <item name="android:foreground">@drawable/focus_on_dark</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">19sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="DualSouls.SectionHeader" parent="">
+        <item name="android:textColor">@color/text_dim</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.08</item>
+    </style>
+</resources>

@@ -226,8 +226,9 @@ namespace DualSouls.Skins
                 var eligible = new HashSet<string>(value.EligiblePackIds, StringComparer.Ordinal);
                 foreach (NativeSkinPackDescriptor pack in value.Packs)
                 {
+                    // OFF: only the remembered pack is marked; the rest are not "disabled", the mode is.
                     string status = value.Mode == "OFF"
-                        ? (pack.Id == value.SelectedPackId ? "SELECTED" : "DISABLED")
+                        ? (pack.Id == value.SelectedPackId ? "SELECTED" : "")
                         : value.Mode == "ON"
                             ? (pack.Id == value.SelectedPackId ? "ENABLED" : "DISABLED")
                             : (eligible.Contains(pack.Id) ? "ENABLED" : "DISABLED");

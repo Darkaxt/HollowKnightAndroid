@@ -96,6 +96,14 @@ class SkinsActivity : Activity() {
         val intent = if (folder) Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
         else Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // Start in Downloads, where packs usually land, not wherever the picker was last left.
+        intent.putExtra(
+            android.provider.DocumentsContract.EXTRA_INITIAL_URI,
+            android.provider.DocumentsContract.buildDocumentUri(
+                "com.android.externalstorage.documents",
+                "primary:Download",
+            ),
+        )
         try { startActivityForResult(intent, if (folder) FOLDER else FILE) }
         catch (error: Exception) { showNotice(error.message.orEmpty()) }
     }
@@ -195,8 +203,9 @@ class SkinsActivity : Activity() {
             getString(R.string.skins_default) else getString(R.string.skins_none)
         findViewById<TextView>(R.id.skins_requested).text = getString(
             R.string.skins_requested,
-            library.requestedMode,
+            modeName(library.requestedMode),
             selectedName,
+            state.rotationOrder.size,
         )
         findViewById<TextView>(R.id.skins_runtime).text = when (library.runtime.kind) {
             SkinRuntimeKind.NONE -> getString(R.string.skins_runtime_none)
@@ -330,12 +339,14 @@ class SkinsActivity : Activity() {
         val sources = readySources(screen)
         if (sources.isEmpty()) return
         dialog = AlertDialog.Builder(this).setTitle(R.string.skins_choose_source)
-            .setItems(sources.map { "${it.second.name} · ${it.second.rawPrefixHex} · ${it.second.candidateKey}" }.toTypedArray()) { _, index ->
+            .setItems(sources.mapIndexed { index, source ->
+                val name = source.second.name?.takeIf(String::isNotBlank) ?: getString(R.string.skins_candidate_unnamed)
+                if (sources.count { it.second.name == source.second.name } > 1) "$name (${index + 1})" else name
+            }.toTypedArray()) { _, index ->
                 if (!acceptsCallback()) return@setItems
                 val (handle, source) = sources[index]
                 dialog = AlertDialog.Builder(this).setTitle(R.string.skins_confirm)
-                    .setMessage(getString(R.string.skins_confirm_replace, targetName, source.name,
-                        source.candidateKey, target.generationSha256, target.treeSha256, target.receiptSha256))
+                    .setMessage(getString(R.string.skins_confirm_replace, targetName, source.name))
                     .setPositiveButton(R.string.skins_confirm) { _, _ ->
                         if (acceptsCallback()) session.replace(handle, requireNotNull(source.candidateKey), target)
                     }
@@ -347,6 +358,12 @@ class SkinsActivity : Activity() {
             .setOnCancelListener { if (acceptsCallback()) session.cancel(preparationOwner) }
             .show()
     }
+
+    private fun modeName(mode: String) = getString(when (mode) {
+        "ROTATE" -> R.string.skins_mode_rotate
+        "ON" -> R.string.skins_mode_on
+        else -> R.string.skins_mode_off
+    })
 
     private fun yesNo(value: Boolean) = getString(if (value) R.string.skins_yes else R.string.skins_no)
 

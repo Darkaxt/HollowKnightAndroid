@@ -32,7 +32,6 @@ import android.widget.Button
 import android.widget.Switch
 import dev.silksong.launcher.profiles.ProfileBuildPaths
 import dev.silksong.launcher.profiles.SelectedGameStore
-import dev.silksong.launcher.skins.ui.SkinsActivity
 
 class SettingsActivity : Activity() {
 
@@ -125,18 +124,6 @@ class SettingsActivity : Activity() {
         // button that does nothing is worse than no button.
         btnClearBuild.isEnabled = BuildReset.hasBuild(buildPaths)
         btnClearBuild.alpha = if (btnClearBuild.isEnabled) 1f else 0.4f
-
-        findViewById<Button>(R.id.btn_settings_skins).setOnClickListener {
-            startActivity(Intent(this, SkinsActivity::class.java))
-        }
-        findViewById<Button>(R.id.btn_settings_mods).setOnClickListener {
-            startActivity(Intent(this, ModsActivity::class.java))
-        }
-
-        // Logs remain available for diagnosing genuine launcher settings/build issues.
-        findViewById<Button>(R.id.btn_settings_logs).setOnClickListener {
-            startActivity(Intent(this, LogActivity::class.java))
-        }
     }
 
     /**

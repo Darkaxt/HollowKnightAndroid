@@ -22,7 +22,7 @@ public sealed class NativeSkinMenuModelTests
             new[] { "MODE", "SPRITES", "Moss Knight", "Silk Red", "BACK" },
             model.Rows.Select(row => row.Label));
         Assert.Equal(
-            new[] { "OFF", "PLAYER + HUD", "SELECTED", "DISABLED", "" },
+            new[] { "OFF", "PLAYER + HUD", "SELECTED", "", "" },
             model.Rows.Select(row => row.Value));
         Assert.Equal(
             new[] { NativeSkinMenuRowKind.Mode, NativeSkinMenuRowKind.Sprites,

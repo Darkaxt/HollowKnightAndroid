@@ -318,7 +318,7 @@ class SkinNormalizer(
                 candidateKey,
                 rawPrefix.copyOf(),
                 layoutCode,
-                candidateName(rawPrefix, candidateFlags, candidateKey),
+                candidateName(rawPrefix, candidateFlags, candidateKey, quarantined.archiveName),
                 contentSha256,
                 receiptBytes,
                 SkinIdentity.sha256(receiptBytes),
@@ -439,8 +439,8 @@ class SkinNormalizer(
         return count to digest.digest().toHex()
     }
 
-    private fun candidateName(rawPrefix: ByteArray, flags: Int, candidateKey: String): String {
-        if (rawPrefix.isEmpty()) return fallbackName(candidateKey)
+    private fun candidateName(rawPrefix: ByteArray, flags: Int, candidateKey: String, archiveName: String): String {
+        if (rawPrefix.isEmpty()) return fallbackName(candidateKey, archiveName)
         val leaf = rawPrefix.copyOfRange(rawPrefix.indexOfLast { it == '/'.code.toByte() } + 1, rawPrefix.size)
         val candidate = if (flags and 0x0800 != 0) {
             runCatching {
@@ -456,7 +456,7 @@ class SkinNormalizer(
         } else if (leaf.all { (it.toInt() and 0xff) in 0x20..0x7e }) {
             leaf.toString(Charsets.US_ASCII)
         } else null
-        return if (candidate != null && validName(candidate)) candidate else fallbackName(candidateKey)
+        return if (candidate != null && validName(candidate)) candidate else fallbackName(candidateKey, archiveName)
     }
 
     private fun canonicalArchiveName(name: String, archiveSha256: String): String {
@@ -554,7 +554,13 @@ class SkinNormalizer(
         return owner
     }
 
-    private fun fallbackName(candidateKey: String) = "Imported skin ${candidateKey.take(12)}"
+    /** The archive's own file name (without extension) reads better than a hash when the folder name inside
+     *  is missing or not decodable (legacy code-page ZIP names); the hash name is the last resort. */
+    private fun fallbackName(candidateKey: String, archiveName: String): String {
+        val normalized = Normalizer.normalize(archiveName, Normalizer.Form.NFKC)
+        val base = normalized.substringBeforeLast('.').trim()
+        return if (base.isNotEmpty() && validName(base)) base else "Imported skin ${candidateKey.take(12)}"
+    }
 
     private fun checkedAdd(left: Long, right: Long): Long {
         if (left < 0 || right < 0 || left > Long.MAX_VALUE - right) reject(SkinImportCode.LIMIT_EXCEEDED, "Size overflow")

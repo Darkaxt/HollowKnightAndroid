@@ -17,12 +17,12 @@ class TestEnvironmentTest {
     }
 
     @Test
-    fun save_transfer_actions_use_import_export_labels_without_arrows() {
+    fun save_transfer_actions_name_steam_cloud_without_arrows() {
         val context = ApplicationProvider.getApplicationContext<Context>()
 
-        assertEquals("Import saves", context.getString(R.string.action_pull_saves))
-        assertEquals("Import saves", context.getString(R.string.action_pull_saves_busy))
-        assertEquals("Export saves", context.getString(R.string.action_push_saves))
-        assertEquals("Export saves", context.getString(R.string.action_push_saves_busy))
+        assertEquals("Download from Steam Cloud", context.getString(R.string.action_pull_saves))
+        assertEquals("Downloading from Steam Cloud…", context.getString(R.string.action_pull_saves_busy))
+        assertEquals("Upload to Steam Cloud", context.getString(R.string.action_push_saves))
+        assertEquals("Uploading to Steam Cloud…", context.getString(R.string.action_push_saves_busy))
     }
 }

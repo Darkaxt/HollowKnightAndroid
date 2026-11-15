@@ -50,7 +50,7 @@ class LauncherProfileSelectionTest {
         assertTrue(collectText(hollowKnight).none { it == "Hollow Knight" })
         assertTrue(collectText(silksong).none { it == "Hollow Knight: Silksong" })
         assertEquals(
-            "Not configured",
+            "Not ported",
             activity.findViewById<TextView>(R.id.txt_hollow_knight_status).text.toString(),
         )
         assertEquals(
@@ -67,22 +67,13 @@ class LauncherProfileSelectionTest {
         assertEquals(0, (hollowKnightLogo.layoutParams as FrameLayout.LayoutParams).bottomMargin)
         assertEquals(Gravity.CENTER, (silksongLogo.layoutParams as FrameLayout.LayoutParams).gravity)
         assertEquals(0, (silksongLogo.layoutParams as FrameLayout.LayoutParams).bottomMargin)
-        val hollowKnightPin = activity.findViewById<Button>(R.id.btn_pin_hollow_knight)
-        val silksongPin = activity.findViewById<Button>(R.id.btn_pin_silksong)
-        assertEquals(
-            Gravity.TOP or Gravity.START,
-            (hollowKnightPin.layoutParams as FrameLayout.LayoutParams).gravity,
-        )
-        assertEquals(
-            Gravity.TOP or Gravity.START,
-            (silksongPin.layoutParams as FrameLayout.LayoutParams).gravity,
-        )
-        assertEquals("📌", hollowKnightPin.text.toString())
-        assertEquals("📌", silksongPin.text.toString())
-        assertEquals("Pin Hollow Knight shortcut", hollowKnightPin.contentDescription.toString())
-        assertEquals("Pin Silksong shortcut", silksongPin.contentDescription.toString())
-        assertFalse(hollowKnightPin.isEnabled)
-        assertFalse(silksongPin.isEnabled)
+        // The shortcut pin moved off the card face to a long-press on the card.
+        for (id in listOf("btn_pin_hollow_knight", "btn_pin_silksong", "txt_log", "log_scroll")) {
+            assertEquals(id, 0, activity.resources.getIdentifier(id, "id", activity.packageName))
+        }
+        assertTrue(hollowKnight.isLongClickable)
+        assertTrue(silksong.isLongClickable)
+        assertTrue(hollowKnight.contentDescription.toString().contains("Long-press to pin"))
         assertEquals(
             0,
             activity.resources.getIdentifier(
@@ -138,20 +129,14 @@ class LauncherProfileSelectionTest {
     }
 
     @Test
-    fun `settings exposes real skins mods and logs routes`() {
+    fun `settings does not duplicate the home screen routes`() {
         val settings = Robolectric.buildActivity(SettingsActivity::class.java).setup().get()
-        val shadow = shadowOf(settings)
-
-        settings.findViewById<Button>(R.id.btn_settings_skins).performClick()
-        assertEquals(SkinsActivity::class.java.name, shadow.nextStartedActivity.component?.className)
-
-        val settingsPluginsButton = settings.findViewById<Button>(R.id.btn_settings_mods)
-        assertEquals("Plugins", settingsPluginsButton.text.toString())
-        settingsPluginsButton.performClick()
-        assertEquals(ModsActivity::class.java.name, shadow.nextStartedActivity.component?.className)
-
-        settings.findViewById<Button>(R.id.btn_settings_logs).performClick()
-        assertEquals(LogActivity::class.java.name, shadow.nextStartedActivity.component?.className)
+        for (id in listOf("btn_settings_skins", "btn_settings_mods", "btn_settings_logs")) {
+            assertEquals(id, 0, settings.resources.getIdentifier(id, "id", settings.packageName))
+        }
+        val launcher = Robolectric.buildActivity(LauncherActivity::class.java).setup().get()
+        launcher.findViewById<Button>(R.id.btn_logs).performClick()
+        assertEquals(LogActivity::class.java.name, shadowOf(launcher).nextStartedActivity.component?.className)
     }
 
     @Test

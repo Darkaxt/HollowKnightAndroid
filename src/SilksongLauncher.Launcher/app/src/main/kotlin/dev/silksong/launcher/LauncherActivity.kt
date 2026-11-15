@@ -2,8 +2,9 @@
 // been built. GameActivity is a regular non-launchable Activity, invoked only
 // via the Intent in launchGame().
 //
-// One panel: profile-scoped mod packages, Skins and Settings actions beside a
-// live mirror of LauncherLog, plus account/cloud controls and game launch.
+// One panel: game cards, a Steam section (account + cloud saves), a Game
+// section (Plugins, Skins, Settings, View logs), a one-line status and PLAY.
+// The live LauncherLog is mirrored on the lower display (LowerDisplayLog).
 
 package dev.silksong.launcher
 
@@ -15,7 +16,6 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
@@ -40,6 +40,7 @@ import dev.silksong.launcher.runtime.GameProcessState
 import dev.silksong.launcher.runtime.LaunchEligibility
 import dev.silksong.launcher.runtime.LaunchEligibilityCode
 import dev.silksong.launcher.runtime.LauncherRuntimeProvider
+import dev.silksong.launcher.runtime.RuntimeCondition
 import dev.silksong.launcher.runtime.RuntimeRequest
 import dev.silksong.launcher.runtime.RuntimeState
 import dev.silksong.launcher.shortcuts.GameShortcutContract
@@ -51,6 +52,10 @@ class LauncherActivity : Activity() {
 
     private companion object {
         private const val REQ_LOGIN = 1
+
+        /** The last user-visible outcome (cloud transfer, launch problem), shown in the status line.
+         *  Process-lived: the launcher process survives the game. */
+        @Volatile var lastResult: String? = null
     }
 
     private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -75,8 +80,6 @@ class LauncherActivity : Activity() {
     private lateinit var radioSilksong: GameCardView
     private lateinit var hollowKnightStatus: TextView
     private lateinit var silksongStatus: TextView
-    private lateinit var btnPinHollowKnight: Button
-    private lateinit var btnPinSilksong: Button
 
     // Launch-panel widgets.
     private lateinit var txtLoginStatus: TextView
@@ -90,14 +93,14 @@ class LauncherActivity : Activity() {
     private lateinit var btnSettings: Button
     private lateinit var btnLogs: Button
     private lateinit var btnLaunch: Button
+    private lateinit var txtStatusLine: TextView
+    private val lowerDisplay by lazy { LowerDisplayLog(this) { lowerDisplayHeader() } }
 
     /**
      * One player-class repair per visit to this screen. See
      * [repairPlayerClasses].
      */
     private var repairAttempted = false
-    private lateinit var logScroll: ScrollView
-    private lateinit var txtLog: TextView
 
     private lateinit var tokenStore: TokenStore
     private lateinit var settings: SettingsStore
@@ -115,12 +118,9 @@ class LauncherActivity : Activity() {
     // the same Steam account.
     private var cloudJob: Job? = null
 
-    // Mirrors LauncherLog into the on-screen log panel.
-    private val logListener = LauncherLog.Listener { _, snapshot ->
-        runOnUiThread {
-            txtLog.text = snapshot.joinToString("\n")
-            logScroll.post { logScroll.fullScroll(View.FOCUS_DOWN) }
-        }
+    private fun recordResult(result: String) {
+        lastResult = result
+        runOnUiThread { if (::txtStatusLine.isInitialized) refreshStatusLine() }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -148,8 +148,6 @@ class LauncherActivity : Activity() {
         radioSilksong = findViewById(R.id.radio_silksong)
         hollowKnightStatus = findViewById(R.id.txt_hollow_knight_status)
         silksongStatus = findViewById(R.id.txt_silksong_status)
-        btnPinHollowKnight = findViewById(R.id.btn_pin_hollow_knight)
-        btnPinSilksong = findViewById(R.id.btn_pin_silksong)
         txtLoginStatus = findViewById(R.id.txt_login_status)
         btnLogin = findViewById(R.id.btn_login)
         btnPull = findViewById(R.id.btn_pull)
@@ -161,12 +159,7 @@ class LauncherActivity : Activity() {
         btnSettings = findViewById(R.id.btn_settings)
         btnLogs = findViewById(R.id.btn_logs)
         btnLaunch = findViewById(R.id.btn_launch)
-        logScroll = findViewById(R.id.log_scroll)
-        txtLog = findViewById(R.id.txt_log)
-
-        // Seed log mirror with any messages emitted before we attached.
-        txtLog.text = LauncherLog.snapshot().joinToString("\n")
-        LauncherLog.addListener(logListener)
+        txtStatusLine = findViewById(R.id.txt_status_line)
 
         bindProfileControls()
         tokenStore = TokenStore(this)
@@ -197,11 +190,14 @@ class LauncherActivity : Activity() {
         btnLogs.setOnClickListener {
             startActivity(Intent(this, LogActivity::class.java))
         }
-        btnPinHollowKnight.setOnClickListener {
+        // Pinning is a long-press on the card, off the card face.
+        radioHollowKnight.setOnLongClickListener {
             onShortcutClicked(GameProfiles.require("hollow-knight"))
+            true
         }
-        btnPinSilksong.setOnClickListener {
+        radioSilksong.setOnLongClickListener {
             onShortcutClicked(GameProfiles.require("silksong"))
+            true
         }
         btnLaunch.setOnClickListener { onLaunchClicked() }
 
@@ -225,8 +221,13 @@ class LauncherActivity : Activity() {
         }
     }
 
+    override fun onPause() {
+        lowerDisplay.hide()
+        super.onPause()
+    }
+
     override fun onDestroy() {
-        LauncherLog.removeListener(logListener)
+        lowerDisplay.hide()
         uiScope.cancel()
         super.onDestroy()
     }
@@ -256,20 +257,9 @@ class LauncherActivity : Activity() {
 
         radioHollowKnight.isChecked = profile.id == hollowKnight.id
         radioSilksong.isChecked = profile.id == silksong.id
-        hollowKnightStatus.text = hollowKnightState.condition.label
-        silksongStatus.text = silksongState.condition.label
-        radioHollowKnight.contentDescription = getString(
-            R.string.game_card_accessibility,
-            hollowKnight.displayName,
-            hollowKnightState.condition.label,
-        )
-        radioSilksong.contentDescription = getString(
-            R.string.game_card_accessibility,
-            silksong.displayName,
-            silksongState.condition.label,
-        )
-        refreshShortcutButton(btnPinHollowKnight, hollowKnight, hollowKnightState)
-        refreshShortcutButton(btnPinSilksong, silksong, silksongState)
+        bindCard(radioHollowKnight, hollowKnightStatus, hollowKnight, hollowKnightState)
+        bindCard(radioSilksong, silksongStatus, silksong, silksongState)
+        lowerDisplay.refreshHeader()
         btnLaunch.text = if (selectedRuntimeState.ready) {
             getString(R.string.action_play_game, profile.displayName)
         } else {
@@ -293,23 +283,54 @@ class LauncherActivity : Activity() {
                     ready = false,
                     generationId = null,
                     detail = it.message ?: "inspection failed",
-                    condition = dev.silksong.launcher.runtime.RuntimeCondition.NEEDS_REPAIR,
+                    condition = RuntimeCondition.NEEDS_REPAIR,
                 )
             }
     }
 
-    private fun refreshShortcutButton(
-        button: Button,
-        target: GameProfile,
-        state: RuntimeState,
-    ) {
-        val pinned = shortcutController.isPinned(target)
-        button.isActivated = pinned
-        button.isEnabled = state.ready
-        button.contentDescription = getString(
-            if (pinned) R.string.shortcut_pinned_accessibility else R.string.shortcut_pin_accessibility,
-            shortcutName(target),
-        )
+    /** Card status says what the game needs; "Pinned" marks a home-screen shortcut. */
+    private fun bindCard(card: GameCardView, status: TextView, target: GameProfile, state: RuntimeState) {
+        val label = getString(cardLabel(state))
+        status.text = if (state.ready && shortcutController.isPinned(target)) {
+            getString(R.string.card_pinned_suffix, label)
+        } else {
+            label
+        }
+        card.contentDescription = getString(R.string.card_long_press_hint, target.displayName, label)
+    }
+
+    private fun cardLabel(state: RuntimeState): Int = when (state.condition) {
+        RuntimeCondition.READY -> R.string.card_ready
+        RuntimeCondition.BUILDING -> R.string.card_porting
+        RuntimeCondition.NEEDS_REPAIR -> R.string.card_update_needed
+        RuntimeCondition.NOT_CONFIGURED -> R.string.card_not_ported
+    }
+
+    private fun lowerDisplayHeader(): String {
+        val state = if (::selectedRuntimeState.isInitialized) getString(cardLabel(selectedRuntimeState)) else ""
+        return listOf(profile.displayName, state).filter(String::isNotEmpty).joinToString(" · ")
+    }
+
+    private fun versionName(): String = runCatching {
+        packageManager.getPackageInfo(packageName, 0).versionName
+    }.getOrNull().orEmpty()
+
+    private fun refreshStatusLine() {
+        val cloud = when {
+            creds == null -> getString(R.string.home_cloud_off)
+            profile.id != "silksong" -> getString(R.string.home_cloud_hk)
+            settings.autoPull || settings.autoPush -> getString(
+                R.string.home_cloud_on,
+                listOfNotNull(
+                    "download".takeIf { settings.autoPull },
+                    "upload".takeIf { settings.autoPush },
+                ).joinToString(" + "),
+            )
+            else -> getString(R.string.home_cloud_manual)
+        }
+        val parts = mutableListOf(cloud)
+        lastResult?.let { parts += getString(R.string.home_last_result, it) }
+        txtStatusLine.text = getString(R.string.home_status_line, versionName(), parts.joinToString(" · "))
     }
 
     private fun selectProfile(selected: GameProfile) {
@@ -356,7 +377,11 @@ class LauncherActivity : Activity() {
         super.onResume()
         // Launch ownership belongs to the launcher process, not this Activity instance or profile.
         GameLifecycleAuthority.clearProcessLaunchPending()
-        if (::radioHollowKnight.isInitialized) refreshProfileCards()
+        if (::radioHollowKnight.isInitialized) {
+            refreshProfileCards()
+            refreshStatusLine()
+            lowerDisplay.show()
+        }
         // Auto-push fires after the user returns from playing the
         // game. We use a flag (set in launchGame) instead of just
         // "always on resume" so dismissing dialogs / opening
@@ -407,16 +432,18 @@ class LauncherActivity : Activity() {
         val c = creds
         val cloudSupported = profile.id == "silksong"
         if (c == null) {
-            txtLoginStatus.text = ""
+            txtLoginStatus.text = getString(R.string.home_steam_signed_out)
             btnLogin.text = getString(R.string.action_log_in)
             btnPull.isEnabled = false
             btnPush.isEnabled = false
         } else {
-            txtLoginStatus.text = "Signed in as ${c.accountName}"
+            txtLoginStatus.text = getString(R.string.home_steam_signed_in, c.accountName) +
+                if (cloudSupported) "" else "\n" + getString(R.string.home_cloud_unsupported)
             btnLogin.text = getString(R.string.action_log_in_as)
             btnPull.isEnabled = cloudSupported
             btnPush.isEnabled = cloudSupported
         }
+        if (::txtStatusLine.isInitialized) refreshStatusLine()
     }
 
     // ── Cloud save: pull (Phase 1c) ────────────────────────────────────
@@ -448,6 +475,7 @@ class LauncherActivity : Activity() {
 
             if (analysis.toDownload.isEmpty() && analysis.conflicts.isEmpty()) {
                 LauncherLog.log("Pull: nothing newer on cloud")
+                recordResult("cloud saves already up to date")
                 return true
             }
 
@@ -460,6 +488,7 @@ class LauncherActivity : Activity() {
                     }
                     ConflictChoice.CANCEL -> {
                         LauncherLog.log("Pull cancelled by user (local is newer for ${analysis.conflicts.size} file(s))")
+                        recordResult("download cancelled (save conflict)")
                         return false
                     }
                     ConflictChoice.KEEP_REMOTE -> {
@@ -470,12 +499,15 @@ class LauncherActivity : Activity() {
                     }
                 }
                 CloudSync.pullItems(this@LauncherActivity, c, analysis.toDownload + analysis.conflicts).collect { }
+                recordResult("downloaded ${analysis.toDownload.size + analysis.conflicts.size} save file(s)")
             } else {
                 CloudSync.pullItems(this@LauncherActivity, c, analysis.toDownload).collect { }
+                recordResult("downloaded ${analysis.toDownload.size} save file(s)")
             }
             return true
         } catch (t: Throwable) {
             LauncherLog.log("Pull failed: ${t.message ?: t.javaClass.simpleName}")
+            recordResult("cloud download failed")
             android.util.Log.e("SilksongLauncher.Cloud", "pull flow failed ($source)", t)
             return true
         }
@@ -521,6 +553,7 @@ class LauncherActivity : Activity() {
                 analysis.toDelete.isEmpty()
             ) {
                 LauncherLog.log("Push: nothing to do (all ${analysis.skipped.size} local file(s) already match cloud, no orphans)")
+                recordResult("cloud saves already up to date")
                 return
             }
 
@@ -533,6 +566,7 @@ class LauncherActivity : Activity() {
                     }
                     ConflictChoice.CANCEL -> {
                         LauncherLog.log("Push cancelled by user (cloud is newer for ${analysis.conflicts.size} file(s))")
+                        recordResult("upload cancelled (save conflict)")
                         return
                     }
                     ConflictChoice.KEEP_LOCAL -> {
@@ -542,11 +576,14 @@ class LauncherActivity : Activity() {
                     }
                 }
                 CloudSync.pushItems(c, analysis.all, toDelete = analysis.toDelete).collect { }
+                recordResult("uploaded ${analysis.all.size} save file(s)")
             } else {
                 CloudSync.pushItems(c, analysis.toUpload, toDelete = analysis.toDelete).collect { }
+                recordResult("uploaded ${analysis.toUpload.size} save file(s)")
             }
         } catch (t: Throwable) {
             LauncherLog.log("Push failed: ${t.message ?: t.javaClass.simpleName}")
+            recordResult("cloud upload failed")
             android.util.Log.e("SilksongLauncher.Cloud", "push flow failed", t)
         }
     }
@@ -702,6 +739,7 @@ class LauncherActivity : Activity() {
 
     private fun launchBlocked(title: String, message: String) {
         LauncherLog.log("Launch blocked: $message")
+        recordResult(title)
         android.app.AlertDialog.Builder(this)
             .setTitle(title)
             .setMessage(message)
@@ -865,6 +903,7 @@ class LauncherActivity : Activity() {
                 returningFromGame = false
             }
             LauncherLog.log("Failed to launch game: ${t.message}")
+            recordResult("the game could not be started")
         }
     }
 

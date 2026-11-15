@@ -148,11 +148,12 @@ class SkinLibrarySurfaceContractTest {
         assertEquals(mapOf("@+id/skins_notice" to "polite", "@+id/skins_runtime" to "polite"), liveIds)
     }
 
-    @Test fun `settings contains skins and mods beside existing logs surface`() {
-        val buttons = xml("res/layout/activity_settings.xml").getElementsByTagName("Button")
-        val ids = (0 until buttons.length).map { (buttons.item(it) as Element).getAttributeNS(android, "id") }
-        assertTrue("Missing Skins entry", "@+id/btn_settings_skins" in ids)
-        assertTrue("Missing Mods entry", "@+id/btn_settings_mods" in ids)
-        assertTrue("@+id/btn_settings_logs" in ids)
+    @Test fun `skins mods and logs are home screen routes not duplicated in settings`() {
+        val settings = xml("res/layout/activity_settings.xml").getElementsByTagName("Button")
+        val settingsIds = (0 until settings.length).map { (settings.item(it) as Element).getAttributeNS(android, "id") }
+        assertTrue(settingsIds.none { it in setOf("@+id/btn_settings_skins", "@+id/btn_settings_mods", "@+id/btn_settings_logs") })
+        val home = xml("res/layout/activity_launcher.xml").getElementsByTagName("Button")
+        val homeIds = (0 until home.length).map { (home.item(it) as Element).getAttributeNS(android, "id") }
+        assertTrue(homeIds.containsAll(listOf("@+id/btn_skins", "@+id/btn_mods", "@+id/btn_logs")))
     }
 }

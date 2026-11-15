@@ -125,6 +125,7 @@ class SetupActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var detail: TextView
     private lateinit var progress: ProgressBar
+    private lateinit var elapsed: TextView
     private lateinit var primary: Button
     private lateinit var secondary: Button
     private lateinit var resetBuild: Button
@@ -146,6 +147,15 @@ class SetupActivity : Activity() {
     private var stepNumber = 0
     private var stepCount = 3
     private var stepTitle = ""
+
+    // Wall-clock start of the running port, for the elapsed-time line.
+    private var portStartedAt = 0L
+    private var portFinished = false
+    private val lowerDisplay by lazy {
+        LowerDisplayLog(this) {
+            if (busy) "Porting ${profile.displayName} · step $stepNumber of $stepCount" else profile.displayName
+        }
+    }
 
     private val profile by lazy { SelectedGameStore(this).get() }
     private val unityDescriptor by lazy { UnityToolchainRegistry.resolve(profile) }
@@ -183,7 +193,13 @@ class SetupActivity : Activity() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+    override fun onPause() {
+        lowerDisplay.hide()
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        lowerDisplay.hide()
         super.onDestroy()
         scope.cancel()
     }
@@ -232,6 +248,7 @@ class SetupActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        lowerDisplay.show()
         if (busy) return
         // Anything already downloaded is moved into place without being asked
         // for: the user has no way of knowing that a file in one directory has
@@ -404,23 +421,27 @@ class SetupActivity : Activity() {
         }
         root.addView(progress, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = dp(22)
+            bottomMargin = dp(4)
         })
+        // Elapsed time, ticking while a port runs: a long stage can go minutes without a
+        // progress event, and a clock that moves shows the work has not stalled.
+        elapsed = text("", 12f, Color.parseColor("#7A6E71")).apply {
+            setPadding(0, 0, 0, dp(14))
+            visibility = View.INVISIBLE
+        }
+        root.addView(elapsed)
 
         val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         // Same palette as the launcher: the action that moves things forward
         // is the red one, and there is never more than one of those on screen.
-        primary = Button(this).apply {
+        primary = Button(this, null, 0, R.style.DualSouls_Button_Primary).apply {
             setOnClickListener { onPrimary() }
-            backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#7D3341"))
-            setTextColor(Color.WHITE)
-            setPadding(paddingLeft, dp(16), paddingRight, dp(16))
+            setPadding(dp(16), dp(14), dp(16), dp(14))
         }
-        secondary = Button(this).apply {
+        secondary = Button(this, null, 0, R.style.DualSouls_Button_Secondary).apply {
             setOnClickListener { onSecondary() }
-            backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#B4AEB2"))
-            setTextColor(Color.parseColor("#0D0A0B"))
-            setPadding(paddingLeft, dp(16), paddingRight, dp(16))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
         }
         buttons.addView(primary, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
             marginEnd = dp(10)
@@ -559,11 +580,8 @@ class SetupActivity : Activity() {
                 status.text = message ?: "Ready to port ${profile.displayName}"
                 detail.text =
                     "${profile.displayName} will now be ported to Android, here on this device.\n\n" +
-                    "Some supporting tools are downloaded as part of this, so an internet " +
-                    "connection is needed while it runs.\n\n" +
-                    "Expect 20-30 minutes on a Snapdragon 8 Gen 2, depending on your network " +
-                    "speed. Keep the app open while it works. Don't delete the game's files " +
-                    "afterwards: they are read from where they are every time you play."
+                    portDurationText() + " Keep the app open while it works. Don't delete the " +
+                    "game's files afterwards: they are read from where they are every time you play."
                 primary.text = "Start porting"
                 primary.visibility = View.VISIBLE
                 secondary.visibility = View.GONE
@@ -585,6 +603,39 @@ class SetupActivity : Activity() {
     }
 
     /**
+     * How long a port takes, from what is already on the device.
+     *
+     * Measured on the Ayn Thor (Snapdragon 8 Gen 2): with the Unity player and build tools already
+     * downloaded (any port after the first, e.g. after an app update), about 5 minutes. The first port
+     * downloads those tools too, which is most of the 20-30 minutes and depends on the network.
+     */
+    private fun portDurationText(): String {
+        val toolsHere = runCatching {
+            UnityFetcher.isPresent(unityDescriptor, UnityFetcher.rootFor(filesDir, profile)) &&
+                ToolchainFetcher.isPresent(ToolchainFetcher.rootFor(this))
+        }.getOrDefault(false)
+        return if (toolsHere) {
+            "The supporting tools are already on this device, so this takes about 5 minutes."
+        } else {
+            "The first port also downloads supporting tools, so an internet connection is needed " +
+                "and it takes 20-30 minutes, depending on your network speed."
+        }
+    }
+
+    private fun startElapsedClock() {
+        portStartedAt = android.os.SystemClock.elapsedRealtime()
+        elapsed.visibility = View.VISIBLE
+        scope.launch {
+            while (busy) {
+                val seconds = (android.os.SystemClock.elapsedRealtime() - portStartedAt) / 1000
+                elapsed.text = String.format("%d:%02d elapsed", seconds / 60, seconds % 60)
+                kotlinx.coroutines.delay(1000)
+            }
+            elapsed.visibility = View.INVISIBLE
+        }
+    }
+
+    /**
      * Names the step that is now running, and how many there are.
      *
      * Three when the game has to be downloaded, two when it is already here.
@@ -595,6 +646,7 @@ class SetupActivity : Activity() {
     private fun setStep(number: Int, title: String) {
         stepNumber = number
         stepTitle = title
+        lowerDisplay.refreshHeader()
     }
 
     /**
@@ -1031,6 +1083,8 @@ class SetupActivity : Activity() {
 
         setStep(if (download != null) 1 else toolsStep, "Starting")
         setBusy(true, "", -1f, "")
+        startElapsedClock()
+        portFinished = false
         LauncherLog.log("depot: $depot, data: ${PlayerImage.depotData(depot)}")
         // Nothing survives the process being reclaimed, and a screen that
         // sleeps is the most likely way for that to happen during a build
@@ -1258,6 +1312,9 @@ class SetupActivity : Activity() {
 
                 readyToPort = false
                 pendingCreds = null
+                portFinished = true
+                val seconds = (android.os.SystemClock.elapsedRealtime() - portStartedAt) / 1000
+                LauncherLog.log("Port finished in ${seconds / 60}m ${seconds % 60}s")
                 say("The game is ready.")
             } catch (t: Throwable) {
                 LauncherLog.log("Setup failed", t)
@@ -1266,6 +1323,8 @@ class SetupActivity : Activity() {
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 setBusy(false)
                 refresh()
+                // A finished port goes straight to the home screen: there is nothing left to decide here.
+                if (portFinished && isBuilt() && !modsPending()) startLauncher()
             }
         }
     }

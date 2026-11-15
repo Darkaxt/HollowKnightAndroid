@@ -80,7 +80,8 @@ public sealed class NativeSkinsSourceContractTests
         Assert.Contains("operationGeneration", source, StringComparison.Ordinal);
         Assert.Contains("resultingConfigSha256", source, StringComparison.Ordinal);
         // The player-facing status is one short line: correlation hashes stay in native evidence.
-        Assert.Contains("\"LAST RESULT · \" + wire.observation.status", source, StringComparison.Ordinal);
+        Assert.Contains("\"LAST ROTATION · \" + wire.observation.status", source, StringComparison.Ordinal);
+        Assert.Contains("\"CHANGE SAVED · \"", source, StringComparison.Ordinal);
         Assert.Contains("\"WAITING FOR GAME TO APPLY\"", source, StringComparison.Ordinal);
         Assert.DoesNotContain("wire.observation.operationId", source, StringComparison.Ordinal);
         Assert.DoesNotContain("wire.operationId", source, StringComparison.Ordinal);

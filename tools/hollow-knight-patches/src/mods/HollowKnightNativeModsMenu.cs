@@ -1617,7 +1617,10 @@ namespace DualSouls.Mods.HollowKnight
                     bool applied = wire.configSha256 != _skinMutationExpected &&
                                    _skinMutationRow >= 0 && _skinMutationRow < _skinMenu.Rows.Count &&
                                    _skinMenu.Rows[_skinMutationRow].Value != _skinMutationBefore;
-                    _skinError = applied ? FormatSkinEvidence(wire) : "CHANGE NOT APPLIED · TRY AGAIN";
+                    // Report the menu change itself, not the last death-rotation result.
+                    _skinError = applied
+                        ? "CHANGE SAVED · " + _skinMenu.Rows[_skinMutationRow].Label + FormatSkinValue(_skinMenu.Rows[_skinMutationRow].Value)
+                        : "CHANGE NOT APPLIED · TRY AGAIN";
                 }
                 else if (!_skinError.StartsWith("CHANGE", StringComparison.Ordinal))
                     _skinError = FormatSkinEvidence(wire);
@@ -1641,13 +1644,16 @@ namespace DualSouls.Mods.HollowKnight
             }
         }
 
+        static string FormatSkinValue(string value) =>
+            string.IsNullOrEmpty(value) ? " · CLEARED" : " · " + value;
+
         // One short line: internal operation/feature hashes stay in the native evidence log.
         static string FormatSkinEvidence(WireSkinSnapshot wire)
         {
             if (string.Equals(wire.evidenceState, "TERMINAL", StringComparison.Ordinal) &&
                 wire.observation != null && !string.IsNullOrEmpty(wire.observation.status))
             {
-                string value = "LAST RESULT · " + wire.observation.status;
+                string value = "LAST ROTATION · " + wire.observation.status;
                 string detail = wire.observation.detail ?? "";
                 if (detail.Length > 40) detail = detail.Substring(0, 40) + "...";
                 return detail.Length == 0 ? value : value + " · " + detail;

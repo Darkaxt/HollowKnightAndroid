@@ -224,7 +224,7 @@ public sealed class NativeSkinsSnapshotAuthorityTests
                 evidenceState = "PENDING", observation = new { status = "", featureId = "SKIN-MODE", operationId = "x", operationGeneration = 2 } }));
             f.Call("SubmitSkin", Button(f, NativeSkinMenuRowKind.Mode));
             Assert.Equal(before + 2, MutationCalls(f));
-            Assert.Equal("WAITING FOR GAME TO APPLY", (string)f.Field("_skinError"));
+            Assert.Equal("CHANGE SAVED · MODE · ON", (string)f.Field("_skinError"));
             Assert.False((bool)f.Field("_skinMutationInFlight"));
             Assert.True((bool)Button(f, NativeSkinMenuRowKind.Mode).Selectable.interactable);
         }

@@ -200,7 +200,7 @@ class SkinsActivityTest {
                 val activity = controller.get()
                 val requested = activity.findViewById<TextView>(R.id.skins_requested).text.toString()
                 val runtime = activity.findViewById<TextView>(R.id.skins_runtime).text.toString()
-                assertTrue(requested.contains("OFF"))
+                assertTrue(requested.contains("Mode: Off (vanilla)"))
                 assertTrue(requested.contains("Target"))
                 assertFalse(requested.contains("Applied"))
                 assertTrue(runtime.contains("Applied"))

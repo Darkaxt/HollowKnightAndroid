@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Sized for the Ayn Thor's effective landscape area (~832dp x 420dp after
-  status/nav bars). Left = the menu, right = the log.
+  status/nav bars).
 
-  Launch sits at the bottom of the left column, separated from the rest by the
-  space between them: it is the thing this screen exists for, and everything
-  above it is housekeeping. It is the only white button, which is what makes it
-  findable on a red page without reading.
+  Games on top, then two labelled sections (Steam: account and cloud saves;
+  Game: plugins, skins, settings, logs), one status line, and PLAY. PLAY is
+  the only red control; everything else uses the dark secondary style. The
+  live log is not here: it is mirrored on the lower display while this screen
+  is open (LowerDisplayLog) and stays complete behind View logs.
 
-  Download and upload share a row. They are two halves of one idea, they are
-  the only actions here that can be waiting on a network, and pairing them
-  buys the height that the rest of the buttons spend on padding.
+  Game cards carry their status chip only. Pinning a home-screen shortcut is
+  a long-press on the card.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -42,7 +42,7 @@
             android:id="@+id/game_selector"
             android:layout_width="match_parent"
             android:layout_height="94dp"
-            android:layout_marginBottom="6dp"
+            android:layout_marginBottom="12dp"
             android:orientation="horizontal">
 
             <dev.silksong.launcher.GameCardView
@@ -53,6 +53,8 @@
                 android:layout_marginEnd="5dp"
                 android:clickable="true"
                 android:focusable="true"
+                android:longClickable="true"
+                android:nextFocusDown="@id/btn_login"
                 android:foreground="@drawable/game_card_outline">
 
                 <ImageView
@@ -80,21 +82,6 @@
                     android:scaleType="fitCenter"
                     android:src="@drawable/game_card_hollow_knight_logo" />
 
-                <Button
-                    android:id="@+id/btn_pin_hollow_knight"
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
-                    android:layout_gravity="top|start"
-                    android:layout_marginStart="8dp"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/game_card_pin"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    android:padding="0dp"
-                    android:text="@string/shortcut_pin_symbol"
-                    android:textColor="@color/text_primary"
-                    android:textSize="15sp" />
-
                 <TextView
                     android:id="@+id/txt_hollow_knight_status"
                     android:layout_width="wrap_content"
@@ -115,6 +102,8 @@
                 android:layout_marginStart="5dp"
                 android:clickable="true"
                 android:focusable="true"
+                android:longClickable="true"
+                android:nextFocusDown="@id/btn_mods"
                 android:foreground="@drawable/game_card_outline">
 
                 <ImageView
@@ -142,21 +131,6 @@
                     android:scaleType="fitCenter"
                     android:src="@drawable/game_card_silksong_logo" />
 
-                <Button
-                    android:id="@+id/btn_pin_silksong"
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
-                    android:layout_gravity="top|start"
-                    android:layout_marginStart="8dp"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/game_card_pin"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    android:padding="0dp"
-                    android:text="@string/shortcut_pin_symbol"
-                    android:textColor="@color/text_primary"
-                    android:textSize="15sp" />
-
                 <TextView
                     android:id="@+id/txt_silksong_status"
                     android:layout_width="wrap_content"
@@ -170,250 +144,209 @@
             </dev.silksong.launcher.GameCardView>
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/txt_login_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textColor="@color/text_muted"
-            android:textSize="13sp"
-            android:layout_marginBottom="10dp" />
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:orientation="horizontal">
 
-            <!-- ── Left: the menu ──────────────────────────────────── -->
+            <!-- ── Steam: account and cloud saves ─────────────────────── -->
             <LinearLayout
+                android:id="@+id/section_steam"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_weight="0.58"
-                android:orientation="vertical"
-                android:paddingEnd="14dp">
+                android:layout_weight="1"
+                android:layout_marginEnd="7dp"
+                android:orientation="vertical">
 
-                <Button
-                    android:id="@+id/btn_login"
+                <TextView
+                    style="@style/DualSouls.SectionHeader"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/action_log_in"
-                    android:textSize="16sp"
-                    android:textColor="@color/text_on_control"
-                    android:backgroundTint="@color/surface_control"
-                    android:foreground="@drawable/focus_on_light"
-                    android:paddingTop="10dp"
-                    android:paddingBottom="10dp"
-                    android:minHeight="0dp"
-                    android:layout_marginBottom="10dp" />
+                    android:text="@string/home_section_steam" />
 
-                <!-- Download / upload, paired. The spinner replaces the arrow
-                     while the operation runs; the button keeps its label. -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="10dp">
+                    android:layout_marginTop="6dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-                    <FrameLayout
+                    <TextView
+                        android:id="@+id/txt_login_status"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:layout_marginEnd="10dp">
+                        android:layout_marginEnd="8dp"
+                        android:maxLines="2"
+                        android:text="@string/home_steam_signed_out"
+                        android:textColor="@color/text_muted"
+                        android:textSize="13sp" />
 
-                        <Button
-                            android:id="@+id/btn_pull"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="@string/action_pull_saves"
-                            android:textSize="16sp"
-                            android:textColor="@color/text_on_control"
-                            android:backgroundTint="@color/surface_control"
-                            android:foreground="@drawable/focus_on_light"
-                            android:paddingTop="10dp"
-                            android:paddingBottom="10dp"
-                            android:minHeight="0dp"
-                            android:enabled="false" />
-
-                        <ProgressBar
-                            android:id="@+id/spin_pull"
-                            style="?android:attr/progressBarStyleSmall"
-                            android:layout_width="18dp"
-                            android:layout_height="18dp"
-                            android:layout_gravity="center_vertical|start"
-                            android:layout_marginStart="16dp"
-                            android:indeterminateTint="@color/text_on_control"
-                            android:visibility="gone" />
-                    </FrameLayout>
-
-                    <FrameLayout
-                        android:layout_width="0dp"
+                    <Button
+                        android:id="@+id/btn_login"
+                        style="@style/DualSouls.Button.Secondary"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1">
-
-                        <Button
-                            android:id="@+id/btn_push"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="@string/action_push_saves"
-                            android:textSize="16sp"
-                            android:textColor="@color/text_on_control"
-                            android:backgroundTint="@color/surface_control"
-                            android:foreground="@drawable/focus_on_light"
-                            android:paddingTop="10dp"
-                            android:paddingBottom="10dp"
-                            android:minHeight="0dp"
-                            android:enabled="false" />
-
-                        <ProgressBar
-                            android:id="@+id/spin_push"
-                            style="?android:attr/progressBarStyleSmall"
-                            android:layout_width="18dp"
-                            android:layout_height="18dp"
-                            android:layout_gravity="center_vertical|start"
-                            android:layout_marginStart="16dp"
-                            android:indeterminateTint="@color/text_on_control"
-                            android:visibility="gone" />
-                    </FrameLayout>
+                        android:minWidth="96dp"
+                        android:nextFocusDown="@id/btn_pull"
+                        android:nextFocusRight="@id/btn_mods"
+                        android:text="@string/action_log_in" />
                 </LinearLayout>
 
-                <!-- Plugins and Skins are primary profile actions. Built-in
-                     gameplay Mods are available inside each running game. -->
+                <!-- The spinner replaces nothing: it sits at the start of the
+                     button while that transfer runs. -->
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp">
+
+                    <Button
+                        android:id="@+id/btn_pull"
+                        style="@style/DualSouls.Button.Secondary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:enabled="false"
+                        android:nextFocusDown="@id/btn_push"
+                        android:nextFocusRight="@id/btn_settings"
+                        android:text="@string/action_pull_saves" />
+
+                    <ProgressBar
+                        android:id="@+id/spin_pull"
+                        style="?android:attr/progressBarStyleSmall"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_gravity="center_vertical|start"
+                        android:layout_marginStart="14dp"
+                        android:indeterminateTint="@color/text_primary"
+                        android:visibility="gone" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp">
+
+                    <Button
+                        android:id="@+id/btn_push"
+                        style="@style/DualSouls.Button.Secondary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:enabled="false"
+                        android:nextFocusDown="@id/btn_launch"
+                        android:nextFocusRight="@id/btn_logs"
+                        android:text="@string/action_push_saves" />
+
+                    <ProgressBar
+                        android:id="@+id/spin_push"
+                        style="?android:attr/progressBarStyleSmall"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_gravity="center_vertical|start"
+                        android:layout_marginStart="14dp"
+                        android:indeterminateTint="@color/text_primary"
+                        android:visibility="gone" />
+                </FrameLayout>
+            </LinearLayout>
+
+            <!-- ── Game: what is built into the selected game ──────────── -->
+            <LinearLayout
+                android:id="@+id/section_game"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginStart="7dp"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/DualSouls.SectionHeader"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/home_section_game" />
+
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
                     android:orientation="horizontal">
 
                     <Button
                         android:id="@+id/btn_mods"
+                        style="@style/DualSouls.Button.Secondary"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:layout_marginEnd="6dp"
-                        android:text="@string/action_plugins"
-                        android:textSize="16sp"
-                        android:textColor="@color/text_on_control"
-                        android:backgroundTint="@color/surface_control"
-                        android:foreground="@drawable/focus_on_light"
-                        android:paddingTop="10dp"
-                        android:paddingBottom="10dp"
-                        android:minHeight="0dp" />
+                        android:layout_marginEnd="8dp"
+                        android:nextFocusLeft="@id/btn_login"
+                        android:nextFocusDown="@id/btn_settings"
+                        android:text="@string/action_plugins" />
 
                     <Button
                         android:id="@+id/btn_skins"
+                        style="@style/DualSouls.Button.Secondary"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:layout_marginEnd="6dp"
-                        android:text="@string/action_skins"
-                        android:textSize="16sp"
-                        android:textColor="@color/text_on_control"
-                        android:backgroundTint="@color/surface_control"
-                        android:foreground="@drawable/focus_on_light"
-                        android:paddingTop="10dp"
-                        android:paddingBottom="10dp"
-                        android:minHeight="0dp" />
+                        android:nextFocusDown="@id/btn_logs"
+                        android:text="@string/action_skins" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
 
                     <Button
                         android:id="@+id/btn_settings"
+                        style="@style/DualSouls.Button.Secondary"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="@string/action_settings"
-                        android:textSize="16sp"
-                        android:textColor="@color/text_on_control"
-                        android:backgroundTint="@color/surface_control"
-                        android:foreground="@drawable/focus_on_light"
-                        android:paddingTop="10dp"
-                        android:paddingBottom="10dp"
-                        android:minHeight="0dp" />
-                </LinearLayout>
+                        android:layout_marginEnd="8dp"
+                        android:nextFocusLeft="@id/btn_pull"
+                        android:nextFocusDown="@id/btn_launch"
+                        android:text="@string/action_settings" />
 
-                <!-- Quiet, because it is for the rare day something has gone
-                     wrong and somebody has asked for the log. -->
-                <Button
-                    android:id="@+id/btn_logs"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/action_logs"
-                    android:textSize="13sp"
-                    android:textColor="@color/text_dim"
-                    android:backgroundTint="@android:color/transparent"
-                    android:foreground="@drawable/focus_on_dark"
-                    android:paddingTop="8dp"
-                    android:paddingBottom="8dp"
-                    android:minHeight="0dp" />
-
-                <Space
-                    android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="1" />
-
-                <!--
-                  focusedByDefault, so a controller lands here rather than on
-                  whatever happens to be first in the tree. Declarative on
-                  purpose: requestFocus() from code is what put this activity
-                  into non-touch mode and cost every button a second press.
-                -->
-                <Button
-                    android:id="@+id/btn_launch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/action_launch"
-                    android:textSize="19sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/text_primary"
-                    android:backgroundTint="@color/hornet_red"
-                    android:foreground="@drawable/focus_on_dark"
-                    android:paddingTop="11dp"
-                    android:paddingBottom="11dp"
-                    android:minHeight="0dp"
-                    android:focusedByDefault="true" />
-            </LinearLayout>
-
-            <!-- ── Right: the log ──────────────────────────────────── -->
-            <!--
-              Nothing here takes focus. A ScrollView is focusable by default so
-              that a D-pad can scroll it, and textIsSelectable quietly makes a
-              TextView focusable too, so on a handheld the first stick movement
-              landed in the log and stayed there: the buttons could not be
-              reached at all. The log is a status feed, not a control, and
-              selecting text in it belongs to the Logs screen, which does it
-              properly with Share and Copy.
-
-              blocksDescendants rather than focusable="false" alone, because
-              that only excuses the ScrollView itself and the TextView inside it
-              was the other half of the problem.
-            -->
-            <FrameLayout
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="0.42"
-                android:background="@color/surface_panel"
-                android:padding="8dp">
-
-                <ScrollView
-                    android:id="@+id/log_scroll"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:fillViewport="true"
-                    android:scrollbars="vertical"
-                    android:focusable="false"
-                    android:focusableInTouchMode="false"
-                    android:descendantFocusability="blocksDescendants">
-
-                    <TextView
-                        android:id="@+id/txt_log"
-                        android:layout_width="match_parent"
+                    <Button
+                        android:id="@+id/btn_logs"
+                        style="@style/DualSouls.Button.Secondary"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:text="@string/launcher_status_idle"
-                        android:textColor="@color/text_dim"
-                        android:textSize="10sp"
-                        android:fontFamily="monospace"
-                        android:focusable="false" />
-                </ScrollView>
-            </FrameLayout>
+                        android:layout_weight="1"
+                        android:nextFocusDown="@id/btn_launch"
+                        android:text="@string/action_logs" />
+                </LinearLayout>
+            </LinearLayout>
         </LinearLayout>
+
+        <!-- Version, cloud state and the last thing that happened. The full
+             story is on the lower display and behind View logs. -->
+        <TextView
+            android:id="@+id/txt_status_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="8dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/text_dim"
+            android:textSize="12sp" />
+
+        <!--
+          focusedByDefault, so a controller lands here rather than on
+          whatever happens to be first in the tree. Declarative on
+          purpose: requestFocus() from code is what put this activity
+          into non-touch mode and cost every button a second press.
+        -->
+        <Button
+            android:id="@+id/btn_launch"
+            style="@style/DualSouls.Button.Primary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:focusedByDefault="true"
+            android:nextFocusUp="@id/btn_push"
+            android:text="@string/action_launch" />
     </LinearLayout>
 
 </FrameLayout>
