@@ -319,7 +319,7 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
             if (old != null) try { writeAtomic(authority, old) } catch (rollback: Exception) {
                 throw IllegalStateException("Configuration publication and rollback failed; recover OFF and retry: ${failure.message}; ${rollback.message}", failure)
             }
-            throw IllegalStateException("Configuration publication failed; refresh before retry: ${failure.message}", failure)
+            throw IllegalStateException("Configuration publication failed; refresh before retry: ${failure.javaClass.simpleName}: ${failure.message}", failure)
         }
     }
     internal fun writeAtomic(file: File, bytes: ByteArray) {

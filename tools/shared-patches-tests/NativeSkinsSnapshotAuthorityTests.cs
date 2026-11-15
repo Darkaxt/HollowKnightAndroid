@@ -253,6 +253,28 @@ public sealed class NativeSkinsSnapshotAuthorityTests
         return ((IEnumerable)f.Field("_skinButtons")).Cast<dynamic>()
             .Single(b => b.DataIndex >= 0 && model.Rows[(int)b.DataIndex].Kind == kind);
     }
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void Changed_hash_without_the_submitted_row_changing_is_not_applied(bool ss)
+    {
+        var f = Open(ss);
+        try {
+            SetSnapshot(f, Failure(ss, "blocked"));
+            f.Call("SubmitSkin", Button(f, NativeSkinMenuRowKind.Mode));
+            Assert.True((bool)f.Field("_skinMutationInFlight"));
+            // A death moved the configuration hash, but the stale-authority write was rejected.
+            SetSnapshot(f, JsonSerializer.Serialize(new {
+                ok = true, profileId = ss ? "silksong" : "hollow-knight", configSha256 = new string('c', 64),
+                mode = "OFF", spriteScope = "ALL", selectedPackId = "host-model-pack", eligiblePackIds = new[] { "host-model-pack" },
+                packs = new[] { new { id = "host-model-pack", name = "HOST MODEL PACK", author = "BOUNDARY FIXTURE" } },
+                evidenceState = "TERMINAL", observation = new { status = "Applied", featureId = "SKIN-ROTATION", operationId = "x", operationGeneration = 3 } }));
+            f.Call("RefreshSkinMenu");
+            Assert.Equal("CHANGE NOT APPLIED · TRY AGAIN", (string)f.Field("_skinError"));
+            Assert.False((bool)f.Field("_skinMutationInFlight"));
+        }
+        finally { Retire(f); }
+    }
+
     static IList Calls(NativeMenuFixture f) => (IList)f.Static("World", "BridgeCalls");
     static int MutationCalls(NativeMenuFixture f) => Calls(f).Cast<string>()
         .Count(c => c == "setMode" || c == "setSpriteScope" || c == "confirmPack");

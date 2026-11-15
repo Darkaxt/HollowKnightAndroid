@@ -31,6 +31,7 @@ public sealed class NativeSkinsSourceContractTests
 
         Assert.Contains("SkinLibraryRuntimeBridge", source, StringComparison.Ordinal);
         Assert.Contains("readMenuSnapshot", source, StringComparison.Ordinal);
+        Assert.Contains("\"readMenuSnapshot\", SkinProfileId, _skinMenuSession", source, StringComparison.Ordinal);
         Assert.Contains("setMode", source, StringComparison.Ordinal);
         Assert.Contains("setSpriteScope", source, StringComparison.Ordinal);
         Assert.Contains("confirmPack", source, StringComparison.Ordinal);

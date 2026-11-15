@@ -99,6 +99,13 @@ namespace DualSouls.Mods.Silksong
         // one-shot native writer) arrives; its expected configuration identifies it.
         bool _skinMutationInFlight;
         string _skinMutationExpected = "";
+        // The submitted row and its value: a change is applied only when that value changed
+        // (the configuration hash also moves on deaths and result reports).
+        int _skinMutationRow = -1;
+        string _skinMutationBefore = "";
+        // Each opening reads its own snapshot: a cached one may predate a death.
+        static long _skinMenuSession;
+        bool _skinSessionLoaded;
         readonly SkinNativeTransportWindow _skinTransport = new SkinNativeTransportWindow();
         AndroidJavaClass _skinBridge;
         UIManager _ui;
@@ -813,6 +820,8 @@ namespace DualSouls.Mods.Silksong
             {
                 _skinError = "";
                 _skinMutationInFlight = false;
+                _skinMenuSession++;
+                _skinSessionLoaded = false;
                 _skinTransport.Start(Time.unscaledTime);
                 RefreshSkinMenu();
                 PaintSkins();
@@ -1365,6 +1374,8 @@ namespace DualSouls.Mods.Silksong
         {
             if (!_skinSnapshotReady || _skinMenu == null || mutation.Kind == NativeSkinMutationKind.None) return;
             string expected = _skinMenu.Snapshot.ConfigSha256;
+            _skinMutationRow = _skinMenu.SelectedRowIndex;
+            _skinMutationBefore = _skinMenu.Selected.Value;
             _skinTransport.Start(Time.unscaledTime);
             SilksongModsRuntime currentRuntime = SilksongModsRuntime.Current;
             if (currentRuntime != null) currentRuntime.InvalidateSkinLibrary(); // queued intent is never counted as apply
@@ -1409,7 +1420,7 @@ namespace DualSouls.Mods.Silksong
             _skinSnapshotReady = false;
             try
             {
-                string json = SkinBridge.CallStatic<string>("readMenuSnapshot", SkinProfileId);
+                string json = SkinBridge.CallStatic<string>("readMenuSnapshot", SkinProfileId, _skinMenuSession);
                 if (string.IsNullOrEmpty(json) || json.Length > MaximumSkinSnapshotBytes)
                     throw new InvalidOperationException("Invalid native skin snapshot length.");
                 WireSkinSnapshot wire = JsonUtility.FromJson<WireSkinSnapshot>(json);
@@ -1417,7 +1428,8 @@ namespace DualSouls.Mods.Silksong
                     // Busy authority retires mutation; a submitted change keeps its row focused
                     // while the next checked snapshot confirms or rejects it.
                     inFlightRead = _skinMutationInFlight;
-                    if (!_skinMutationInFlight) _skinError = "SKIN LIBRARY BUSY · RETRYING";
+                    if (!_skinMutationInFlight)
+                        _skinError = _skinSessionLoaded ? "SKIN LIBRARY BUSY · RETRYING" : "LOADING SKINS";
                     return;
                 }
                 if (wire == null || !wire.ok)
@@ -1446,12 +1458,15 @@ namespace DualSouls.Mods.Silksong
                 else _skinMenu.Replace(snapshot);
                 if (_skinMutationInFlight) {
                     _skinMutationInFlight = false;
-                    _skinError = wire.configSha256 != _skinMutationExpected
-                        ? FormatSkinEvidence(wire) : "CHANGE NOT APPLIED · TRY AGAIN";
+                    bool applied = wire.configSha256 != _skinMutationExpected &&
+                                   _skinMutationRow >= 0 && _skinMutationRow < _skinMenu.Rows.Count &&
+                                   _skinMenu.Rows[_skinMutationRow].Value != _skinMutationBefore;
+                    _skinError = applied ? FormatSkinEvidence(wire) : "CHANGE NOT APPLIED · TRY AGAIN";
                 }
                 else if (!_skinError.StartsWith("CHANGE", StringComparison.Ordinal))
                     _skinError = FormatSkinEvidence(wire);
                 _skinSnapshotReady = true;
+                _skinSessionLoaded = true;
             }
             catch (Exception error)
             {

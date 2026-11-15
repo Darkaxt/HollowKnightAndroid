@@ -31,9 +31,12 @@ object SkinLibraryRuntimeBridge {
         requireProfile(requireNotNull(launchedProfile))
         io.poll(0, "configuration:$saveSlot:$configurationEdge", pending) { runtimeAccess().readConfiguration(saveSlot) }
     } catch (error: Exception) { failure("PROFILE_REJECTED", error.message.orEmpty()) }
-    @JvmStatic fun readMenuSnapshot(profileId: String): String = try {
+    @JvmStatic fun readMenuSnapshot(profileId: String): String = readMenuSnapshot(profileId, 0L)
+    /** [session] is the menu's opening counter: the latest-value cache never crosses openings, where a
+     *  death or result report may have changed the document without a menu mutation. */
+    @JvmStatic fun readMenuSnapshot(profileId: String, session: Long): String = try {
         requireProfile(profileId)
-        io.pollLatest(1, "menu:$profileId:$configurationEdge", pending) { runtimeAccess().readMenuSnapshot(profileId) }
+        io.pollLatest(1, "menu:$profileId:$session:$configurationEdge", pending) { runtimeAccess().readMenuSnapshot(profileId) }
     } catch (error: Exception) { failure("PROFILE_REJECTED", error.message.orEmpty()) }
     @JvmStatic fun setMode(profileId: String, expectedConfiguration: String, mode: String): Boolean = try {
         requireProfile(profileId)
