@@ -87,8 +87,9 @@ namespace DualSouls.Skins
     public sealed class NativeSkinMenuModel
     {
         static readonly string[] Modes = { "OFF", "ON", "ROTATE" };
-        static readonly string[] ScopeValues = { "ALL", "CHARACTER_HUD", "CHARACTER" };
-        static readonly string[] ScopeLabels = { "ALL", "CHARACTER + HUD", "CHARACTER" };
+        // Player-only is the default; HUD and world art are opt-in, EVERYTHING also covers menu pages.
+        static readonly string[] ScopeValues = { "CHARACTER", "CHARACTER_HUD", "CHARACTER_WORLD", "ALL" };
+        static readonly string[] ScopeLabels = { "PLAYER ONLY", "PLAYER + HUD", "PLAYER + WORLD", "EVERYTHING" };
 
         NativeSkinMenuSnapshot snapshot;
         IReadOnlyList<NativeSkinMenuRow> rows;
@@ -213,7 +214,7 @@ namespace DualSouls.Skins
             var result = new List<NativeSkinMenuRow>(value.Packs.Count + 3)
             {
                 new NativeSkinMenuRow(NativeSkinMenuRowKind.Mode, "mode", "MODE",
-                    value.Mode == "ROTATE" ? "ROTATE + DEFAULT" : value.Mode, null, true),
+                    value.Mode == "ROTATE" ? "RANDOM ON DEATH" : value.Mode, null, true),
                 new NativeSkinMenuRow(NativeSkinMenuRowKind.Sprites, "sprites", "SPRITES",
                     ScopeLabel(value.SpriteScope), null, true)
             };

@@ -49,6 +49,18 @@ class SkinTreeVerifierTest {
     }
 
     @Test
+    fun `structural verification skips payload hashing but full verification still detects same-size tamper`() {
+        val published = publish("local-structural")
+        val payload = File(published.objectRoot, "pack").walkTopDown().single { it.isFile && it.name != "skin.json" }
+        payload.setWritable(true)
+        val bytes = payload.readBytes(); bytes[bytes.lastIndex] = (bytes.last().toInt() xor 1).toByte(); payload.writeBytes(bytes)
+        assertTrue(verifier().verify(published.objectRoot, published.treeSha256, hashPayload = false) is SkinResult.Ok)
+        assertTrue(verifier().verify(published.objectRoot, published.treeSha256) is SkinResult.Error)
+        payload.writeBytes(bytes + 0.toByte())
+        assertTrue(verifier().verify(published.objectRoot, published.treeSha256, hashPayload = false) is SkinResult.Error)
+    }
+
+    @Test
     fun `rejects fake catalog target even when manifest remains png-like`() {
         val published = publish("local-fake-target")
         val manifest = File(published.objectRoot, "pack/skin.json")

@@ -11,10 +11,14 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         public static bool Allows(string spriteScope, string target)
         {
             if (!HollowKnightSkinTargets.TryGetFamily(target, out var family)) return false;
-            if (spriteScope == SkinSpriteScopes.All) return true;
-            if (spriteScope == SkinSpriteScopes.CharacterHud)
-                return family == HollowKnightSkinFamily.Character || family == HollowKnightSkinFamily.Hud;
-            return spriteScope == SkinSpriteScopes.Character && family == HollowKnightSkinFamily.Character;
+            switch (spriteScope)
+            {
+                case SkinSpriteScopes.All: return true;
+                case SkinSpriteScopes.Character: return family == HollowKnightSkinFamily.Character;
+                case SkinSpriteScopes.CharacterHud: return family == HollowKnightSkinFamily.Character || family == HollowKnightSkinFamily.Hud;
+                case SkinSpriteScopes.CharacterWorld: return family == HollowKnightSkinFamily.Character || family == HollowKnightSkinFamily.World;
+                default: return false;
+            }
         }
     }
 }

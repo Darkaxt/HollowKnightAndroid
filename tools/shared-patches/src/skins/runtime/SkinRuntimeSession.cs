@@ -33,7 +33,9 @@ namespace DualSouls.Skins.Runtime
         public const string All = "ALL";
         public const string CharacterHud = "CHARACTER_HUD";
         public const string Character = "CHARACTER";
-        public static bool IsValid(string value) => value == All || value == CharacterHud || value == Character;
+        public const string CharacterWorld = "CHARACTER_WORLD";
+        public static bool IsValid(string value) =>
+            value == All || value == CharacterHud || value == Character || value == CharacterWorld;
     }
 
     // A caller-verified, immutable normalized object. No registry or automatic folder discovery.

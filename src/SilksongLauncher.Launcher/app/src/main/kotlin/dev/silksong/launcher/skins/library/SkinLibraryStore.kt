@@ -21,7 +21,8 @@ import java.util.concurrent.locks.ReentrantLock
 /** One Kotlin writer, shared by launcher controls and JNI. No managed file writer or legacy dual-read. */
 class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = AndroidSkinFileSystem(),
     internal val catalog: CatalogPathSet = CatalogPathSet.requirePinned(),
-    private val publicationAllowed: () -> Boolean = { true }) {
+    private val publicationAllowed: () -> Boolean = { true },
+    private val random: kotlin.random.Random = kotlin.random.Random.Default) {
     val profileId: String = catalog.profile.profileId
     private val processLock = locks.computeIfAbsent(paths.root.absolutePath) { ReentrantLock(true) }
     private val authority = File(paths.root, "library.json")
@@ -79,13 +80,10 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
         } else activateOccurrence(value, occurrence)
     }
     private fun activateOccurrence(value: SkinLibraryDocument, occurrence: Long): SkinLibraryDocument {
-        val currentIndex = value.eligiblePackIds.indexOf(value.selectedPackId)
-        val nextPackId = when {
-            value.selectedPackId == null -> value.eligiblePackIds.firstOrNull()
-            currentIndex < 0 -> value.eligiblePackIds.firstOrNull()
-            currentIndex + 1 < value.eligiblePackIds.size -> value.eligiblePackIds[currentIndex + 1]
-            else -> null
-        }
+        // Random successor among the other eligible packs, so a death never repeats the current
+        // skin. The default skin is only the successor when no other pack is eligible.
+        val candidates = value.eligiblePackIds.filter { it != value.selectedPackId }
+        val nextPackId = if (candidates.isEmpty()) null else candidates[random.nextInt(candidates.size)]
         val nextIsVanilla = nextPackId == null && value.selectedPackId != null
         return value.copy(lastDeath = occurrence, pendingPackId = nextPackId, pendingVanilla = nextIsVanilla)
     }
@@ -278,10 +276,14 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
         commit(next, preserveBackup = good != null)
         SkinResult.Ok(Unit)
     }
-    internal fun requireVerified(pack: LibraryPack): SkinManifestDocument {
-        val manifest = objects.verify(pack.treeSha256).required()
+    /** Trees whose payloads were already hashed (or admitted by the runtime) in this process. */
+    private val hashedTrees: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    /** Payload hashing runs once per tree per process; later checks stay structural so gameplay never re-hashes a pack. */
+    internal fun requireVerified(pack: LibraryPack, hashPayload: Boolean = pack.treeSha256 !in hashedTrees): SkinManifestDocument {
+        val manifest = objects.verify(pack.treeSha256, hashPayload).required()
         val receipt = receipts.verify(pack.receiptSha256).required()
         require(manifest.id == pack.id && receipt.candidateKey == pack.candidateKey) { "Published pack/receipt identity differs from library" }
+        hashedTrees += pack.treeSha256
         return manifest
     }
     internal fun readLocked(): SkinLibraryDocument {

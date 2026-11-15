@@ -15,7 +15,7 @@ class SkinLibraryDocumentTest {
     @Test fun `fresh library is OFF and does not choose an imported pack`() {
         val document = SkinLibraryDocument(packs = listOf(a))
         assertEquals(LibraryMode.OFF, document.mode)
-        assertEquals(SpriteScope.ALL, document.spriteScope)
+        assertEquals(SpriteScope.CHARACTER, document.spriteScope)
         assertNull(document.selectedPackId)
         assertTrue(document.eligiblePackIds.isEmpty())
         assertEquals(document, SkinLibraryCodec.decode(SkinLibraryCodec.encode(document)))
@@ -93,7 +93,7 @@ class SkinLibraryDocumentTest {
     }
 
     @Test fun `unknown sprite scope fails closed`() {
-        val encoded = SkinLibraryCodec.encode(SkinLibraryDocument()).toString(Charsets.UTF_8)
+        val encoded = SkinLibraryCodec.encode(SkinLibraryDocument(spriteScope = SpriteScope.ALL)).toString(Charsets.UTF_8)
             .replace("\"ALL\"", "\"HUD_ONLY\"")
         assertThrows(IllegalArgumentException::class.java) { SkinLibraryCodec.decode(encoded.toByteArray()) }
     }

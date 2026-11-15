@@ -55,7 +55,8 @@ namespace DualSouls.Skins.Silksong.Runtime
             IsSupported, (spriteScope, path) => TryGetByPath(path, out var target) &&
                 (spriteScope == SkinSpriteScopes.All ||
                  spriteScope == SkinSpriteScopes.CharacterHud ||
-                 spriteScope == SkinSpriteScopes.Character && !target.IsHud));
+                 // Silksong has no separate world targets, so PLAYER + WORLD is player-only here.
+                 (spriteScope == SkinSpriteScopes.Character || spriteScope == SkinSpriteScopes.CharacterWorld) && !target.IsHud));
 
         public static bool IsSupported(string path) => path != null && byPath.ContainsKey(path);
         public static bool TryGetByPath(string path, out SilksongSkinTarget target) =>

@@ -44,6 +44,8 @@ public sealed class SilksongSkinTargetTests
         Assert.True(rules.Allows("CHARACTER_HUD", hud));
         Assert.True(rules.Allows("CHARACTER", character));
         Assert.False(rules.Allows("CHARACTER", hud));
+        Assert.True(rules.Allows("CHARACTER_WORLD", character));
+        Assert.False(rules.Allows("CHARACTER_WORLD", hud));
         Assert.False(rules.Allows("BOGUS", character));
         Assert.False(rules.IsSupported("Knight.png"));
         Assert.False(rules.IsSupported("Assets/Collections/Tools Cln Data/atlas0.png"));

@@ -4,7 +4,8 @@ using System.Collections.ObjectModel;
 
 namespace DualSouls.Skins.HollowKnight.Runtime
 {
-    public enum HollowKnightSkinFamily { Character, Hud, Other }
+    /// <summary>Character = the player; Hud = status HUD; World = NPC/currency/environment art; Ui = inventory and charm pages.</summary>
+    public enum HollowKnightSkinFamily { Character, Hud, World, Ui }
 
     // Adapted from igawa6/dualsouls Assets/HKMods.cs at
     // 5c22451435b772acde0c7e6456f9019bc1baef73 (source-only MIT label). See NOTICE.md.
@@ -169,15 +170,15 @@ namespace DualSouls.Skins.HollowKnight.Runtime
             // HKMods.cs identifies these exact three through HUD Cln and its hudCanvas object pass.
             Add(HollowKnightSkinFamily.Hud, "Hud.png", "OrbFull.png", "Liquid.png");
 
-            // Explicit non-status surfaces: world currency, NPC/environment/cutscene art, inventory,
-            // and charms pages. These remain available only to ALL.
-            Add(HollowKnightSkinFamily.Other, "Geo.png", "Quirrel.png", "Hornet.png", "Birthplace.png", "BrummWave.png", "Salubra.png");
+            // World currency and NPC/environment/cutscene art (PLAYER + WORLD and EVERYTHING).
+            Add(HollowKnightSkinFamily.World, "Geo.png", "Quirrel.png", "Hornet.png", "Birthplace.png", "BrummWave.png", "Salubra.png");
+            // Inventory and charm pages (EVERYTHING only).
             foreach (var map in new[] { InventoryObjects, InventoryFsms, CharmFields, CharmFsms })
-                foreach (var target in map.Keys) AddTarget(HollowKnightSkinFamily.Other, target);
+                foreach (var target in map.Keys) AddTarget(HollowKnightSkinFamily.Ui, target);
             for (int i = 0; i < 40; i++)
             {
                 var target = CharmListTarget(i);
-                if (target != null) AddTarget(HollowKnightSkinFamily.Other, target);
+                if (target != null) AddTarget(HollowKnightSkinFamily.Ui, target);
             }
             return new ReadOnlyDictionary<string, HollowKnightSkinFamily>(result);
         }

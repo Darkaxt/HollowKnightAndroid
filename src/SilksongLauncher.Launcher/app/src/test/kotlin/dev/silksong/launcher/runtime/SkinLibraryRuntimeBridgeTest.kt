@@ -25,7 +25,7 @@ class SkinLibraryRuntimeBridgeTest {
         val access = SkinLibraryRuntimeAccess(store)
         val wire = JsonParser.parseString(access.readConfiguration()).asJsonObject
         assertTrue(wire["ok"].asBoolean); assertEquals("hollow-knight",wire["profileId"].asString)
-        assertEquals("OFF",wire["mode"].asString); assertEquals("ALL", wire["spriteScope"].asString)
+        assertEquals("OFF",wire["mode"].asString); assertEquals("CHARACTER", wire["spriteScope"].asString)
         assertEquals(64,wire["configSha256"].asString.length)
     }
     @Test fun `runtime payload transports sprite scope independently of mode including OFF`() {
@@ -281,6 +281,8 @@ class SkinLibraryRuntimeBridgeTest {
 
     @Test fun `Silksong rotation evidence correlates imported and default outcomes and rejects retired work`() {
         val store = importedStore(FastSkinFileSystem(), silksong = true)
+        // Only the other pack is eligible, so its successor is the default skin.
+        store.setEligibility(requireNotNull(store.read().required().selectedPackId), false).required()
         val access = SkinLibraryRuntimeAccess(store)
         val run = JsonParser.parseString(access.readConfiguration()).asJsonObject["rotationRun"].asString
         val pending = store.confirmDeath(run, 1).required()
@@ -354,28 +356,30 @@ class SkinLibraryRuntimeBridgeTest {
 
     @Test fun `pending vanilla wire restores and commits default as the active rotation member`() {
         val store = importedStore()
+        // Default is the successor only when no other pack is eligible: keep just the selected one.
+        val initial = store.read().required()
+        val selected = requireNotNull(initial.selectedPackId)
+        store.setEligibility(initial.packs.single { it.id != selected }.id, false).required()
         val access = SkinLibraryRuntimeAccess(store)
         val first = JsonParser.parseString(access.readConfiguration()).asJsonObject
         val run = first["rotationRun"].asString
-        val current = store.read().required()
-        val selected = requireNotNull(current.selectedPackId)
-        val other = current.packs.single { it.id != selected }
-        val toOther = store.confirmDeath(run, 1).required()
-        assertEquals(other.id, toOther.pendingPackId)
-        assertTrue(store.finishRotation(
-            store.configurationIdentity(toOther), run, 1, other.id, other.treeSha256,
-        ))
+        store.confirmDeath(run, 1).required()
+        assertTrue(store.finishRotation(store.configurationIdentity(store.read().required()), run, 1, "", ""))
+        val back = store.confirmDeath(run, 2).required()
+        assertEquals(selected, back.pendingPackId)
+        val selectedPack = back.packs.single { it.id == selected }
+        assertTrue(store.finishRotation(store.configurationIdentity(back), run, 2, selected, selectedPack.treeSha256))
 
-        val pending = store.confirmDeath(run, 2).required()
+        val pending = store.confirmDeath(run, 3).required()
         assertTrue(pending.pendingVanilla)
         val wire = JsonParser.parseString(access.readConfiguration()).asJsonObject
         assertTrue(wire["vanilla"].asBoolean)
-        assertEquals(2L, wire["pendingOccurrence"].asLong)
+        assertEquals(3L, wire["pendingOccurrence"].asLong)
         assertFalse(wire.has("packId"))
         assertFalse(wire.has("textures"))
 
         assertTrue(access.reportRotation(
-            wire["configSha256"].asString, run, 2, "", "", "Restored", "default restored",
+            wire["configSha256"].asString, run, 3, "", "", "Restored", "default restored",
         ))
         val defaultActive = store.read().required()
         assertNull(defaultActive.selectedPackId)
@@ -386,7 +390,7 @@ class SkinLibraryRuntimeBridgeTest {
         assertEquals("DEFAULT", evidence["resolvedKind"].asString)
         assertEquals("", evidence["resolvedReceiptSha256"].asString)
         assertEquals("DEFAULT", evidence["activeKind"].asString)
-        assertEquals(2L, evidence["operationGeneration"].asLong)
+        assertEquals(3L, evidence["operationGeneration"].asLong)
         assertEquals(store.configurationIdentity(defaultActive), evidence["resultingConfigSha256"].asString)
         val stable = JsonParser.parseString(access.readConfiguration()).asJsonObject
         assertTrue(stable["vanilla"].asBoolean)
@@ -410,7 +414,7 @@ class SkinLibraryRuntimeBridgeTest {
         assertEquals("TERMINAL", matching["evidenceState"].asString)
         assertEquals(initialConfig, matching["observation"].asJsonObject["operationId"].asString)
 
-        assertTrue(access.setSpriteScope("hollow-knight", initialConfig, SpriteScope.CHARACTER.name))
+        assertTrue(access.setSpriteScope("hollow-knight", initialConfig, SpriteScope.CHARACTER_WORLD.name))
         val stale = JsonParser.parseString(access.readMenuSnapshot("hollow-knight")).asJsonObject
         assertEquals("STALE", stale["evidenceState"].asString)
         assertNotEquals(stale["operationId"].asString, stale["observation"].asJsonObject["operationId"].asString)
@@ -643,8 +647,8 @@ class SkinLibraryRuntimeBridgeTest {
         assertFalse(access.setMode("silksong", config, LibraryMode.ON.name))
         assertFalse(access.setSpriteScope("hollow-knight", "0".repeat(64), SpriteScope.CHARACTER.name))
         assertFalse(access.confirmPack("hollow-knight", "0".repeat(64), selected))
-        assertTrue(access.setSpriteScope("hollow-knight", config, SpriteScope.CHARACTER.name))
-        assertEquals(SpriteScope.CHARACTER, store.read().required().spriteScope)
+        assertTrue(access.setSpriteScope("hollow-knight", config, SpriteScope.CHARACTER_WORLD.name))
+        assertEquals(SpriteScope.CHARACTER_WORLD, store.read().required().spriteScope)
     }
 
     @Test fun `JNI malformed authority returns error instead of fallback configuration`() {

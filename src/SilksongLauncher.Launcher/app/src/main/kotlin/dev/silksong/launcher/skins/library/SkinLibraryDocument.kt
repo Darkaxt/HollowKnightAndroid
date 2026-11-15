@@ -14,7 +14,8 @@ import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 
 enum class LibraryMode { OFF, ON, ROTATE }
-enum class SpriteScope { ALL, CHARACTER_HUD, CHARACTER }
+/** Which sprites a pack re-skins. CHARACTER (player only) is the default; values are appended, never reordered. */
+enum class SpriteScope { ALL, CHARACTER_HUD, CHARACTER, CHARACTER_WORLD }
 data class LibraryPack(val id: String, val name: String, val author: String, val candidateKey: String,
     val treeSha256: String, val receiptSha256: String)
 data class SaveSkinAffinity(val slot: Int, val packId: String? = null, val treeSha256: String? = null)
@@ -22,7 +23,7 @@ data class SkinLibraryDocument(val mode: LibraryMode = LibraryMode.OFF, val sele
     val packs: List<LibraryPack> = emptyList(), val eligiblePackIds: List<String> = emptyList(),
     val rotationRun: String? = null, val lastDeath: Long = 0, val pendingPackId: String? = null,
     val pendingVanilla: Boolean = false, val queuedDeathOccurrences: List<Long> = emptyList(),
-    val spriteScope: SpriteScope = SpriteScope.ALL, val activeSaveSlot: Int? = null,
+    val spriteScope: SpriteScope = SpriteScope.CHARACTER, val activeSaveSlot: Int? = null,
     val saveAffinities: List<SaveSkinAffinity> = emptyList(), val configurationGeneration: Long = 0,
     val unboundSelectionPending: Boolean = false)
 

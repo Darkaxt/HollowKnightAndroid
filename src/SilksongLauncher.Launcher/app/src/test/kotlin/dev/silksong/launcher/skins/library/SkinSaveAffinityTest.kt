@@ -205,7 +205,7 @@ class SkinSaveAffinityTest {
     @Test fun `normal death successor commits once to bound save and slot change cancels frozen work`() {
         val store = store("hollow-knight"); val a = import(store, "A"); val b = import(store, "B")
         store.bindSave(1).required(); store.enable(a.id).required(); confirm(store, 1, a)
-        store.setEligibility(a.id, true).required(); store.setEligibility(b.id, true).required()
+        store.setEligibility(b.id, true).required() // only B eligible: A -> B -> default -> B
         store.setMode(store.configurationIdentity(store.read().required()), LibraryMode.ROTATE).required()
         val run = requireNotNull(store.read().required().rotationRun)
         val next = store.confirmDeath(run, 1).required()
@@ -217,7 +217,7 @@ class SkinSaveAffinityTest {
         val pending = store.confirmDeath(run, 3).required()
         store.bindSave(2).required()
         assertTrue(store.confirmDeath(run, 4) is SkinResult.Error)
-        assertFalse(store.recordRotationObservation(store.configurationIdentity(pending), run, 3, a.id, a.treeSha256, "Applied", "retired", 1))
+        assertFalse(store.recordRotationObservation(store.configurationIdentity(pending), run, 3, b.id, b.treeSha256, "Applied", "retired", 1))
         assertEquals(listOf(SaveSkinAffinity(1, null)), store.read().required().saveAffinities)
     }
 }

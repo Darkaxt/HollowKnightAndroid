@@ -174,7 +174,8 @@ internal class SkinLibraryRuntimeAccess(private val store: SkinLibraryStore) {
             if (document.mode != LibraryMode.OFF && !vanilla) {
                 val pack = document.packs.single { it.id == (document.pendingPackId ?: document.selectedPackId) }
                 if (verifiedPack != pack) {
-                    verifiedManifest = store.requireVerified(pack); verifiedPack = pack
+                    // Main-thread game call: structural check only (payloads were hashed at import).
+                    verifiedManifest = store.requireVerified(pack, hashPayload = false); verifiedPack = pack
                 }
                 val game = requireNotNull(verifiedManifest).games.getValue(store.profileId)
                 wire.addProperty("packId", pack.id); wire.addProperty("treeSha256", pack.treeSha256)

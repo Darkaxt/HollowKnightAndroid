@@ -29,7 +29,7 @@ class SkinLibraryStoreTest {
         PinnedCatalogFixture.load()
         return SkinLibraryStore(
             SkinPaths(File(temporary.root, "profiles/hollow-knight").apply { mkdirs() }),
-            FastSkinFileSystem(),
+            FastSkinFileSystem(), random = FirstCandidate,
         )
     }
     private fun silksongStore(): SkinLibraryStore {
@@ -158,7 +158,7 @@ class SkinLibraryStoreTest {
         val promoted = store.read().required()
         assertEquals("b", promoted.selectedPackId)
         assertEquals(2L, promoted.lastDeath)
-        assertEquals("c", promoted.pendingPackId)
+        assertEquals("a", promoted.pendingPackId)
         assertTrue(promoted.queuedDeathOccurrences.isEmpty())
         assertEquals(promoted, store.confirmDeath(run, 1).required())
         assertEquals(promoted, store.confirmDeath(run, 2).required())
@@ -230,27 +230,43 @@ class SkinLibraryStoreTest {
         assertEquals(pendingDefault.packs, promoted.packs)
     }
 
-    @Test fun `multiple packs rotate through default before wrapping`() {
+    @Test fun `multiple packs alternate without falling back to default`() {
         val store = rotationStore(listOf("a", "b"))
         val run = requireNotNull(store.startRuntime().required().rotationRun)
         val toB = store.confirmDeath(run, 1).required()
         assertTrue(store.finishRotation(
             store.configurationIdentity(toB), run, 1, "b", toB.packs.single { it.id == "b" }.treeSha256,
         ))
-        val toDefault = store.confirmDeath(run, 2).required()
-        assertTrue(toDefault.pendingVanilla)
-        assertTrue(store.finishRotation(store.configurationIdentity(toDefault), run, 2, "", ""))
-        assertEquals("a", store.confirmDeath(run, 3).required().pendingPackId)
+        val toA = store.confirmDeath(run, 2).required()
+        assertFalse(toA.pendingVanilla)
+        assertEquals("a", toA.pendingPackId)
     }
 
-    @Test fun `ordered packs include default after the last eligible member`() {
+    @Test fun `random successor never repeats the current skin and reaches every other pack`() {
+        val store = rotationStore(listOf("a", "b", "c"), random = kotlin.random.Random(7))
+        val run = requireNotNull(store.startRuntime().required().rotationRun)
+        val seen = mutableSetOf<String>()
+        for (occurrence in 1L..40L) {
+            val before = store.read().required().selectedPackId
+            val next = store.confirmDeath(run, occurrence).required()
+            val id = requireNotNull(next.pendingPackId)
+            assertFalse(next.pendingVanilla)
+            assertNotEquals(before, id)
+            seen += id
+            assertTrue(store.finishRotation(store.configurationIdentity(next), run, occurrence, id,
+                next.packs.single { it.id == id }.treeSha256))
+        }
+        assertEquals(setOf("a", "b", "c"), seen)
+    }
+
+    @Test fun `successor is chosen from the other eligible packs and default only when none remain`() {
         data class Case(val ring: List<String>, val selected: String, val nextPack: String?, val nextVanilla: Boolean)
         for (case in listOf(
             Case(emptyList(), "a", null, true),
             Case(listOf("a"), "a", null, true),
             Case(listOf("b"), "a", "b", false),
             Case(listOf("c", "b"), "a", "c", false),
-            Case(listOf("c", "b"), "b", null, true),
+            Case(listOf("c", "b"), "b", "c", false),
         )) {
             val store = rotationStore(case.ring, case.selected)
             val run = requireNotNull(store.startRuntime().required().rotationRun)
@@ -291,8 +307,12 @@ class SkinLibraryStoreTest {
         }
         assertEquals(0L,store.read().required().lastDeath); assertEquals("b",store.confirmDeath(run,1).required().pendingPackId)
     }
-    private fun rotationStore(ring: List<String>, selected: String? = "a"): SkinLibraryStore {
-        val store = store(); store.read().required()
+    /** Default random always picks the first candidate, so expectations stay deterministic. */
+    private fun rotationStore(ring: List<String>, selected: String? = "a",
+        random: kotlin.random.Random = FirstCandidate): SkinLibraryStore {
+        PinnedCatalogFixture.load()
+        val store = SkinLibraryStore(SkinPaths(File(temporary.root, "profiles/hollow-knight").apply { mkdirs() }), random = random)
+        store.read().required()
         val packs = listOf("a","b","c").map { LibraryPack(it,it,"Unknown",it.repeat(64),it.repeat(64),it.repeat(64)) }
         File(store.paths.root,"library.json").writeBytes(SkinLibraryCodec.encode(SkinLibraryDocument(LibraryMode.ROTATE,selected,packs,ring)))
         return store
@@ -416,7 +436,7 @@ class SkinLibraryStoreTest {
         }
         val before = authority.readBytes().toList()
 
-        assertTrue(store.setSpriteScope(store.configurationIdentity(current), SpriteScope.CHARACTER) is SkinResult.Error)
+        assertTrue(store.setSpriteScope(store.configurationIdentity(current), SpriteScope.ALL) is SkinResult.Error)
         assertEquals(before, authority.readBytes().toList())
     }
 
@@ -522,3 +542,5 @@ class SkinLibraryStoreTest {
         assertEquals(listOf("b", "a"), (store.read() as SkinResult.Ok).value.eligiblePackIds)
     }
 }
+
+private object FirstCandidate : kotlin.random.Random() { override fun nextBits(bitCount: Int) = 0 }

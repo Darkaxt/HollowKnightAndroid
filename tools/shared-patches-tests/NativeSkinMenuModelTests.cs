@@ -17,12 +17,12 @@ public sealed class NativeSkinMenuModelTests
             new NativeSkinPackDescriptor("silk", "Silk Red", "B")), 5);
 
         Assert.Equal(new[] { "OFF", "ON", "ROTATE" }, NativeSkinMenuModel.ModeChoices);
-        Assert.Equal(new[] { "ALL", "CHARACTER + HUD", "CHARACTER" }, NativeSkinMenuModel.SpriteChoices);
+        Assert.Equal(new[] { "PLAYER ONLY", "PLAYER + HUD", "PLAYER + WORLD", "EVERYTHING" }, NativeSkinMenuModel.SpriteChoices);
         Assert.Equal(
             new[] { "MODE", "SPRITES", "Moss Knight", "Silk Red", "BACK" },
             model.Rows.Select(row => row.Label));
         Assert.Equal(
-            new[] { "OFF", "CHARACTER + HUD", "SELECTED", "DISABLED", "" },
+            new[] { "OFF", "PLAYER + HUD", "SELECTED", "DISABLED", "" },
             model.Rows.Select(row => row.Value));
         Assert.Equal(
             new[] { NativeSkinMenuRowKind.Mode, NativeSkinMenuRowKind.Sprites,
@@ -37,7 +37,7 @@ public sealed class NativeSkinMenuModelTests
         var model = new NativeSkinMenuModel(Snapshot("ROTATE", "ALL", null, new[] { "p0" },
             new NativeSkinPackDescriptor("p0", "Pack 0", "A")), 3);
 
-        Assert.Equal("ROTATE + DEFAULT", model.Rows[0].Value);
+        Assert.Equal("RANDOM ON DEATH", model.Rows[0].Value);
         Assert.Equal("ENABLED", model.Rows[2].Value);
     }
 
@@ -52,11 +52,14 @@ public sealed class NativeSkinMenuModelTests
         model.Replace(Snapshot("ROTATE", "ALL", null, Array.Empty<string>()));
         Assert.Equal("OFF", model.CycleMode(1).Value);
 
-        Assert.Equal("CHARACTER_HUD", model.CycleSprites(1).Value);
-        model.Replace(Snapshot("ROTATE", "CHARACTER_HUD", null, Array.Empty<string>()));
         Assert.Equal("CHARACTER", model.CycleSprites(1).Value);
         model.Replace(Snapshot("ROTATE", "CHARACTER", null, Array.Empty<string>()));
+        Assert.Equal("CHARACTER_HUD", model.CycleSprites(1).Value);
+        model.Replace(Snapshot("ROTATE", "CHARACTER_HUD", null, Array.Empty<string>()));
+        Assert.Equal("CHARACTER_WORLD", model.CycleSprites(1).Value);
+        model.Replace(Snapshot("ROTATE", "CHARACTER_WORLD", null, Array.Empty<string>()));
         Assert.Equal("ALL", model.CycleSprites(1).Value);
+        Assert.Equal("CHARACTER_HUD", model.CycleSprites(-1).Value);
     }
 
     [Fact]

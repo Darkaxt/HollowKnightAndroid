@@ -17,7 +17,12 @@ class SkinTreeVerifier(
     private val catalog: CatalogPathSet = CatalogPathSet.requirePinned(),
     private val profileAncestor: File? = null,
 ) {
-    fun verify(root: File, expectedTreeSha256: String? = null): SkinResult<SkinManifestDocument> = try {
+    /**
+     * [hashPayload] = false keeps every structural, size, manifest and identity check but skips re-hashing
+     * texture payloads. Objects are immutable and fully hashed at publication; the in-game path uses this
+     * so a death rotation never stalls a frame on SHA-256 of a whole pack.
+     */
+    fun verify(root: File, expectedTreeSha256: String? = null, hashPayload: Boolean = true): SkinResult<SkinManifestDocument> = try {
         val containmentOwner = profileAncestor ?: deriveProfileAncestor(root)
         fileSystem.requireContained(root, containmentOwner)
         if (!safeDirectory(root)) corrupt("Object root is not a safe directory")
@@ -82,8 +87,10 @@ class SkinTreeVerifier(
                 val maximum = if (row.path == manifest.preview) limits.previewBytes else limits.textureBytes
                 if (row.length > maximum) corrupt("Object payload exceeds its per-file bound")
             }
-            val digest = hashStable(file, identity)
-            if (digest != row.sha256) corrupt("Object file digest mismatch: ${row.path}")
+            if (hashPayload || row.path == "skin.json") {
+                val digest = hashStable(file, identity)
+                if (digest != row.sha256) corrupt("Object file digest mismatch: ${row.path}")
+            }
             if (row.path != "skin.json") {
                 payloadBytes = Math.addExact(payloadBytes, row.length)
                 identityRows += StagedPayload(row.path, row.sha256, row.length, file)

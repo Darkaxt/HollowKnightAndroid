@@ -992,11 +992,11 @@ public sealed class HollowKnightSkinRuntimeTests
         Assert.Equal(HollowKnightSkinFamily.Hud, Family("Hud.png"));
         Assert.Equal(HollowKnightSkinFamily.Hud, Family("OrbFull.png"));
         Assert.Equal(HollowKnightSkinFamily.Hud, Family("Liquid.png"));
-        Assert.Equal(HollowKnightSkinFamily.Other, Family("Inventory/Geo.png"));
-        Assert.Equal(HollowKnightSkinFamily.Other, Family("Charms/Charm_1.png"));
-        Assert.Equal(HollowKnightSkinFamily.Other, Family("Geo.png"));
-        Assert.Equal(HollowKnightSkinFamily.Other, Family("Birthplace.png"));
-        Assert.Equal(HollowKnightSkinFamily.Other, Family("Quirrel.png"));
+        Assert.Equal(HollowKnightSkinFamily.Ui, Family("Inventory/Geo.png"));
+        Assert.Equal(HollowKnightSkinFamily.Ui, Family("Charms/Charm_1.png"));
+        Assert.Equal(HollowKnightSkinFamily.World, Family("Geo.png"));
+        Assert.Equal(HollowKnightSkinFamily.World, Family("Birthplace.png"));
+        Assert.Equal(HollowKnightSkinFamily.World, Family("Quirrel.png"));
         Assert.False(HollowKnightSkinTargets.TryGetFamily("future-unclassified.png", out _));
 
         HollowKnightSkinFamily Family(string target)
@@ -1016,6 +1016,14 @@ public sealed class HollowKnightSkinRuntimeTests
     [InlineData("CHARACTER", "Knight.png", true)]
     [InlineData("CHARACTER", "Hud.png", false)]
     [InlineData("CHARACTER", "Inventory/Geo.png", false)]
+    [InlineData("CHARACTER", "Geo.png", false)]
+    [InlineData("CHARACTER_WORLD", "Knight.png", true)]
+    [InlineData("CHARACTER_WORLD", "Geo.png", true)]
+    [InlineData("CHARACTER_WORLD", "Quirrel.png", true)]
+    [InlineData("CHARACTER_WORLD", "Hud.png", false)]
+    [InlineData("CHARACTER_WORLD", "Inventory/Geo.png", false)]
+    [InlineData("CHARACTER_HUD", "Inventory/Geo.png", false)]
+    [InlineData("ALL", "Inventory/Geo.png", true)]
     [InlineData("BOGUS", "Knight.png", false)]
     public void Hollow_Knight_scope_policy_is_explicit_and_closed(string scope, string target, bool expected) =>
         Assert.Equal(expected, HollowKnightSkinPolicy.RuntimeRules.Allows(scope, target));

@@ -13,8 +13,8 @@ class SkinObjectRepository(
 ) {
     internal val verifier = SkinTreeVerifier(fileSystem, catalog = catalog, profileAncestor = paths.profileRoot)
 
-    fun verify(treeSha256: String): SkinResult<SkinManifestDocument> =
-        verifier.verify(paths.objectRoot(treeSha256), treeSha256)
+    fun verify(treeSha256: String, hashPayload: Boolean = true): SkinResult<SkinManifestDocument> =
+        verifier.verify(paths.objectRoot(treeSha256), treeSha256, hashPayload)
 
     fun verify(root: File, treeSha256: String): SkinResult<SkinManifestDocument> =
         if (root.absoluteFile.normalize() != paths.objectRoot(treeSha256).absoluteFile.normalize()) {

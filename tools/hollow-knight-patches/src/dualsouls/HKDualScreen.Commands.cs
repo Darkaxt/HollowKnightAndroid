@@ -11,7 +11,7 @@ public partial class HKDualScreen
 {
     const string CommandHelp =
         "help | state | pause | mods | skins | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
-        "mods-list | mod <id> <value> | pd <field>... | geo <amount> | save | quit-menu | fonts | hudfit | sprites <text>";
+        "mods-list | mod <id> <value> | pd <field>... | geo <amount> | die | save | quit-menu | fonts | hudfit | sprites <text>";
 
     void PollCommands() { DsCommandFile.Poll(RunCommand); }
 
@@ -57,6 +57,18 @@ public partial class HKDualScreen
                 if (hero == null) return "error no HeroController";
                 hero.AddGeo(amount);
                 return "ok geo=" + (PlayerData.instance != null ? PlayerData.instance.geo : -1);
+            }
+            case "die":
+            {
+                // QA: one lethal hit through the game's own damage path, so death rotation runs for real.
+                var hero = HeroController.instance;
+                var pd = PlayerData.instance;
+                if (hero == null || pd == null) return "error no HeroController";
+                if (gm == null || gm.gameState != GlobalEnums.GameState.PLAYING) return "error not playing";
+                pd.healthBlue = 0;
+                pd.health = 1;
+                hero.TakeDamage(hero.gameObject, GlobalEnums.CollisionSide.top, 1, 1);
+                return "ok health=" + pd.health;
             }
             case "save":
                 if (gm == null) return "error no GameManager";
