@@ -62,10 +62,10 @@
     <string name="skins_mode_off">Off (vanilla)</string>
     <string name="skins_mode_on">Fixed pack</string>
     <string name="skins_mode_rotate">Random on death</string>
-    <string name="skins_runtime_none">Latest runtime report: Not reported yet</string>
-    <string name="skins_runtime_report">Latest runtime report: %1$s</string>
-    <string name="skins_runtime_report_old">Latest runtime report: %1$s · Older configuration</string>
-    <string name="skins_runtime_unavailable">Latest runtime report: Unavailable</string>
+    <string name="skins_runtime_none">Last skin change in game: none yet</string>
+    <string name="skins_runtime_report">Last skin change in game: %1$s</string>
+    <string name="skins_runtime_report_old">Last skin change in game: %1$s · before the current settings</string>
+    <string name="skins_runtime_unavailable">Last skin change in game: unavailable</string>
     <string name="skins_change_mode">Change mode</string>
     <string name="skins_details">Details</string>
     <string name="skins_installed_title">Installed skins</string>

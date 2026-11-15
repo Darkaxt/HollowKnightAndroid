@@ -69,6 +69,18 @@ class LogActivity : Activity() {
         }
     }
 
+    private val lowerDisplay by lazy { LowerDisplayLog.forScreen(this, "Logs") }
+
+    override fun onPause() {
+        lowerDisplay.hide()
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        lowerDisplay.show()
+    }
+
     override fun onDestroy() {
         scope.cancel()
         super.onDestroy()
@@ -224,13 +236,12 @@ class LogActivity : Activity() {
         return root
     }
 
+    // Secondary style throughout: PLAY on the home screen is the launcher's only primary action.
+    @Suppress("UNUSED_PARAMETER")
     private fun button(label: String, primary: Boolean = false, onClick: () -> Unit) =
-        Button(this).apply {
+        Button(this, null, 0, R.style.DualSouls_Button_Secondary).apply {
             text = label
             setOnClickListener { onClick() }
-            backgroundTintList = android.content.res.ColorStateList.valueOf(
-                Color.parseColor(if (primary) "#7D3341" else "#B4AEB2"))
-            setTextColor(if (primary) Color.WHITE else Color.parseColor("#0D0A0B"))
             setPadding(paddingLeft, dp(12), paddingRight, dp(12))
         }
 

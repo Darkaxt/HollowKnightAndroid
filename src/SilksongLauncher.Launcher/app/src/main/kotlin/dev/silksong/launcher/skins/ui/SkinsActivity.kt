@@ -59,14 +59,18 @@ class SkinsActivity : Activity() {
         findViewById<Button>(R.id.skins_library_details).setOnClickListener { if (acceptsCallback()) showLibraryDetails(session.state) }
     }
 
+    private val lowerDisplay by lazy { dev.silksong.launcher.LowerDisplayLog.forScreen(this, "Skins") }
+
     override fun onStart() { super.onStart(); if (::session.isInitialized) session.attach(::render) }
     override fun onResume() {
         super.onResume()
+        lowerDisplay.show()
         if (!::session.isInitialized || isFinishing) return
         if (!sameProfile()) { session.close(); finish(); return }
         SkinLibrarySession.retryPendingCleanup()
         session.refresh()
     }
+    override fun onPause() { lowerDisplay.hide(); super.onPause() }
     override fun onStop() { if (::session.isInitialized) session.detach(); super.onStop() }
     override fun onRetainNonConfigurationInstance(): Any? = if (::session.isInitialized) session else null
     override fun onDestroy() {

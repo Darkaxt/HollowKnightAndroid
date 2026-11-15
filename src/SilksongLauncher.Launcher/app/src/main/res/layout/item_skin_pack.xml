@@ -50,6 +50,7 @@
 
         <Button
             android:id="@+id/skin_pack_delete"
+            style="@style/DualSouls.Button.Secondary"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -59,6 +60,7 @@
 
         <Button
             android:id="@+id/skin_pack_details"
+            style="@style/DualSouls.Button.Secondary"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"

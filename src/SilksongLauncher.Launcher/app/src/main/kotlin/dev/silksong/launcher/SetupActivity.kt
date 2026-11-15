@@ -1315,6 +1315,7 @@ class SetupActivity : Activity() {
                 portFinished = true
                 val seconds = (android.os.SystemClock.elapsedRealtime() - portStartedAt) / 1000
                 LauncherLog.log("Port finished in ${seconds / 60}m ${seconds % 60}s")
+                LauncherActivity.lastResult = "Port finished in ${seconds / 60}m ${seconds % 60}s"
                 say("The game is ready.")
             } catch (t: Throwable) {
                 LauncherLog.log("Setup failed", t)

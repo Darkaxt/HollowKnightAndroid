@@ -52,6 +52,19 @@ class SettingsActivity : Activity() {
         )
     }
 
+
+    private val lowerDisplay by lazy { LowerDisplayLog.forScreen(this, "Settings") }
+
+    override fun onPause() {
+        lowerDisplay.hide()
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        lowerDisplay.show()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)

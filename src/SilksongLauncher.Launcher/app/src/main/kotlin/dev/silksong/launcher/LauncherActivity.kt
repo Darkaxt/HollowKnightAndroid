@@ -50,7 +50,7 @@ import dev.silksong.launcher.skins.ui.SkinsActivity
 
 class LauncherActivity : Activity() {
 
-    private companion object {
+    internal companion object {
         private const val REQ_LOGIN = 1
 
         /** The last user-visible outcome (cloud transfer, launch problem), shown in the status line.

@@ -105,7 +105,15 @@ class LowerDisplayLog(
         return root
     }
 
-    private companion object {
-        const val MAX_LINES = 300
+    companion object {
+        private const val MAX_LINES = 300
+
+        /** The log for a secondary launcher screen: "<selected game> · <screen>". */
+        fun forScreen(activity: Activity, screen: String) = LowerDisplayLog(activity) {
+            val game = runCatching {
+                dev.silksong.launcher.profiles.SelectedGameStore(activity).get().displayName
+            }.getOrDefault("")
+            if (game.isEmpty()) screen else "$game · $screen"
+        }
     }
 }

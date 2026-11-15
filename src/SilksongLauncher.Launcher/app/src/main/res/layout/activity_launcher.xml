@@ -54,7 +54,6 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:longClickable="true"
-                android:nextFocusDown="@id/btn_login"
                 android:foreground="@drawable/game_card_outline">
 
                 <ImageView
@@ -189,7 +188,6 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:minWidth="96dp"
-                        android:nextFocusDown="@id/btn_pull"
                         android:nextFocusRight="@id/btn_mods"
                         android:text="@string/action_log_in" />
                 </LinearLayout>
@@ -207,7 +205,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:enabled="false"
-                        android:nextFocusDown="@id/btn_push"
                         android:nextFocusRight="@id/btn_settings"
                         android:text="@string/action_pull_saves" />
 
@@ -304,7 +301,6 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:layout_marginEnd="8dp"
-                        android:nextFocusLeft="@id/btn_pull"
                         android:nextFocusDown="@id/btn_launch"
                         android:text="@string/action_settings" />
 
@@ -345,7 +341,6 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:focusedByDefault="true"
-            android:nextFocusUp="@id/btn_push"
             android:text="@string/action_launch" />
     </LinearLayout>
 
