@@ -103,6 +103,7 @@ namespace DualSouls.Mods.Silksong
         // (the configuration hash also moves on deaths and result reports).
         int _skinMutationRow = -1;
         string _skinMutationBefore = "";
+        string _skinMutationRefusal;
         // Each opening reads its own snapshot: a cached one may predate a death.
         static long _skinMenuSession;
         bool _skinSessionLoaded;
@@ -1474,6 +1475,7 @@ namespace DualSouls.Mods.Silksong
             string expected = _skinMenu.Snapshot.ConfigSha256;
             _skinMutationRow = _skinMenu.SelectedRowIndex;
             _skinMutationBefore = _skinMenu.Selected.Value;
+            _skinMutationRefusal = _skinMenu.RefusalHint(mutation);
             _skinTransport.Start(Time.unscaledTime);
             SilksongModsRuntime currentRuntime = SilksongModsRuntime.Current;
             if (currentRuntime != null) currentRuntime.InvalidateSkinLibrary(); // queued intent is never counted as apply
@@ -1562,7 +1564,7 @@ namespace DualSouls.Mods.Silksong
                     // Report the menu change itself, not the last death-rotation result.
                     _skinError = applied
                         ? "CHANGE SAVED · " + _skinMenu.Rows[_skinMutationRow].Label + FormatSkinValue(_skinMenu.Rows[_skinMutationRow].Value)
-                        : "CHANGE NOT APPLIED · TRY AGAIN";
+                        : _skinMutationRefusal ?? "CHANGE NOT APPLIED · TRY AGAIN";
                 }
                 else if (!_skinError.StartsWith("CHANGE", StringComparison.Ordinal))
                     _skinError = FormatSkinEvidence(wire);

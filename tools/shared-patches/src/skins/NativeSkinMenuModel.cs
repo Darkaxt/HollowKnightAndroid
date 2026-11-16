@@ -171,6 +171,16 @@ namespace DualSouls.Skins
             new NativeSkinMutation(NativeSkinMutationKind.SetMode,
                 Cycle(Modes, snapshot.Mode, delta));
 
+        /// <summary>Why the launcher store will refuse this mutation, or null when it may
+        /// apply. Turning skins ON needs a selected pack (SkinLibraryStore.setMode).</summary>
+        public string RefusalHint(NativeSkinMutation mutation)
+        {
+            if (mutation.Kind != NativeSkinMutationKind.SetMode || mutation.Value != "ON") return null;
+            foreach (NativeSkinPackDescriptor pack in snapshot.Packs)
+                if (pack.Id == snapshot.SelectedPackId) return null;
+            return "SELECT A SKIN FIRST · CHOOSE ONE WHILE OFF";
+        }
+
         public NativeSkinMutation CycleSprites(int delta) =>
             new NativeSkinMutation(NativeSkinMutationKind.SetSpriteScope,
                 Cycle(ScopeValues, snapshot.SpriteScope, delta));

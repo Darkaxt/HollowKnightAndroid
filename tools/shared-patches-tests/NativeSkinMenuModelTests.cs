@@ -63,6 +63,21 @@ public sealed class NativeSkinMenuModelTests
     }
 
     [Fact]
+    public void TurningOnWithoutASelectedPackExplainsTheRefusal()
+    {
+        var pack = new NativeSkinPackDescriptor("p0", "Pack 0", "A");
+        var model = new NativeSkinMenuModel(Snapshot("OFF", "ALL", null, Array.Empty<string>(), pack), 3);
+        Assert.StartsWith("SELECT A SKIN FIRST", model.RefusalHint(model.CycleMode(1)));
+        Assert.Null(model.RefusalHint(model.CycleMode(-1)));          // OFF -> ROTATE needs no pack
+        Assert.Null(model.RefusalHint(model.CycleSprites(1)));
+
+        model.Replace(Snapshot("OFF", "ALL", "p0", Array.Empty<string>(), pack));
+        Assert.Null(model.RefusalHint(model.CycleMode(1)));
+        model.Replace(Snapshot("OFF", "ALL", "gone", Array.Empty<string>(), pack));
+        Assert.NotNull(model.RefusalHint(model.CycleMode(1)));       // selection no longer installed
+    }
+
+    [Fact]
     public void ScrollingAndReplacementRetainFocusedPackIdentity()
     {
         var packs = Enumerable.Range(0, 7)
