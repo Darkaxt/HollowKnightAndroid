@@ -142,7 +142,10 @@ namespace DualSouls.Skins.Silksong.Runtime
             death.Tick();
             if (death.BacklogFaulted && !backlogFaultSeen) { backlogFaultSeen = true; nextPoll = now; }
             if (settled && !death.BacklogFaulted && death.Occurrence == 0 && death.PendingCancellationCount == 0) { workDeadline = float.PositiveInfinity; return; }
-            if (float.IsPositiveInfinity(workDeadline)) workDeadline = now + RecoveryTimeoutSeconds;
+            // A confirmed death waiting for the player to regain stable control (tutorial lock,
+            // pause, dialogue, idling after respawn) is not stuck work: do not let it time out (#23).
+            if (pending && death.Occurrence != 0 && death.Recorded && !death.Ready) workDeadline = float.PositiveInfinity;
+            else if (float.IsPositiveInfinity(workDeadline)) workDeadline = now + RecoveryTimeoutSeconds;
             if (now >= workDeadline)
             {
                 controller.CancelPending("Skin operation timed out; change configuration or re-enter the loaded save to retry.");

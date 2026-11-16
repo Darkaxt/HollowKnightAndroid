@@ -461,6 +461,17 @@ public class HollowKnightSkinLibraryTests
         controller.Tick();Assert.Equal(1,applies);Assert.Equal(2,restores);Assert.Equal("AwaitingTargets",seen.Status);
         controller.Tick();Assert.Equal(2,applies);Assert.Equal("Applied",seen.Status);Assert.Equal(1,seen.PendingOccurrence);
     }
+    [Fact] public void Recorded_death_waiting_for_player_control_does_not_time_out()
+    {
+        // #23: a long wait between the death and stable control (pause, dialogue, idling)
+        // must not trip the 60 s work timeout and wedge rotation until reload.
+        using var r=new AcknowledgementRig();r.FirstDeath();
+        Assert.Equal(1,r.Confirms);
+        for(int second=2;second<=180;second++)r.Tick(second);
+        Assert.False(r.Library.RecoveryRequired);Assert.Equal(0,r.Commits);
+        r.Respawn(181.1f,181.2f);r.Tick(183); // 181.1 consumed the one-second poll window
+        Assert.Equal(1,r.Commits);Assert.False(r.Library.RecoveryRequired);Assert.Equal(0,r.Request.PendingOccurrence);
+    }
     [Fact] public void Accepted_rotation_report_allows_second_real_death_before_next_poll()
     {
         using var r=new AcknowledgementRig();r.FirstRespawn();

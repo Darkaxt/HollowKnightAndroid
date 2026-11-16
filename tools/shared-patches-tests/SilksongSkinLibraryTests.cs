@@ -68,6 +68,55 @@ public sealed class SilksongSkinLibraryTests
     }
 
     [Fact]
+    public void Recorded_death_waiting_for_player_control_does_not_time_out()
+    {
+        // #23 (2.0.18 Thor): the Moss Grotto Bind lesson held control for minutes after the
+        // respawn; the 60 s work timeout cancelled the rotation and wedged it until reload.
+        var frame = Frame();
+        var death = new SilksongSkinDeathAdapter(() => frame);
+        var request = Request("a");
+        var actions = new List<string>();
+        using var library = new SilksongSkinLibrary(() => request,
+            pack => { actions.Add("apply:" + pack.Id); return new SkinApplyResult(SkinApplyStatus.Applied); },
+            () => new SkinApplyResult(SkinApplyStatus.Restored),
+            observation => {
+                if (observation.PendingOccurrence > 0 && observation.Status == "Applied") request.PendingOccurrence = 0;
+                return true;
+            }, () => new SkinApplyResult(SkinApplyStatus.Unchanged), death,
+            (run, occurrence) => {
+                request.LastDeath = occurrence;
+                request.PendingOccurrence = occurrence;
+                request.PackId = "b";
+                request.TreeSha256 = new string('c', 64);
+                return true;
+            }, (_, __) => true, _ => true);
+
+        library.Tick(0);
+        frame.BridgeOccurrence = 1;
+        frame.BridgeOccurrences = new[] { new SilksongDeathOccurrence(1, frame.Hero, frame.Manager) };
+        frame.Dead = true;
+        frame.Frame++;
+        library.Tick(.1f);
+        library.Tick(1);
+        frame.Dead = false;
+        frame.HeroInPosition = true;
+        frame.SceneComplete = true;
+        frame.ControlRelinquished = true;
+        for (int second = 2; second <= 180; second++) { frame.Frame++; library.Tick(second); }
+        Assert.False(library.RecoveryRequired);
+        Assert.Equal(new[] { "apply:a" }, actions);
+
+        frame.ControlRelinquished = false;
+        frame.Frame++;
+        library.Tick(181);
+        frame.Frame++;
+        library.Tick(181.1f);
+        library.Tick(182);
+        Assert.Equal(new[] { "apply:a", "apply:b" }, actions);
+        Assert.False(library.RecoveryRequired);
+    }
+
+    [Fact]
     public void Default_successor_restore_completes_the_exact_bridge_occurrence()
     {
         var frame = Frame();
