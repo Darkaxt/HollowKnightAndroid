@@ -110,6 +110,19 @@ public sealed class HollowKnightModsSourceContractTests
     static string NativeSource(string name) =>
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "native-skin-contracts", name));
 
+    [Fact]
+    public void LowerCharmsPaneHonoursEquipAnywhereAwayFromBenches()
+    {
+        // #17: the mod forces atBench only while the game's own inventory is open, and the
+        // pane refuses to equip while that inventory is open, so the pane must read the mod itself.
+        string features = Source("HollowKnightGameplayFeatures.cs");
+        string pane = Source("HkCharmsScreen.cs");
+        Assert.Contains("EquipAnywhereActive = enabled;", features, StringComparison.Ordinal);
+        Assert.Contains("if (gm.inventoryFSM != null && gm.inventoryFSM.ActiveStateName != \"Closed\") return \"Close the inventory\";", pane, StringComparison.Ordinal);
+        Assert.Contains("if (!pd.atBench && !DualSouls.Mods.HollowKnight.HollowKnightGameplayFeatures.EquipAnywhereActive) return \"Rest at a bench\";", pane, StringComparison.Ordinal);
+        Assert.DoesNotContain("if (!pd.atBench) return", pane, StringComparison.Ordinal);
+    }
+
     static string Source(string name) =>
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "source-contracts", name));
 }

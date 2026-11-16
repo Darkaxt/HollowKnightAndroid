@@ -658,6 +658,10 @@ namespace DualSouls.Mods.Silksong
             if (text == null) text = root.GetComponentInChildren<UiText>(true);
             if (text == null)
                 throw new InvalidOperationException("Native button text is unavailable.");
+            // Labels are single-line. The cloned native label keeps the width it had for its
+            // original short text (its size driver is disabled), so wrapping would stack longer
+            // labels ("MODS", pack names) into overlapping lines. Descriptions re-enable Wrap.
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
             text.text = value;
             return text;
         }
@@ -1308,6 +1312,89 @@ namespace DualSouls.Mods.Silksong
         internal void OpenEntry(int route)
         {
             Open((NativeMenuRoute)route);
+        }
+
+        /// <summary>Opens Mods (0) or Skins (1) for the QA command channel from the pause menu.</summary>
+        internal static string OpenForCommand(int route)
+        {
+            SilksongNativeModsMenu current = _current;
+            NativeMenuBinding binding = current != null ? current._lifecycle.Current : null;
+            if (current == null || !current.BindingIsAlive(binding)) return "error Mods menu not bound";
+            if (binding.Ui.uiState != UIState.PAUSED) return "error not paused (uiState=" + binding.Ui.uiState + ")";
+            if (current._lifecycle.Transitioning) return "error menu transitioning";
+            if (current._nativeOpen) return "error a Mods/Skins menu is already open";
+            GameObject entry = route == 0 ? binding.ModsEntryRoot : binding.SkinsEntryRoot;
+            if (entry == null) return "error entry not bound";
+            if (entry.activeInHierarchy) { current.OpenEntry(route); return "ok"; }
+            // The entries live on the Options screen; go there the way a player would.
+            binding.Ui.UIGoToOptionsMenu();
+            current.StartCoroutine(current.OpenWhenEntryShown(entry, route, current._bindingGeneration));
+            return "ok via options";
+        }
+
+        IEnumerator OpenWhenEntryShown(GameObject entry, int route, int generation)
+        {
+            float until = Time.unscaledTime + 5f;
+            while (Time.unscaledTime < until && generation == _bindingGeneration && entry != null &&
+                   (!entry.activeInHierarchy || _lifecycle.Transitioning))
+                yield return null;
+            if (generation != _bindingGeneration || entry == null || !entry.activeInHierarchy)
+            {
+                Debug.LogWarning("[Silksong Mods] command open: entry never became visible");
+                yield break;
+            }
+            OpenEntry(route);
+        }
+
+        /// <summary>QA command access to the open Skins menu: <c>list</c>, <c>row N</c> (submit, like a tap),
+        /// <c>left N</c>/<c>right N</c> (cycle Mode/Sprites), <c>close</c> (the BACK path). Goes through the
+        /// same model and native writer as the buttons.</summary>
+        internal static string SkinCommand(string verb, string argument)
+        {
+            SilksongNativeModsMenu current = _current;
+            if (current == null || !current.BindingIsAlive(current._lifecycle.Current)) return "error no Mods menu";
+            string lifecycle = "open=" + current._nativeOpen + " route=" + current._openRoute +
+                               " transitioning=" + current._lifecycle.Transitioning;
+            if (verb == "close")
+            {
+                if (!current._nativeOpen || current._lifecycle.Transitioning) return "error cannot close; " + lifecycle;
+                current.Close();
+                return "ok closing";
+            }
+            if (!current._nativeOpen || current._openRoute != NativeMenuRoute.Skins || current._skinMenu == null)
+                return "error Skins menu is not open; " + lifecycle + " model=" + (current._skinMenu != null);
+            NativeSkinMenuModel model = current._skinMenu;
+            var report = new System.Text.StringBuilder();
+            if (verb != "list")
+            {
+                if (current._lifecycle.Transitioning) return "error menu transitioning";
+                int index;
+                if (!int.TryParse(argument, out index) || index < 0 || index >= model.Rows.Count)
+                    return "error row 0.." + (model.Rows.Count - 1);
+                model.SelectRow(index);
+                if (verb == "row")
+                {
+                    NativeSkinMenuRow row = model.Selected;
+                    if (row.Kind == NativeSkinMenuRowKind.Back) { current.Close(); return "ok closing"; }
+                    current.ApplySkinMutation(row.Kind == NativeSkinMenuRowKind.Mode ? model.CycleMode(1)
+                        : row.Kind == NativeSkinMenuRowKind.Sprites ? model.CycleSprites(1) : model.ConfirmSelected());
+                }
+                else if (!current._skinSnapshotReady) return "error snapshot not ready";
+                else if (model.Selected.Kind == NativeSkinMenuRowKind.Mode)
+                    current.ApplySkinMutation(model.CycleMode(verb == "left" ? -1 : 1));
+                else if (model.Selected.Kind == NativeSkinMenuRowKind.Sprites)
+                    current.ApplySkinMutation(model.CycleSprites(verb == "left" ? -1 : 1));
+                else return "error row " + index + " does not cycle";
+                current.PaintSkins();
+                report.Append("ok ").Append(verb).Append(' ').Append(index).Append('\n');
+            }
+            report.Append("ready=").Append(current._skinSnapshotReady)
+                .Append(" inflight=").Append(current._skinMutationInFlight)
+                .Append(" status=").Append(current._skinError).Append('\n');
+            for (int row = 0; row < model.Rows.Count; row++)
+                report.Append(row).Append(row == model.SelectedRowIndex ? " > " : "   ")
+                    .Append(model.Rows[row].Label).Append(" = ").Append(model.Rows[row].Value).Append('\n');
+            return report.ToString().TrimEnd();
         }
 
         internal void SelectSkin(SilksongNativeSkinButton button)

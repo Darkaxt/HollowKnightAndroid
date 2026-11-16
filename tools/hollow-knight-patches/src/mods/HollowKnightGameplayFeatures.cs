@@ -32,6 +32,8 @@ namespace DualSouls.Mods.HollowKnight
         static int magnetCostBaseline;
         static bool benchOwned;
         static bool benchBaseline;
+        // Read by the lower Charms pane: equip-anywhere stands in for a bench there too.
+        internal static bool EquipAnywhereActive;
         static readonly Dictionary<HealthManager, EnemyVisual> enemies = new Dictionary<HealthManager, EnemyVisual>();
         static readonly List<HealthManager> deadEnemies = new List<HealthManager>();
         static readonly List<FloatingNumber> numbers = new List<FloatingNumber>();
@@ -540,6 +542,7 @@ namespace DualSouls.Mods.HollowKnight
 
         static void MaintainEquipAnywhere(PlayerData player, bool enabled)
         {
+            EquipAnywhereActive = enabled;
             bool shouldOwn = enabled && global::HKDualScreen.GameInventoryOpen;
             if (shouldOwn && !benchOwned)
             {

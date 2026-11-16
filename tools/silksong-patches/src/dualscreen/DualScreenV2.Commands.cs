@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | tab <id> | mods-list | mod <id> <value> | pd <field>... | die (refused on slot 1)";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die (refused on slot 1)";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -35,6 +35,13 @@ public partial class DualScreenV2
                 if (gm == null) return "error no GameManager";
                 bool was = NativeGamePaused();
                 return DsQaReport.Invoke(gm, gm, "PauseGameToggle", null) + " was-paused=" + was;
+            case "mods": return SilksongNativeModsMenu.OpenForCommand(0);
+            case "skins": return SilksongNativeModsMenu.OpenForCommand(1);
+            case "skin":
+                if (a.Length < 2 || (a[1] != "list" && a[1] != "close" &&
+                    (a.Length < 3 || (a[1] != "row" && a[1] != "left" && a[1] != "right"))))
+                    return "error skin <list|row N|left N|right N|close>";
+                return SilksongNativeModsMenu.SkinCommand(a[1], a.Length > 2 ? a[2] : "");
             case "tab":
                 if (a.Length < 2) return "error tab <id>";
                 if (_shell == null) return "error no shell";

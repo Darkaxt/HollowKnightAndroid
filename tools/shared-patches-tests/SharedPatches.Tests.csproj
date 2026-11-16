@@ -26,6 +26,7 @@
     <Content Include="../hollow-knight-patches/src/dualsouls/HkStageHooks.cs" Link="source-contracts/HkStageHooks.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/dualsouls/HKDualScreen.cs" Link="source-contracts/HKDualScreen.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/lower/HkMapScreen.cs" Link="source-contracts/HkMapScreen.cs" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../hollow-knight-patches/src/lower/HkCharmsScreen.cs" Link="source-contracts/HkCharmsScreen.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/mods/HollowKnightNativeModsMenu.cs" Link="native-skin-contracts/HollowKnightNativeModsMenu.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../silksong-patches/src/mods/SilksongNativeModsMenu.cs" Link="native-skin-contracts/SilksongNativeModsMenu.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/mods/HollowKnightModsRuntime.cs" Link="native-skin-contracts/HollowKnightModsRuntime.cs" CopyToOutputDirectory="PreserveNewest" />

@@ -25,6 +25,21 @@ public sealed class NativeSkinsSourceContractTests
     [Theory]
     [InlineData("HollowKnightNativeModsMenu.cs")]
     [InlineData("SilksongNativeModsMenu.cs")]
+    public void ClonedLabelsStaySingleLineAndRoutesHaveQaCommands(string file)
+    {
+        // #23: Silksong's cloned labels kept Wrap at their frozen width, stacking "MOD"/"S"
+        // and overlapping the Skins rows. Both games must also open and drive Skins by command.
+        string source = Source(file);
+
+        Assert.Contains("horizontalOverflow = HorizontalWrapMode.Overflow", source, StringComparison.Ordinal);
+        Assert.Contains("internal static string OpenForCommand(int route)", source, StringComparison.Ordinal);
+        Assert.Contains("internal static string SkinCommand(string verb, string argument)", source, StringComparison.Ordinal);
+        Assert.Contains("UIGoToOptionsMenu()", source, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("HollowKnightNativeModsMenu.cs")]
+    [InlineData("SilksongNativeModsMenu.cs")]
     public void SkinsRouteUsesBoundedProfileCheckedBridgeAndRefreshesAfterEveryMutation(string file)
     {
         string source = Source(file);

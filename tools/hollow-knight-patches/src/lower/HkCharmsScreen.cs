@@ -581,7 +581,9 @@ namespace HollowKnightPatches.Lower
             if (gm.gameState != GlobalEnums.GameState.PLAYING || gm.IsInSceneTransition) return "Unavailable";
             if (gm.inventoryFSM != null && gm.inventoryFSM.ActiveStateName != "Closed") return "Close the inventory";
             if (BossSequenceController.BoundCharms) return "Charms are bound";
-            if (!pd.atBench) return "Rest at a bench";
+            // The equip-anywhere mod only forces atBench while the game's own inventory is
+            // open, which this pane refuses above; honour the mod here directly.
+            if (!pd.atBench && !DualSouls.Mods.HollowKnight.HollowKnightGameplayFeatures.EquipAnywhereActive) return "Rest at a bench";
             if ((n == 23 && pd.brokenCharm_23) || (n == 24 && pd.brokenCharm_24) || (n == 25 && pd.brokenCharm_25))
                 return "Broken";
             if (n == 36 && (pd.royalCharmState == 1 || pd.royalCharmState == 2)) return "Incomplete";
