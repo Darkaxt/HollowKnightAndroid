@@ -238,6 +238,35 @@ public sealed class SkinUnityCallerContractsTests
         Assert.Same(rig.Vanilla, rig.Material.mainTexture);
     }
 
+    [Fact]
+    public void SS_knight_page_binds_only_its_own_page_and_ignores_a_detached_primary_template()
+    {
+        // Thor sprites QA (#34): Hornet draws from "Knight", four distinct 4096 pages, and the primary
+        // `material` is never page zero's material.
+        using var rig = new Rig(true);
+        var pages = new Texture2D[4]; var materials = new Material[4];
+        for (int i = 0; i < 4; i++)
+        {
+            pages[i] = new Texture2D(4096, 4096, TextureFormat.RGBA32, false) { name = "atlas" + i };
+            materials[i] = new Material { mainTexture = pages[i] };
+        }
+        var template = new Material { mainTexture = new Texture2D(4096, 4096, TextureFormat.RGBA32, false) };
+        rig.Collection.spriteCollectionName = "Knight";
+        rig.Collection.material = template;
+        rig.Collection.materials = rig.Collection.materialInsts = materials;
+
+        var result = rig.Apply(rig.Pack("K", "Assets/Collections/Knight Data/atlas1.png", 4096, 4096));
+
+        Assert.Equal(SkinApplyStatus.Applied, result.Status);
+        Assert.NotSame(pages[1], materials[1].mainTexture);
+        Assert.Same(pages[0], materials[0].mainTexture);
+        Assert.Same(pages[2], materials[2].mainTexture);
+        Assert.Same(pages[3], materials[3].mainTexture);
+        Assert.NotSame(materials[1].mainTexture, template.mainTexture);
+        Assert.Equal(SkinApplyStatus.Restored, rig.Restore().Status);
+        Assert.Same(pages[1], materials[1].mainTexture);
+    }
+
     sealed class Rig : IDisposable
     {
         readonly bool ss;
@@ -289,7 +318,8 @@ public sealed class SkinUnityCallerContractsTests
             cameras.hudCanvasSlideOut = cameras.hudCanvas.Add<PlayMakerFSM>();
             cameras.silkSpool = new GameObject("SilkSpool").Add<SilkSpool>();
         }
-        public SkinPack Pack(string name)
+        public SkinPack Pack(string name) => Pack(name, target, width, height);
+        public SkinPack Pack(string name, string target, int width, int height)
         {
             byte[] png = new byte[45];
             new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }.CopyTo(png, 0);

@@ -5,11 +5,11 @@ using Xunit;
 public sealed class SilksongSkinTargetTests
 {
     [Fact]
-    public void Catalog_is_exactly_the_nine_character_and_two_persistent_hud_targets()
+    public void Catalog_is_exactly_the_fourteen_character_and_two_persistent_hud_targets()
     {
         var targets = SilksongSkinTargets.All;
-        Assert.Equal(11, targets.Count);
-        Assert.Equal(9, targets.Count(x => !x.IsHud));
+        Assert.Equal(16, targets.Count);
+        Assert.Equal(14, targets.Count(x => !x.IsHud));
         Assert.Equal(2, targets.Count(x => x.IsHud));
         Assert.Equal(new[] {
             "Assets/Collections/Hornet Cln Data/atlas0.png",
@@ -22,12 +22,22 @@ public sealed class SilksongSkinTargetTests
             "Assets/Collections/Hornet CrestWeapon Whip Cln Data/atlas0.png",
             "Assets/Collections/Hornet_Needolin_Windy Data/atlas0.png",
             "Assets/Collections/HUD Cln Data/atlas0.png",
-            "Assets/Collections/HUD Extras Cln Data/atlas0.png"
+            "Assets/Collections/HUD Extras Cln Data/atlas0.png",
+            "Assets/Collections/Knight Data/atlas0.png",
+            "Assets/Collections/Knight Data/atlas1.png",
+            "Assets/Collections/Knight Data/atlas2.png",
+            "Assets/Collections/Knight Data/atlas3.png",
+            "Assets/Collections/Bone Beast Child Call Cln Data/atlas0.png"
         }, targets.Select(x => x.CanonicalPath));
         Assert.Equal(2, targets.Single(x => x.CollectionName == "Hornet CrestWeapon Scythe").MaterialCount);
         Assert.Equal(2, targets.Single(x => x.CollectionName == "Hornet CrestWeapon Shaman Cln").MaterialCount);
         Assert.Equal(2, targets.Single(x => x.CollectionName == "HUD Cln").MaterialCount);
         Assert.All(targets.Where(x => x.MaterialCount == 2), x => Assert.True(x.RequiresSharedOriginal));
+        // Hornet's moveset: one collection, four distinct pages, one target per page (#34).
+        var knight = targets.Where(x => x.CollectionName == "Knight").ToList();
+        Assert.Equal(new[] { 0, 1, 2, 3 }, knight.Select(x => x.Page));
+        Assert.All(knight, x => { Assert.Equal(4, x.MaterialCount); Assert.False(x.RequiresSharedOriginal); Assert.False(x.IsHud); });
+        Assert.All(targets.Where(x => x.CollectionName != "Knight"), x => Assert.Equal(0, x.Page));
     }
 
     [Fact]
@@ -37,7 +47,7 @@ public sealed class SilksongSkinTargetTests
         var character = SilksongSkinTargets.All.First(x => !x.IsHud).CanonicalPath;
         var hud = SilksongSkinTargets.All.First(x => x.IsHud).CanonicalPath;
         Assert.Equal("silksong", rules.ProfileId);
-        Assert.Equal(11, rules.MappingLimit);
+        Assert.Equal(16, rules.MappingLimit);
         Assert.True(rules.Allows("ALL", character));
         Assert.True(rules.Allows("ALL", hud));
         Assert.True(rules.Allows("CHARACTER_HUD", character));

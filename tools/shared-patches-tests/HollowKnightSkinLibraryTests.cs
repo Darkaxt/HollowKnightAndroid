@@ -60,6 +60,49 @@ public class HollowKnightSkinLibraryTests
         Assert.Equal(new[] { "apply:a", "apply:b", "restore", "restore", "apply:b" }, actions);
     }
 
+    [Fact] public void Rotation_successor_without_live_targets_settles_and_still_applies_later()
+    {
+        // #34: Dark Hornet has nothing to skin in Tut_01; its occurrence must settle so the next death rotates.
+        var rules = new SkinRuntimeRules("silksong", 16, _ => true, (_, __) => true);
+        var request = Request(); request.ProfileId = "silksong"; request.Mode = "ROTATE"; request.PendingOccurrence = 1;
+        bool live = false; int applies = 0; SkinLibraryObservation observed = null;
+        var controller = new SkinLibraryRuntimeController(rules, () => request,
+            _ => { applies++; return live ? new SkinApplyResult(SkinApplyStatus.Applied)
+                : new SkinApplyResult(SkinApplyStatus.AwaitingTargets, "No live targets available for ALL; excluded targets restored."); },
+            () => new SkinApplyResult(SkinApplyStatus.Restored), value => observed = value, null, _ => true);
+
+        controller.Tick();
+        Assert.Equal("Unchanged", observed.Status);
+        Assert.Equal(1, observed.PendingOccurrence);
+        Assert.Equal("a", observed.ActivePackId); // Kotlin requires success to name the resolved pack
+
+        request.PendingOccurrence = 0;
+        controller.Tick();
+        Assert.Equal("AwaitingTargets", observed.Status); // settled run still reports honest state
+        live = true;
+        controller.Tick();
+        Assert.Equal("Applied", observed.Status);
+        Assert.Equal("a", observed.ActivePackId);
+        Assert.Equal(3, applies);
+    }
+
+    [Fact] public void Rotation_successor_waiting_for_respawn_is_not_settled()
+    {
+        var rules = new SkinRuntimeRules("silksong", 16, _ => true, (_, __) => true);
+        var request = Request(); request.ProfileId = "silksong"; request.Mode = "ROTATE"; request.PendingOccurrence = 1;
+        SkinLibraryObservation observed = null;
+        var controller = new SkinLibraryRuntimeController(rules, () => request,
+            _ => new SkinApplyResult(SkinApplyStatus.AwaitingTargets, "Prior skin resources are still retiring; successor allocation is deferred."),
+            () => new SkinApplyResult(SkinApplyStatus.Restored), value => observed = value, null, _ => true);
+        controller.Tick();
+        Assert.Equal("AwaitingTargets", observed.Status);
+        var notReady = new SkinLibraryRuntimeController(rules, () => request,
+            _ => new SkinApplyResult(SkinApplyStatus.Applied),
+            () => new SkinApplyResult(SkinApplyStatus.Restored), value => observed = value, null, _ => false);
+        notReady.Tick();
+        Assert.Equal("AwaitingTargets", observed.Status);
+    }
+
     [Fact] public void Same_pack_scope_change_reapplies_but_mode_change_reuses_cache()
     {
         var request = Request(); var applied = new List<SkinPack>();

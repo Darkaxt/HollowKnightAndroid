@@ -19,7 +19,7 @@ class SkinCatalogMapper(
     private val catalog: CatalogPathSet,
     private val limits: SkinLimits = SkinLimits.V1,
 ) {
-    private val catalogSuffixes = CatalogSuffixAuthority.shortestUnique(catalog.paths)
+    private val catalogSuffixes = CatalogSuffixAuthority.uniqueSuffixes(catalog.paths)
 
     fun map(candidate: SkinCandidate, archive: AuthorizedZip): SkinResult<CatalogMapping> {
         try {

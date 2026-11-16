@@ -189,6 +189,10 @@ namespace DualSouls.Skins.Runtime
     public sealed class SkinRuntimeSession : IDisposable, ISkinTeardownSession
     {
         const long EncodedLimit = 16L * 1024 * 1024;
+        const string NoLiveTargets = "No live targets available for ";
+        /// <summary>True when an apply found none of the pack's targets in the current scene.</summary>
+        public static bool IsNoLiveTargets(SkinApplyResult result) => result != null &&
+            result.Status == SkinApplyStatus.AwaitingTargets && (result.Detail ?? "").StartsWith(NoLiveTargets, StringComparison.Ordinal);
         readonly ISkinTextureDecoder decoder;
         readonly Func<IReadOnlyList<SkinSlot>> discover;
         readonly SkinRuntimeRules rules;
@@ -399,7 +403,7 @@ namespace DualSouls.Skins.Runtime
                 originals = restoring ? new Dictionary<SkinSlot, object>() : activeOriginals;
                 if (undo.Count > 0) unchecked { SkinStamp++; }
                 if (waiting) return new SkinApplyResult(SkinApplyStatus.AwaitingTargets,
-                    "No live targets available for " + requestedScope + "; excluded targets restored.", unsupported,
+                    NoLiveTargets + requestedScope + "; excluded targets restored.", unsupported,
                     previousVisualsRestored: undo.Count > 0 && activeOriginals.Count == 0);
                 return new SkinApplyResult(undo.Count == 0 ? SkinApplyStatus.Unchanged :
                     restoring ? SkinApplyStatus.Restored : SkinApplyStatus.Applied, unsupported: unsupported);

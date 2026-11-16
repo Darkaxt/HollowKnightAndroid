@@ -142,7 +142,9 @@ namespace DualSouls.Skins.Silksong.Runtime
         public SilksongSkinRuntime()
         {
             if (Current != null) throw new InvalidOperationException("Only one Silksong skin runtime may own game visuals.");
-            session = new SkinRuntimeSession(decoder, Discover, 512L * 1024 * 1024,
+            // Accounting charges 8 B/px; atlases are uploaded non-readable, so resident cost is about half.
+            // The Knight collection alone is four 4096 pages, which a 512 MiB budget could never admit (#34).
+            session = new SkinRuntimeSession(decoder, Discover, 1536L * 1024 * 1024,
                 SilksongSkinTargets.RuntimeRules);
             SceneManager.sceneLoaded += SceneChanged;
             SceneManager.sceneUnloaded += SceneUnloaded;
@@ -291,19 +293,21 @@ namespace DualSouls.Skins.Silksong.Runtime
                 : new SilksongMaterialPage(material.mainTexture, material.mainTexture.width, material.mainTexture.height)).ToList();
             failure = SilksongCollectionAdmission.Validate(target, collection.spriteCollectionName, pages);
             if (failure != null) return false;
-            if (collection.material == null || !ReferenceEquals(collection.material, materials[0]))
-            {
-                failure = "primary material does not match material page zero";
-                return false;
-            }
             if (collection.materialInsts == null || collection.materialInsts.Length != target.MaterialCount)
             {
                 failure = "material instance count does not match material/page count";
                 return false;
             }
-            var all = materials.Concat(collection.materialInsts).Concat(new[] { collection.material }).Distinct().ToList();
-            var original = pages[0].OriginalTexture;
-            if (all.Any(material => material == null || !ReferenceEquals(material.mainTexture, original)))
+            // Bind exactly the materials that draw this page's original texture. On Thor the primary `material`
+            // was never page zero's material for any live collection (sprites QA, #34), so a fixed
+            // "primary is page zero" rule refused every target; bind it only when it really draws this page.
+            var original = pages[target.Page].OriginalTexture;
+            var all = materials.Concat(collection.materialInsts).Concat(new[] { collection.material })
+                .Where(material => material != null && ReferenceEquals(material.mainTexture, original)).Distinct().ToList();
+            // Renderers draw materialInsts: binding a page whose instance diverged would report Applied while
+            // nothing visible changes.
+            var instances = target.RequiresSharedOriginal ? collection.materialInsts : new[] { collection.materialInsts[target.Page] };
+            if (instances.Any(material => material == null || !ReferenceEquals(material.mainTexture, original)))
             {
                 failure = "material and materialInsts do not share the admitted original texture";
                 return false;
@@ -450,7 +454,7 @@ namespace DualSouls.Skins.Silksong.Runtime
                 var texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
                     { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear, name = "SSSKIN_atlas" };
                 bool decoded;
-                try { decoded = ImageConversion.LoadImage(texture, bytes, false); }
+                try { decoded = ImageConversion.LoadImage(texture, bytes, true); }
                 catch (Exception) { decoded = false; }
                 return new SkinTexture(texture, texture.width, texture.height, () => {
                     if (texture != null) UObject.Destroy(texture);

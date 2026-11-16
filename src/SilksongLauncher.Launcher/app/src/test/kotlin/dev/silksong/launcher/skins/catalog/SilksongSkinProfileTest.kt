@@ -38,6 +38,11 @@ class SilksongSkinProfileTest {
         "Assets/Collections/Hornet_Needolin_Windy Data/atlas0.png",
         "Assets/Collections/HUD Cln Data/atlas0.png",
         "Assets/Collections/HUD Extras Cln Data/atlas0.png",
+        "Assets/Collections/Knight Data/atlas0.png",
+        "Assets/Collections/Knight Data/atlas1.png",
+        "Assets/Collections/Knight Data/atlas2.png",
+        "Assets/Collections/Knight Data/atlas3.png",
+        "Assets/Collections/Bone Beast Child Call Cln Data/atlas0.png",
     )
     private val expectedDimensions = mapOf(
         expected[0] to SkinTextureDimensions(2048, 2048),
@@ -51,6 +56,11 @@ class SilksongSkinProfileTest {
         expected[8] to SkinTextureDimensions(1024, 2048),
         expected[9] to SkinTextureDimensions(4096, 4096),
         expected[10] to SkinTextureDimensions(512, 1024),
+        expected[11] to SkinTextureDimensions(4096, 4096),
+        expected[12] to SkinTextureDimensions(4096, 4096),
+        expected[13] to SkinTextureDimensions(4096, 4096),
+        expected[14] to SkinTextureDimensions(4096, 4096),
+        expected[15] to SkinTextureDimensions(1024, 2048),
     )
 
     @Test
@@ -62,7 +72,7 @@ class SilksongSkinProfileTest {
         assertEquals(205, hk.pathCount)
         assertEquals("silksong", ss.profileId)
         assertEquals("1.0.29980", ss.gameVersion)
-        assertEquals(11, ss.pathCount)
+        assertEquals(16, ss.pathCount)
         assertEquals(expected, ss.paths)
         assertEquals(expectedDimensions, ss.textureDimensions)
         assertTrue(hk.textureDimensions.isEmpty())
@@ -152,7 +162,7 @@ class SilksongSkinProfileTest {
 
         assertEquals(setOf(expected[0]), textures.keys)
         assertFalse(textures.keys.any { it.endsWith("Knight.png") && !it.contains("Hornet") })
-        assertEquals(10, expected.count { it !in textures })
+        assertEquals(15, expected.count { it !in textures })
     }
 
     @Test

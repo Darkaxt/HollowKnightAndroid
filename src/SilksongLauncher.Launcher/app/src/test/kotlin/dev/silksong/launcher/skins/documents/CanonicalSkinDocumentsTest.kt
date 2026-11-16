@@ -108,7 +108,7 @@ class CanonicalSkinDocumentsTest {
     }
 
     @Test
-    fun `receipt accepts only exact shortest unique catalog suffix aliases`() {
+    fun `receipt accepts only exact unique catalog suffix aliases`() {
         val valid = receipt().copy(
             aliases = listOf(
                 SkinAlias(raw("Pack/charm_1.png"), "Charms/Charm_1.png", "CATALOG_SUFFIX"),
@@ -116,10 +116,13 @@ class CanonicalSkinDocumentsTest {
         )
         val bytes = CanonicalJson.importReceipt(valid, catalog)
         assertEquals("CATALOG_SUFFIX", CanonicalJson.parseImportReceipt(bytes, catalog).aliases.single().rule)
+        // Longer unique suffixes are accepted too: Silksong packs ship Knight/atlasN.png folders.
+        val longer = valid.copy(aliases = listOf(SkinAlias(raw("Pack/Charms/charm_1.png"), "Charms/Charm_1.png", "CATALOG_SUFFIX")))
+        assertEquals(1, CanonicalJson.parseImportReceipt(CanonicalJson.importReceipt(longer, catalog), catalog).aliases.size)
 
         listOf(
             valid.copy(aliases = listOf(SkinAlias(raw("Pack/charm_1.png"), "Knight.png", "CATALOG_SUFFIX"))),
-            valid.copy(aliases = listOf(SkinAlias(raw("Pack/Charms/charm_1.png"), "Charms/Charm_1.png", "CATALOG_SUFFIX"))),
+            valid.copy(aliases = listOf(SkinAlias(raw("Pack/Other/charm_1.png"), "Charms/Charm_1.png", "CATALOG_SUFFIX"))),
         ).forEach { invalid ->
             assertThrows(IllegalArgumentException::class.java) {
                 CanonicalJson.importReceipt(invalid, catalog)

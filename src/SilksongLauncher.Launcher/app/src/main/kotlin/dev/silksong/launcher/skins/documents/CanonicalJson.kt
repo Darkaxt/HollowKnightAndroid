@@ -277,6 +277,9 @@ object CanonicalJson {
         )
     }
 
+    private fun compatibleCatalogIds(profileId: String): Set<String> =
+        if (profileId == "silksong") dev.silksong.launcher.skins.catalog.SilksongCatalogPaths.COMPATIBLE_CATALOG_IDS else emptySet()
+
     private fun validateManifest(document: SkinManifestDocument, catalog: CatalogPathSet? = null) {
         val authority = (catalog ?: CatalogPathSet.requirePinned()).revalidate()
         require(document.schemaVersion == 1)
@@ -288,7 +291,7 @@ object CanonicalJson {
         require(document.games.keys == setOf(profile.profileId))
         val game = document.games.getValue(profile.profileId)
         require(game.gameVersion == profile.gameVersion)
-        require(game.catalogId == profile.catalogId)
+        require(game.catalogId == profile.catalogId || game.catalogId in compatibleCatalogIds(profile.profileId))
         require(game.assetRoot == "assets")
         require(game.textures.isNotEmpty() && game.textures.size <= profile.pathCount)
         game.textures.forEach { (target, source) ->
@@ -344,7 +347,7 @@ object CanonicalJson {
         val aliasTargets = HashSet<String>()
         val candidatePrefix = document.candidateRawPathHex.hexBytes()
         val catalogSuffixes = if (document.aliases.any { it.rule == "CATALOG_SUFFIX" })
-            CatalogSuffixAuthority.shortestUnique(authority.paths) else emptyMap()
+            CatalogSuffixAuthority.uniqueSuffixes(authority.paths) else emptyMap()
         document.aliases.forEach {
             require(HEX.matches(it.sourceRawPathHex) && it.sourceRawPathHex.isNotEmpty())
             require(it.target in authority.pathSet && it.rule in ALIAS_RULES)

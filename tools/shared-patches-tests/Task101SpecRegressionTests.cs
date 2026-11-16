@@ -48,7 +48,7 @@ public sealed class Task101SpecRegressionTests
         Assert.Contains(plan.Omissions, x => x == invalid.CanonicalPath + " (wrong dimensions)");
         foreach (var missing in SilksongSkinTargets.All.Skip(2))
             Assert.Contains(plan.Omissions, x => x == missing.CanonicalPath + " (pack texture missing)");
-        Assert.Equal(10, plan.Omissions.Count);
+        Assert.Equal(15, plan.Omissions.Count);
     }
 
     [Fact]

@@ -56,6 +56,11 @@ object SkinCatalogProfiles {
         "Assets/Collections/Hornet_Needolin_Windy Data/atlas0.png",
         "Assets/Collections/HUD Cln Data/atlas0.png",
         "Assets/Collections/HUD Extras Cln Data/atlas0.png",
+        "Assets/Collections/Knight Data/atlas0.png",
+        "Assets/Collections/Knight Data/atlas1.png",
+        "Assets/Collections/Knight Data/atlas2.png",
+        "Assets/Collections/Knight Data/atlas3.png",
+        "Assets/Collections/Bone Beast Child Call Cln Data/atlas0.png",
     )
 
     private val silksongDimensions = listOf(
@@ -70,6 +75,11 @@ object SkinCatalogProfiles {
         1024 to 2048,
         4096 to 4096,
         512 to 1024,
+        4096 to 4096,
+        4096 to 4096,
+        4096 to 4096,
+        4096 to 4096,
+        1024 to 2048,
     ).mapIndexed { index, (width, height) ->
         silksongPaths[index] to SkinTextureDimensions(width, height)
     }.toMap()
@@ -93,7 +103,7 @@ object SkinCatalogProfiles {
         SilksongCatalogPaths.SHA256,
         silksongPaths,
         silksongDimensions,
-        expectedPathCount = 11,
+        expectedPathCount = 16,
         legacyMigrationAllowed = false,
     )
 
@@ -112,6 +122,8 @@ object SkinCatalogProfiles {
 
 object SilksongCatalogPaths {
     const val ASSET_NAME = "silksong-skin-catalog-v1.txt"
-    const val CATALOG_ID = "silksong-1.0.29980-character-hud-11"
-    const val SHA256 = "363ff1affbe9b95214667b4ebdc0d903aa8cc098aa3e956183519c9e88f4136e"
+    const val CATALOG_ID = "silksong-1.0.29980-character-hud-16"
+    /** Earlier catalogs whose paths are a strict prefix of this one; their packs stay valid (#34). */
+    val COMPATIBLE_CATALOG_IDS = setOf("silksong-1.0.29980-character-hud-11")
+    const val SHA256 = "58de03fbd85d238437f1bde03b4045269b789190934d53555077ea82b74b76a1"
 }

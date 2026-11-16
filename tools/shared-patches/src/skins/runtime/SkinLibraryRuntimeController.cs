@@ -75,10 +75,21 @@ namespace DualSouls.Skins.Runtime
                 else result = ApplyRequested(request);
                 if (result.Status == SkinApplyStatus.RestoreFailed || result.Status == SkinApplyStatus.Blocked) restoreRequired = true;
                 if (request.Mode == "OFF" && restored) restoreRequired = false;
+                var status = result.Status.ToString();
                 var detail = result.Detail;
+                // A rotation successor whose pack has nothing to skin in this scene settles as Unchanged, so the
+                // next death is not stuck behind it; awaitingApply stays set and the pack applies once its
+                // collections load (#34).
+                if (request.Mode == "ROTATE" && request.PendingOccurrence > 0 && awaitingApply &&
+                    result.Status == SkinApplyStatus.AwaitingTargets && SkinRuntimeSession.IsNoLiveTargets(result))
+                {
+                    // The selected pack is the active one; it simply has nothing to draw yet.
+                    activeId = request.PackId; activeTree = request.TreeSha256; activeScope = request.SpriteScope;
+                    status = SkinApplyStatus.Unchanged.ToString();
+                }
                 if (request.Mode == "ROTATE" && request.PendingOccurrence == 0 && !string.IsNullOrEmpty(request.RotationDetail))
                     detail = (detail ?? "") + " " + request.RotationDetail;
-                Publish(request, result.Status.ToString(), detail);
+                Publish(request, status, detail);
             }
             catch (Exception error)
             {

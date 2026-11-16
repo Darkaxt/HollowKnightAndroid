@@ -1,7 +1,7 @@
 package dev.silksong.launcher.skins.catalog
 
 internal object CatalogSuffixAuthority {
-    fun shortestUnique(paths: List<String>): Map<String, String> {
+    fun uniqueSuffixes(paths: List<String>): Map<String, String> {
         val normalized = paths.associateWith(::components)
         val suffixes = linkedMapOf<String, String>()
         paths.forEach { target ->
@@ -10,7 +10,6 @@ internal object CatalogSuffixAuthority {
                 val suffix = targetComponents.takeLast(length)
                 if (normalized.values.count { it.endsWith(suffix) } == 1) {
                     suffixes[suffix.joinToString("/")] = target
-                    break
                 }
             }
         }

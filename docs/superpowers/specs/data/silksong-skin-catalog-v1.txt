@@ -9,3 +9,8 @@ Assets/Collections/Hornet CrestWeapon Whip Cln Data/atlas0.png
 Assets/Collections/Hornet_Needolin_Windy Data/atlas0.png
 Assets/Collections/HUD Cln Data/atlas0.png
 Assets/Collections/HUD Extras Cln Data/atlas0.png
+Assets/Collections/Knight Data/atlas0.png
+Assets/Collections/Knight Data/atlas1.png
+Assets/Collections/Knight Data/atlas2.png
+Assets/Collections/Knight Data/atlas3.png
+Assets/Collections/Bone Beast Child Call Cln Data/atlas0.png
