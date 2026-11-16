@@ -12,10 +12,9 @@ public sealed class SilksongTweakAdapterTests
     public void CatalogStartsWithExactRequiredContractAndSilksongNamesThenAppendsExtras()
     {
         var rows = new SilksongTweakAdapter(new RecordingApi()).Descriptors;
-        TweakDescriptor[] required = rows.Take(26).ToArray();
+        TweakDescriptor[] required = rows.Take(25).ToArray();
         string[] contractIds =
         {
-            "black_background",
             "run_speed", "fast_transitions", "auto_map", "innate_compass", "bench_teleport", "secret_radar",
             "nail_damage", "damage_taken", "damage_cap", "one_hit_kills", "unlimited_soul",
             "enemy_health_bars", "damage_numbers", "boss_retry",
@@ -27,13 +26,13 @@ public sealed class SilksongTweakAdapterTests
         Assert.Equal(contractIds, required.Select(row => row.ContractId));
         Assert.Equal("NEEDLE DAMAGE", required.Single(row => row.ContractId == "nail_damage").Title);
         Assert.Equal("UNLIMITED SILK", required.Single(row => row.ContractId == "unlimited_soul").Title);
-        Assert.All(required.Skip(15).Take(3), row => Assert.Equal("CRESTS & TOOLS", row.Group));
+        Assert.All(required.Skip(14).Take(3), row => Assert.Equal("CRESTS & TOOLS", row.Group));
         Assert.Equal("ROSARY MAGNET", required.Single(row => row.ContractId == "geo_magnet").Title);
         Assert.Equal("KEEP ROSARIES ON DEATH", required.Single(row => row.ContractId == "keep_geo_on_death").Title);
         Assert.Equal("ROSARY MULTIPLIER", required.Single(row => row.ContractId == "geo_multiplier").Title);
         Assert.Equal("damage_received", required.Single(row => row.ContractId == "damage_taken").Id);
         Assert.Equal("unlimited_silk", required.Single(row => row.ContractId == "unlimited_soul").Id);
-        Assert.Equal(new[] { "instant_dialogue", "disable_world_rumble", "ignore_frost_slowdown" }, rows.Skip(26).Select(row => row.Id));
+        Assert.Equal(new[] { "instant_dialogue", "disable_world_rumble", "ignore_frost_slowdown" }, rows.Skip(25).Select(row => row.Id));
         Assert.All(required, row => Assert.True(row.IsAvailable, row.Id + " must be available"));
         Assert.DoesNotContain(rows, row => row.Id == "skins");
         Assert.DoesNotContain(rows, row => row.Id == "state_slots");
@@ -45,7 +44,7 @@ public sealed class SilksongTweakAdapterTests
         var api = new RecordingApi();
         var adapter = new SilksongTweakAdapter(api);
 
-        foreach (TweakDescriptor row in adapter.Descriptors.Take(26))
+        foreach (TweakDescriptor row in adapter.Descriptors.Take(25))
         {
             var result = adapter.Apply(row.Id, row.DefaultValue);
             Assert.True(result.Success, row.Id + ": " + result.Error);
@@ -57,7 +56,6 @@ public sealed class SilksongTweakAdapterTests
     {
         var expected = new Dictionary<string, Dictionary<string, string>>
         {
-            ["black_background"] = OffOn("backdrop"),
             ["run_speed"] = Map(("vanilla", "run:restore"), ("plus_25", "run:1.25"), ("plus_50", "run:1.5")),
             ["fast_transitions"] = OffOn("fast-transitions"),
             ["auto_map"] = OffOn("auto-map"),
@@ -416,7 +414,6 @@ public sealed class SilksongTweakAdapterTests
         }
 
         public void OpenSkins() => Mutate("skins:open");
-        public void SetCompanionBackdropBlack(bool black) => Mutate($"backdrop:{black}");
         public void SetRunSpeedMultiplier(float multiplier) => Mutate($"run:{multiplier}");
         public void RestoreRunSpeed() => Mutate("run:restore");
         public void SetFastTransitions(bool enabled) => Mutate($"fast-transitions:{enabled}");
@@ -546,7 +543,6 @@ public sealed class SilksongTweakAdapterTests
 
         static Dictionary<string, string> DefaultValues() => new()
         {
-            ["black_background"] = "off",
             ["run_speed"] = "vanilla",
             ["fast_transitions"] = "off",
             ["auto_map"] = "off",
@@ -577,8 +573,7 @@ public sealed class SilksongTweakAdapterTests
         {
             string BoolValue(string prefix) =>
                 call == prefix + ":True" ? "on" : "off";
-            if (call.StartsWith("backdrop:", StringComparison.Ordinal)) _actual["black_background"] = BoolValue("backdrop");
-            else if (call.StartsWith("run:", StringComparison.Ordinal)) _actual["run_speed"] = call == "run:1.25" ? "plus_25" : call == "run:1.5" ? "plus_50" : "vanilla";
+            if (call.StartsWith("run:", StringComparison.Ordinal)) _actual["run_speed"] = call == "run:1.25" ? "plus_25" : call == "run:1.5" ? "plus_50" : "vanilla";
             else if (call.StartsWith("fast-transitions:", StringComparison.Ordinal)) _actual["fast_transitions"] = BoolValue("fast-transitions");
             else if (call.StartsWith("auto-map:", StringComparison.Ordinal)) _actual["auto_map"] = BoolValue("auto-map");
             else if (call.StartsWith("compass:", StringComparison.Ordinal)) _actual["innate_compass"] = BoolValue("compass");

@@ -298,8 +298,8 @@ public class DsActionBar
     static float Measure(Row row, string text)
     {
         var label = row.Label;
-        if (row.Measured && row.MeasuredText == text && row.Font == label.font &&
-            row.Material == label.fontSharedMaterial && row.Size == label.fontSize &&
+        if (row.Measured && row.MeasuredText == text && ReferenceEquals(row.Font, label.font) &&
+            ReferenceEquals(row.Material, label.fontSharedMaterial) && row.Size == label.fontSize &&
             row.MinSize == label.fontSizeMin && row.MaxSize == label.fontSizeMax &&
             row.Style == label.fontStyle && row.CharacterSpace == label.characterSpacing &&
             row.LineSpace == label.lineSpacing &&

@@ -228,8 +228,9 @@ class SkinLibraryStore(val paths: SkinPaths, internal val fs: SkinFileSystem = A
             checkEditable(value, replacing.id)
             require(value.packs.singleOrNull { it.id == replacing.id } == replacing) { "Replacement target changed; refresh and confirm again" }
             require(pack.id == replacing.id) { "Replacement ID differs" }
+            // Same pack ID: saves that chose this pack keep it, re-bound to the new content tree.
             value.copy(packs = value.packs.map { if (it.id == replacing.id) pack else it },
-                saveAffinities = value.saveAffinities.filterNot { it.packId == replacing.id })
+                saveAffinities = value.saveAffinities.map { if (it.packId == replacing.id) it.copy(treeSha256 = pack.treeSha256) else it })
         }
     }
     internal fun checkEditable(value: SkinLibraryDocument, id: String) {

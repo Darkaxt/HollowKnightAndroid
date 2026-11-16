@@ -37,42 +37,25 @@ receipts record only what they directly prove.
 Visual acceptance requires device comparison of both games in ordinary
 gameplay. Source similarity and synthetic host tests do not substitute for it.
 
-### Hollow Knight lower-screen ledger (2026-11 reset)
+### Hollow Knight lower screen (2026-11 reset)
 
 The pre-reset world-space HK lower screen (companion pane clones, native layout
-engine, HK-V2-01..07) was retired by reset step 4 (#19) and replaced by the
-shared frame above. Its parity claims no longer describe shipped code.
+engine) was retired by reset step 4 (#19) and replaced by the shared frame above.
 
-- **HK-LOWER-01 — implemented, device-unverified (#19, #23):** five HK pages on
-  DsShell via `HKDualScreen.Shell`; HUD framed into the header band; pause and
-  title-logo behaviour as above.
-- **HK-LOWER-02 — device checklist (#23):** map copy render texture, camera
-  depth and fit; marker placement and compass tint; tk2d sprite residency for
-  cursor, tab and page art outside the native menu; FSM execution-stack growth
-  on the map copy; HUD band size versus the action column; charm/inventory text
-  keys and journal frame art.
-- **HK-LOWER-03 — missing (#16):** scenery backdrop behind the lower screen when
-  General → Black background is off (`DsFrame.BlackBackground` exists; no
-  backdrop is drawn yet).
-- **HK-V2-06 — retained:** the duplicate upper health-HUD option remains
-  Silksong-only.
-- **HK-MODS-01 — reopened under the reset plan:** the shared controller/model
-  tests cover grouped rows, unavailable explanations, Choice mutation,
-  reset/Back and controller routing. The source-grep catalog suite was retired
-  with the 2026-11 reset. Known gaps: the menu is reachable only while paused, and
-  readback reflects the menu's own state rather than live game values (cheat
-  fixes, reset step 5). Closure requires the per-candidate device checklist in
-  both games.
+- Five HK pages on DsShell via `HKDualScreen.Shell`, the HUD framed into the
+  header band, and the pause/title-logo behaviour above: verified on device on
+  signed 2.0.22 (#19, #23).
+- The lower screen is always the opaque black ground. The old scenery-wash
+  backdrop and its Black background Mods row were removed (#16): the wash
+  needed a second scene camera every frame, and nothing drew it after the reset.
+- Mods are reachable from the title-screen and pause Options in both games, with
+  readback from live game state (#5, #20).
 
 ## Built-in Mods
 
 The complete reference catalog is required. The names below describe required
 user-visible behavior; they are not a claim that the current build implements
 all rows.
-
-### General
-
-- Black background
 
 ### World
 

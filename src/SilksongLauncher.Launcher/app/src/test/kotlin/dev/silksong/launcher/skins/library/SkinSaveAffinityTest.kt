@@ -202,6 +202,29 @@ class SkinSaveAffinityTest {
         }
     }
 
+    @Test fun `replacing a pack keeps saves that chose it, re-bound to the new content`() {
+        // The store code is profile-neutral; HK accepts a differently sized Knight.png, which gives new content.
+        run {
+            val store = store("hollow-knight"); val a = import(store, "A"); val b = import(store, "B")
+            store.bindSave(1).required(); store.enable(a.id).required(); confirm(store, 1, a)
+            store.bindSave(2).required(); store.enable(b.id).required(); confirm(store, 2, b)
+            val bytes = RawZipFixture.build(listOf(RawZipFixture.Entry("A2/Knight.png".toByteArray(), TinyPngFixture.rgba(2, 1)))).bytes
+            val importer = SkinLibraryImporter(store, PngDecoder { _, info -> SkinResult.Ok(DecodeResult(info.width, info.height, info.width.toLong()*info.height)) })
+            val prepared = importer.prepare(SkinImportInput.SelectedFile("A2.zip") { bytes.inputStream() }).required()
+            importer.commitReplace(dev.silksong.launcher.skins.ui.SkinReplaceRequest(prepared.handleId,
+                prepared.candidates.single().candidateKey!!,
+                dev.silksong.launcher.skins.ui.SkinReplaceTarget(a.id, "0".repeat(64), a.treeSha256, a.receiptSha256))).required()
+            val replaced = store.read().required().packs.single { it.id == a.id }
+            assertNotEquals(a.treeSha256, replaced.treeSha256)
+            assertEquals(listOf(SaveSkinAffinity(1, a.id, replaced.treeSha256), SaveSkinAffinity(2, b.id, b.treeSha256)),
+                store.read().required().saveAffinities)
+            val reopened = SkinLibraryStore(store.paths, store.fs, store.catalog)
+            reopened.startRuntime().required()
+            val slot1 = reopened.bindSave(1).required()
+            assertEquals(LibraryMode.ON, slot1.mode); assertEquals(a.id, slot1.selectedPackId)
+        }
+    }
+
     @Test fun `normal death successor commits once to bound save and slot change cancels frozen work`() {
         val store = store("hollow-knight"); val a = import(store, "A"); val b = import(store, "B")
         store.bindSave(1).required(); store.enable(a.id).required(); confirm(store, 1, a)

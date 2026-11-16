@@ -59,7 +59,6 @@ public partial class HKDualScreen
         if (attrCam != null) attrCam.enabled = active;
         if (hudCam2 != null) hudCam2.enabled = active;
         if (promptCam != null) promptCam.enabled = active;
-        if (!active && bgCaptureCam != null) bgCaptureCam.enabled = false;
     }
 
     void RestoreReferenceRouting()
@@ -145,14 +144,6 @@ public partial class HKDualScreen
         directDisplayFinalTeardownPending = false;
 
         var failures = new List<Exception>();
-        TryDirectStep(() =>
-        {
-            if (bgDimmer != null) Destroy(bgDimmer);
-            bgDimmer = null;
-            bgCaptureCam = null;
-            bgSetup = false;
-        }, failures);
-
         var completedTransport = transport;
         if (completedTransport != null)
             TryDirectStep(

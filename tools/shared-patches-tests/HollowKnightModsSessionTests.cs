@@ -16,7 +16,7 @@ public sealed class HollowKnightModsSessionTests
         var api = new RecordingApi { IsReady = false };
         var store = new RecordingStore
         {
-            [Prefix + "value.companion_backdrop"] = "black",
+            [Prefix + "value.auto_map"] = "on",
         };
         using var session = new HollowKnightModsSession(api, store, visibleRows: 5);
 
@@ -37,7 +37,7 @@ public sealed class HollowKnightModsSessionTests
         var api = new RecordingApi();
         var store = new RecordingStore
         {
-            [Prefix + "value.companion_backdrop"] = "black",
+            [Prefix + "value.auto_map"] = "on",
             [Prefix + "value.lifeblood_flash"] = "vanilla",
         };
         using var session = new HollowKnightModsSession(api, store, visibleRows: 5);
@@ -49,18 +49,18 @@ public sealed class HollowKnightModsSessionTests
         Assert.True(session.IsReady);
         Assert.Equal(string.Empty, session.LastError);
         Assert.True(session.Controller.MutationsAvailable);
-        Assert.Equal("black", session.Controller.Value("companion_backdrop"));
+        Assert.Equal("on", session.Controller.Value("auto_map"));
         Assert.Equal("vanilla", session.Controller.Value("lifeblood_flash"));
-        Assert.Equal(new[] { "capture", "backdrop:True" }, api.Calls);
+        Assert.Equal(new[] { "capture", "auto-map:True" }, api.Calls);
     }
 
     [Fact]
     public void InitializationApplyFailureRetainsExactPipelineForResetRecovery()
     {
-        var api = new RecordingApi { BackdropFailuresRemaining = 1 };
+        var api = new RecordingApi { AutoMapFailuresRemaining = 1 };
         var store = new RecordingStore
         {
-            [Prefix + "value.companion_backdrop"] = "black",
+            [Prefix + "value.auto_map"] = "on",
         };
         using var session = new HollowKnightModsSession(api, store, visibleRows: 5);
 
@@ -73,8 +73,8 @@ public sealed class HollowKnightModsSessionTests
         Assert.False(session.Controller.MutationsAvailable);
         Assert.Equal(1, api.CaptureCount);
         Assert.Equal(1, api.RestoreCount);
-        Assert.Equal("black", store[Prefix + "value.companion_backdrop"]);
-        Assert.Contains("backdrop failed", initializationError);
+        Assert.Equal("on", store[Prefix + "value.auto_map"]);
+        Assert.Contains("auto-map failed", initializationError);
 
         for (int i = 0; i < 120; i++) session.Tick();
 
@@ -86,9 +86,9 @@ public sealed class HollowKnightModsSessionTests
 
         Assert.True(reset.Success);
         Assert.True(session.Controller.MutationsAvailable);
-        Assert.Equal("dimmed", session.Controller.Value("companion_backdrop"));
-        Assert.Equal("dimmed", store[Prefix + "value.companion_backdrop"]);
-        Assert.Equal(new[] { "capture", "backdrop:True", "restore", "restore" }, api.Calls);
+        Assert.Equal("off", session.Controller.Value("auto_map"));
+        Assert.Equal("off", store[Prefix + "value.auto_map"]);
+        Assert.Equal(new[] { "capture", "auto-map:True", "restore", "restore" }, api.Calls);
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public sealed class HollowKnightModsSessionTests
         var api = new RecordingApi();
         var store = new RecordingStore
         {
-            [Prefix + "value.companion_backdrop"] = "black",
+            [Prefix + "value.auto_map"] = "on",
         };
         using var session = new HollowKnightModsSession(api, store, visibleRows: 5);
         session.Tick();
@@ -142,8 +142,8 @@ public sealed class HollowKnightModsSessionTests
         Assert.True(session.IsReady);
         Assert.True(session.Controller.MutationsAvailable);
         Assert.True(session.Menu.IsOpen);
-        Assert.Equal("black", session.Controller.Value("companion_backdrop"));
-        Assert.Equal(new[] { "capture", "backdrop:True" }, api.Calls);
+        Assert.Equal("on", session.Controller.Value("auto_map"));
+        Assert.Equal(new[] { "capture", "auto-map:True" }, api.Calls);
         Assert.Equal(writesAfterInitialization, store.WriteCount);
         Assert.Equal(flushesAfterInitialization, store.FlushCount);
     }
@@ -154,7 +154,7 @@ public sealed class HollowKnightModsSessionTests
         var api = new RecordingApi();
         var store = new RecordingStore
         {
-            [Prefix + "value.companion_backdrop"] = "black",
+            [Prefix + "value.auto_map"] = "on",
         };
         var session = new HollowKnightModsSession(api, store, visibleRows: 5);
         session.Tick();
@@ -166,11 +166,11 @@ public sealed class HollowKnightModsSessionTests
         session.SetPresenterAttached(false);
         session.Tick();
 
-        Assert.Equal(new[] { "capture", "backdrop:True", "restore" }, api.Calls);
+        Assert.Equal(new[] { "capture", "auto-map:True", "restore" }, api.Calls);
         Assert.Equal(writesAfterInitialization, store.WriteCount);
         Assert.Equal(flushesAfterInitialization, store.FlushCount);
-        Assert.Equal("black", store[Prefix + "value.companion_backdrop"]);
-        Assert.Equal("black", session.Controller.Value("companion_backdrop"));
+        Assert.Equal("on", store[Prefix + "value.auto_map"]);
+        Assert.Equal("on", session.Controller.Value("auto_map"));
     }
 
     [Fact]
@@ -209,7 +209,7 @@ public sealed class HollowKnightModsSessionTests
         var api = new RecordingApi();
         var store = new RecordingStore
         {
-            [Prefix + "value.companion_backdrop"] = "black",
+            [Prefix + "value.auto_map"] = "on",
         };
         var session = new HollowKnightModsSession(api, store, visibleRows: 5);
         session.Tick();
@@ -264,13 +264,13 @@ public sealed class HollowKnightModsSessionTests
         public bool IsReady { get; set; } = true;
         // Session tests model complete native hook admission, not weaver availability.
         public bool IsHookAvailable(string id) => true;
-        public int BackdropFailuresRemaining { get; set; }
+        public int AutoMapFailuresRemaining { get; set; }
         public int RestoreFailuresRemaining { get; set; }
         public bool AlwaysFailCapture { get; set; }
         public int CaptureCount { get; private set; }
         public int RestoreCount { get; private set; }
         public List<string> Calls { get; } = new();
-        bool _backdropBlack;
+        bool _autoMap;
 
         public void CaptureBaseline()
         {
@@ -284,7 +284,7 @@ public sealed class HollowKnightModsSessionTests
         {
             RestoreCount++;
             Calls.Add("restore");
-            _backdropBlack = false;
+            _autoMap = false;
             if (RestoreFailuresRemaining > 0)
             {
                 RestoreFailuresRemaining--;
@@ -292,14 +292,14 @@ public sealed class HollowKnightModsSessionTests
             }
         }
 
-        public void SetCompanionBackdropBlack(bool black)
+        public void SetAutoMap(bool enabled)
         {
-            Calls.Add($"backdrop:{black}");
-            _backdropBlack = black;
-            if (BackdropFailuresRemaining > 0)
+            Calls.Add($"auto-map:{enabled}");
+            _autoMap = enabled;
+            if (AutoMapFailuresRemaining > 0)
             {
-                BackdropFailuresRemaining--;
-                throw new InvalidOperationException("backdrop failed");
+                AutoMapFailuresRemaining--;
+                throw new InvalidOperationException("auto-map failed");
             }
         }
 
@@ -329,7 +329,6 @@ public sealed class HollowKnightModsSessionTests
 
         public void OpenSkins() => Calls.Add("skins:open");
         public void SetFastTransitions(bool enabled) => Calls.Add($"fast-transitions:{enabled}");
-        public void SetAutoMap(bool enabled) => Calls.Add($"auto-map:{enabled}");
         public void SetInnateCompass(bool enabled) => Calls.Add($"compass:{enabled}");
         public void OpenBenchTeleport(long operationToken) => Calls.Add("bench-teleport:open");
         public void SetSecretRadar(bool enabled) => Calls.Add($"secret-radar:{enabled}");
@@ -351,9 +350,9 @@ public sealed class HollowKnightModsSessionTests
 
         public TweakActionResult Readback(string id)
         {
-            if (id == "companion_backdrop")
+            if (id == "auto_map")
                 return TweakActionResult.Ok(TweakReadback.Choice(
-                    _backdropBlack ? "black" : "dimmed"));
+                    _autoMap ? "on" : "off"));
             TweakDescriptor row = new HollowKnightTweakAdapter(this).Descriptors
                 .Single(descriptor => descriptor.Id == id);
             return TweakActionResult.Ok(TweakReadback.Choice(row.DefaultValue));

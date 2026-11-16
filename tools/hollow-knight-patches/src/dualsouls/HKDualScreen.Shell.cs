@@ -25,11 +25,10 @@ public partial class HKDualScreen
     bool shellInGame;
     float shellNextInGameCheck;
     bool shellShown;
-    long shellTouchGeneration;
+    readonly HkShellTouchTracker shellTouch = new HkShellTouchTracker();
+    readonly List<HkShellTouchTracker.Contact> shellContacts = new List<HkShellTouchTracker.Contact>(8);
+    readonly List<HkShellTouchTracker.Sample> shellSamples = new List<HkShellTouchTracker.Sample>(8);
     readonly List<DsTouch.Point> shellPoints = new List<DsTouch.Point>(8);
-    readonly List<int> shellHeldIds = new List<int>(4);
-    readonly List<int> shellSeenIds = new List<int>(4);
-    readonly List<Vector2> shellHeldPositions = new List<Vector2>(4);
 
     // Header-band destination for the live HUD, in BOTTOM_W/BOTTOM_H pixels (top-left).
     Rect shellHudDestination;
@@ -57,17 +56,15 @@ public partial class HKDualScreen
         bool inGame = ShellInGame(gm);
         if (inGame) { shellIdleSince = -1f; shellEverInGame = true; }
         else if (shellIdleSince < 0f) shellIdleSince = Time.unscaledTime;
-        bool settled = !shellEverInGame || Time.unscaledTime - shellIdleSince >= ShellIdleGrace;
 
         // Pause shows the title card (logo) and hides the HUD; HK's open inventory is not a pause.
         if (paused && !shell.Paused) CancelShellTouch();
         shell.SetPaused(paused);
-        shell.SetIdle(!inGame && settled);
+        shell.SetIdle(HkShellPolicy.Idle(inGame, shellEverInGame, shellIdleSince, Time.unscaledTime, ShellIdleGrace));
 
         // A routed dialogue/tutorial, a gameplay HUD fade (cutscene, lore tablet) or the
         // companion switched off leaves the lower panel to those owners on black.
-        bool gameplayHudFaded = hudFaded && !paused;
-        bool show = companionOn && !popupAny && !gameplayHudFaded;
+        bool show = HkShellPolicy.Visible(companionOn, popupAny, hudFaded, paused);
         if (show != shellShown) { shellShown = show; if (!show) CancelShellTouch(); }
         shell.SetVisible(show);
         if (attrCam != null) attrCam.cullingMask = show ? 1 << ATTR_LAYER : 0;
@@ -168,72 +165,58 @@ public partial class HKDualScreen
         var contacts = transport.PixelContacts;
         bool fresh = transport.TouchFrame == Time.frameCount;
         Vector2 size = DsFrame.LayoutSize;
-        float inputH = DsFrame.InputHeight;
         float w = transport.PanelWidth, h = transport.PanelHeight;
-        double now = Time.realtimeSinceStartupAsDouble;
-        shellPoints.Clear();
-        shellSeenIds.Clear();
+        shellContacts.Clear();
         if (fresh)
-        {
             for (int i = 0; i < contacts.Count; i++)
             {
                 var c = contacts[i].ToTopLeftNormalized(w, h);
-                var pos = new Vector2(c.X * size.x, inputH - c.Y * size.y);
-                int held = shellHeldIds.IndexOf(c.Id);
-                shellPoints.Add(new DsTouch.Point
-                {
-                    FingerId = c.Id,
-                    Phase = held < 0 ? TouchPhase.Began : TouchPhase.Moved,
-                    Position = pos,
-                    Time = now,
-                });
-                shellSeenIds.Add(c.Id);
-                if (held < 0) { shellHeldIds.Add(c.Id); shellHeldPositions.Add(pos); }
-                else shellHeldPositions[held] = pos;
+                shellContacts.Add(new HkShellTouchTracker.Contact(c.Id, c.X, c.Y));
             }
-        }
-        for (int i = shellHeldIds.Count - 1; i >= 0; i--)
+        shellSamples.Clear();
+        shellTouch.Update(shellContacts, fresh, size.x, size.y, DsFrame.InputHeight, shellSamples);
+        if (shellSamples.Count == 0) return;
+        double now = Time.realtimeSinceStartupAsDouble;
+        shellPoints.Clear();
+        for (int i = 0; i < shellSamples.Count; i++)
         {
-            if (shellSeenIds.Contains(shellHeldIds[i])) continue;
+            var sample = shellSamples[i];
             shellPoints.Add(new DsTouch.Point
             {
-                FingerId = shellHeldIds[i], Phase = TouchPhase.Ended,
-                Position = shellHeldPositions[i], Time = now,
+                FingerId = sample.Id,
+                Phase = sample.Phase == HkShellTouchTracker.Phase.Began ? TouchPhase.Began
+                      : sample.Phase == HkShellTouchTracker.Phase.Moved ? TouchPhase.Moved : TouchPhase.Ended,
+                Position = new Vector2(sample.X, sample.Y),
+                Time = now,
             });
-            shellHeldIds.RemoveAt(i);
-            shellHeldPositions.RemoveAt(i);
         }
-        if (shellPoints.Count == 0) return;
-        shellInput.Poll(shellPoints, shellTouchGeneration);
+        shellInput.Poll(shellPoints, shellTouch.Generation);
         var gestures = shellInput.Gestures;
         for (int i = 0; i < gestures.Count; i++) shell.OnGesture(gestures[i]);
     }
 
     void CancelShellTouch()
     {
-        shellHeldIds.Clear();
-        shellHeldPositions.Clear();
-        if (shellInput == null) return;
-        shellInput.Cancel();
-        if (shell != null)
+        if (shellInput != null)
         {
-            var gestures = shellInput.Gestures;
-            for (int i = 0; i < gestures.Count; i++) shell.OnGesture(gestures[i]);
+            shellInput.Cancel();
+            if (shell != null)
+            {
+                var gestures = shellInput.Gestures;
+                for (int i = 0; i < gestures.Count; i++) shell.OnGesture(gestures[i]);
+            }
         }
-        shellTouchGeneration++;
+        shellTouch.Cancel();
     }
 
     // The header's free band below the HUD hosts the page title.
     void SetShellHudBand(float headerW, float headerH)
     {
         Vector2 layout = DsFrame.LayoutSize;
-        if (layout.x <= 0f || layout.y <= 0f || headerW <= 0f || headerH <= 0f) { shellHudDestinationValid = false; return; }
-        float sx = BOTTOM_W / layout.x, sy = BOTTOM_H / layout.y;
-        float pad = DsTheme.Pad;
-        float w = Mathf.Min(headerW * HudBandWidth, headerW - 2f * pad);
-        float hgt = headerH * HudBandHeight - pad;
-        shellHudDestination = new Rect(pad * sx, pad * sy, Mathf.Max(1f, w * sx), Mathf.Max(1f, hgt * sy));
-        shellHudDestinationValid = true;
+        float x, y, w, hgt;
+        shellHudDestinationValid = HkShellPolicy.HudBand(layout.x, layout.y, headerW, headerH,
+            BOTTOM_W, BOTTOM_H, DsTheme.Pad, HudBandWidth, HudBandHeight, out x, out y, out w, out hgt);
+        if (shellHudDestinationValid) shellHudDestination = new Rect(x, y, w, hgt);
     }
 
     // The right of the header belongs to the page's action column.

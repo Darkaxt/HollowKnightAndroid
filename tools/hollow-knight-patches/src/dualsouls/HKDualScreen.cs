@@ -42,8 +42,7 @@ public partial class HKDualScreen : MonoBehaviour
 
     Transform creditT;                                          // opening attribution ("Credits")
 
-    Camera bgCaptureCam; HollowKnightPatches.HkBackdropDimmer bgDimmer;
-    bool bgSetup; int bgCullMask; bool bgShow;
+    bool bgShow;
 
     Transform dreamLoreCameraT;                                  // cached tk2dCamera for focus-tablet lore
     Transform dreamLoreT;                                       // cached tk2dCamera/Audio/Dream Dialogue (focus-tablet lore)
@@ -363,33 +362,10 @@ public partial class HKDualScreen : MonoBehaviour
         if (cfg.debug == 1 && up && (Time.frameCount % 45) == 0) Dbg("HKDS lore/dialogue BOX UP -> bottom + hide companion");
     }
 
-    // ---- dimmed environment-only backdrop ------------------------------------------------------
-    // A dedicated camera mirrors the main game camera but culls the character + dynamic actors, so
-    // only scenery renders into bgRT. The native plugin draws bgRT dimmed + centre-cropped behind
-    // the HUD. bgBlur renders it at 1/N res -> the plugin's bilinear upscale smears it to a soft wash.
-    void SetupBgCapture(GameCameras gc)
-    {
-        if (bgSetup) return;
-        Camera main = gc.mainCamera != null ? gc.mainCamera : Camera.main;
-        if (main == null) return;
-        // exclude: Player(9) Enemies(11) Projectiles(12) HeroDetector(13) EnemyDetector(15)
-        // Tinker(16) Attack(17) HeroBox(20) EnemyAttack(22) + our private layers
-        int excl = (1 << 9) | (1 << 11) | (1 << 12) | (1 << 13) | (1 << 15) | (1 << 16) | (1 << 17)
-                 | (1 << 20) | (1 << 22) | (1 << HUD_LAYER) | (1 << TUT_LAYER);
-        bgCullMask = ~excl;
-        if (transport == null) return;
-        bgCaptureCam = transport.CreateRoleCamera(
-            "HKBgCaptureCam", 0, 97, CameraClearFlags.SolidColor);
-        bgDimmer = bgCaptureCam.gameObject.AddComponent<HollowKnightPatches.HkBackdropDimmer>();
-        bgSetup = true;
-        Dbg($"HKDS bg cam on '{main.name}' mask=0x{bgCullMask:X}");
-    }
-
     void SyncBgCapture(GameCameras gc)
     {
         // The canonical gameplay shell is opaque black. bgShow remains the
         // gameplay/title authority used by LogoTick, not a capture switch.
-        if (bgCaptureCam != null) bgCaptureCam.enabled = false;
         if (clearCam != null) clearCam.clearFlags = CameraClearFlags.SolidColor;
     }
 

@@ -1,6 +1,0 @@
-VSTest version 18.7.0 (x64)
-
-Starting test execution, please wait...
-A total of 1 test files matched the specified pattern.
-
-Passed!  - Failed:     0, Passed:   259, Skipped:     0, Total:   259, Duration: 162 ms - SharedPatches.Tests.dll (net8.0)

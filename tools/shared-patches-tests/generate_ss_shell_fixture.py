@@ -216,10 +216,12 @@ def generate(output, source_root, manifest, shared_source_root=None, frame_sourc
         bodies.append(value)
         record('DsWidgets.cs','DsWidgets.Place',value,value)
     parts.append('public static partial class DsWidgets {\n'+'\n'.join(bodies)+'\n}')
-    text=src('DsPortHudState.cs').read_text(encoding='utf-8')
+    # Older replay snapshots keep these classes in DsPortHudState.cs.
+    lifecycle='DsHudLifecycle.cs' if src('DsHudLifecycle.cs').exists() else 'DsPortHudState.cs'
+    text=src(lifecycle).read_text(encoding='utf-8')
     for name in ('DsHudManagerCallbacks','DsHudReleaseState'):
         value=class_text(text,name)
-        record('DsPortHudState.cs',name+' (compiled directly)',value,value)
+        record(lifecycle,name+' (compiled directly)',value,value)
     generated=('// Generated SS production bodies; namespace-isolated from HK.\n'
                '#pragma warning disable CS0649, CS0414, CS0169 // Typed native-data boundaries retain original fields.\n'
                'namespace SsShellContracts;\n'

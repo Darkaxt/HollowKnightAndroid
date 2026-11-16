@@ -5,7 +5,6 @@ using DualSouls.Mods.HollowKnight;
 internal static class HkStageHooks
 {
     internal static void ClearPresentationOverrides() { }
-    internal static void SetBackdropOverride(bool black) { }
     internal static void SetFlashOverride(HollowKnightFlashMode mode) { }
     internal static void OpenSkins() { }
     internal static void OpenBenchTeleport(Action<DualSouls.Mods.TweakActionResult> completed) { }

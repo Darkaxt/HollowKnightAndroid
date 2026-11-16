@@ -891,6 +891,11 @@ namespace DualSouls.Mods.Silksong
             {
                 yield return binding.Ui.ShowMenu(binding.OptionsScreen);
                 if (!TransitionStillCurrent(binding, transition)) yield break;
+                // Return focus to the entry that opened this screen (#31).
+                SilksongNativeModsEntryButton opener = _openRoute == NativeMenuRoute.Mods
+                    ? _entryButton : _skinsEntryButton;
+                if (opener != null && opener.Selectable != null && opener.Selectable.isActiveAndEnabled)
+                    opener.Selectable.Select();
             }
 
             if (_lifecycle.Complete(transition, binding))

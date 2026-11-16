@@ -14,7 +14,6 @@ namespace DualSouls.Mods.HollowKnight
         void CaptureBaseline();
         void RestoreBaseline();
         void OpenSkins();
-        void SetCompanionBackdropBlack(bool black);
         void SetRunSpeedMultiplier(float multiplier);
         void RestoreRunSpeed();
         void SetFastTransitions(bool enabled);
@@ -55,7 +54,6 @@ namespace DualSouls.Mods.HollowKnight
     {
         static readonly IReadOnlyList<TweakDescriptor> Rows = Array.AsReadOnly(new[]
         {
-            Row("companion_backdrop", "black_background", TweakControlKind.Choice, "GENERAL", "BLACK BACKGROUND", "Use a black lower-screen background instead of the dimmed scenery wash.", "dimmed", "dimmed", "black"),
             Row("run_speed", "run_speed", TweakControlKind.Choice, "WORLD", "RUN SPEED", "Choose the Knight's normal, +25%, or +50% movement pace.", "vanilla", "vanilla", "plus_25", "plus_50"),
             Row("fast_transitions", "fast_transitions", TweakControlKind.Choice, "WORLD", "FAST TRANSITIONS", "Shorten supported scene transitions.", "off", "off", "on"),
             Row("auto_map", "auto_map", TweakControlKind.Choice, "WORLD", "AUTO MAP", "Reveal visited rooms on the map automatically.", "off", "off", "on"),
@@ -172,7 +170,6 @@ namespace DualSouls.Mods.HollowKnight
             {
                 switch (id)
                 {
-                    case "companion_backdrop": _api.SetCompanionBackdropBlack(value == "black"); break;
                     case "run_speed":
                         if (value == "vanilla") _api.RestoreRunSpeed();
                         else _api.SetRunSpeedMultiplier(value == "plus_25" ? 1.25f : 1.5f);

@@ -164,7 +164,6 @@ public partial class HKDualScreen
         if (!paused) return;
         if (hudCam2 != null) hudCam2.cullingMask = 0;   // the shell's title card carries the logo
         bgShow = false;
-        if (bgCaptureCam != null) bgCaptureCam.enabled = false;
         if (clearCam != null) clearCam.clearFlags = CameraClearFlags.SolidColor;
     }
 

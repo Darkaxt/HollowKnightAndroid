@@ -10,7 +10,6 @@ static class HkStageHooks
     static KeyCode joyBase = KeyCode.Joystick1Button0;
     static int joySlot = 1;
     static float nextJoyPoll;
-    static bool? _backdropBlackOverride;
     static HollowKnightFlashMode? _flashOverride;
     static HollowKnightFlashMode? _legacyFlashMode;
     static float? _legacyFlashAlpha;
@@ -46,16 +45,10 @@ static class HkStageHooks
         HollowKnightModsRuntime.Current.Session.IsReady;
     internal static bool TweaksMenuVisible =>
         TweaksAvailable && HollowKnightModsRuntime.Current.Session.Menu.IsOpen;
-    internal static bool BlackBackground => _backdropBlackOverride == true;
     internal static HollowKnightFlashMode? FlashOverride => _flashOverride;
     internal static HollowKnightFlashMode? LegacyFlashMode => _legacyFlashMode;
     internal static float? LegacyFlashAlpha => _legacyFlashAlpha;
     internal static int SkinStamp => DualSouls.Skins.HollowKnight.Runtime.HollowKnightSkinRuntime.SkinStamp;
-
-    internal static void SetBackdropOverride(bool black)
-    {
-        _backdropBlackOverride = black;
-    }
 
     internal static void SetFlashOverride(HollowKnightFlashMode mode)
     {
@@ -93,7 +86,6 @@ static class HkStageHooks
 
     internal static void ClearPresentationOverrides()
     {
-        _backdropBlackOverride = null;
         _flashOverride = null;
     }
 

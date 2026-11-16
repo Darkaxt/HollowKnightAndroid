@@ -11,7 +11,6 @@ public sealed class HollowKnightTweakAdapterTests
 {
     private static readonly string[] RequiredContractIds =
     {
-        "black_background",
         "run_speed", "fast_transitions", "auto_map", "innate_compass", "bench_teleport", "secret_radar",
         "nail_damage", "damage_taken", "damage_cap", "one_hit_kills", "unlimited_soul",
         "enemy_health_bars", "damage_numbers", "boss_retry",
@@ -24,29 +23,27 @@ public sealed class HollowKnightTweakAdapterTests
     public void CatalogStartsWithExactRequiredContractAndAppendsExtras()
     {
         var rows = new HollowKnightTweakAdapter(new RecordingApi()).Descriptors;
-        TweakDescriptor[] required = rows.Take(26).ToArray();
+        TweakDescriptor[] required = rows.Take(25).ToArray();
 
         Assert.Equal(RequiredContractIds, required.Select(row => row.ContractId));
         Assert.Equal(
-            new[] { "GENERAL" }
-                .Concat(Enumerable.Repeat("WORLD", 6))
+            Enumerable.Repeat("WORLD", 6)
                 .Concat(Enumerable.Repeat("COMBAT", 5))
                 .Concat(Enumerable.Repeat("ENCOUNTERS", 3))
                 .Concat(Enumerable.Repeat("CHARMS", 3))
                 .Concat(Enumerable.Repeat("SAVE STATES", 4))
                 .Concat(Enumerable.Repeat("ECONOMY", 4)),
             required.Select(row => row.Group));
-        Assert.Equal(TweakControlKind.Route, required[5].ControlKind);
+        Assert.Equal(TweakControlKind.Route, required[4].ControlKind);
+        Assert.Equal(TweakControlKind.Command, required[18].ControlKind);
         Assert.Equal(TweakControlKind.Command, required[19].ControlKind);
         Assert.Equal(TweakControlKind.Command, required[20].ControlKind);
-        Assert.Equal(TweakControlKind.Command, required[21].ControlKind);
-        Assert.All(required.Where((_, index) => index is not (5 or 19 or 20 or 21)),
+        Assert.All(required.Where((_, index) => index is not (4 or 18 or 19 or 20)),
             row => Assert.Equal(TweakControlKind.Choice, row.ControlKind));
-        Assert.Equal("companion_backdrop", required.Single(row => row.ContractId == "black_background").Id);
         Assert.Equal("damage_received", required.Single(row => row.ContractId == "damage_taken").Id);
         Assert.Equal("health_bars", required.Single(row => row.ContractId == "enemy_health_bars").Id);
-        Assert.Equal(new[] { "lifeblood_flash" }, rows.Skip(26).Select(row => row.Id));
-        Assert.Equal(26, required.Count(row => row.IsAvailable));
+        Assert.Equal(new[] { "lifeblood_flash" }, rows.Skip(25).Select(row => row.Id));
+        Assert.Equal(25, required.Count(row => row.IsAvailable));
         Assert.All(required, row => Assert.True(row.IsAvailable));
         Assert.DoesNotContain(rows, row => row.Id == "skins");
         Assert.DoesNotContain(rows, row => row.Id == "state_slots");
@@ -189,7 +186,6 @@ public sealed class HollowKnightTweakAdapterTests
     {
         var expected = new Dictionary<string, Dictionary<string, string>>
         {
-            ["companion_backdrop"] = Map(("dimmed", "backdrop:False"), ("black", "backdrop:True")),
             ["run_speed"] = Map(("vanilla", "run:restore"), ("plus_25", "run:1.25"), ("plus_50", "run:1.5")),
             ["fast_transitions"] = OffOn("fast-transitions"),
             ["auto_map"] = OffOn("auto-map"),
@@ -270,20 +266,6 @@ public sealed class HollowKnightTweakAdapterTests
                 Assert.Equal(value, evidence.Readback.Value);
             }
         }
-    }
-
-    [Theory]
-    [InlineData("dimmed", false)]
-    [InlineData("black", true)]
-    public void CompanionBackdropValuesMapToTypedApiIncludingDefault(string value, bool expectedBlack)
-    {
-        var api = new RecordingApi();
-        var adapter = new HollowKnightTweakAdapter(api);
-
-        TweakActionResult result = adapter.Apply("companion_backdrop", value);
-
-        Assert.True(result.Success);
-        Assert.Equal(new[] { $"backdrop:{expectedBlack}" }, api.Calls);
     }
 
     [Theory]
@@ -538,15 +520,15 @@ public sealed class HollowKnightTweakAdapterTests
         var adapter = new HollowKnightTweakAdapter(api);
 
         adapter.CaptureBaseline();
-        Assert.True(adapter.Apply("companion_backdrop", "black").Success);
+        Assert.True(adapter.Apply("lifeblood_flash", "soft").Success);
         adapter.RestoreBaseline();
 
-        Assert.Equal(new[] { "capture", "backdrop:True", "restore" }, api.Calls);
+        Assert.Equal(new[] { "capture", "flash:Soft", "restore" }, api.Calls);
     }
 
     [Theory]
     [InlineData("missing", "off")]
-    [InlineData("companion_backdrop", "DIMMED")]
+    [InlineData("auto_map", "ON")]
     [InlineData("lifeblood_flash", "none")]
     public void UnknownIdsAndValuesFailWithoutCallingApi(string id, string value)
     {
@@ -566,12 +548,12 @@ public sealed class HollowKnightTweakAdapterTests
         var api = new RecordingApi { ThrowOnMutation = true };
         var adapter = new HollowKnightTweakAdapter(api);
 
-        TweakActionResult result = adapter.Apply("companion_backdrop", "black");
+        TweakActionResult result = adapter.Apply("lifeblood_flash", "soft");
 
         Assert.False(result.Success);
-        Assert.Contains("companion_backdrop", result.Error);
+        Assert.Contains("lifeblood_flash", result.Error);
         Assert.Contains("game rejected presentation change", result.Error);
-        Assert.Equal(new[] { "backdrop:True" }, api.Calls);
+        Assert.Equal(new[] { "flash:Soft" }, api.Calls);
     }
 
     [Fact]
@@ -673,11 +655,6 @@ public sealed class HollowKnightTweakAdapterTests
                 _actual[pair.Key] = pair.Value;
         }
 
-        public void SetCompanionBackdropBlack(bool black)
-        {
-            SetActive("companion_backdrop", black, $"backdrop:{black}");
-        }
-
         public void SetLifebloodFlash(HollowKnightFlashMode mode)
         {
             SetActive("lifeblood_flash", mode != HollowKnightFlashMode.Vanilla, $"flash:{mode}");
@@ -777,7 +754,6 @@ public sealed class HollowKnightTweakAdapterTests
 
         static Dictionary<string, string> DefaultValues() => new()
         {
-            ["companion_backdrop"] = "dimmed",
             ["run_speed"] = "vanilla",
             ["fast_transitions"] = "off",
             ["auto_map"] = "off",
@@ -806,8 +782,7 @@ public sealed class HollowKnightTweakAdapterTests
         {
             string BoolValue(string prefix) =>
                 call == prefix + ":True" ? "on" : "off";
-            if (call.StartsWith("backdrop:", StringComparison.Ordinal)) _actual["companion_backdrop"] = call == "backdrop:True" ? "black" : "dimmed";
-            else if (call.StartsWith("run:", StringComparison.Ordinal)) _actual["run_speed"] = call == "run:1.25" ? "plus_25" : call == "run:1.5" ? "plus_50" : "vanilla";
+            if (call.StartsWith("run:", StringComparison.Ordinal)) _actual["run_speed"] = call == "run:1.25" ? "plus_25" : call == "run:1.5" ? "plus_50" : "vanilla";
             else if (call.StartsWith("fast-transitions:", StringComparison.Ordinal)) _actual["fast_transitions"] = BoolValue("fast-transitions");
             else if (call.StartsWith("auto-map:", StringComparison.Ordinal)) _actual["auto_map"] = BoolValue("auto-map");
             else if (call.StartsWith("compass:", StringComparison.Ordinal)) _actual["innate_compass"] = BoolValue("compass");

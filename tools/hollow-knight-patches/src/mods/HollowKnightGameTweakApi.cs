@@ -35,7 +35,6 @@ namespace DualSouls.Mods.HollowKnight
         bool _geoMagnet;
         bool _keepGeoOnDeath;
         bool _journalOneKill;
-        bool _companionBackdropBlack;
         bool _oneHitKills;
         int _geoMultiplier = 1;
         HollowKnightFlashMode _lifebloodFlash = HollowKnightFlashMode.Vanilla;
@@ -118,7 +117,6 @@ namespace DualSouls.Mods.HollowKnight
             _geoMagnet = false;
             _keepGeoOnDeath = false;
             _journalOneKill = false;
-            _companionBackdropBlack = false;
             _oneHitKills = false;
             _geoMultiplier = 1;
             _lifebloodFlash = HollowKnightFlashMode.Vanilla;
@@ -140,12 +138,6 @@ namespace DualSouls.Mods.HollowKnight
         public void OpenSkins()
         {
             global::HkStageHooks.OpenSkins();
-        }
-
-        public void SetCompanionBackdropBlack(bool black)
-        {
-            _companionBackdropBlack = black;
-            global::HkStageHooks.SetBackdropOverride(black);
         }
 
         public void SetLifebloodFlash(HollowKnightFlashMode mode)
@@ -348,8 +340,6 @@ namespace DualSouls.Mods.HollowKnight
                 "The required Hollow Knight native gameplay weave is unavailable for " + id + ".");
             switch (id)
             {
-                case "companion_backdrop":
-                    return Choice(_companionBackdropBlack ? "black" : "dimmed");
                 case "run_speed":
                     return Live(Choice(_runSpeedMultiplier == 1.5f ? "plus_50" :
                                   _runSpeedMultiplier == 1.25f ? "plus_25" : "vanilla"), RunSpeedMismatch());

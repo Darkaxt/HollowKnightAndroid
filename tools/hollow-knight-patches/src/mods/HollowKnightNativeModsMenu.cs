@@ -1025,6 +1025,12 @@ namespace DualSouls.Mods.HollowKnight
             {
                 yield return binding.Ui.ShowMenu(binding.OptionsScreen);
                 if (!BindingIsAlive(binding, generation)) yield break;
+                // Return focus to the entry that opened this screen (#31); the native
+                // Options highlight otherwise lands on whichever entry it last tracked.
+                HollowKnightNativeModsEntryButton opener = _openRoute == NativeMenuRoute.Mods
+                    ? _entryButton : _skinsEntryButton;
+                if (opener != null && opener.Selectable != null && opener.Selectable.isActiveAndEnabled)
+                    opener.Selectable.Select();
             }
 
             CompleteTransition(binding, generation);

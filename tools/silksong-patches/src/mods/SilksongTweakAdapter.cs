@@ -60,7 +60,6 @@ namespace DualSouls.Mods.Silksong
         void CaptureBaseline();
         void RestoreBaseline();
         void OpenSkins();
-        void SetCompanionBackdropBlack(bool black);
         void SetRunSpeedMultiplier(float multiplier);
         void RestoreRunSpeed();
         void SetFastTransitions(bool enabled);
@@ -108,7 +107,6 @@ namespace DualSouls.Mods.Silksong
     {
         static readonly IReadOnlyList<TweakDescriptor> Rows = Array.AsReadOnly(new[]
         {
-            Row("black_background", "black_background", TweakControlKind.Choice, "GENERAL", "BLACK BACKGROUND", "Use a black lower-screen background instead of the dimmed scenery wash.", "off", "off", "on"),
 
             Row("run_speed", "run_speed", TweakControlKind.Choice, "WORLD", "RUN SPEED", "Choose Hornet's normal, +25%, or +50% movement pace.", "vanilla", "vanilla", "plus_25", "plus_50"),
             Row("fast_transitions", "fast_transitions", TweakControlKind.Choice, "WORLD", "FAST TRANSITIONS", "Shorten supported scene transitions.", "off", "off", "on"),
@@ -218,7 +216,6 @@ namespace DualSouls.Mods.Silksong
             {
                 switch (id)
                 {
-                    case "black_background": _api.SetCompanionBackdropBlack(On(value)); break;
                     case "run_speed": if (value == "vanilla") _api.RestoreRunSpeed(); else _api.SetRunSpeedMultiplier(value == "plus_25" ? 1.25f : 1.5f); break;
                     case "fast_transitions": _api.SetFastTransitions(On(value)); break;
                     case "auto_map": _api.SetAutoMap(On(value)); break;
