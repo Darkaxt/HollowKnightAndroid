@@ -464,7 +464,10 @@ namespace DualSouls.Mods.Silksong
             if (_modsScreen == null)
                 throw new InvalidOperationException("Options screen clone has no typed MenuScreen.");
             MenuButtonList oldList = root.GetComponent<MenuButtonList>();
-            if (oldList != null) oldList.enabled = false;
+            // Destroy, not disable: UIManager.ShowMenu calls SetupActive on any MenuButtonList,
+            // and this one still lists the destroyed Options buttons. Its NullReferenceException
+            // killed ShowMenu before StartUIInput, leaving UI input off and the open transition stuck.
+            if (oldList != null) UnityObject.Destroy(oldList);
             _modsScreen.backButton = null;
 
             Transform title = root.transform.Find("Title");
@@ -509,7 +512,10 @@ namespace DualSouls.Mods.Silksong
             if (_skinsScreen == null)
                 throw new InvalidOperationException("Options screen clone has no typed MenuScreen.");
             MenuButtonList oldList = root.GetComponent<MenuButtonList>();
-            if (oldList != null) oldList.enabled = false;
+            // Destroy, not disable: UIManager.ShowMenu calls SetupActive on any MenuButtonList,
+            // and this one still lists the destroyed Options buttons. Its NullReferenceException
+            // killed ShowMenu before StartUIInput, leaving UI input off and the open transition stuck.
+            if (oldList != null) UnityObject.Destroy(oldList);
             _skinsScreen.backButton = null;
             Transform title = root.transform.Find("Title");
             _skinsTitle = title != null ? title.GetComponentInChildren<UiText>(true) : null;

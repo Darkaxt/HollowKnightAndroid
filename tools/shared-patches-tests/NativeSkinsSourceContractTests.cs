@@ -40,6 +40,20 @@ public sealed class NativeSkinsSourceContractTests
     [Theory]
     [InlineData("HollowKnightNativeModsMenu.cs")]
     [InlineData("SilksongNativeModsMenu.cs")]
+    public void ClonedScreensDestroyTheInheritedOptionsButtonList(string file)
+    {
+        // #23 (2.0.15 device): a merely disabled clone of the Options MenuButtonList still ran
+        // SetupActive inside ShowMenu over destroyed buttons, threw, and left UI input stopped
+        // and the Skins/Mods open transition stuck.
+        string source = Source(file);
+
+        Assert.Equal(2, Count(source, "if (oldList != null) UnityObject.Destroy(oldList);"));
+        Assert.DoesNotContain("oldList.enabled = false", source, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("HollowKnightNativeModsMenu.cs")]
+    [InlineData("SilksongNativeModsMenu.cs")]
     public void SkinsRouteUsesBoundedProfileCheckedBridgeAndRefreshesAfterEveryMutation(string file)
     {
         string source = Source(file);
