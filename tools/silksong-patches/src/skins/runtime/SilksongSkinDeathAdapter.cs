@@ -117,6 +117,22 @@ namespace DualSouls.Skins.Silksong.Runtime
             }
         }
 
+        /// <summary>QA diagnostics for the report's rotation line: one line, read-only, on demand.</summary>
+        internal string Describe()
+        {
+            var frame = disposed ? null : sample();
+            return "run=" + (Run ?? "-") + " occ=" + Occurrence + " recorded=" + Recorded + " stable=" + stableFrames +
+                " backlog=" + backlog.Count + " cancels=" + cancellations.Count + " faulted=" + BacklogFaulted +
+                " observedBridge=" + observedBridge +
+                (frame == null ? " frame=-" : " bridge=" + frame.BridgeOccurrence + " dead=" + frame.Dead +
+                    " playing=" + frame.Playing + " inPosition=" + frame.HeroInPosition + " sceneDone=" + frame.SceneComplete +
+                    " targets=" + frame.TargetsAvailable)
+#if UNITY_ANDROID && !UNITY_EDITOR
+                + " ringField=" + (OccurrenceField == null ? "missing" : OccurrenceField.GetValue(null).ToString())
+#endif
+                ;
+        }
+
         public SilksongSkinDeathAdapter(Func<SilksongDeathFrame> sample)
         {
             this.sample = sample ?? throw new ArgumentNullException(nameof(sample));

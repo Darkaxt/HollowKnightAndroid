@@ -45,7 +45,8 @@ namespace DualSouls.Skins.Silksong.Runtime
             Func<string, long, bool> confirm, Func<string, long, bool> cancelOccurrence,
             Func<string, bool> cancel, Func<int> saveIdentity = null)
         {
-            this.read = read ?? throw new ArgumentNullException(nameof(read));
+            if (read == null) throw new ArgumentNullException(nameof(read));
+            this.read = () => Track(read());
             this.report = report ?? throw new ArgumentNullException(nameof(report));
             this.observe = observe;
             this.saveIdentity = saveIdentity;
@@ -71,7 +72,7 @@ namespace DualSouls.Skins.Silksong.Runtime
                     manager != null && (manager.GameState == GlobalEnums.GameState.MAIN_MENU || manager.GameState == GlobalEnums.GameState.INACTIVE));
             };
             death = new SilksongSkinDeathAdapter(runtime);
-            read = ReadManaged;
+            read = () => Track(ReadManaged());
             report = ReportManaged;
             observe = () => runtime.LastResult;
             confirm = (run, occurrence) => Bridge.CallStatic<bool>("confirmDeath", run, occurrence);
@@ -114,6 +115,21 @@ namespace DualSouls.Skins.Silksong.Runtime
 
 
 #endif
+
+        string lastRead = "none";
+
+        /// <summary>QA diagnostics for the report's rotation line.</summary>
+        public string Describe() => "recovery=" + RecoveryRequired + " pending=" + pending + " settled=" + settled +
+            " saveSlot=" + saveSlot + " saveChanged=" + saveChanged + " canRefresh=" + CanRefresh +
+            " read={" + lastRead + "} death={" + death.Describe() + "}";
+
+        SkinLibraryRequest Track(SkinLibraryRequest request)
+        {
+            lastRead = request == null ? "null" : "mode=" + request.Mode + " vanilla=" + request.Vanilla +
+                " run=" + (request.RotationRun ?? "-") + " pack=" + (request.PackId ?? "-") + " lastDeath=" + request.LastDeath +
+                " pendingOcc=" + request.PendingOccurrence + " slot=" + request.SaveSlot;
+            return request;
+        }
 
         bool Ready(string run, long occurrence) => run == death.Run && occurrence == death.Occurrence &&
             death.Recorded && death.Ready;

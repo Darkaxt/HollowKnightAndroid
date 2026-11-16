@@ -56,6 +56,13 @@ public sealed class SilksongSkinLibraryTests
         Assert.Equal(new[] { "apply:a", "apply:b" }, actions);
         Assert.Equal(0, request.PendingOccurrence);
         Assert.Equal(1, confirms);
+
+        // #23 QA report line: the gates and the last bridge read are visible without a debugger.
+        var described = library.Describe();
+        Assert.Contains("recovery=False", described, StringComparison.Ordinal);
+        Assert.Contains("mode=ROTATE", described, StringComparison.Ordinal);
+        Assert.Contains("lastDeath=1", described, StringComparison.Ordinal);
+        Assert.Contains("bridge=1", described, StringComparison.Ordinal);
     }
 
     [Fact]

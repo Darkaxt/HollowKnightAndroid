@@ -97,6 +97,9 @@ public partial class DualScreenV2
             ? DsQaReport.Fields(skins.LastResult, "Status", "Detail") + " lastError=" + skins.LastError
               + " pack: " + DsQaReport.Fields(skins.CurrentPack, "Id", "Mode", "SpriteScope")
             : "no runtime").Append('\n');
+        var modsRuntime = SilksongModsRuntime.Current;
+        var library = modsRuntime != null ? modsRuntime.SkinLibrary : null;
+        sb.Append("rotation: ").Append(library != null ? library.Describe() : "no library").Append('\n');
         sb.Append(DsQaReport.Frames()).Append('\n');
         sb.Append(DsQaReport.Errors());
         return sb.ToString();

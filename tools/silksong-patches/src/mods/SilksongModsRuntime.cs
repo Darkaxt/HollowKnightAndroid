@@ -21,6 +21,7 @@ namespace DualSouls.Mods.Silksong
         public TweakSession Session { get; private set; }
         public SilksongSkinRuntime Skins { get; private set; }
         SilksongSkinLibrary skinLibrary;
+        internal SilksongSkinLibrary SkinLibrary => skinLibrary;
         SilksongGameTweakApi tweakApi;
 
         public static void EnsureStarted()
