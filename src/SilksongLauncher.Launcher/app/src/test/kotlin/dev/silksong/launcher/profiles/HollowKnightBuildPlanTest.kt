@@ -369,6 +369,30 @@ class HollowKnightBuildPlanTest {
     }
 
     @Test
+    fun `classic image moves player files and leaves desktop runtimes behind`() {
+        val classic = temp.newFolder("classic-player-tree")
+        val img = temp.newFolder("image")
+        fun put(relative: String, text: String) =
+            File(classic, relative).apply { parentFile?.mkdirs(); writeText(text) }
+        put("globalgamemanagers", "ggm")
+        put("StreamingAssets/media/intro.mp4", "video")
+        put("Managed/Assembly-CSharp.dll", "dll")
+        put("level0.part", "partial")
+        put("level0", "fresh")
+        File(img, "level0").writeText("stale")
+
+        PlayerImage.moveClassicImage(classic, img)
+
+        assertEquals("ggm", File(img, "globalgamemanagers").readText())
+        assertEquals("video", File(img, "StreamingAssets/media/intro.mp4").readText())
+        assertEquals("fresh", File(img, "level0").readText())
+        assertFalse(File(classic, "globalgamemanagers").exists())
+        assertFalse(File(img, "Managed/Assembly-CSharp.dll").exists())
+        assertFalse(File(img, "level0.part").exists())
+        assertTrue(File(classic, "Managed/Assembly-CSharp.dll").isFile)
+    }
+
+    @Test
     fun `classic runtime registration names the Hollow Knight patch assembly`() {
         val root = temp.newFolder("build")
         val image = temp.newFolder("image")

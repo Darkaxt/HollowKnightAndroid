@@ -317,16 +317,9 @@ object PlayerImage {
                 ),
             )
 
-            send(Progress("Assembling the player image", -1f, "copying classic data"))
+            send(Progress("Assembling the player image", -1f, "moving classic data"))
             img.deleteRecursively()
-            for (source in classic.walkTopDown().sortedBy { it.path }) {
-                if (!source.isFile) continue
-                val relative = source.relativeTo(classic).path.replace('\\', '/')
-                if (!shouldCopyClassicRelativePath(relative)) continue
-                val target = File(img, relative)
-                target.parentFile?.mkdirs()
-                source.copyTo(target, overwrite = true)
-            }
+            moveClassicImage(classic, img)
             File(img, "Resources").mkdirs()
             File(img, "Managed/Metadata").mkdirs()
             File(img, "Managed/Resources").mkdirs()
@@ -785,6 +778,24 @@ object PlayerImage {
             }
         }
         return crc.value
+    }
+
+    /**
+     * Moves the converted classic tree's player files into the image. Copying wrote
+     * the same ~5 GB a second time right after the converter wrote it, and that
+     * writeback burst is what put the device under memory pressure (#2). The
+     * converter re-creates any output that is missing on the next port, so a
+     * re-port writes no more than it did before.
+     */
+    internal fun moveClassicImage(classic: File, img: File) {
+        for (source in classic.walkTopDown().sortedBy { it.path }) {
+            if (!source.isFile) continue
+            val relative = source.relativeTo(classic).path.replace('\\', '/')
+            if (!shouldCopyClassicRelativePath(relative)) continue
+            val target = File(img, relative)
+            target.parentFile?.mkdirs()
+            Files.move(source.toPath(), target.toPath(), REPLACE_EXISTING)
+        }
     }
 
     fun shouldCopyClassicRelativePath(relativePath: String): Boolean {
