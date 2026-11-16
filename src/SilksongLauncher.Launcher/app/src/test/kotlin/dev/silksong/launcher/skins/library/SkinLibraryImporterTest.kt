@@ -5,6 +5,9 @@ import dev.silksong.launcher.skins.fixtures.*
 import dev.silksong.launcher.skins.importing.*
 import dev.silksong.launcher.skins.storage.*
 import dev.silksong.launcher.skins.catalog.CatalogPathSet
+import dev.silksong.launcher.skins.catalog.SkinCatalogProfiles
+import dev.silksong.launcher.skins.documents.SkinGameDocument
+import dev.silksong.launcher.skins.documents.SkinManifestDocument
 import dev.silksong.launcher.skins.ui.SkinImportWorkflow
 import org.junit.Assert.*
 import org.junit.Rule
@@ -65,6 +68,14 @@ class SkinLibraryImporterTest {
         val store = store(); val importer = SkinLibraryImporter(store, decoder)
         repeat(2) { importer.commitImport(importer.prepare(input()).required().handleId).required() }
         assertEquals(1,store.read().required().packs.size)
+    }
+    @Test fun `reimport rebuilds a pack only when it was built under an older catalog`() {
+        fun manifest(game: String, catalogId: String) = SkinManifestDocument(id = "skin-x", name = "x", author = "Unknown",
+            contentSha256 = "0".repeat(64), games = mapOf(game to SkinGameDocument("v", catalogId, "assets", emptyMap())))
+        val ss = SkinCatalogProfiles.Silksong
+        assertTrue(SkinLibraryImporter.builtUnderOlderCatalog(manifest("silksong", "silksong-1.0.29980-character-hud-11"), ss))
+        assertFalse(SkinLibraryImporter.builtUnderOlderCatalog(manifest("silksong", ss.catalogId), ss))
+        assertFalse(SkinLibraryImporter.builtUnderOlderCatalog(manifest("hollow-knight", "other"), ss))
     }
     @Test fun `retained orphan bytes count and admission rejection happens before provider open while OFF remains available`() {
         val store = store(); store.read().required()

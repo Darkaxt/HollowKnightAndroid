@@ -1,6 +1,8 @@
 package dev.silksong.launcher.skins.library
 
+import dev.silksong.launcher.skins.catalog.SkinCatalogProfile
 import dev.silksong.launcher.skins.contracts.*
+import dev.silksong.launcher.skins.documents.SkinManifestDocument
 import dev.silksong.launcher.skins.importing.*
 import dev.silksong.launcher.skins.quota.*
 import dev.silksong.launcher.skins.registry.CandidatePreparationSummary
@@ -128,8 +130,13 @@ internal class SkinLibraryImporter(private val store: SkinLibraryStore, decoder:
     private fun publish(candidate: PreparedSkinCandidate, replacing: LibraryPack?): SkinImportSummary {
         val existing = store.readLocked().packs.singleOrNull { it.candidateKey == candidate.candidateKey }
         if (replacing == null && existing != null) {
-            store.requireVerified(existing)
-            return SkinImportSummary(candidate.rawPrefix.hex(), SkinImportCode.OK, existing.id, "Already installed", emptyList())
+            val manifest = store.requireVerified(existing)
+            if (!builtUnderOlderCatalog(manifest, store.catalog.profile)) {
+                return SkinImportSummary(candidate.rawPrefix.hex(), SkinImportCode.OK, existing.id, "Already installed", emptyList())
+            }
+            // Same archive, older catalog: rebuild in place so newly catalogued textures are picked up.
+            store.checkEditable(store.readLocked(), existing.id)
+            return publish(candidate, existing)
         }
         val request = SkinQuotaRequest.profile(*(candidate.payloads.map { it.length } +
             listOf(candidate.importReceiptBytes.size.toLong(), 262144L, 65536L, 4L * SkinLibraryCodec.MAX_BYTES, 4096L)).toLongArray())
@@ -150,4 +157,9 @@ internal class SkinLibraryImporter(private val store: SkinLibraryStore, decoder:
         } finally { reserved.release() }
     }
     private fun ByteArray.hex() = joinToString("") { "%02x".format(it.toInt() and 255) }
+
+    internal companion object {
+        fun builtUnderOlderCatalog(manifest: SkinManifestDocument, profile: SkinCatalogProfile): Boolean =
+            manifest.games[profile.profileId]?.catalogId.let { it != null && it != profile.catalogId }
+    }
 }
