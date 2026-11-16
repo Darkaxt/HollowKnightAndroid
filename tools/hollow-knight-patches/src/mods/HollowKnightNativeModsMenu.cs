@@ -1520,7 +1520,7 @@ namespace DualSouls.Mods.HollowKnight
             FocusSkin();
         }
 
-        void FocusSkin()
+        void FocusSkin(bool reselect = false)
         {
             if (_skinMenu == null) return;
             int dataIndex = _skinMenu.SelectedRowIndex;
@@ -1528,6 +1528,12 @@ namespace DualSouls.Mods.HollowKnight
                 if (_skinButtonRoots[index].activeInHierarchy &&
                     _skinButtons[index].DataIndex == dataIndex)
                 {
+                    // The row was selected while a change was in flight and not interactable,
+                    // so it never lit up; selecting the current object again is ignored.
+                    EventSystem events = EventSystem.current;
+                    if (reselect && events != null &&
+                        events.currentSelectedGameObject == _skinButtons[index].Selectable.gameObject)
+                        events.SetSelectedGameObject(null);
                     _skinButtons[index].Selectable.Select();
                     return;
                 }
@@ -1581,6 +1587,7 @@ namespace DualSouls.Mods.HollowKnight
         void RefreshSkinMenu()
         {
             bool inFlightRead = false;
+            bool confirming = _skinMutationInFlight;
             _skinSnapshotReady = false;
             try
             {
@@ -1648,6 +1655,11 @@ namespace DualSouls.Mods.HollowKnight
                     if (!inFlightRead) _skinMenu.SelectRow(_skinMenu.Rows.Count - 1);
                     PaintSkins();
                     if (_nativeOpen && _openRoute == NativeMenuRoute.Skins) FocusSkin();
+                }
+                else if (confirming && _skinSnapshotReady && _skinMenu != null && BindingIsAlive() &&
+                         _nativeOpen && _openRoute == NativeMenuRoute.Skins) {
+                    PaintSkins();
+                    FocusSkin(reselect: true);
                 }
             }
         }
