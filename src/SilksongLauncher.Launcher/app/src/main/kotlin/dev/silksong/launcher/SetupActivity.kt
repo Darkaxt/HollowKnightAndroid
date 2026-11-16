@@ -1090,6 +1090,7 @@ class SetupActivity : Activity() {
         // sleeps is the most likely way for that to happen during a build
         // nobody is watching. This costs no permission.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        PortInterruption.begin(this, profile.displayName)
         scope.launch {
             try {
                 // Profile builds are assembled in a separate staging generation.
@@ -1321,6 +1322,7 @@ class SetupActivity : Activity() {
                 LauncherLog.log("Setup failed", t)
                 say("Failed: ${t.message}")
             } finally {
+                PortInterruption.end(this@SetupActivity)
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 setBusy(false)
                 refresh()

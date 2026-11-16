@@ -125,6 +125,10 @@ class LauncherActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        PortInterruption.consumeInterrupted(this)?.let { game ->
+            LauncherLog.log("port: the last port of $game was cut off before it finished")
+            lastResult = "Port of $game was interrupted by Android · prepare again to resume"
+        }
         val directLaunch = acceptDirectLaunch(intent)
         if (profile.id == "silksong") {
             val adoption = LegacySilksongAdopter.adopt(

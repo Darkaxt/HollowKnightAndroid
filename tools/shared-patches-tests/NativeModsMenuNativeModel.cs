@@ -433,7 +433,12 @@ namespace NativeMenuFixture.PROFILE.Engine.Events
 }
 namespace NativeMenuFixture.PROFILE.Engine.EventSystems
 {
-    public class BaseEventData { public void Use() { } }
+    public class BaseEventData
+    {
+        public BaseEventData() { }
+        public BaseEventData(EventSystem eventSystem) { }
+        public void Use() { }
+    }
     public struct RaycastResult { public GameObject gameObject; }
     public class PointerEventData : BaseEventData
     {
@@ -496,7 +501,13 @@ namespace NativeMenuFixture.PROFILE.Engine.UI
             if (cancelAction != GlobalEnums.CancelAction.DoNothing) World.ForeignCancelActions++;
             if (cancelAction != GlobalEnums.CancelAction.DoNothing || _hasCancel) ForceDeselect();
         }
-        public void OnSelect(EventSystems.BaseEventData e) { World.CursorSelect++; World.AudioSelect++; }
+        public bool DontPlaySelectSound { get; set; }
+        public void OnSelect(EventSystems.BaseEventData e)
+        {
+            if (!interactable) return;
+            World.CursorSelect++;
+            if (DontPlaySelectSound) DontPlaySelectSound = false; else World.AudioSelect++;
+        }
         public void ForceDeselect() { if (ReferenceEquals(EventSystems.EventSystem.current.currentSelectedGameObject, gameObject)) EventSystems.EventSystem.current.SetSelectedGameObject(null); }
     }
     public class MenuButton : MenuSelectable, EventSystems.ISubmitHandler, EventSystems.IPointerClickHandler

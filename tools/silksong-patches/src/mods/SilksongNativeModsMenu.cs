@@ -1465,12 +1465,18 @@ namespace DualSouls.Mods.Silksong
                     _skinButtons[index].DataIndex == dataIndex)
                 {
                     // The row was selected while a change was in flight and not interactable,
-                    // so it never lit up; selecting the current object again is ignored.
+                    // so it never lit up. Selecting the current object again is ignored, and
+                    // bouncing the selection through null lets the game's end-of-frame deselect
+                    // check hide the fleurs again, so light the selected row directly.
+                    MenuButton button = _skinButtons[index].Selectable;
                     EventSystem events = EventSystem.current;
-                    if (reselect && events != null &&
-                        events.currentSelectedGameObject == _skinButtons[index].Selectable.gameObject)
-                        events.SetSelectedGameObject(null);
-                    _skinButtons[index].Selectable.Select();
+                    if (reselect && events != null && button.interactable &&
+                        events.currentSelectedGameObject == button.gameObject)
+                    {
+                        button.DontPlaySelectSound = true;
+                        button.OnSelect(new BaseEventData(events));
+                    }
+                    else button.Select();
                     return;
                 }
         }
