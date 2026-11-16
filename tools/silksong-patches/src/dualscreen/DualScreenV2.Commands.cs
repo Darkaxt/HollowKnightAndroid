@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die (refused on slot 1)";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die (refused on slot 1) | sprites";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -61,6 +61,9 @@ public partial class DualScreenV2
                 Array.Copy(a, 1, names, 0, names.Length);
                 return DsQaReport.Fields(PlayerData.instance, names);
             case "die": return CommandDie(gm);
+            case "sprites":
+                var skinRuntime = SilksongSkinRuntime.Current;
+                return skinRuntime != null ? skinRuntime.DescribeCollections() : "error no skin runtime";
             default: return "error unknown command; " + CommandHelp;
         }
     }

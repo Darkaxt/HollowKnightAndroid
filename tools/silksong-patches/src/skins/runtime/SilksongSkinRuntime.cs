@@ -92,6 +92,48 @@ namespace DualSouls.Skins.Silksong.Runtime
         internal Func<bool> RecoverySuspended;
         internal Action AuthorityEdge;
         internal object HudOwnerIdentity => hudOwners;
+
+        /// <summary>QA `sprites`: the collections discovery actually sees on the current owners (#23).</summary>
+        internal string DescribeCollections()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append("heroOwners=").Append(heroOwners != null).Append(" hudOwners=").Append(hudOwners != null).Append('\n');
+            if (heroOwners != null)
+                sb.Append("hero libraries: default=").Append(LibraryName(heroOwners.DefaultLibrary))
+                  .Append(" current=").Append(LibraryName(heroOwners.CurrentLibrary))
+                  .Append(" windy=").Append(LibraryName(heroOwners.WindyLibrary))
+                  .Append(" crest=").Append(LibraryName(heroOwners.CrestLibrary))
+                  .Append(" sprite=").Append(heroOwners.SpriteCollection != null ? heroOwners.SpriteCollection.spriteCollectionName : "null")
+                  .Append('\n');
+            Describe(sb, "hero", CaptureCharacterCollections());
+            Describe(sb, "hud", CaptureHudCollections());
+            foreach (var target in SilksongSkinTargets.All)
+                sb.Append("target ").Append(target.CollectionName).Append(" pages=").Append(target.MaterialCount)
+                  .Append(' ').Append(target.Width).Append('x').Append(target.Height).Append(target.IsHud ? " hud" : "").Append('\n');
+            return sb.ToString();
+        }
+
+        static string LibraryName(tk2dSpriteAnimation library) =>
+            library == null ? "null" : library.name + "(" + (library.clips == null ? 0 : library.clips.Length) + ")";
+
+        static void Describe(System.Text.StringBuilder sb, string kind, List<OwnedCollection> collections)
+        {
+            var seen = new HashSet<object>(ReferenceComparer.Instance);
+            foreach (var item in collections)
+            {
+                var c = item.Collection;
+                if (!seen.Add(c)) continue;
+                var mats = c.materials;
+                sb.Append(kind).Append(' ').Append(c.spriteCollectionName).Append(" mats=").Append(mats == null ? -1 : mats.Length)
+                  .Append(" insts=").Append(c.materialInsts == null ? -1 : c.materialInsts.Length)
+                  .Append(" primaryIsPage0=").Append(mats != null && mats.Length > 0 && ReferenceEquals(c.material, mats[0]))
+                  .Append(" tex=");
+                if (mats != null)
+                    foreach (var m in mats)
+                        sb.Append(m == null || m.mainTexture == null ? "null" : m.mainTexture.name + ":" + m.mainTexture.width + "x" + m.mainTexture.height).Append(',');
+                sb.Append('\n');
+            }
+        }
         internal bool DeathTargetsAvailable(HeroController hero, GameManager manager) => !disposed &&
             hero != null && manager != null && heroOwners != null && hudOwners != null &&
             ReferenceEquals(heroOwners.Hero, hero) && ReferenceEquals(ownerManager, manager) &&
