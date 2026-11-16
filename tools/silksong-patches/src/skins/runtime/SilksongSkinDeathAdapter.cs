@@ -125,8 +125,12 @@ namespace DualSouls.Skins.Silksong.Runtime
                 " backlog=" + backlog.Count + " cancels=" + cancellations.Count + " faulted=" + BacklogFaulted +
                 " observedBridge=" + observedBridge +
                 (frame == null ? " frame=-" : " bridge=" + frame.BridgeOccurrence + " dead=" + frame.Dead +
-                    " playing=" + frame.Playing + " inPosition=" + frame.HeroInPosition + " sceneDone=" + frame.SceneComplete +
-                    " targets=" + frame.TargetsAvailable)
+                    " gameplay=" + frame.Gameplay + " playing=" + frame.Playing + " paused=" + frame.Paused +
+                    " inPosition=" + frame.HeroInPosition + " sceneDone=" + frame.SceneComplete + " hazard=" + frame.Hazard +
+                    " transitioning=" + frame.Transitioning + " loading=" + frame.Loading + " input=" + frame.AcceptingInput +
+                    " relinquished=" + frame.ControlRelinquished + " targets=" + frame.TargetsAvailable +
+                    " hud=" + (frame.HudOwners != null) + " stableNow=" + Stable(frame) +
+                    " sameHero=" + ReferenceEquals(frame.Hero, deathHero) + " sameManager=" + ReferenceEquals(frame.Manager, deathManager))
 #if UNITY_ANDROID && !UNITY_EDITOR
                 + " ringField=" + (OccurrenceField == null ? "missing" : OccurrenceField.GetValue(null).ToString())
 #endif

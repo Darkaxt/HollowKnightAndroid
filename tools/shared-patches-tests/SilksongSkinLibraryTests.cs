@@ -63,6 +63,8 @@ public sealed class SilksongSkinLibraryTests
         Assert.Contains("mode=ROTATE", described, StringComparison.Ordinal);
         Assert.Contains("lastDeath=1", described, StringComparison.Ordinal);
         Assert.Contains("bridge=1", described, StringComparison.Ordinal);
+        Assert.Contains("stableNow=True", described, StringComparison.Ordinal);
+        Assert.Contains("sameHero=False", described, StringComparison.Ordinal);
     }
 
     [Fact]
