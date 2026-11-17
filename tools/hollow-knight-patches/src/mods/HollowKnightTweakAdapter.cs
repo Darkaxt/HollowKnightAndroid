@@ -106,6 +106,7 @@ namespace DualSouls.Mods.HollowKnight
 
             Cheat("unlock_stags", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL STAGS", "Permanently open every Stag Station on this save.", "run", "run"),
             Cheat("unlock_maps", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL MAPS", "Permanently add every area map to this save.", "run", "run"),
+            Cheat("unlock_all_charms", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL CHARMS", "Permanently add all 40 charms. Fragile charms are repaired, Kingsoul is whole and Grimmchild starts at level 1.", "run", "run"),
 
             Cheat("award_all_achievements", TweakControlKind.Command, "ACHIEVEMENTS", "UNLOCK ALL ACHIEVEMENTS", "Unlock every achievement on this device.", "run", "run"),
             Cheat("reset_achievements", TweakControlKind.Command, "ACHIEVEMENTS", "RESET ACHIEVEMENTS", "Lock every achievement on this device again.", "run", "run"),

@@ -220,6 +220,26 @@ namespace DualSouls.Mods.HollowKnight
                 }
                 case "unlock_maps":
                     return Text(UnlockMaps(data) + " maps unlocked");
+                case "unlock_all_charms":
+                {
+                    int granted = 0;
+                    for (int charm = 1; charm <= 40; charm++)
+                    {
+                        if (data.GetBool("gotCharm_" + charm)) continue;
+                        data.SetBool("gotCharm_" + charm, true);
+                        data.SetBool("newCharm_" + charm, true);
+                        granted++;
+                    }
+                    for (int charm = 23; charm <= 25; charm++)
+                        if (data.GetBool("brokenCharm_" + charm)) data.SetBool("brokenCharm_" + charm, false);
+                    // Charm icons read these states: Kingsoul whole (not Void Heart) and
+                    // Grimmchild at its first level, so both quests continue from there.
+                    if (data.royalCharmState < 3) data.SetInt("royalCharmState", 3);
+                    if (data.grimmChildLevel < 1) data.SetInt("grimmChildLevel", 1);
+                    if (!data.hasCharm) data.SetBool("hasCharm", true);
+                    data.CountCharms();
+                    return Text(granted + " charms added, " + data.charmsOwned + "/40 owned");
+                }
                 default:
                     return ToggleAbility(id, data);
             }
