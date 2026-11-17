@@ -1643,7 +1643,7 @@ namespace DualSouls.Mods.Silksong
                     _skinButtons[index].DataIndex = -1;
                     _skinButtons[index].Selectable.interactable = shown;
                 }
-                _skinLabels[back].text = "BACK";
+                SetSkinLabel(_skinLabels[back], "BACK");
                 _skinsScreen.defaultHighlight = _skinButtons[back].Selectable;
                 return;
             }
@@ -1661,11 +1661,27 @@ namespace DualSouls.Mods.Silksong
                 _skinButtons[slot].DataIndex = dataIndex;
                 _skinButtons[slot].Selectable.interactable = row.IsActionable &&
                     (_skinSnapshotReady || row.Kind == NativeSkinMenuRowKind.Back);
-                _skinLabels[slot].text = row.Label.ToUpperInvariant() +
-                    (string.IsNullOrEmpty(row.Value) ? "" : "     " + row.Value);
+                SetSkinLabel(_skinLabels[slot], row.Label.ToUpperInvariant() +
+                    (string.IsNullOrEmpty(row.Value) ? "" : "     " + row.Value));
             }
             _skinsScreen.defaultHighlight = _skinSnapshotReady
                 ? _skinButtons[0].Selectable : _skinButtons[visible.Count - 1].Selectable;
+        }
+
+        /// <summary>
+        /// Sets a Skins row label and fits its width to the text. The focus fleurs hang
+        /// off the label's edges, and the cloned label's own size fitter is disabled, so
+        /// without this they keep the width of the Options entry the row was cloned from
+        /// and sit on top of longer text.
+        /// </summary>
+        static void SetSkinLabel(UiText label, string value)
+        {
+            if (label.text != value) label.text = value;
+            RectTransform rect = label.transform as RectTransform;
+            if (rect == null) return;
+            float width = Mathf.Ceil(label.preferredWidth);
+            if (Mathf.Abs(rect.rect.width - width) > 0.5f)
+                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
         }
 
         string SkinFocusDescription()
