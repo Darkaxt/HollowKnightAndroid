@@ -208,6 +208,10 @@ namespace DualSouls.Mods.Silksong
 
             Cheat("award_all_achievements", TweakControlKind.Command, "ACHIEVEMENTS", "UNLOCK ALL ACHIEVEMENTS", "Unlock every achievement on this device.", "run", "run"),
             Cheat("reset_achievements", TweakControlKind.Command, "ACHIEVEMENTS", "RESET ACHIEVEMENTS", "Lock every achievement on this device again.", "run", "run"),
+            Cheat("achievement_prev", TweakControlKind.Command, "ACHIEVEMENTS", "PREVIOUS ACHIEVEMENT", "Select the previous achievement and show whether it is unlocked.", "run", "run"),
+            Cheat("achievement_next", TweakControlKind.Command, "ACHIEVEMENTS", "NEXT ACHIEVEMENT", "Select the next achievement and show whether it is unlocked.", "run", "run"),
+            Cheat("achievement_award", TweakControlKind.Command, "ACHIEVEMENTS", "UNLOCK SELECTED", "Unlock the selected achievement on this device.", "run", "run"),
+            Cheat("achievement_popups", TweakControlKind.Command, "ACHIEVEMENTS", "TOGGLE ACHIEVEMENT POPUPS", "Turn the game's own achievement popups on or off.", "run", "run"),
         });
 
         readonly struct PendingChoice

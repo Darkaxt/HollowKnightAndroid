@@ -304,6 +304,39 @@ namespace DualSouls.Mods.Silksong
         // Achievements live in the platform's roaming shared data on Android (no
         // online subsystem); the game's own ResetAllAchievements only clears that
         // subsystem, so reset clears the local records directly.
+        static int _achievement = -1;
+
+        // #25 mod 19 picker: one achievement at a time, and the game's own popup setting.
+        static TweakActionResult AchievementPicker(string id)
+        {
+            GameManager game = GameManager.instance;
+            AchievementHandler handler = game == null ? null : game.achievementHandler;
+            if (handler == null || handler.AchievementsList == null)
+                return TweakActionResult.Fail("The achievement list is not loaded yet.");
+            if (id == "achievement_popups")
+            {
+                GameSettings settings = game.gameSettings;
+                settings.showNativeAchievementPopups = settings.showNativeAchievementPopups == 1 ? 0 : 1;
+                settings.SaveGameOptionsSettings();
+                return Text("achievement popups " + (settings.showNativeAchievementPopups == 1 ? "on" : "off"));
+            }
+            var list = new System.Collections.Generic.List<Achievement>(handler.AchievementsList.Achievements);
+            if (list.Count == 0) return TweakActionResult.Fail("This game has no achievements loaded.");
+            if (id == "achievement_award")
+            {
+                if (_achievement < 0 || _achievement >= list.Count) return TweakActionResult.Fail("Pick an achievement first with NEXT ACHIEVEMENT.");
+            }
+            else
+            {
+                int step = id == "achievement_next" ? 1 : -1;
+                _achievement = _achievement < 0 ? (step > 0 ? 0 : list.Count - 1) : ((_achievement + step) % list.Count + list.Count) % list.Count;
+            }
+            Achievement achievement = list[_achievement];
+            if (id == "achievement_award") handler.AwardAchievementToPlayer(achievement.PlatformKey);
+            string title = TeamCherry.Localization.Language.Get(achievement.TitleCell, "Achievements");
+            return Text((_achievement + 1) + "/" + list.Count + " " + title + ": " + (handler.AchievementWasAwarded(achievement.PlatformKey) ? "unlocked" : "locked"));
+        }
+
         static TweakActionResult Achievements(bool award)
         {
             GameManager game = GameManager.instance;
@@ -332,6 +365,7 @@ namespace DualSouls.Mods.Silksong
                 case "unlock_all_tools": case "unlock_all_crests": case "unlock_fast_travel":
                 case "unlock_maps": case "max_collectables":
                 case "award_all_achievements": case "reset_achievements":
+                case "achievement_prev": case "achievement_next": case "achievement_award": case "achievement_popups":
                     return true;
                 default:
                     return id.StartsWith("ability_", StringComparison.Ordinal) || SilksongItemPickers.IsCommand(id);
@@ -342,6 +376,8 @@ namespace DualSouls.Mods.Silksong
         {
             if (id == "award_all_achievements" || id == "reset_achievements")
                 return Achievements(id == "award_all_achievements");
+            if (id.StartsWith("achievement_", StringComparison.Ordinal))
+                return AchievementPicker(id);
             HeroController hero = HeroController.instance;
             PlayerData data = PlayerData.HasInstance ? PlayerData.instance : null;
             if (hero == null || data == null)
