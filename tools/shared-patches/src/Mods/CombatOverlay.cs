@@ -24,6 +24,9 @@ namespace DualSouls.Mods
         const float NumberDuration = 2f;
         const int NumberPool = 16;
         const int MaximumBossBars = 3;
+        // Mod 28's default bar colours: light grey fill with near-black numbers.
+        static readonly Color BarFill = new Color(0.745f, 0.722f, 0.722f, 1f);
+        static readonly Color BarText = new Color(0.055f, 0.016f, 0.016f, 1f);
 
         sealed class Tracked
         {
@@ -66,8 +69,12 @@ namespace DualSouls.Mods
         public static bool Active => _bars || _bossBars || _damage;
 
         /// <summary>The hero is about to hit <paramref name="target"/> (the HP owner after any redirect).</summary>
+        // Device diagnostics: game hit-hook calls and hero hits recorded here.
+        public static int HookCalls, HeroHits;
+
         public static void NoteHeroHit(HealthManager target)
         {
+            HeroHits++;
             if (!Active || target == null || target.hp <= 0) return;
             Tracked tracked;
             if (!_tracked.TryGetValue(target, out tracked))
@@ -150,7 +157,7 @@ namespace DualSouls.Mods
             for (int index = 0; index < _numbers.Length; index++)
                 if (_numbers[index] != null && _numbers[index].Transform != null && _numbers[index].Transform.gameObject.activeSelf) numbers++;
             return "combat: bars=" + (_bars ? "on" : "off") + " bossBars=" + (_bossBars ? "on" : "off") + " numbers=" + (_damage ? "on" : "off")
-                + " tracked=" + _tracked.Count + " bosses=" + _bosses.Count + " shownNumbers=" + numbers;
+                + " tracked=" + _tracked.Count + " bosses=" + _bosses.Count + " shownNumbers=" + numbers + " hooks=" + HookCalls + " heroHits=" + HeroHits;
         }
 
         static void ShowEnemyBar(HealthManager enemy, Tracked tracked)
@@ -188,11 +195,11 @@ namespace DualSouls.Mods
                 bar.Root.rotation = camera.transform.rotation;
                 bar.Root.localScale = Vector3.one;
                 bar.Root.Find("Background").localScale = new Vector3(width, height, 1f);
-                SetFill(bar, tracked, width * 0.99f, height * 0.7f);
+                SetFill(bar, tracked, width * 0.99f, height * 0.84f);
                 bar.Name.text = tracked.Name;
                 bar.Name.transform.localPosition = new Vector3(0f, height * 1.6f, 0f);
-                bar.Name.characterSize = height * 0.11f;
-                bar.Label.characterSize = height * 0.09f;
+                bar.Name.characterSize = height * 0.22f;
+                bar.Label.characterSize = height * 0.18f;
                 bar.Root.gameObject.SetActive(true);
             }
         }
@@ -211,8 +218,8 @@ namespace DualSouls.Mods
             if (parent != null) root.transform.SetParent(parent, false);
             var bar = new Bar { Root = root.transform };
             Part(root.transform, "Background", new Color(0f, 0f, 0f, 0.62f), 3200, new Vector3(1.5f, 0.16f, 1f));
-            bar.Fill = Part(root.transform, "Fill", boss ? new Color(0.75f, 0.72f, 0.72f, 0.95f) : new Color(0.92f, 0.25f, 0.2f, 0.92f), 3201, new Vector3(1.44f, 0.10f, 1f));
-            bar.Label = Text(root.transform, "Health", boss ? 40 : 32, Color.white, 3202);
+            bar.Fill = Part(root.transform, "Fill", BarFill, 3201, new Vector3(1.44f, 0.10f, 1f));
+            bar.Label = Text(root.transform, "Health", boss ? 40 : 32, BarText, 3202);
             bar.Label.characterSize = 0.035f;
             if (boss) bar.Name = Text(root.transform, "Name", 40, Color.white, 3202);
             return bar;

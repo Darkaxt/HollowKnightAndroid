@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die, hit <damage> [hp] (refused on slot 1) | sprites";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die, hit <damage> [hp] [near] (refused on slot 1) | sprites";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -25,8 +25,10 @@ public partial class DualScreenV2
     string CommandHit(string[] a, GameManager gm)
     {
         int damage, hp = 0;
-        if (a.Length < 2 || !int.TryParse(a[1], out damage) || damage <= 0 || (a.Length > 2 && !int.TryParse(a[2], out hp)))
-            return "error hit <damage> [hp]";
+        bool near = a.Length > 2 && a[a.Length - 1] == "near";
+        int numbers = near ? a.Length - 1 : a.Length;
+        if (numbers < 2 || !int.TryParse(a[1], out damage) || damage <= 0 || (numbers > 2 && !int.TryParse(a[2], out hp)))
+            return "error hit <damage> [hp] [near]";
         if (gm == null || gm.profileID == 1) return "error refused on slot 1 (player save); use a disposable slot";
         var hero = HeroController.SilentInstance;
         if (hero == null) return "error no HeroController";
@@ -40,13 +42,16 @@ public partial class DualScreenV2
         }
         if (target == null) return "error no live enemy in scene";
         if (hp > 0) target.hp = hp;
-        int before = target.hp;
+        // near: bring the target beside the hero so its bar and damage number are on screen.
+        if (near) target.transform.position = hero.transform.position + new Vector3(3f, 1f, 0f);
+        int before = target.hp, hooks = DualSouls.Mods.CombatOverlay.HookCalls, heroHits = DualSouls.Mods.CombatOverlay.HeroHits;
         target.Hit(new HitInstance
         {
             Source = hero.gameObject, AttackType = AttackTypes.Nail, DamageDealt = damage,
             Multiplier = 1f, MagnitudeMultiplier = 1f, IgnoreInvulnerable = true, IsHeroDamage = true,
         });
-        return "ok target=" + target.gameObject.name + " hp=" + before + "->" + target.hp + " distance=" + Mathf.Sqrt(best).ToString("0.0");
+        return "ok target=" + target.gameObject.name + " hp=" + before + "->" + target.hp + " distance=" + Mathf.Sqrt(best).ToString("0.0")
+            + " hooks=+" + (DualSouls.Mods.CombatOverlay.HookCalls - hooks) + " heroHits=+" + (DualSouls.Mods.CombatOverlay.HeroHits - heroHits);
     }
 
     void PollCommands() { DsCommandFile.Poll(RunCommand); }

@@ -389,6 +389,7 @@ namespace NativeMenuFixture.PROFILE.Engine
     {
         public static void RestoreAll() { }
         public static void NoteEnemyHit(HealthManager target, HitInstance hit) { }
+        public static void NoteHitHook() { }
         public static void SetStateTransferPreparation(Action action) { }
         public static void SaveState(int slot) { }
         public static void LoadState(int slot, Action<string> completed) { }

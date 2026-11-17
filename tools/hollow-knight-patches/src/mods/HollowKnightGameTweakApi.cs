@@ -822,6 +822,9 @@ namespace DualSouls.Mods.HollowKnight
 
         public static void BeforeHit(global::HealthManager target, ref global::HitInstance hitInstance)
         {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            HollowKnightGameplayFeatures.NoteHitHook();
+#endif
             if (target == null || target.isDead || hitInstance.DamageDealt <= 0)
                 return;
 #if UNITY_ANDROID && !UNITY_EDITOR

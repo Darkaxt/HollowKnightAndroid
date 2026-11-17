@@ -11,7 +11,7 @@ public partial class HKDualScreen
 {
     const string CommandHelp =
         "help | report | state | pause | mods | skins | skin <list|row N|left N|right N> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
-        "mods-list | mod <id> <value> | pd <field>... | charm give <id>... | geo <amount> | die | hit <damage> [hp] | save | quit-menu | fonts | hudfit | sprites <text>\n" +
+        "mods-list | mod <id> <value> | pd <field>... | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | save | quit-menu | fonts | hudfit | sprites <text>\n" +
         "geo, charm, die, hit and save refuse slot 1 (the player's own save); use a disposable slot.";
 
     // QA: one hero nail hit on the nearest live enemy through HealthManager.Hit, as a slash
@@ -19,8 +19,10 @@ public partial class HKDualScreen
     string CommandHit(string[] a, GameManager gm)
     {
         int damage, hp = 0;
-        if (a.Length < 2 || !int.TryParse(a[1], out damage) || damage <= 0 || (a.Length > 2 && !int.TryParse(a[2], out hp)))
-            return "error hit <damage> [hp]";
+        bool near = a.Length > 2 && a[a.Length - 1] == "near";
+        int numbers = near ? a.Length - 1 : a.Length;
+        if (numbers < 2 || !int.TryParse(a[1], out damage) || damage <= 0 || (numbers > 2 && !int.TryParse(a[2], out hp)))
+            return "error hit <damage> [hp] [near]";
         string guard = SaveSlotGuard(gm);
         if (guard != null) return guard;
         var hero = HeroController.UnsafeInstance;
@@ -35,13 +37,16 @@ public partial class HKDualScreen
         }
         if (target == null) return "error no live enemy in scene";
         if (hp > 0) target.hp = hp;
-        int before = target.hp;
+        // near: bring the target beside the hero so its bar and damage number are on screen.
+        if (near) target.transform.position = hero.transform.position + new Vector3(3f, 1f, 0f);
+        int before = target.hp, hooks = DualSouls.Mods.CombatOverlay.HookCalls, heroHits = DualSouls.Mods.CombatOverlay.HeroHits;
         target.Hit(new HitInstance
         {
             Source = hero.gameObject, AttackType = AttackTypes.Nail, DamageDealt = damage,
             Multiplier = 1f, MagnitudeMultiplier = 1f, IgnoreInvulnerable = true,
         });
-        return "ok target=" + target.gameObject.name + " hp=" + before + "->" + target.hp + " distance=" + Mathf.Sqrt(best).ToString("0.0");
+        return "ok target=" + target.gameObject.name + " hp=" + before + "->" + target.hp + " distance=" + Mathf.Sqrt(best).ToString("0.0")
+            + " hooks=+" + (DualSouls.Mods.CombatOverlay.HookCalls - hooks) + " heroHits=+" + (DualSouls.Mods.CombatOverlay.HeroHits - heroHits);
     }
 
     void PollCommands() { DsCommandFile.Poll(RunCommand); }

@@ -660,6 +660,7 @@ namespace DualSouls.Mods.Silksong
 
         public static void BeforeEnemyHit(HealthManager target, ref HitInstance hit)
         {
+            CombatOverlay.HookCalls++;
             if (target == null || target.isDead || hit.DamageDealt <= 0) return;
             if (hit.IsHeroDamage) CombatOverlay.NoteHeroHit(target.SendDamageTo != null ? target.SendDamageTo : target);
             long factor = (hit.IsNailDamage ? Math.Max(NeedleMultiplier, 1) : 1) * (long)Math.Max(AllDamageMultiplier, 1);
