@@ -57,13 +57,19 @@ namespace DualSouls.Mods.HollowKnight
                     _quickAttacks = value == "on";
                     if (_quickAttacks) MaintainQuickAttacks(); else RestoreQuickAttacks();
                     break;
+                case HeroTint.Id:
+                    _tint.Set(value);
+                    break;
                 default:
                     throw new ArgumentException("Not a Hollow Knight cheat choice: " + id);
             }
         }
 
+        readonly HeroTint _tint = new HeroTint();
+
         public void Tick()
         {
+            _tint.Tick();
             MaintainSpeed();
             MaintainAirJump();
             MaintainQuickAttacks();
@@ -71,6 +77,7 @@ namespace DualSouls.Mods.HollowKnight
 
         public void RestoreAll()
         {
+            _tint.Set("off");
             _gameSpeed = 1f;
             RestoreSpeed();
             _airJump = false;

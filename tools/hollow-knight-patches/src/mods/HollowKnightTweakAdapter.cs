@@ -93,6 +93,7 @@ namespace DualSouls.Mods.HollowKnight
             Cheat("refill_health", TweakControlKind.Command, "PLAYER", "REFILL HEALTH", "Restore all masks now.", "run", "run"),
             Cheat("max_health_up", TweakControlKind.Command, "PLAYER", "MAX HEALTH +1", "Permanently add one mask to this save.", "run", "run"),
             Cheat("max_health_down", TweakControlKind.Command, "PLAYER", "MAX HEALTH -1", "Permanently remove one mask from this save (minimum 1).", "run", "run"),
+            Cheat("hero_colour", TweakControlKind.Choice, "PLAYER", "HERO COLOUR", "Tint the hero on top of the active skin. Rainbows cycle colours.", "off", "off", "red", "blue", "green", "purple", "gold", "fire", "ice", "shadow", "red_shadow", "gold_shadow", "rainbow_1", "rainbow_2"),
 
             Cheat("ability_double_jump", TweakControlKind.Command, "ABILITIES", "DOUBLE JUMP", "Grant or remove Monarch Wings on this save.", "run", "run"),
             Cheat("ability_dash", TweakControlKind.Command, "ABILITIES", "DASH", "Grant or remove Mothwing Cloak on this save.", "run", "run"),

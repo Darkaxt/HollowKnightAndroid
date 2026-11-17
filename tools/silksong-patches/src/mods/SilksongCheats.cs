@@ -95,7 +95,7 @@ namespace DualSouls.Mods.Silksong
 
         public bool IsChoice(string id) =>
             id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" ||
-            id == "infinite_tools" || id.StartsWith("active_", StringComparison.Ordinal);
+            id == "infinite_tools" || id == HeroTint.Id || id.StartsWith("active_", StringComparison.Ordinal);
 
         public void SetChoice(string id, string value)
         {
@@ -117,6 +117,9 @@ namespace DualSouls.Mods.Silksong
                     _infiniteTools = value == "on";
                     ToolItemManager.IsInfiniteToolUseEnabled = _infiniteTools || _infiniteToolsBaseline;
                     break;
+                case HeroTint.Id:
+                    _tint.Set(value);
+                    break;
                 default:
                     SetActiveTool(id, value == "on");
                     break;
@@ -131,8 +134,11 @@ namespace DualSouls.Mods.Silksong
             return TweakActionResult.Ok(TweakReadback.Choice(value));
         }
 
+        readonly HeroTint _tint = new HeroTint();
+
         public void Tick()
         {
+            _tint.Tick();
             MaintainSpeed();
             MaintainAirJump();
             MaintainQuickAttacks();
@@ -140,6 +146,7 @@ namespace DualSouls.Mods.Silksong
 
         public void RestoreAll()
         {
+            _tint.Set("off");
             _gameSpeed = 1f;
             RestoreSpeed();
             _airJump = false;
