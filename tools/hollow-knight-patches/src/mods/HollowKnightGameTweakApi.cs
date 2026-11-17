@@ -39,6 +39,11 @@ namespace DualSouls.Mods.HollowKnight
         int _geoMultiplier = 1;
         HollowKnightFlashMode _lifebloodFlash = HollowKnightFlashMode.Vanilla;
         int _stateSlot = 1;
+        readonly System.Collections.Generic.Dictionary<string, string> _cheatChoices =
+            new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal);
+#if UNITY_ANDROID && !UNITY_EDITOR
+        readonly HollowKnightCheats _cheats = new HollowKnightCheats();
+#endif
         readonly TweakDeferredOperation _benchOperation =
             new TweakDeferredOperation("bench_teleport", 120f);
         long _benchRequestToken;
@@ -121,6 +126,10 @@ namespace DualSouls.Mods.HollowKnight
             _geoMultiplier = 1;
             _lifebloodFlash = HollowKnightFlashMode.Vanilla;
             _stateSlot = 1;
+            _cheatChoices.Clear();
+#if UNITY_ANDROID && !UNITY_EDITOR
+            _cheats.RestoreAll();
+#endif
             _completedOperations.Clear();
             Enqueue(_benchOperation.Cancel(
                 "Hollow Knight Bench Teleport was canceled by baseline restoration."));
@@ -334,8 +343,36 @@ namespace DualSouls.Mods.HollowKnight
             HollowKnightGameplayHooks.GeoMultiplier = multiplier;
         }
 
+        static bool IsCheatChoice(string id) =>
+            id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks";
+
+        public void SetCheatChoice(string id, string value)
+        {
+            if (!IsCheatChoice(id))
+                throw new System.ArgumentException("Not a Hollow Knight cheat choice: " + id);
+#if UNITY_ANDROID && !UNITY_EDITOR
+            _cheats.SetChoice(id, value);
+#endif
+            _cheatChoices[id] = value;
+        }
+
+        public TweakActionResult RunCheatCommand(string id)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            return _cheats.Run(id);
+#else
+            return TweakActionResult.Fail("Hollow Knight cheat commands need the game runtime: " + id);
+#endif
+        }
+
         public TweakActionResult Readback(string id)
         {
+            if (IsCheatChoice(id))
+            {
+                string value;
+                if (!_cheatChoices.TryGetValue(id, out value)) value = id == "game_speed" ? "vanilla" : "off";
+                return Choice(value);
+            }
             if (!IsHookAvailable(id)) return TweakActionResult.Fail(
                 "The required Hollow Knight native gameplay weave is unavailable for " + id + ".");
             switch (id)
@@ -503,6 +540,7 @@ namespace DualSouls.Mods.HollowKnight
             MaintainRunSpeed();
             MaintainUnlimitedSoul();
 #if UNITY_ANDROID && !UNITY_EDITOR
+            _cheats.Tick();
             HollowKnightGameplayFeatures.Tick(
                 _fastTransitions, _autoMap, _innateCompass, _secretRadar,
                 _healthBars, _damageNumbers, _bossRetry, _equipAnywhere,
@@ -522,6 +560,7 @@ namespace DualSouls.Mods.HollowKnight
             RestoreDamageOwner();
             RestoreNailOwner();
             RestoreRunSpeedOwner();
+            _cheats.PrepareForStateTransfer();
             HollowKnightGameplayFeatures.RestorePlayerOwnedForStateTransfer();
         }
 #endif

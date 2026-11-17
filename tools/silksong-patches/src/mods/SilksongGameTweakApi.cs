@@ -45,6 +45,7 @@ namespace DualSouls.Mods.Silksong
         bool _rosaryMagnet;
         bool _keepRosaries;
         int _stateSlot = 1;
+        readonly SilksongCheats _cheats = new SilksongCheats();
         readonly SilksongAppliedChoiceState _appliedChoices =
             new SilksongAppliedChoiceState();
         readonly TweakDeferredOperation _stateLoadOperation =
@@ -79,6 +80,7 @@ namespace DualSouls.Mods.Silksong
                 _instantDialogue = CheatManager.IsTextPrintSkipEnabled;
                 _worldRumbleDisabled = CheatManager.IsWorldRumbleDisabled;
                 _frostDisabled = CheatManager.IsFrostDisabled;
+                _cheats.Capture();
                 _captured = true;
             }
             _baselineOwner = this;
@@ -97,6 +99,7 @@ namespace DualSouls.Mods.Silksong
             RestoreWorldRumbleDisabled();
             RestoreFrostDisabled();
             RestoreRunSpeed();
+            _cheats.RestoreAll();
             _fastTransitions = _autoMap = _innateCompass = _secretRadar = false;
             _healthBars = _damageNumbers = _bossRetry = _unlimitedToolSlots = false;
             _rosaryMagnet = _keepRosaries = _unlimitedSilk = false;
@@ -293,8 +296,23 @@ namespace DualSouls.Mods.Silksong
             _appliedChoices.SetFrostDisabled(false);
         }
 
+        public void SetCheatChoice(string id, string value)
+        {
+            EnsureCaptured();
+            if (!_cheats.IsChoice(id)) throw new ArgumentException("Not a Silksong cheat choice: " + id);
+            _cheats.SetChoice(id, value);
+        }
+
+        public TweakActionResult RunCheatCommand(string id)
+        {
+            if (!_cheats.IsCommand(id))
+                return TweakActionResult.Fail("Not a Silksong cheat command: " + id);
+            return _cheats.Run(id);
+        }
+
         public TweakActionResult Readback(string id)
         {
+            if (_cheats.IsChoice(id)) return _cheats.Readback(id);
             switch (id)
             {
                 case "run_speed":
@@ -373,6 +391,7 @@ namespace DualSouls.Mods.Silksong
                 "Silksong save-state load timed out before scene completion."));
             MaintainRunSpeed();
             MaintainUnlimitedSilk();
+            _cheats.Tick();
             SilksongGameplayFeatures.Tick(_fastTransitions, _autoMap, _innateCompass,
                 _secretRadar, _healthBars, _damageNumbers, _bossRetry,
                 _unlimitedToolSlots, _rosaryMagnet, _keepRosaries);
@@ -505,6 +524,7 @@ namespace DualSouls.Mods.Silksong
         {
             RestoreRunSpeedOwner();
             RestoreSilkOwner();
+            _cheats.PrepareForStateTransfer();
             SilksongGameplayFeatures.RestorePlayerOwnedForStateTransfer();
         }
 

@@ -98,6 +98,8 @@ namespace DualSouls.Mods.Silksong
         void SetFrostDisabled(bool enabled);
         void RestoreFrostDisabled();
         void TickGameplay();
+        void SetCheatChoice(string id, string value);
+        TweakActionResult RunCheatCommand(string id);
         TweakActionResult Readback(string id);
         IReadOnlyList<TweakAdapterCompletion> DrainCompletedOperations();
     }
@@ -105,6 +107,9 @@ namespace DualSouls.Mods.Silksong
     /// <summary>Silksong adapter for the shared built-in Mods contract.</summary>
     public sealed class SilksongTweakAdapter : ITweakAdapter, ITweakOperationAdapter
     {
+        // #25 Nexus mod 19 parity rows; declared before Rows, which fills it.
+        static readonly HashSet<string> CheatIds = new HashSet<string>(StringComparer.Ordinal);
+
         static readonly IReadOnlyList<TweakDescriptor> Rows = Array.AsReadOnly(new[]
         {
 
@@ -114,12 +119,14 @@ namespace DualSouls.Mods.Silksong
             Row("innate_compass", "innate_compass", TweakControlKind.Choice, "WORLD", "INNATE COMPASS", "Show Hornet on the map without requiring a compass tool.", "off", "off", "on"),
             Row("bench_teleport", "bench_teleport", TweakControlKind.Route, "WORLD", "BENCH TELEPORT", "Open the recorded-bench destination list.", "open", "open"),
             Row("secret_radar", "secret_radar", TweakControlKind.Choice, "WORLD", "SECRET RADAR", "Signal nearby secrets without changing progression.", "off", "off", "on"),
+            Cheat("game_speed", TweakControlKind.Choice, "WORLD", "GAME SPEED", "Slow down or speed up gameplay. Pause and hit-stop keep their normal timing.", "vanilla", "vanilla", "x0_5", "x0_75", "x1_5", "x2"),
 
             Row("nail_damage", "nail_damage", TweakControlKind.Choice, "COMBAT", "NEEDLE DAMAGE", "Multiply Needle damage while preserving upgrades.", "x1", "x1", "x2", "x3", "x5"),
             Row("damage_received", "damage_taken", TweakControlKind.Choice, "COMBAT", "DAMAGE TAKEN", "Choose normal damage, prevent death, or full invincibility.", "vanilla", "vanilla", "prevent_death", "invincible"),
             Row("damage_cap", "damage_cap", TweakControlKind.Choice, "COMBAT", "DAMAGE CAP", "Limit damage received from a single hit.", "off", "off", "on"),
             Row("one_hit_kills", "one_hit_kills", TweakControlKind.Choice, "COMBAT", "ONE-HIT KILLS", "Use Silksong's managed instant-kill damage state.", "off", "off", "on"),
             Row("unlimited_silk", "unlimited_soul", TweakControlKind.Choice, "COMBAT", "UNLIMITED SILK", "Keep Silk available using Silksong's own drain and refill paths.", "off", "off", "on"),
+            Cheat("quick_attacks", TweakControlKind.Choice, "COMBAT", "QUICK ATTACKS", "Remove Needle attack cooldowns and allow turning mid-slash.", "off", "off", "on"),
 
             Row("health_bars", "enemy_health_bars", TweakControlKind.Choice, "ENCOUNTERS", "ENEMY HEALTH BARS", "Show health bars for eligible enemies and bosses.", "off", "off", "on"),
             Row("damage_numbers", "damage_numbers", TweakControlKind.Choice, "ENCOUNTERS", "DAMAGE NUMBERS", "Show the damage dealt by supported attacks.", "off", "off", "on"),
@@ -128,6 +135,8 @@ namespace DualSouls.Mods.Silksong
             Row("equip_anywhere", "equip_anywhere", TweakControlKind.Choice, "CRESTS & TOOLS", "EQUIP ANYWHERE", "Allow Crest and Tool changes away from benches.", "off", "off", "on"),
             Row("charm_costs", "charm_costs", TweakControlKind.Choice, "CRESTS & TOOLS", "TOOL COSTS", "Remove Tool replenishment costs while enabled.", "vanilla", "vanilla", "free"),
             Row("unlimited_notches", "unlimited_notches", TweakControlKind.Choice, "CRESTS & TOOLS", "UNLIMITED TOOL SLOTS", "Equip Tools without the normal Crest slot limit.", "off", "off", "on"),
+            Cheat("infinite_tools", TweakControlKind.Choice, "CRESTS & TOOLS", "INFINITE TOOL USE", "Tools never run out of uses while enabled.", "off", "off", "on"),
+            Cheat("refill_tools", TweakControlKind.Command, "CRESTS & TOOLS", "REFILL TOOLS", "Refill every unlocked Tool to its full capacity now.", "run", "run"),
 
             Row("state_slot", "state_slot", TweakControlKind.Choice, "SAVE STATES", "SLOT", "Choose the save-state slot used by the commands below.", "1", "1", "2", "3", "4", "5"),
             Row("save_to_slot", "save_to_slot", TweakControlKind.Command, "SAVE STATES", "SAVE TO SLOT", "Capture the current state in the selected slot.", "run", "run"),
@@ -138,10 +147,49 @@ namespace DualSouls.Mods.Silksong
             Row("keep_geo_on_death", "keep_geo_on_death", TweakControlKind.Choice, "ECONOMY", "KEEP ROSARIES ON DEATH", "Keep Rosaries through death without duplicate recovery awards.", "off", "off", "on"),
             Row("journal_one_kill", "journal_one_kill", TweakControlKind.Choice, "ECONOMY", "JOURNAL IN ONE KILL", "Complete eligible Journal entries after one kill.", "off", "off", "on"),
             Row("geo_multiplier", "geo_multiplier", TweakControlKind.Choice, "ECONOMY", "ROSARY MULTIPLIER", "Multiply supported Rosary awards.", "x1", "x1", "x2", "x3", "x5"),
+            Cheat("add_rosaries", TweakControlKind.Command, "ECONOMY", "ADD 1000 ROSARIES", "Add 1000 Rosaries now (the game's cap still applies).", "run", "run"),
+            Cheat("add_shards", TweakControlKind.Command, "ECONOMY", "ADD 100 SHELL SHARDS", "Add 100 Shell Shards now (the game's cap still applies).", "run", "run"),
 
             Row("instant_dialogue", "instant_dialogue", TweakControlKind.Choice, "PRESENTATION", "INSTANT DIALOGUE", "Show dialogue text immediately instead of printing it over time.", "off", "off", "on"),
             Row("disable_world_rumble", "disable_world_rumble", TweakControlKind.Choice, "PRESENTATION", "DISABLE WORLD RUMBLE", "Prevent ambient world rumble effects.", "off", "off", "on"),
             Row("ignore_frost_slowdown", "ignore_frost_slowdown", TweakControlKind.Choice, "PLAYER", "IGNORE FROST SLOWDOWN", "Prevent frost buildup from slowing Hornet.", "off", "off", "on"),
+            Cheat("infinite_air_jump", TweakControlKind.Choice, "PLAYER", "INFINITE AIR JUMP", "Jump again in mid-air as often as you like.", "off", "off", "on"),
+            Cheat("refill_health", TweakControlKind.Command, "PLAYER", "REFILL HEALTH", "Restore all masks now.", "run", "run"),
+            Cheat("max_health_up", TweakControlKind.Command, "PLAYER", "MAX HEALTH +1", "Permanently add one mask to this save.", "run", "run"),
+            Cheat("max_health_down", TweakControlKind.Command, "PLAYER", "MAX HEALTH -1", "Permanently remove one mask from this save (minimum 1).", "run", "run"),
+
+            Cheat("ability_double_jump", TweakControlKind.Command, "ABILITIES", "DOUBLE JUMP", "Grant or remove the Faydown Cloak double jump on this save.", "run", "run"),
+            Cheat("ability_dash", TweakControlKind.Command, "ABILITIES", "DASH", "Grant or remove Swift Step on this save.", "run", "run"),
+            Cheat("ability_wall_jump", TweakControlKind.Command, "ABILITIES", "WALL JUMP", "Grant or remove Cling Grip on this save.", "run", "run"),
+            Cheat("ability_glide", TweakControlKind.Command, "ABILITIES", "GLIDE", "Grant or remove Drifter's Cloak on this save.", "run", "run"),
+            Cheat("ability_charge_attack", TweakControlKind.Command, "ABILITIES", "CHARGE ATTACK", "Grant or remove Needle Strike on this save.", "run", "run"),
+            Cheat("ability_needolin", TweakControlKind.Command, "ABILITIES", "NEEDOLIN", "Grant or remove the Needolin on this save.", "run", "run"),
+            Cheat("ability_clawline", TweakControlKind.Command, "ABILITIES", "CLAWLINE", "Grant or remove the Clawline grapple on this save.", "run", "run"),
+            Cheat("ability_super_jump", TweakControlKind.Command, "ABILITIES", "SILK SOAR", "Grant or remove Silk Soar on this save (granting adds Clawline).", "run", "run"),
+
+            Cheat("active_magnetite_brooch", TweakControlKind.Choice, "ACTIVE TOOLS", "MAGNETITE BROOCH", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_shard_pendant", TweakControlKind.Choice, "ACTIVE TOOLS", "SHARD PENDANT", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_weighted_belt", TweakControlKind.Choice, "ACTIVE TOOLS", "WEIGHTED BELT", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_barbed_bracelet", TweakControlKind.Choice, "ACTIVE TOOLS", "BARBED BRACELET", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_dead_bugs_purse", TweakControlKind.Choice, "ACTIVE TOOLS", "DEAD BUG'S PURSE", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_shell_satchel", TweakControlKind.Choice, "ACTIVE TOOLS", "SHELL SATCHEL", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_magnetite_dice", TweakControlKind.Choice, "ACTIVE TOOLS", "MAGNETITE DICE", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_scuttlebrace", TweakControlKind.Choice, "ACTIVE TOOLS", "SCUTTLEBRACE", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_ascendants_grip", TweakControlKind.Choice, "ACTIVE TOOLS", "ASCENDANT'S GRIP", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_spider_strings", TweakControlKind.Choice, "ACTIVE TOOLS", "SPIDER STRINGS", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_silkspeed_anklets", TweakControlKind.Choice, "ACTIVE TOOLS", "SILKSPEED ANKLETS", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_thiefs_mark", TweakControlKind.Choice, "ACTIVE TOOLS", "THIEF'S MARK", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_longclaw", TweakControlKind.Choice, "ACTIVE TOOLS", "LONGCLAW", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_pin_badge", TweakControlKind.Choice, "ACTIVE TOOLS", "PIN BADGE", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_quick_sling", TweakControlKind.Choice, "ACTIVE TOOLS", "QUICK SLING", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_weavelight", TweakControlKind.Choice, "ACTIVE TOOLS", "WEAVELIGHT", "Keep this Tool active without equipping it.", "off", "off", "on"),
+            Cheat("active_warding_bell", TweakControlKind.Choice, "ACTIVE TOOLS", "WARDING BELL", "Keep this Tool active without equipping it.", "off", "off", "on"),
+
+            Cheat("unlock_all_tools", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL TOOLS", "Permanently unlock every Tool on this save.", "run", "run"),
+            Cheat("unlock_all_crests", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL CRESTS", "Permanently unlock every Crest and the extra Tool slots.", "run", "run"),
+            Cheat("unlock_fast_travel", TweakControlKind.Command, "UNLOCKS", "UNLOCK FAST TRAVEL", "Permanently open every Bellway station and Ventrica tube.", "run", "run"),
+            Cheat("unlock_maps", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL MAPS", "Permanently add every area map to this save.", "run", "run"),
+            Cheat("max_collectables", TweakControlKind.Command, "UNLOCKS", "FILL COLLECTABLES", "Add up to 99 of every collectable item (Growstone excluded). Can affect quests.", "run", "run"),
         });
 
         readonly struct PendingChoice
@@ -244,7 +292,11 @@ namespace DualSouls.Mods.Silksong
                     case "instant_dialogue": if (On(value)) _api.SetInstantDialogue(true); else _api.RestoreInstantDialogue(); break;
                     case "disable_world_rumble": if (On(value)) _api.SetWorldRumbleDisabled(true); else _api.RestoreWorldRumbleDisabled(); break;
                     case "ignore_frost_slowdown": if (On(value)) _api.SetFrostDisabled(true); else _api.RestoreFrostDisabled(); break;
-                    default: return TweakActionResult.Fail("No Silksong dispatch exists for " + id + ".");
+                    default:
+                        if (!CheatIds.Contains(id)) return TweakActionResult.Fail("No Silksong dispatch exists for " + id + ".");
+                        if (row.ControlKind == TweakControlKind.Command) return _api.RunCheatCommand(id);
+                        _api.SetCheatChoice(id, value);
+                        break;
                 }
                 if (row.ControlKind == TweakControlKind.Choice)
                 {
@@ -267,6 +319,11 @@ namespace DualSouls.Mods.Silksong
 
         static bool On(string value) => value == "on";
         static int Multiplier(string value) => value == "x2" ? 2 : value == "x3" ? 3 : value == "x5" ? 5 : 1;
+        static TweakDescriptor Cheat(string id, TweakControlKind kind, string group, string title, string description, string defaultValue, params string[] values)
+        {
+            CheatIds.Add(id);
+            return Row(id, id, kind, group, title, description, defaultValue, values);
+        }
         static TweakDescriptor Row(string id, string contract, TweakControlKind kind, string group, string title, string description, string defaultValue, params string[] values) =>
             new TweakDescriptor(id, contract, kind, group, title, description, defaultValue, values);
         static TweakDescriptor Find(string id)

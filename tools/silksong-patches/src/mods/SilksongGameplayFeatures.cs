@@ -756,7 +756,9 @@ namespace DualSouls.Mods.Silksong
         }
         public static bool ShouldForceToolEquipped(ToolItem tool)
         {
-            return InnateCompassEnabled && tool != null && tool == GlobalSettings.Gameplay.CompassTool;
+            if (tool == null) return false;
+            return (InnateCompassEnabled && tool == GlobalSettings.Gameplay.CompassTool) ||
+                SilksongCheats.IsForcedTool(tool);
         }
         public static void BeforeAuthoritativeBoolSet(PlayerData player, string boolName, bool value)
         {

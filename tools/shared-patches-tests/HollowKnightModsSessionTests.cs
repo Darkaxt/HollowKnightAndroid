@@ -364,6 +364,13 @@ public sealed class HollowKnightModsSessionTests
         public void TickGameplay()
         {
         }
+
+        public void SetCheatChoice(string id, string value)
+        {
+        }
+
+        public TweakActionResult RunCheatCommand(string id) =>
+            TweakActionResult.Ok(TweakReadback.Text(id));
     }
 
     private sealed class RecordingStore : Dictionary<string, string>, ITweakStore

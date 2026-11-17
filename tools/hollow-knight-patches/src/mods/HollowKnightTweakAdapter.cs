@@ -46,12 +46,17 @@ namespace DualSouls.Mods.HollowKnight
         void SetGeoMultiplier(int multiplier);
         void SetLifebloodFlash(HollowKnightFlashMode mode);
         void TickGameplay();
+        void SetCheatChoice(string id, string value);
+        TweakActionResult RunCheatCommand(string id);
         TweakActionResult Readback(string id);
         IReadOnlyList<TweakAdapterCompletion> DrainCompletedOperations();
     }
 
     public sealed class HollowKnightTweakAdapter : ITweakAdapter, ITweakOperationAdapter
     {
+        // #25 Nexus mod 19 parity rows; declared before Rows, which fills it.
+        static readonly HashSet<string> CheatIds = new HashSet<string>(StringComparer.Ordinal);
+
         static readonly IReadOnlyList<TweakDescriptor> Rows = Array.AsReadOnly(new[]
         {
             Row("run_speed", "run_speed", TweakControlKind.Choice, "WORLD", "RUN SPEED", "Choose the Knight's normal, +25%, or +50% movement pace.", "vanilla", "vanilla", "plus_25", "plus_50"),
@@ -60,11 +65,13 @@ namespace DualSouls.Mods.HollowKnight
             Row("innate_compass", "innate_compass", TweakControlKind.Choice, "WORLD", "INNATE COMPASS", "Show the Knight on the map without requiring Wayward Compass.", "off", "off", "on"),
             Row("bench_teleport", "bench_teleport", TweakControlKind.Route, "WORLD", "BENCH TELEPORT", "Open the recorded-bench destination list.", "open", "open"),
             Row("secret_radar", "secret_radar", TweakControlKind.Choice, "WORLD", "SECRET RADAR", "Signal nearby secrets without changing progression.", "off", "off", "on"),
+            Cheat("game_speed", TweakControlKind.Choice, "WORLD", "GAME SPEED", "Slow down or speed up gameplay. Pause and hit-stop keep their normal timing.", "vanilla", "vanilla", "x0_5", "x0_75", "x1_5", "x2"),
             Row("nail_damage", "nail_damage", TweakControlKind.Choice, "COMBAT", "NAIL DAMAGE", "Multiply nail damage while preserving smith upgrades.", "x1", "x1", "x2", "x3", "x5"),
             Row("damage_received", "damage_taken", TweakControlKind.Choice, "COMBAT", "DAMAGE TAKEN", "Choose normal damage, keep masks, or ignore damage entirely.", "vanilla", "vanilla", "no_mask_loss", "invincible"),
             Row("damage_cap", "damage_cap", TweakControlKind.Choice, "COMBAT", "DAMAGE CAP", "Limit damage received from a single hit.", "off", "off", "on"),
             Row("one_hit_kills", "one_hit_kills", TweakControlKind.Choice, "COMBAT", "ONE-HIT KILLS", "Defeat regular enemies in one hit while excluding boss-scale targets.", "off", "off", "on"),
             Row("unlimited_soul", "unlimited_soul", TweakControlKind.Choice, "COMBAT", "UNLIMITED SOUL", "Keep Soul available through the game's normal refill path.", "off", "off", "on"),
+            Cheat("quick_attacks", TweakControlKind.Choice, "COMBAT", "QUICK ATTACKS", "Remove nail attack cooldowns.", "off", "off", "on"),
             Row("health_bars", "enemy_health_bars", TweakControlKind.Choice, "ENCOUNTERS", "ENEMY HEALTH BARS", "Show health bars for eligible enemies and bosses.", "off", "off", "on"),
             Row("damage_numbers", "damage_numbers", TweakControlKind.Choice, "ENCOUNTERS", "DAMAGE NUMBERS", "Show the damage dealt by supported attacks.", "off", "off", "on"),
             Row("boss_retry", "boss_retry", TweakControlKind.Choice, "ENCOUNTERS", "BOSS RETRY", "Retry supported boss encounters from a safe checkpoint.", "off", "off", "on"),
@@ -79,7 +86,24 @@ namespace DualSouls.Mods.HollowKnight
             Row("keep_geo_on_death", "keep_geo_on_death", TweakControlKind.Choice, "ECONOMY", "KEEP GEO ON DEATH", "Keep Geo through death without duplicate Shade awards.", "off", "off", "on"),
             Row("journal_one_kill", "journal_one_kill", TweakControlKind.Choice, "ECONOMY", "JOURNAL IN ONE KILL", "Complete eligible Hunter's Journal entries after one kill.", "off", "off", "on"),
             Row("geo_multiplier", "geo_multiplier", TweakControlKind.Choice, "ECONOMY", "GEO MULTIPLIER", "Multiply supported Geo awards.", "x1", "x1", "x2", "x3", "x5"),
+            Cheat("add_geo", TweakControlKind.Command, "ECONOMY", "ADD 1000 GEO", "Add 1000 Geo now.", "run", "run"),
             Row("lifeblood_flash", "lifeblood_flash", TweakControlKind.Choice, "PRESENTATION", "LIFEBLOOD FLASH", "Use the original flash, a softened flash, or no flash.", "vanilla", "vanilla", "soft", "off"),
+
+            Cheat("infinite_air_jump", TweakControlKind.Choice, "PLAYER", "INFINITE AIR JUMP", "Jump again in mid-air as often as you like.", "off", "off", "on"),
+            Cheat("refill_health", TweakControlKind.Command, "PLAYER", "REFILL HEALTH", "Restore all masks now.", "run", "run"),
+            Cheat("max_health_up", TweakControlKind.Command, "PLAYER", "MAX HEALTH +1", "Permanently add one mask to this save.", "run", "run"),
+            Cheat("max_health_down", TweakControlKind.Command, "PLAYER", "MAX HEALTH -1", "Permanently remove one mask from this save (minimum 1).", "run", "run"),
+
+            Cheat("ability_double_jump", TweakControlKind.Command, "ABILITIES", "DOUBLE JUMP", "Grant or remove Monarch Wings on this save.", "run", "run"),
+            Cheat("ability_dash", TweakControlKind.Command, "ABILITIES", "DASH", "Grant or remove Mothwing Cloak on this save.", "run", "run"),
+            Cheat("ability_wall_jump", TweakControlKind.Command, "ABILITIES", "WALL JUMP", "Grant or remove Mantis Claw on this save.", "run", "run"),
+            Cheat("ability_crystal_heart", TweakControlKind.Command, "ABILITIES", "CRYSTAL HEART", "Grant or remove Crystal Heart on this save.", "run", "run"),
+            Cheat("ability_shade_cloak", TweakControlKind.Command, "ABILITIES", "SHADE CLOAK", "Grant or remove Shade Cloak on this save (granting adds the dash).", "run", "run"),
+            Cheat("ability_ismas_tear", TweakControlKind.Command, "ABILITIES", "ISMA'S TEAR", "Grant or remove Isma's Tear on this save.", "run", "run"),
+            Cheat("ability_dream_nail", TweakControlKind.Command, "ABILITIES", "DREAM NAIL", "Grant or remove the Dream Nail on this save.", "run", "run"),
+
+            Cheat("unlock_stags", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL STAGS", "Permanently open every Stag Station on this save.", "run", "run"),
+            Cheat("unlock_maps", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL MAPS", "Permanently add every area map to this save.", "run", "run"),
         });
 
         readonly struct PendingChoice
@@ -204,7 +228,11 @@ namespace DualSouls.Mods.HollowKnight
                     case "journal_one_kill": _api.SetJournalOneKill(On(value)); break;
                     case "geo_multiplier": _api.SetGeoMultiplier(Multiplier(value)); break;
                     case "lifeblood_flash": _api.SetLifebloodFlash(value == "soft" ? HollowKnightFlashMode.Soft : value == "off" ? HollowKnightFlashMode.Off : HollowKnightFlashMode.Vanilla); break;
-                    default: return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + ".");
+                    default:
+                        if (!CheatIds.Contains(id)) return TweakActionResult.Fail("No Hollow Knight dispatch exists for " + id + ".");
+                        if (row.ControlKind == TweakControlKind.Command) return _api.RunCheatCommand(id);
+                        _api.SetCheatChoice(id, value);
+                        break;
                 }
                 if (row.ControlKind == TweakControlKind.Choice)
                 {
@@ -227,6 +255,11 @@ namespace DualSouls.Mods.HollowKnight
 
         static bool On(string value) => value == "on";
         static int Multiplier(string value) => value == "x2" ? 2 : value == "x3" ? 3 : value == "x5" ? 5 : 1;
+        static TweakDescriptor Cheat(string id, TweakControlKind kind, string group, string title, string description, string defaultValue, params string[] values)
+        {
+            CheatIds.Add(id);
+            return Row(id, id, kind, group, title, description, defaultValue, values);
+        }
         static TweakDescriptor Row(string id, string contract, TweakControlKind kind, string group, string title, string description, string defaultValue, params string[] values) =>
             new TweakDescriptor(id, contract, kind, group, title, description, defaultValue, values);
         TweakDescriptor Find(string id)

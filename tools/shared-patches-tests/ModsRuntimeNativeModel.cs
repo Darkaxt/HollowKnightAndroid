@@ -158,6 +158,24 @@ public static class SilksongGameplayFeatures
     public static void Tick(bool fast, bool map, bool compass, bool radar, bool bars,
         bool numbers, bool retry, bool slots, bool magnet, bool keep) { }
 }
+// #25 cheat owner stand-in: typed choice readback only; game effects are Android-only.
+public sealed class SilksongCheats
+{
+    static readonly HashSet<string> Choices = new HashSet<string>(StringComparer.Ordinal) {
+        "game_speed", "quick_attacks", "infinite_tools", "infinite_air_jump" };
+    readonly Dictionary<string, string> _choices = new Dictionary<string, string>(StringComparer.Ordinal);
+    public bool IsChoice(string id) => Choices.Contains(id) || id.StartsWith("active_", StringComparison.Ordinal);
+    public bool IsCommand(string id) => !IsChoice(id);
+    public void Capture() { }
+    public void RestoreAll() => _choices.Clear();
+    public void Tick() { }
+    public void PrepareForStateTransfer() { }
+    public void SetChoice(string id, string value) => _choices[id] = value;
+    public DualSouls.Mods.TweakActionResult Readback(string id) => DualSouls.Mods.TweakActionResult.Ok(
+        DualSouls.Mods.TweakReadback.Choice(_choices.TryGetValue(id, out string v) ? v : id == "game_speed" ? "vanilla" : "off"));
+    public DualSouls.Mods.TweakActionResult Run(string id) =>
+        DualSouls.Mods.TweakActionResult.Ok(DualSouls.Mods.TweakReadback.Text(id));
+}
 internal static partial class HollowKnightGameplayFeatures
 {
     static int[] charmCostBaseline;

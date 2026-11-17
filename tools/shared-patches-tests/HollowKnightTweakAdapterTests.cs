@@ -19,10 +19,14 @@ public sealed class HollowKnightTweakAdapterTests
         "geo_magnet", "keep_geo_on_death", "journal_one_kill", "geo_multiplier",
     };
 
+    static readonly string[] CheatIds = { "game_speed", "quick_attacks", "add_geo", "infinite_air_jump", "refill_health", "max_health_up", "max_health_down", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_crystal_heart", "ability_shade_cloak", "ability_ismas_tear", "ability_dream_nail", "unlock_stags", "unlock_maps" };
+    static readonly string[] CheatChoiceIds = { "game_speed", "quick_attacks", "infinite_air_jump" };
+
     [Fact]
     public void CatalogStartsWithExactRequiredContractAndAppendsExtras()
     {
-        var rows = new HollowKnightTweakAdapter(new RecordingApi()).Descriptors;
+        var rows = new HollowKnightTweakAdapter(new RecordingApi()).Descriptors
+            .Where(row => !CheatIds.Contains(row.Id)).ToArray();
         TweakDescriptor[] required = rows.Take(25).ToArray();
 
         Assert.Equal(RequiredContractIds, required.Select(row => row.ContractId));
@@ -213,6 +217,10 @@ public sealed class HollowKnightTweakAdapterTests
             ["geo_multiplier"] = Map(("x1", "geo-multiplier:1"), ("x2", "geo-multiplier:2"), ("x3", "geo-multiplier:3"), ("x5", "geo-multiplier:5")),
             ["lifeblood_flash"] = Map(("vanilla", "flash:Vanilla"), ("soft", "flash:Soft"), ("off", "flash:Off")),
         };
+        foreach (TweakDescriptor cheat in new HollowKnightTweakAdapter(new RecordingApi()).Descriptors.Where(row => CheatIds.Contains(row.Id)))
+            expected[cheat.Id] = cheat.ControlKind == TweakControlKind.Command
+                ? One("run", "cheat:" + cheat.Id)
+                : cheat.Values.ToDictionary(value => value, value => "cheat:" + cheat.Id + ":" + value);
         var catalog = new HollowKnightTweakAdapter(new RecordingApi());
         TweakDescriptor[] available = catalog.Descriptors.Where(row => row.IsAvailable).ToArray();
 
@@ -231,6 +239,30 @@ public sealed class HollowKnightTweakAdapterTests
                 Assert.Equal(new[] { expected[row.Id][value] }, api.Calls);
             }
         }
+    }
+
+    [Fact]
+    public void CheatRowsFollowTheMod19ParityCatalogAndDispatchThroughTheCheatOwner()
+    {
+        TweakDescriptor[] cheats = new HollowKnightTweakAdapter(new RecordingApi()).Descriptors
+            .Where(row => CheatIds.Contains(row.Id)).ToArray();
+
+        Assert.Equal(CheatIds, cheats.Select(row => row.Id));
+        Assert.All(cheats, row => Assert.Equal(row.Id, row.ContractId));
+        Assert.All(cheats, row => Assert.True(row.IsAvailable, row.Id));
+        Assert.Equal(CheatChoiceIds.OrderBy(id => id),
+            cheats.Where(row => row.ControlKind == TweakControlKind.Choice).Select(row => row.Id).OrderBy(id => id));
+        Assert.All(cheats.Where(row => row.ControlKind != TweakControlKind.Choice),
+            row => Assert.Equal(TweakControlKind.Command, row.ControlKind));
+        Assert.Equal(new[] { "vanilla", "x0_5", "x0_75", "x1_5", "x2" },
+            cheats.Single(row => row.Id == "game_speed").Values);
+
+        var api = new RecordingApi();
+        var adapter = new HollowKnightTweakAdapter(api);
+        TweakActionResult command = adapter.Apply("refill_health", "run");
+        Assert.True(command.Success, command.Error);
+        Assert.Equal(TweakReadbackKind.Text, command.Readback.Kind);
+        Assert.Equal(new[] { "cheat:refill_health" }, api.Calls);
     }
 
     [Fact]
@@ -776,6 +808,9 @@ public sealed class HollowKnightTweakAdapterTests
             ["journal_one_kill"] = "off",
             ["geo_multiplier"] = "x1",
             ["lifeblood_flash"] = "vanilla",
+            ["game_speed"] = "vanilla",
+            ["quick_attacks"] = "off",
+            ["infinite_air_jump"] = "off",
         };
 
         void Track(string call)
@@ -808,6 +843,18 @@ public sealed class HollowKnightTweakAdapterTests
 
         public void TickGameplay()
         {
+        }
+
+        public void SetCheatChoice(string id, string value)
+        {
+            SetActive(id, value != (id == "game_speed" ? "vanilla" : "off"), "cheat:" + id + ":" + value);
+            _actual[id] = value;
+        }
+
+        public TweakActionResult RunCheatCommand(string id)
+        {
+            Record("cheat:" + id);
+            return TweakActionResult.Ok(TweakReadback.Text(id + " done"));
         }
 
         private void SetActive(string id, bool enabled, string call)

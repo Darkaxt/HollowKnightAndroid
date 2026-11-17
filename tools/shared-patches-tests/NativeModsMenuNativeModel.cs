@@ -400,6 +400,15 @@ namespace NativeMenuFixture.PROFILE.Engine
         public static void BeginAuthoritativeMapUpdate(PlayerData player) { }
         public static void EndAuthoritativeMapUpdate(PlayerData player) { }
     }
+    public sealed class HollowKnightCheats
+    {
+        public void SetChoice(string id, string value) { }
+        public void Tick() { }
+        public void RestoreAll() { }
+        public void PrepareForStateTransfer() { }
+        public global::DualSouls.Mods.TweakActionResult Run(string id) =>
+            global::DualSouls.Mods.TweakActionResult.Ok(global::DualSouls.Mods.TweakReadback.Text(id));
+    }
     public static class SilksongGameplayFeatures
     {
         public class BenchRecord { public string scene; }

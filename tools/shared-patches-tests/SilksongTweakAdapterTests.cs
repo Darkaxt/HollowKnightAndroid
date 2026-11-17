@@ -8,10 +8,14 @@ namespace SharedPatches.Tests;
 
 public sealed class SilksongTweakAdapterTests
 {
+    static readonly string[] CheatIds = { "game_speed", "quick_attacks", "infinite_tools", "refill_tools", "add_rosaries", "add_shards", "infinite_air_jump", "refill_health", "max_health_up", "max_health_down", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_glide", "ability_charge_attack", "ability_needolin", "ability_clawline", "ability_super_jump", "active_magnetite_brooch", "active_shard_pendant", "active_weighted_belt", "active_barbed_bracelet", "active_dead_bugs_purse", "active_shell_satchel", "active_magnetite_dice", "active_scuttlebrace", "active_ascendants_grip", "active_spider_strings", "active_silkspeed_anklets", "active_thiefs_mark", "active_longclaw", "active_pin_badge", "active_quick_sling", "active_weavelight", "active_warding_bell", "unlock_all_tools", "unlock_all_crests", "unlock_fast_travel", "unlock_maps", "max_collectables" };
+    static readonly string[] CheatChoiceIds = { "game_speed", "quick_attacks", "infinite_tools", "infinite_air_jump", "active_magnetite_brooch", "active_shard_pendant", "active_weighted_belt", "active_barbed_bracelet", "active_dead_bugs_purse", "active_shell_satchel", "active_magnetite_dice", "active_scuttlebrace", "active_ascendants_grip", "active_spider_strings", "active_silkspeed_anklets", "active_thiefs_mark", "active_longclaw", "active_pin_badge", "active_quick_sling", "active_weavelight", "active_warding_bell" };
+
     [Fact]
     public void CatalogStartsWithExactRequiredContractAndSilksongNamesThenAppendsExtras()
     {
-        var rows = new SilksongTweakAdapter(new RecordingApi()).Descriptors;
+        var rows = new SilksongTweakAdapter(new RecordingApi()).Descriptors
+            .Where(row => !CheatIds.Contains(row.Id)).ToArray();
         TweakDescriptor[] required = rows.Take(25).ToArray();
         string[] contractIds =
         {
@@ -85,6 +89,10 @@ public sealed class SilksongTweakAdapterTests
             ["disable_world_rumble"] = Map(("off", "rumble:restore"), ("on", "rumble:True")),
             ["ignore_frost_slowdown"] = Map(("off", "frost:restore"), ("on", "frost:True")),
         };
+        foreach (TweakDescriptor cheat in new SilksongTweakAdapter(new RecordingApi()).Descriptors.Where(row => CheatIds.Contains(row.Id)))
+            expected[cheat.Id] = cheat.ControlKind == TweakControlKind.Command
+                ? One("run", "cheat:" + cheat.Id)
+                : cheat.Values.ToDictionary(value => value, value => "cheat:" + cheat.Id + ":" + value);
         var catalog = new SilksongTweakAdapter(new RecordingApi());
         TweakDescriptor[] available = catalog.Descriptors.Where(row => row.IsAvailable).ToArray();
 
@@ -103,6 +111,30 @@ public sealed class SilksongTweakAdapterTests
                 Assert.Equal(new[] { expected[row.Id][value] }, api.Calls);
             }
         }
+    }
+
+    [Fact]
+    public void CheatRowsFollowTheMod19ParityCatalogAndDispatchThroughTheCheatOwner()
+    {
+        TweakDescriptor[] cheats = new SilksongTweakAdapter(new RecordingApi()).Descriptors
+            .Where(row => CheatIds.Contains(row.Id)).ToArray();
+
+        Assert.Equal(CheatIds, cheats.Select(row => row.Id));
+        Assert.All(cheats, row => Assert.Equal(row.Id, row.ContractId));
+        Assert.All(cheats, row => Assert.True(row.IsAvailable, row.Id));
+        Assert.Equal(CheatChoiceIds.OrderBy(id => id),
+            cheats.Where(row => row.ControlKind == TweakControlKind.Choice).Select(row => row.Id).OrderBy(id => id));
+        Assert.All(cheats.Where(row => row.ControlKind != TweakControlKind.Choice),
+            row => Assert.Equal(TweakControlKind.Command, row.ControlKind));
+        Assert.Equal(new[] { "vanilla", "x0_5", "x0_75", "x1_5", "x2" },
+            cheats.Single(row => row.Id == "game_speed").Values);
+
+        var api = new RecordingApi();
+        var adapter = new SilksongTweakAdapter(api);
+        TweakActionResult command = adapter.Apply("refill_health", "run");
+        Assert.True(command.Success, command.Error);
+        Assert.Equal(TweakReadbackKind.Text, command.Readback.Kind);
+        Assert.Equal(new[] { "cheat:refill_health" }, api.Calls);
     }
 
     [Fact]
@@ -531,6 +563,18 @@ public sealed class SilksongTweakAdapterTests
 
         public void TickGameplay() => GameplayTickCount++;
 
+        public void SetCheatChoice(string id, string value)
+        {
+            Mutate("cheat:" + id + ":" + value);
+            _actual[id] = value;
+        }
+
+        public TweakActionResult RunCheatCommand(string id)
+        {
+            Mutate("cheat:" + id);
+            return TweakActionResult.Ok(TweakReadback.Text(id + " done"));
+        }
+
         public TweakActionResult Readback(string id)
         {
             return _actual.TryGetValue(id, out string value)
@@ -567,6 +611,27 @@ public sealed class SilksongTweakAdapterTests
             ["instant_dialogue"] = "off",
             ["disable_world_rumble"] = "off",
             ["ignore_frost_slowdown"] = "off",
+            ["game_speed"] = "vanilla",
+            ["quick_attacks"] = "off",
+            ["infinite_tools"] = "off",
+            ["infinite_air_jump"] = "off",
+            ["active_magnetite_brooch"] = "off",
+            ["active_shard_pendant"] = "off",
+            ["active_weighted_belt"] = "off",
+            ["active_barbed_bracelet"] = "off",
+            ["active_dead_bugs_purse"] = "off",
+            ["active_shell_satchel"] = "off",
+            ["active_magnetite_dice"] = "off",
+            ["active_scuttlebrace"] = "off",
+            ["active_ascendants_grip"] = "off",
+            ["active_spider_strings"] = "off",
+            ["active_silkspeed_anklets"] = "off",
+            ["active_thiefs_mark"] = "off",
+            ["active_longclaw"] = "off",
+            ["active_pin_badge"] = "off",
+            ["active_quick_sling"] = "off",
+            ["active_weavelight"] = "off",
+            ["active_warding_bell"] = "off",
         };
 
         void Track(string call)
