@@ -147,6 +147,8 @@ internal static class Program
         }
 
         foreach (var note in Builtin.Apply(assemblies)) Console.WriteLine(note);
+        // The builder process may end before a buffered stdout drains; the launcher logs these lines.
+        Console.Out.Flush();
         return 0;
     }
 

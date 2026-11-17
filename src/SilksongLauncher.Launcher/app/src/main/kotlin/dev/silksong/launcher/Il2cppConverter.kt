@@ -404,7 +404,8 @@ object Il2cppConverter {
 
         if (PackageCompiler.requiresSaveIo(profile)) redirectSaveCalls(context, root)
 
-        if (profile.id == "hollow-knight" && assets != null) {
+        // Both games: each staged patch assembly brings gameplay hooks that only exist once woven.
+        if (assets != null) {
             send(Progress("Weaving gameplay tweaks", -1f, "managed damage seam"))
             Mods.weaveBuiltin(context, root, asmDir(root), assets) { line ->
                 trySend(Progress("Weaving gameplay tweaks", -1f, line.take(80)))

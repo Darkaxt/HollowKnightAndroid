@@ -578,7 +578,8 @@ object Mods {
         assets: android.content.res.AssetManager,
         onLine: (String) -> Unit = {},
     ) {
-        val requiredHollowKnight = File(assemblies, "HollowKnightPatches.dll").isFile
+        val requiredHollowKnight = File(assemblies, "HollowKnightPatches.dll").isFile ||
+            File(assemblies, "SilksongPatches.dll").isFile
         try {
             val weaver = stageWeaver(root, assets)
             val argv = arrayListOf("builtin", "--assemblies", assemblies.absolutePath)
@@ -597,11 +598,11 @@ object Mods {
                 for (line in said) LauncherLog.log("builtin weave: $line")
             }
             if (!result.ok) {
-                if (requiredHollowKnight) throw IOException("Mandatory Hollow Knight gameplay weave failed with exit ${result.code}")
+                if (requiredHollowKnight) throw IOException("Mandatory gameplay weave failed with exit ${result.code}")
                 LauncherLog.log("builtin weave: exit ${result.code}; stock behaviour kept")
             }
         } catch (t: Throwable) {
-            if (requiredHollowKnight) throw IOException("Mandatory Hollow Knight gameplay weave could not complete", t)
+            if (requiredHollowKnight) throw IOException("Mandatory gameplay weave could not complete", t)
             LauncherLog.log("builtin weave: skipped", t)
         }
     }
