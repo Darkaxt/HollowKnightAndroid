@@ -19,7 +19,7 @@ public sealed class HollowKnightTweakAdapterTests
         "geo_magnet", "keep_geo_on_death", "journal_one_kill", "geo_multiplier",
     };
 
-    static readonly string[] CheatIds = { "game_speed", "quick_attacks", "add_geo", "infinite_air_jump", "refill_health", "max_health_up", "max_health_down", "hero_colour", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_crystal_heart", "ability_shade_cloak", "ability_ismas_tear", "ability_dream_nail", "unlock_stags", "unlock_maps" };
+    static readonly string[] CheatIds = { "game_speed", "quick_attacks", "add_geo", "infinite_air_jump", "refill_health", "max_health_up", "max_health_down", "hero_colour", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_crystal_heart", "ability_shade_cloak", "ability_ismas_tear", "ability_dream_nail", "unlock_stags", "unlock_maps", "award_all_achievements", "reset_achievements" };
     static readonly string[] CheatChoiceIds = { "hero_colour", "game_speed", "quick_attacks", "infinite_air_jump" };
 
     [Fact]

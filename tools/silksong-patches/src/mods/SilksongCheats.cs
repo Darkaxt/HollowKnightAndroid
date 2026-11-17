@@ -283,6 +283,28 @@ namespace DualSouls.Mods.Silksong
 
         // ---- Commands (persistent save edits, mirroring mod 19's buttons) ----
 
+        // Achievements live in the platform's roaming shared data on Android (no
+        // online subsystem); the game's own ResetAllAchievements only clears that
+        // subsystem, so reset clears the local records directly.
+        static TweakActionResult Achievements(bool award)
+        {
+            GameManager game = GameManager.instance;
+            AchievementHandler handler = game == null ? null : game.achievementHandler;
+            if (handler == null || handler.AchievementsList == null)
+                return TweakActionResult.Fail("The achievement list is not loaded yet.");
+            Platform.ISharedData shared = Platform.Current.RoamingSharedData;
+            if (award) handler.AwardAllAchievements();
+            int unlocked = 0, total = 0;
+            foreach (Achievement achievement in handler.AchievementsList.Achievements)
+            {
+                total++;
+                if (!award && shared.HasKey(achievement.PlatformKey)) shared.DeleteKey(achievement.PlatformKey);
+                if (handler.AchievementWasAwarded(achievement.PlatformKey)) unlocked++;
+            }
+            shared.Save();
+            return Text(unlocked + "/" + total + " achievements unlocked");
+        }
+
         public bool IsCommand(string id)
         {
             switch (id)
@@ -291,6 +313,7 @@ namespace DualSouls.Mods.Silksong
                 case "add_rosaries": case "add_shards": case "refill_tools":
                 case "unlock_all_tools": case "unlock_all_crests": case "unlock_fast_travel":
                 case "unlock_maps": case "max_collectables":
+                case "award_all_achievements": case "reset_achievements":
                     return true;
                 default:
                     return id.StartsWith("ability_", StringComparison.Ordinal);
@@ -299,6 +322,8 @@ namespace DualSouls.Mods.Silksong
 
         public TweakActionResult Run(string id)
         {
+            if (id == "award_all_achievements" || id == "reset_achievements")
+                return Achievements(id == "award_all_achievements");
             HeroController hero = HeroController.instance;
             PlayerData data = PlayerData.HasInstance ? PlayerData.instance : null;
             if (hero == null || data == null)

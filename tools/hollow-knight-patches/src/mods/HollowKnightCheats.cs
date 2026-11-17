@@ -169,6 +169,8 @@ namespace DualSouls.Mods.HollowKnight
 
         public TweakActionResult Run(string id)
         {
+            if (id == "award_all_achievements" || id == "reset_achievements")
+                return Achievements(id == "award_all_achievements");
             global::HeroController hero = global::HeroController.instance;
             global::PlayerData data = global::PlayerData.instance;
             if (hero == null || data == null)
@@ -217,6 +219,28 @@ namespace DualSouls.Mods.HollowKnight
                 default:
                     return ToggleAbility(id, data);
             }
+        }
+
+        // Achievements live in the platform's roaming shared data on Android (no
+        // online subsystem); the game's own ResetAllAchievements only clears that
+        // subsystem, so reset clears the local records directly.
+        static TweakActionResult Achievements(bool award)
+        {
+            global::GameManager game = global::GameManager.instance;
+            global::AchievementHandler handler = game == null ? null : game.achievementHandler;
+            if (handler == null || handler.AchievementsList == null)
+                return TweakActionResult.Fail("The achievement list is not loaded yet.");
+            global::Platform.ISharedData shared = global::Platform.Current.RoamingSharedData;
+            if (award) handler.AwardAllAchievements();
+            int unlocked = 0, total = 0;
+            foreach (global::Achievement achievement in handler.AchievementsList.Achievements)
+            {
+                total++;
+                if (!award && shared.HasKey(achievement.key)) shared.DeleteKey(achievement.key);
+                if (handler.AchievementWasAwarded(achievement.key)) unlocked++;
+            }
+            shared.Save();
+            return Text(unlocked + "/" + total + " achievements unlocked");
         }
 
         static TweakActionResult Text(string value) => TweakActionResult.Ok(TweakReadback.Text(value));

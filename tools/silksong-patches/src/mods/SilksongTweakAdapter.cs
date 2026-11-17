@@ -191,6 +191,9 @@ namespace DualSouls.Mods.Silksong
             Cheat("unlock_fast_travel", TweakControlKind.Command, "UNLOCKS", "UNLOCK FAST TRAVEL", "Permanently open every Bellway station and Ventrica tube.", "run", "run"),
             Cheat("unlock_maps", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL MAPS", "Permanently add every area map to this save.", "run", "run"),
             Cheat("max_collectables", TweakControlKind.Command, "UNLOCKS", "FILL COLLECTABLES", "Add up to 99 of every collectable item (Growstone excluded). Can affect quests.", "run", "run"),
+
+            Cheat("award_all_achievements", TweakControlKind.Command, "ACHIEVEMENTS", "UNLOCK ALL ACHIEVEMENTS", "Unlock every achievement on this device.", "run", "run"),
+            Cheat("reset_achievements", TweakControlKind.Command, "ACHIEVEMENTS", "RESET ACHIEVEMENTS", "Lock every achievement on this device again.", "run", "run"),
         });
 
         readonly struct PendingChoice
