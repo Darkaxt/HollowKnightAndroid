@@ -11,8 +11,38 @@ public partial class HKDualScreen
 {
     const string CommandHelp =
         "help | report | state | pause | mods | skins | skin <list|row N|left N|right N> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
-        "mods-list | mod <id> <value> | pd <field>... | charm give <id>... | geo <amount> | die | save | quit-menu | fonts | hudfit | sprites <text>\n" +
-        "geo, charm, die and save refuse slot 1 (the player's own save); use a disposable slot.";
+        "mods-list | mod <id> <value> | pd <field>... | charm give <id>... | geo <amount> | die | hit <damage> [hp] | save | quit-menu | fonts | hudfit | sprites <text>\n" +
+        "geo, charm, die, hit and save refuse slot 1 (the player's own save); use a disposable slot.";
+
+    // QA: one hero nail hit on the nearest live enemy through HealthManager.Hit, as a slash
+    // would land. The optional hp first sets the target's health, e.g. above the boss threshold.
+    string CommandHit(string[] a, GameManager gm)
+    {
+        int damage, hp = 0;
+        if (a.Length < 2 || !int.TryParse(a[1], out damage) || damage <= 0 || (a.Length > 2 && !int.TryParse(a[2], out hp)))
+            return "error hit <damage> [hp]";
+        string guard = SaveSlotGuard(gm);
+        if (guard != null) return guard;
+        var hero = HeroController.UnsafeInstance;
+        if (hero == null) return "error no HeroController";
+        HealthManager target = null;
+        float best = float.MaxValue;
+        foreach (HealthManager enemy in UnityEngine.Object.FindObjectsOfType<HealthManager>())
+        {
+            if (enemy.isDead || enemy.hp <= 0 || !enemy.gameObject.activeInHierarchy) continue;
+            float distance = (enemy.transform.position - hero.transform.position).sqrMagnitude;
+            if (distance < best) { best = distance; target = enemy; }
+        }
+        if (target == null) return "error no live enemy in scene";
+        if (hp > 0) target.hp = hp;
+        int before = target.hp;
+        target.Hit(new HitInstance
+        {
+            Source = hero.gameObject, AttackType = AttackTypes.Nail, DamageDealt = damage,
+            Multiplier = 1f, MagnitudeMultiplier = 1f, IgnoreInvulnerable = true,
+        });
+        return "ok target=" + target.gameObject.name + " hp=" + before + "->" + target.hp + " distance=" + Mathf.Sqrt(best).ToString("0.0");
+    }
 
     void PollCommands() { DsCommandFile.Poll(RunCommand); }
 
@@ -69,6 +99,7 @@ public partial class HKDualScreen
                 hero.AddGeo(amount);
                 return "ok geo=" + (PlayerData.instance != null ? PlayerData.instance.geo : -1);
             }
+            case "hit": return CommandHit(a, gm);
             case "die":
             {
                 // QA: one lethal hit through the game's own damage path, so death rotation runs for real.

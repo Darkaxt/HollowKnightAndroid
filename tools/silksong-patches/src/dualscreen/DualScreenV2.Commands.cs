@@ -15,10 +15,39 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die (refused on slot 1) | sprites";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die, hit <damage> [hp] (refused on slot 1) | sprites";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
+
+    // QA: one hero nail hit on the nearest live enemy through HealthManager.Hit, as a slash
+    // would land. The optional hp first sets the target's health, e.g. above the boss threshold.
+    string CommandHit(string[] a, GameManager gm)
+    {
+        int damage, hp = 0;
+        if (a.Length < 2 || !int.TryParse(a[1], out damage) || damage <= 0 || (a.Length > 2 && !int.TryParse(a[2], out hp)))
+            return "error hit <damage> [hp]";
+        if (gm == null || gm.profileID == 1) return "error refused on slot 1 (player save); use a disposable slot";
+        var hero = HeroController.SilentInstance;
+        if (hero == null) return "error no HeroController";
+        HealthManager target = null;
+        float best = float.MaxValue;
+        foreach (HealthManager enemy in UnityEngine.Object.FindObjectsOfType<HealthManager>())
+        {
+            if (enemy.isDead || enemy.hp <= 0 || !enemy.gameObject.activeInHierarchy) continue;
+            float distance = (enemy.transform.position - hero.transform.position).sqrMagnitude;
+            if (distance < best) { best = distance; target = enemy; }
+        }
+        if (target == null) return "error no live enemy in scene";
+        if (hp > 0) target.hp = hp;
+        int before = target.hp;
+        target.Hit(new HitInstance
+        {
+            Source = hero.gameObject, AttackType = AttackTypes.Nail, DamageDealt = damage,
+            Multiplier = 1f, MagnitudeMultiplier = 1f, IgnoreInvulnerable = true, IsHeroDamage = true,
+        });
+        return "ok target=" + target.gameObject.name + " hp=" + before + "->" + target.hp + " distance=" + Mathf.Sqrt(best).ToString("0.0");
+    }
 
     void PollCommands() { DsCommandFile.Poll(RunCommand); }
 
@@ -62,6 +91,7 @@ public partial class DualScreenV2
                 Array.Copy(a, 1, names, 0, names.Length);
                 return DsQaReport.Fields(PlayerData.instance, names);
             case "die": return CommandDie(gm);
+            case "hit": return CommandHit(a, gm);
             case "sprites":
                 var skinRuntime = SilksongSkinRuntime.Current;
                 return skinRuntime != null ? skinRuntime.DescribeCollections() : "error no skin runtime";

@@ -67,7 +67,7 @@ namespace DualSouls.Mods.Silksong
                 }
                 else if (target < before)
                     item.Take(before - target, false);
-                return Text(ItemName(item) + " · " + before + " to " + item.CollectedAmount);
+                return Text(ItemName(item) + ": " + before + " to " + item.CollectedAmount);
             }
 
             ToolItem tool = SelectedTool();
@@ -114,7 +114,7 @@ namespace DualSouls.Mods.Silksong
             if (items.Count == 0) return TweakActionResult.Fail("Collectables are not loaded yet.");
             _item = Step(_item, step, items.Count);
             CollectableItem item = items[_item];
-            return Text((_item + 1) + "/" + items.Count + " " + ItemName(item) + " · " + item.CollectedAmount + " owned");
+            return Text((_item + 1) + "/" + items.Count + " " + ItemName(item) + ": " + item.CollectedAmount + " owned");
         }
 
         TweakActionResult StepTool(int step)
@@ -126,7 +126,7 @@ namespace DualSouls.Mods.Silksong
             string state = !tool.IsUnlocked ? "locked"
                 : tool.BaseStorageAmount > 0 ? tool.SavedData.AmountLeft + "/" + ToolItemManager.GetToolStorageAmount(tool) + " uses"
                 : "unlocked";
-            return Text((_tool + 1) + "/" + tools.Count + " " + ToolName(tool) + " · " + state);
+            return Text((_tool + 1) + "/" + tools.Count + " " + ToolName(tool) + ": " + state);
         }
 
         static int Step(int current, int step, int count) =>

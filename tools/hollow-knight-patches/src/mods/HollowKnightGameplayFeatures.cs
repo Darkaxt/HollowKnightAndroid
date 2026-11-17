@@ -592,7 +592,7 @@ namespace DualSouls.Mods.HollowKnight
         static void MaintainCombatOverlays(bool barsEnabled, bool numbersEnabled)
         {
             if (CombatOverlay.NameResolver == null) CombatOverlay.NameResolver = BossName;
-            CombatOverlay.Tick(barsEnabled, numbersEnabled);
+            CombatOverlay.Tick(barsEnabled, numbersEnabled, HeroController.UnsafeInstance);
         }
         static void RemoveCombatOverlays() { CombatOverlay.Clear(); }
         // Hollow Knight has no hero-damage flag: acid, splatter and water hits are the environment.

@@ -82,7 +82,7 @@ namespace DualSouls.Mods.HollowKnight
 
         public void Tick()
         {
-            _tint.Tick();
+            _tint.Tick(global::HeroController.UnsafeInstance);
             MaintainSpeed();
             MaintainAirJump();
             MaintainQuickAttacks();
@@ -153,7 +153,7 @@ namespace DualSouls.Mods.HollowKnight
         void MaintainQuickAttacks()
         {
             if (!_quickAttacks) return;
-            global::HeroController hero = global::HeroController.instance;
+            global::HeroController hero = global::HeroController.UnsafeInstance;
             if (hero == null || ReferenceEquals(_quickHero, hero)) return;
             RestoreQuickAttacks();
             _quickHero = hero;
@@ -188,7 +188,7 @@ namespace DualSouls.Mods.HollowKnight
         {
             if (id == "award_all_achievements" || id == "reset_achievements")
                 return Achievements(id == "award_all_achievements");
-            global::HeroController hero = global::HeroController.instance;
+            global::HeroController hero = global::HeroController.UnsafeInstance;
             global::PlayerData data = global::PlayerData.instance;
             if (hero == null || data == null)
                 return TweakActionResult.Fail("Load a save before using " + id + ".");

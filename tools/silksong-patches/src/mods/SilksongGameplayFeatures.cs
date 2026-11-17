@@ -528,7 +528,7 @@ namespace DualSouls.Mods.Silksong
         static void MaintainCombatOverlays(bool barsEnabled, bool numbersEnabled)
         {
             if (CombatOverlay.NameResolver == null) CombatOverlay.NameResolver = JournalName;
-            CombatOverlay.Tick(barsEnabled, numbersEnabled);
+            CombatOverlay.Tick(barsEnabled, numbersEnabled, HeroController.SilentInstance);
         }
         static void RemoveCombatOverlays() { CombatOverlay.Clear(); }
         static readonly System.Reflection.FieldInfo JournalRecordField =

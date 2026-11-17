@@ -80,7 +80,7 @@ namespace DualSouls.Mods
             tracked.HideAt = Time.unscaledTime + EnemyHideDelay;
         }
 
-        public static void Tick(bool enemyBars, bool damageNumbers)
+        public static void Tick(bool enemyBars, bool damageNumbers, HeroController hero)
         {
             _bars = enemyBars; _bossBars = BossBars; _damage = damageNumbers;
             if (!Active) { Clear(); return; }
@@ -118,7 +118,7 @@ namespace DualSouls.Mods
                 if (_tracked.TryGetValue(enemy, out tracked)) Destroy(tracked);
                 _tracked.Remove(enemy);
             }
-            LayoutBossBars();
+            LayoutBossBars(hero);
             TickNumbers(now);
         }
 
@@ -164,13 +164,12 @@ namespace DualSouls.Mods
             bar.Root.gameObject.SetActive(true);
         }
 
-        static void LayoutBossBars()
+        static void LayoutBossBars(HeroController hero)
         {
             if (_bosses.Count == 0) return;
             GameCameras cameras = GameCameras.instance;
             Camera camera = cameras != null ? cameras.mainCamera : null;
             if (camera == null) return;
-            HeroController hero = HeroController.instance;
             float depth = (hero != null ? hero.transform.position.z : 0f) - camera.transform.position.z;
             if (depth <= 0.01f) depth = 20f;
             for (int index = 0; index < _bosses.Count; index++)

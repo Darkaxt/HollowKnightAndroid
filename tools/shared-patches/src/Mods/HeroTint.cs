@@ -63,11 +63,10 @@ namespace DualSouls.Mods
             if (!on) RestoreScene();
         }
 
-        public void Tick()
+        public void Tick(HeroController hero)
         {
             if (_mode == "off") return;
-            if (_scene) TickScene();
-            HeroController hero = HeroController.instance;
+            if (_scene) TickScene(hero);
             if (hero == null) { Restore(); return; }
             if (!ReferenceEquals(hero, _hero))
             {
@@ -105,14 +104,14 @@ namespace DualSouls.Mods
             _hero = null;
         }
 
-        void TickScene()
+        void TickScene(HeroController hero)
         {
             float now = Time.unscaledTime;
             int handle = UnityEngine.SceneManagement.SceneManager.GetActiveScene().handle;
             if (handle != _sceneHandle || now >= _nextSceneScan)
             {
                 _sceneHandle = handle;
-                ScanScene();
+                ScanScene(hero);
                 _nextSceneScan = now + 5f;
                 _nextSceneTint = 0f;
             }
@@ -137,12 +136,11 @@ namespace DualSouls.Mods
             }
         }
 
-        void ScanScene()
+        void ScanScene(HeroController hero)
         {
             // Destroyed sprites compare equal to null but keep their managed identity, so
             // they are dropped from the set before it is used to recognise new ones.
             _sceneKnown.RemoveWhere(sprite => sprite == null);
-            HeroController hero = HeroController.instance;
             Transform heroRoot = hero != null ? hero.transform : null;
             tk2dSprite[] sprites = UnityEngine.Object.FindObjectsOfType<tk2dSprite>();
             for (int index = 0; index < sprites.Length; index++)

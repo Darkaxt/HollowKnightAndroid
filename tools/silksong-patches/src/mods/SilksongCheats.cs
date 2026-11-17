@@ -152,7 +152,7 @@ namespace DualSouls.Mods.Silksong
 
         public void Tick()
         {
-            _tint.Tick();
+            _tint.Tick(HeroController.SilentInstance);
             MaintainSpeed();
             MaintainAirJump();
             MaintainQuickAttacks();

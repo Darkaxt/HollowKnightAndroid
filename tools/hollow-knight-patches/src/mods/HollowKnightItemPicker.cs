@@ -49,7 +49,7 @@ namespace DualSouls.Mods.HollowKnight
                 int step = id == "item_next" ? 1 : -1;
                 _item = _item < 0 ? (step > 0 ? 0 : Items.Length - 1) : ((_item + step) % Items.Length + Items.Length) % Items.Length;
                 object[] entry = Items[_item];
-                return Text((_item + 1) + "/" + Items.Length + " " + entry[0] + " · " + data.GetInt((string)entry[1]) + " owned");
+                return Text((_item + 1) + "/" + Items.Length + " " + entry[0] + ": " + data.GetInt((string)entry[1]) + " owned");
             }
             if (_item < 0) return TweakActionResult.Fail("Pick an item first with NEXT ITEM.");
             object[] item = Items[_item];
@@ -60,7 +60,7 @@ namespace DualSouls.Mods.HollowKnight
             target = Math.Max(0, Math.Min(limit, target));
             data.SetInt(field, target);
             if (target > 0 && item[2] != null) data.SetBool((string)item[2], true);
-            return Text(item[0] + " · " + before + " to " + target);
+            return Text(item[0] + ": " + before + " to " + target);
         }
 
         static TweakActionResult Text(string value) => TweakActionResult.Ok(TweakReadback.Text(value));
