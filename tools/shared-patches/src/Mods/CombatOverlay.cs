@@ -24,6 +24,9 @@ namespace DualSouls.Mods
         const float NumberDuration = 2f;
         const int NumberPool = 16;
         const int MaximumBossBars = 3;
+        // Mod 28 defaults: 135x25 canvas units at 0.01 scale, fill inset 2 units each side.
+        const float EnemyWidth = 1.35f, EnemyHeight = 0.25f, EnemyFillWidth = 1.31f, EnemyFillHeight = 0.21f;
+        const float EnemyTextSize = 0.06f;
         // Mod 28's default bar colours: light grey fill with near-black numbers.
         static readonly Color BarFill = new Color(0.745f, 0.722f, 0.722f, 1f);
         static readonly Color BarText = new Color(0.055f, 0.016f, 0.016f, 1f);
@@ -167,7 +170,7 @@ namespace DualSouls.Mods
             bar.Root.localPosition = new Vector3(0f, 1.35f, 0f);
             Vector3 scale = enemy.transform.lossyScale;
             bar.Root.localScale = new Vector3(scale.x == 0f ? 1f : 1f / scale.x, scale.y == 0f ? 1f : 1f / scale.y, 1f);
-            SetFill(bar, tracked, 1.44f);
+            SetFill(bar, tracked, EnemyFillWidth, EnemyFillHeight);
             bar.Root.gameObject.SetActive(true);
         }
 
@@ -217,10 +220,10 @@ namespace DualSouls.Mods
             var root = new GameObject(boss ? "DualSouls Boss Health" : "DualSouls Enemy Health");
             if (parent != null) root.transform.SetParent(parent, false);
             var bar = new Bar { Root = root.transform };
-            Part(root.transform, "Background", new Color(0f, 0f, 0f, 0.62f), 3200, new Vector3(1.5f, 0.16f, 1f));
-            bar.Fill = Part(root.transform, "Fill", BarFill, 3201, new Vector3(1.44f, 0.10f, 1f));
+            Part(root.transform, "Background", new Color(0f, 0f, 0f, 0.62f), 3200, new Vector3(EnemyWidth, EnemyHeight, 1f));
+            bar.Fill = Part(root.transform, "Fill", BarFill, 3201, new Vector3(EnemyFillWidth, EnemyFillHeight, 1f));
             bar.Label = Text(root.transform, "Health", boss ? 40 : 32, BarText, 3202);
-            bar.Label.characterSize = 0.035f;
+            bar.Label.characterSize = EnemyTextSize;
             if (boss) bar.Name = Text(root.transform, "Name", 40, Color.white, 3202);
             return bar;
         }
