@@ -26,7 +26,7 @@ namespace DualSouls.Mods
         const int MaximumBossBars = 3;
         // Mod 28 defaults: 135x25 canvas units at 0.01 scale, fill inset 2 units each side.
         const float EnemyWidth = 1.35f, EnemyHeight = 0.25f, EnemyFillWidth = 1.31f, EnemyFillHeight = 0.21f;
-        const float EnemyTextSize = 0.06f;
+        const float EnemyTextSize = 0.10f, EnemyTextAbove = 0.425f;
         // Mod 28's default bar colours: light grey fill with near-black numbers.
         static readonly Color BarFill = new Color(0.745f, 0.722f, 0.722f, 1f);
         static readonly Color BarText = new Color(0.055f, 0.016f, 0.016f, 1f);
@@ -35,7 +35,7 @@ namespace DualSouls.Mods
         {
             public int Maximum, Last;
             public bool HeroHitPending;
-            public float HideAt;
+            public float HideAt, Offset;
             public string Name;
             public Bar Bar;
         }
@@ -165,9 +165,14 @@ namespace DualSouls.Mods
 
         static void ShowEnemyBar(HealthManager enemy, Tracked tracked)
         {
+            if (tracked.Bar == null)
+            {
+                Renderer body = enemy.GetComponentInChildren<Renderer>();
+                tracked.Offset = body != null ? Mathf.Clamp(body.bounds.extents.y + 0.5f, 1f, 6f) : 1.5f;
+            }
             Bar bar = tracked.Bar ?? (tracked.Bar = NewBar(enemy.transform, false));
             if (bar.Root.parent != enemy.transform) bar.Root.SetParent(enemy.transform, false);
-            bar.Root.localPosition = new Vector3(0f, 1.35f, 0f);
+            bar.Root.position = enemy.transform.position + Vector3.up * tracked.Offset;
             Vector3 scale = enemy.transform.lossyScale;
             bar.Root.localScale = new Vector3(scale.x == 0f ? 1f : 1f / scale.x, scale.y == 0f ? 1f : 1f / scale.y, 1f);
             SetFill(bar, tracked, EnemyFillWidth, EnemyFillHeight);
@@ -212,6 +217,7 @@ namespace DualSouls.Mods
             float fill = Mathf.Clamp01(tracked.Maximum > 0 ? (float)tracked.Last / tracked.Maximum : 0f);
             bar.Fill.localScale = new Vector3(width * fill, height, 1f);
             bar.Fill.localPosition = new Vector3(-width * 0.5f * (1f - fill), 0f, 0f);
+            if (bar.Name != null) bar.Label.color = fill >= 0.5f ? BarText : BarFill;
             bar.Label.text = tracked.Last.ToString(CultureInfo.InvariantCulture) + "/" + tracked.Maximum.ToString(CultureInfo.InvariantCulture);
         }
 
@@ -224,6 +230,7 @@ namespace DualSouls.Mods
             bar.Fill = Part(root.transform, "Fill", BarFill, 3201, new Vector3(EnemyFillWidth, EnemyFillHeight, 1f));
             bar.Label = Text(root.transform, "Health", boss ? 40 : 32, BarText, 3202);
             bar.Label.characterSize = EnemyTextSize;
+            if (!boss) bar.Label.transform.localPosition = new Vector3(0f, EnemyTextAbove, 0f);
             if (boss) bar.Name = Text(root.transform, "Name", 40, Color.white, 3202);
             return bar;
         }
@@ -266,7 +273,7 @@ namespace DualSouls.Mods
                 number = _numbers[_nextNumber] = new Number { Transform = text.transform, Text = text };
             }
             _nextNumber = (_nextNumber + 1) % _numbers.Length;
-            number.Transform.position = position + Vector3.up * 1.6f;
+            number.Transform.position = position + Vector3.up;
             number.Text.text = "-" + damage.ToString(CultureInfo.InvariantCulture);
             number.Text.color = new Color(0.86f, 0.08f, 0.24f, 1f);
             number.Until = Time.unscaledTime + NumberDuration;
@@ -280,7 +287,7 @@ namespace DualSouls.Mods
                 Number number = _numbers[index];
                 if (number == null || number.Transform == null || !number.Transform.gameObject.activeSelf) continue;
                 if (now >= number.Until) { number.Transform.gameObject.SetActive(false); continue; }
-                number.Transform.position += Vector3.up * (Time.unscaledDeltaTime * 1.2f);
+                number.Transform.position += Vector3.up * (Time.unscaledDeltaTime * 0.7f);
                 Color color = number.Text.color;
                 color.a = Mathf.Clamp01((number.Until - now) / 0.5f);
                 number.Text.color = color;
