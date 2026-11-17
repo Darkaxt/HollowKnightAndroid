@@ -405,6 +405,14 @@ object MonoRuntime {
                 if (collected.length < MAX_CAPTURED) collected.append(carry)
                 onLine(carry.toString())
             }
+            // What the program itself printed. .NET on Android sends Console to
+            // logcat under DOTNET rather than to stdout, so the out file above only
+            // ever holds the native host's own lines; without this, compiler errors
+            // and the weaver's notes never reached the launcher log.
+            for (line in consoleLines(pid, startedWall)) {
+                if (collected.length < MAX_CAPTURED) collected.append(line).append('\n')
+                onLine(line)
+            }
             ended = true
         } finally {
             // First: it is the run's claim on the process, and the run is over
@@ -817,6 +825,28 @@ object MonoRuntime {
                 ?: 0L
         }
     }.getOrDefault(0L)
+
+    /**
+     * The run's Console output, read back from logcat once it is over.
+     *
+     * The builder is this app's own process, and an app may read its own uid's
+     * log without any permission. Filtered to the builder's pid and to entries
+     * since the run started, so a recycled pid cannot bring back an older run's
+     * lines; DOTNET:I keeps Console (info and error) and drops the runtime's
+     * debug chatter. Best effort: a log that cannot be read loses diagnostics,
+     * never the run.
+     */
+    private fun consoleLines(pid: Int, sinceWall: Long): List<String> = runCatching {
+        if (pid <= 0) return emptyList()
+        val since = java.text.SimpleDateFormat("MM-dd HH:mm:ss.SSS", java.util.Locale.US)
+            .format(java.util.Date(sinceWall))
+        val proc = ProcessBuilder("logcat", "-d", "-v", "raw", "--pid=$pid", "-T", since, "-s", "DOTNET:I")
+            .redirectErrorStream(true)
+            .start()
+        val text = proc.inputStream.bufferedReader().use { it.readText() }
+        proc.waitFor()
+        text.lines().filter { it.isNotBlank() && !it.startsWith("--------- beginning of") }
+    }.getOrDefault(emptyList())
 
     /** How often the run's memory is sampled, and the size worth reporting. */
     private const val RSS_SAMPLE_MS = 2_000L
