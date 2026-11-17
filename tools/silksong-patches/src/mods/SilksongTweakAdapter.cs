@@ -127,6 +127,7 @@ namespace DualSouls.Mods.Silksong
             Row("one_hit_kills", "one_hit_kills", TweakControlKind.Choice, "COMBAT", "ONE-HIT KILLS", "Use Silksong's managed instant-kill damage state.", "off", "off", "on"),
             Row("unlimited_silk", "unlimited_soul", TweakControlKind.Choice, "COMBAT", "UNLIMITED SILK", "Keep Silk available using Silksong's own drain and refill paths.", "off", "off", "on"),
             Cheat("quick_attacks", TweakControlKind.Choice, "COMBAT", "QUICK ATTACKS", "Remove Needle attack cooldowns and allow turning mid-slash.", "off", "off", "on"),
+            Cheat("all_damage", TweakControlKind.Choice, "COMBAT", "ALL DAMAGE", "Multiply every hit you deal, spells and tools included. Stacks with Needle damage.", "off", "off", "x2", "x3", "x5", "x10"),
 
             Row("health_bars", "enemy_health_bars", TweakControlKind.Choice, "ENCOUNTERS", "ENEMY HEALTH BARS", "Show health bars for eligible enemies and bosses.", "off", "off", "on"),
             Row("damage_numbers", "damage_numbers", TweakControlKind.Choice, "ENCOUNTERS", "DAMAGE NUMBERS", "Show the damage dealt by supported attacks.", "off", "off", "on"),

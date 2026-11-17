@@ -94,7 +94,7 @@ namespace DualSouls.Mods.Silksong
         }
 
         public bool IsChoice(string id) =>
-            id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" ||
+            id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "all_damage" ||
             id == "infinite_tools" || id == HeroTint.Id || id.StartsWith("active_", StringComparison.Ordinal);
 
         public void SetChoice(string id, string value)
@@ -116,6 +116,9 @@ namespace DualSouls.Mods.Silksong
                 case "infinite_tools":
                     _infiniteTools = value == "on";
                     ToolItemManager.IsInfiniteToolUseEnabled = _infiniteTools || _infiniteToolsBaseline;
+                    break;
+                case "all_damage":
+                    SilksongGameplayHooks.AllDamageMultiplier = value == "x2" ? 2 : value == "x3" ? 3 : value == "x5" ? 5 : value == "x10" ? 10 : 1;
                     break;
                 case HeroTint.Id:
                     _tint.Set(value);
@@ -147,6 +150,7 @@ namespace DualSouls.Mods.Silksong
         public void RestoreAll()
         {
             _tint.Set("off");
+            SilksongGameplayHooks.AllDamageMultiplier = 1;
             _gameSpeed = 1f;
             RestoreSpeed();
             _airJump = false;

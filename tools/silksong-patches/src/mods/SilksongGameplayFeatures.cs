@@ -717,6 +717,8 @@ namespace DualSouls.Mods.Silksong
     public static class SilksongGameplayHooks
     {
         public static int NeedleMultiplier { get; set; } = 1;
+        // #25: mod 19 scales every DamageEnemies hit, not only the Needle.
+        public static int AllDamageMultiplier { get; set; } = 1;
         public static bool DamageCapEnabled { get; set; }
         public static bool InnateCompassEnabled { get; set; }
         public static bool JournalOneKillEnabled { get; set; }
@@ -727,8 +729,10 @@ namespace DualSouls.Mods.Silksong
 
         public static void BeforeEnemyHit(HealthManager target, ref HitInstance hit)
         {
-            if (target == null || target.isDead || NeedleMultiplier <= 1 || hit.DamageDealt <= 0 || !hit.IsNailDamage) return;
-            long scaled = (long)hit.DamageDealt * NeedleMultiplier; hit.DamageDealt = scaled > int.MaxValue ? int.MaxValue : (int)scaled;
+            if (target == null || target.isDead || hit.DamageDealt <= 0) return;
+            long factor = (hit.IsNailDamage ? Math.Max(NeedleMultiplier, 1) : 1) * (long)Math.Max(AllDamageMultiplier, 1);
+            if (factor <= 1) return;
+            long scaled = hit.DamageDealt * factor; hit.DamageDealt = scaled > int.MaxValue ? int.MaxValue : (int)scaled;
         }
         public static void BeforeHeroDamage(ref int damageAmount) { if (DamageCapEnabled && damageAmount > 1) damageAmount = 1; }
         public static void BeforeCurrencyChange(ref int amount, CurrencyType type)
@@ -795,7 +799,7 @@ namespace DualSouls.Mods.Silksong
         }
         public static void Reset()
         {
-            NeedleMultiplier = 1; DamageCapEnabled = false; InnateCompassEnabled = false; JournalOneKillEnabled = false; ToolCostsFreeEnabled = false; KeepRosariesEnabled = false; RosaryMultiplier = 1; deathObserved = false;
+            NeedleMultiplier = 1; AllDamageMultiplier = 1; DamageCapEnabled = false; InnateCompassEnabled = false; JournalOneKillEnabled = false; ToolCostsFreeEnabled = false; KeepRosariesEnabled = false; RosaryMultiplier = 1; deathObserved = false;
         }
     }
 }

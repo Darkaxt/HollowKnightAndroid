@@ -344,7 +344,8 @@ namespace DualSouls.Mods.HollowKnight
         }
 
         static bool IsCheatChoice(string id) =>
-            id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "hero_colour";
+            id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "hero_colour" ||
+            id == "all_damage";
 
         public void SetCheatChoice(string id, string value)
         {
@@ -815,9 +816,19 @@ namespace DualSouls.Mods.HollowKnight
             _targets = NewTargetCache();
         }
 
+        // #25: mod 19's all-damage multiplier, applied before the one-hit check.
+        public static int DamageMultiplier { get; set; } = 1;
+
         public static void BeforeHit(global::HealthManager target, ref global::HitInstance hitInstance)
         {
-            if (!_enabled || target == null || target.isDead || hitInstance.DamageDealt <= 0)
+            if (target == null || target.isDead || hitInstance.DamageDealt <= 0)
+                return;
+            if (DamageMultiplier > 1)
+            {
+                long scaled = (long)hitInstance.DamageDealt * DamageMultiplier;
+                hitInstance.DamageDealt = scaled > int.MaxValue ? int.MaxValue : (int)scaled;
+            }
+            if (!_enabled)
                 return;
 
             if (!_targets.TryGetValue(target, out TargetEligibility eligibility))

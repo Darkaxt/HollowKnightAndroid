@@ -57,6 +57,9 @@ namespace DualSouls.Mods.HollowKnight
                     _quickAttacks = value == "on";
                     if (_quickAttacks) MaintainQuickAttacks(); else RestoreQuickAttacks();
                     break;
+                case "all_damage":
+                    HollowKnightOneHitDamagePatch.DamageMultiplier = value == "x2" ? 2 : value == "x3" ? 3 : value == "x5" ? 5 : value == "x10" ? 10 : 1;
+                    break;
                 case HeroTint.Id:
                     _tint.Set(value);
                     break;
@@ -78,6 +81,7 @@ namespace DualSouls.Mods.HollowKnight
         public void RestoreAll()
         {
             _tint.Set("off");
+            HollowKnightOneHitDamagePatch.DamageMultiplier = 1;
             _gameSpeed = 1f;
             RestoreSpeed();
             _airJump = false;
