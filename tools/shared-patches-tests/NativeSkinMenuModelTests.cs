@@ -78,6 +78,14 @@ public sealed class NativeSkinMenuModelTests
     }
 
     [Fact]
+    public void TurningOnWithNoPackImportedPointsToTheLauncher()
+    {
+        var model = new NativeSkinMenuModel(Snapshot("OFF", "CHARACTER", null, Array.Empty<string>()), 3);
+        Assert.Equal("NO SKINS YET · IMPORT ONE IN THE LAUNCHER", model.RefusalHint(model.CycleMode(1)));
+        Assert.Null(model.RefusalHint(model.CycleSprites(1)));
+    }
+
+    [Fact]
     public void ScrollingAndReplacementRetainFocusedPackIdentity()
     {
         var packs = Enumerable.Range(0, 7)

@@ -1643,7 +1643,8 @@ namespace DualSouls.Mods.HollowKnight
                         ? "CHANGE SAVED · " + _skinMenu.Rows[_skinMutationRow].Label + FormatSkinValue(_skinMenu.Rows[_skinMutationRow].Value)
                         : _skinMutationRefusal ?? "CHANGE NOT APPLIED · TRY AGAIN";
                 }
-                else if (!_skinError.StartsWith("CHANGE", StringComparison.Ordinal))
+                else if (!_skinError.StartsWith("CHANGE", StringComparison.Ordinal) &&
+                         (_skinMutationRefusal == null || _skinError != _skinMutationRefusal))
                     _skinError = FormatSkinEvidence(wire);
                 _skinSnapshotReady = true;
                 _skinSessionLoaded = true;

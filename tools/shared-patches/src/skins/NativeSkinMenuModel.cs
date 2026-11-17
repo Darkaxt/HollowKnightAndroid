@@ -176,6 +176,7 @@ namespace DualSouls.Skins
         public string RefusalHint(NativeSkinMutation mutation)
         {
             if (mutation.Kind != NativeSkinMutationKind.SetMode || mutation.Value != "ON") return null;
+            if (snapshot.Packs.Count == 0) return "NO SKINS YET · IMPORT ONE IN THE LAUNCHER";
             foreach (NativeSkinPackDescriptor pack in snapshot.Packs)
                 if (pack.Id == snapshot.SelectedPackId) return null;
             return "SELECT A SKIN FIRST · CHOOSE ONE WHILE OFF";
