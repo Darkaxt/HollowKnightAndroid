@@ -95,7 +95,7 @@ namespace DualSouls.Mods.Silksong
 
         public bool IsChoice(string id) =>
             id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "all_damage" ||
-            id == "infinite_tools" || id == HeroTint.Id || id.StartsWith("active_", StringComparison.Ordinal);
+            id == "infinite_tools" || id == HeroTint.Id || id == HeroTint.SceneId || id.StartsWith("active_", StringComparison.Ordinal);
 
         public void SetChoice(string id, string value)
         {
@@ -122,6 +122,9 @@ namespace DualSouls.Mods.Silksong
                     break;
                 case HeroTint.Id:
                     _tint.Set(value);
+                    break;
+                case HeroTint.SceneId:
+                    _tint.SetScene(value == "on");
                     break;
                 default:
                     SetActiveTool(id, value == "on");
@@ -150,6 +153,7 @@ namespace DualSouls.Mods.Silksong
         public void RestoreAll()
         {
             _tint.Set("off");
+            _tint.SetScene(false);
             SilksongGameplayHooks.AllDamageMultiplier = 1;
             _gameSpeed = 1f;
             RestoreSpeed();
@@ -348,12 +352,14 @@ namespace DualSouls.Mods.Silksong
                     hero.RefillHealthToMax();
                     return Text("max health " + data.CurrentMaxHealth);
                 }
+                // CurrencyManager queues the change and applies it on its next Update, so the
+                // balance read here is still the old one.
                 case "add_rosaries":
                     AddCurrency(1000, CurrencyType.Money);
-                    return Text("rosaries " + CurrencyManager.GetCurrencyAmount(CurrencyType.Money));
+                    return Text("+1000 rosaries (had " + CurrencyManager.GetCurrencyAmount(CurrencyType.Money) + ")");
                 case "add_shards":
                     AddCurrency(100, CurrencyType.Shard);
-                    return Text("shards " + CurrencyManager.GetCurrencyAmount(CurrencyType.Shard));
+                    return Text("+100 shards (had " + CurrencyManager.GetCurrencyAmount(CurrencyType.Shard) + ")");
                 case "refill_tools":
                     return Text("refilled " + RefillTools() + " tools");
                 case "unlock_all_tools":

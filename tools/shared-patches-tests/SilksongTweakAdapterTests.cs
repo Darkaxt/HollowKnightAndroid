@@ -8,8 +8,8 @@ namespace SharedPatches.Tests;
 
 public sealed class SilksongTweakAdapterTests
 {
-    static readonly string[] CheatIds = { "game_speed", "quick_attacks", "all_damage", "infinite_tools", "refill_tools", "add_rosaries", "add_shards", "infinite_air_jump", "refill_health", "max_health_up", "max_health_down", "hero_colour", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_glide", "ability_charge_attack", "ability_needolin", "ability_clawline", "ability_super_jump", "active_magnetite_brooch", "active_shard_pendant", "active_weighted_belt", "active_barbed_bracelet", "active_dead_bugs_purse", "active_shell_satchel", "active_magnetite_dice", "active_scuttlebrace", "active_ascendants_grip", "active_spider_strings", "active_silkspeed_anklets", "active_thiefs_mark", "active_longclaw", "active_pin_badge", "active_quick_sling", "active_weavelight", "active_warding_bell", "unlock_all_tools", "unlock_all_crests", "unlock_fast_travel", "unlock_maps", "max_collectables", "award_all_achievements", "reset_achievements" };
-    static readonly string[] CheatChoiceIds = { "hero_colour", "game_speed", "quick_attacks", "all_damage", "infinite_tools", "infinite_air_jump", "active_magnetite_brooch", "active_shard_pendant", "active_weighted_belt", "active_barbed_bracelet", "active_dead_bugs_purse", "active_shell_satchel", "active_magnetite_dice", "active_scuttlebrace", "active_ascendants_grip", "active_spider_strings", "active_silkspeed_anklets", "active_thiefs_mark", "active_longclaw", "active_pin_badge", "active_quick_sling", "active_weavelight", "active_warding_bell" };
+    static readonly string[] CheatIds = { "game_speed", "quick_attacks", "all_damage", "infinite_tools", "refill_tools", "add_rosaries", "add_shards", "infinite_air_jump", "refill_health", "max_health_up", "max_health_down", "hero_colour", "scene_colour", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_glide", "ability_charge_attack", "ability_needolin", "ability_clawline", "ability_super_jump", "active_magnetite_brooch", "active_shard_pendant", "active_weighted_belt", "active_barbed_bracelet", "active_dead_bugs_purse", "active_shell_satchel", "active_magnetite_dice", "active_scuttlebrace", "active_ascendants_grip", "active_spider_strings", "active_silkspeed_anklets", "active_thiefs_mark", "active_longclaw", "active_pin_badge", "active_quick_sling", "active_weavelight", "active_warding_bell", "unlock_all_tools", "unlock_all_crests", "unlock_fast_travel", "unlock_maps", "max_collectables", "award_all_achievements", "reset_achievements" };
+    static readonly string[] CheatChoiceIds = { "hero_colour", "scene_colour", "game_speed", "quick_attacks", "all_damage", "infinite_tools", "infinite_air_jump", "active_magnetite_brooch", "active_shard_pendant", "active_weighted_belt", "active_barbed_bracelet", "active_dead_bugs_purse", "active_shell_satchel", "active_magnetite_dice", "active_scuttlebrace", "active_ascendants_grip", "active_spider_strings", "active_silkspeed_anklets", "active_thiefs_mark", "active_longclaw", "active_pin_badge", "active_quick_sling", "active_weavelight", "active_warding_bell" };
 
     [Fact]
     public void CatalogStartsWithExactRequiredContractAndSilksongNamesThenAppendsExtras()
@@ -614,6 +614,7 @@ public sealed class SilksongTweakAdapterTests
             ["game_speed"] = "vanilla",
             ["all_damage"] = "off",
             ["hero_colour"] = "off",
+            ["scene_colour"] = "off",
             ["quick_attacks"] = "off",
             ["infinite_tools"] = "off",
             ["infinite_air_jump"] = "off",

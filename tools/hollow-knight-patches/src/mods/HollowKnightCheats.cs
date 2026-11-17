@@ -63,6 +63,9 @@ namespace DualSouls.Mods.HollowKnight
                 case HeroTint.Id:
                     _tint.Set(value);
                     break;
+                case HeroTint.SceneId:
+                    _tint.SetScene(value == "on");
+                    break;
                 default:
                     throw new ArgumentException("Not a Hollow Knight cheat choice: " + id);
             }
@@ -81,6 +84,7 @@ namespace DualSouls.Mods.HollowKnight
         public void RestoreAll()
         {
             _tint.Set("off");
+            _tint.SetScene(false);
             HollowKnightOneHitDamagePatch.DamageMultiplier = 1;
             _gameSpeed = 1f;
             RestoreSpeed();

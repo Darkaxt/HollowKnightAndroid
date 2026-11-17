@@ -26,24 +26,45 @@ namespace DualSouls.Mods
             public Color Written;
         }
 
+        public const string SceneId = "scene_colour";
+
         readonly List<Owned> _owned = new List<Owned>();
         readonly List<tk2dSprite> _scan = new List<tk2dSprite>();
+        // Scene-wide colouring (mod 19's "scene-wide" option): every other tk2d sprite in
+        // the loaded scenes takes the same tint. A scene holds thousands of sprites, so it
+        // is rescanned every few seconds or on a scene change and re-tinted at 4 Hz, not
+        // every frame; a rainbow therefore steps there while the hero cycles smoothly.
+        readonly List<Owned> _sceneOwned = new List<Owned>();
+        readonly HashSet<tk2dSprite> _sceneKnown = new HashSet<tk2dSprite>();
         HeroController _hero;
         string _mode = "off";
         float _nextScan;
+        bool _scene;
+        int _sceneHandle;
+        float _nextSceneScan, _nextSceneTint;
 
         public string Mode => _mode;
+        public bool SceneWide => _scene;
 
         public void Set(string value)
         {
             if (Array.IndexOf(Values, value) < 0) throw new ArgumentException("Unknown hero colour: " + value);
             _mode = value;
-            if (value == "off") Restore();
+            if (value == "off") { Restore(); RestoreScene(); }
+            _nextSceneTint = 0f;
+        }
+
+        public void SetScene(bool on)
+        {
+            _scene = on;
+            _nextSceneScan = _nextSceneTint = 0f;
+            if (!on) RestoreScene();
         }
 
         public void Tick()
         {
             if (_mode == "off") return;
+            if (_scene) TickScene();
             HeroController hero = HeroController.instance;
             if (hero == null) { Restore(); return; }
             if (!ReferenceEquals(hero, _hero))
@@ -80,6 +101,69 @@ namespace DualSouls.Mods
             }
             _owned.Clear();
             _hero = null;
+        }
+
+        void TickScene()
+        {
+            float now = Time.unscaledTime;
+            int handle = UnityEngine.SceneManagement.SceneManager.GetActiveScene().handle;
+            if (handle != _sceneHandle || now >= _nextSceneScan)
+            {
+                _sceneHandle = handle;
+                ScanScene();
+                _nextSceneScan = now + 5f;
+                _nextSceneTint = 0f;
+            }
+            if (now < _nextSceneTint) return;
+            _nextSceneTint = now + 0.25f;
+            Color tint = TintFor(_mode, now);
+            for (int index = _sceneOwned.Count - 1; index >= 0; index--)
+            {
+                Owned owned = _sceneOwned[index];
+                if (owned.Sprite == null)
+                {
+                    _sceneKnown.Remove(owned.Sprite);
+                    _sceneOwned.RemoveAt(index);
+                    continue;
+                }
+                Color current = owned.Sprite.color;
+                if (current != owned.Written) owned.Base = current;
+                Color next = new Color(owned.Base.r * tint.r, owned.Base.g * tint.g, owned.Base.b * tint.b, owned.Base.a);
+                if (next != current) owned.Sprite.color = next;
+                owned.Written = next;
+            }
+        }
+
+        void ScanScene()
+        {
+            // Destroyed sprites compare equal to null but keep their managed identity, so
+            // they are dropped from the set before it is used to recognise new ones.
+            _sceneKnown.RemoveWhere(sprite => sprite == null);
+            HeroController hero = HeroController.instance;
+            Transform heroRoot = hero != null ? hero.transform : null;
+            tk2dSprite[] sprites = UnityEngine.Object.FindObjectsOfType<tk2dSprite>();
+            for (int index = 0; index < sprites.Length; index++)
+            {
+                tk2dSprite sprite = sprites[index];
+                if (sprite == null || _sceneKnown.Contains(sprite)) continue;
+                // The hero keeps its own smooth tint.
+                if (heroRoot != null && sprite.transform.IsChildOf(heroRoot)) continue;
+                _sceneKnown.Add(sprite);
+                Color color = sprite.color;
+                _sceneOwned.Add(new Owned { Sprite = sprite, Base = color, Written = color });
+            }
+        }
+
+        void RestoreScene()
+        {
+            for (int index = 0; index < _sceneOwned.Count; index++)
+            {
+                Owned owned = _sceneOwned[index];
+                if (owned.Sprite != null && owned.Sprite.color == owned.Written) owned.Sprite.color = owned.Base;
+            }
+            _sceneOwned.Clear();
+            _sceneKnown.Clear();
+            _sceneHandle = 0;
         }
 
         void Scan(HeroController hero)
