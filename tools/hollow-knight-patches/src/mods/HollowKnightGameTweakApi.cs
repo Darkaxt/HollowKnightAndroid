@@ -345,7 +345,7 @@ namespace DualSouls.Mods.HollowKnight
 
         static bool IsCheatChoice(string id) =>
             id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "hero_colour" || id == "scene_colour" || id == "picker_amount" || id == "boss_health_bars" ||
-            id == "all_damage";
+            id == "all_damage" || id == "health_regen" || id == "dash_invincibility" || id == "rebirth_in_scene";
 
         public void SetCheatChoice(string id, string value)
         {

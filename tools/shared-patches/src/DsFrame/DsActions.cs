@@ -175,6 +175,9 @@ public class DsActionBar
     RectTransform _host;
     float _right, _headerH;
 
+    /// <summary>The left edge of the header's buttons, in layout space; 0 with none shown.</summary>
+    public float HeaderLeft { get; private set; }
+
     /// <param name="host">
     /// Covers the whole panel, in layout space. The bar draws in two corners
     /// that belong to two different parts of the frame -- the header band and a
@@ -234,6 +237,7 @@ public class DsActionBar
             : 0f;
 
         int paneSeen = 0, headerSeen = 0;
+        HeaderLeft = 0f;
 
         for (int i = 0; i < _rows.Count; i++)
         {
@@ -268,6 +272,7 @@ public class DsActionBar
                 float w = Mathf.Max(MinW, textW + PadX * 2f);
                 where = new Rect(_right - w, headerGap * (headerSeen + 1) + RowH * headerSeen,
                                  w, RowH);
+                HeaderLeft = headerSeen == 0 ? where.x : Mathf.Min(HeaderLeft, where.x);
                 headerSeen++;
             }
 

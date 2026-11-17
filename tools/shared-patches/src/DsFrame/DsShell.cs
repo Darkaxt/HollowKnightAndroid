@@ -63,6 +63,8 @@ public partial class DsShell
     readonly List<DsAction> _actionBuffer = new List<DsAction>();
     // The screen's name in the header, in the space the tools used to fill.
     TmpText _headerTitle;
+    TmpText _headerStatus;
+    Rect _headerStatusRect;
     string _headerRawTitle, _headerCapsTitle;
     Rect _headerTitleRect;
     bool _headerTitlePlaced;
@@ -168,6 +170,12 @@ public partial class DsShell
         _headerTitle = DsWidgets.Label(_header, "screen-title", "", TitleSize,
                                        DsTheme.Ink, TmpAlign.Bottom, display: true);
         DsWidgets.SetActive(_headerTitle, false);
+
+        // The game's status line (the death counter), on the right of the title row.
+        _headerStatus = DsWidgets.Label(_header, "header-status", "", DsTheme.RowSize,
+                                        DsTheme.InkDim, TmpAlign.BottomRight);
+        _headerStatus.enableWordWrapping = false;
+        DsWidgets.SetActive(_headerStatus, false);
 
         _tabBar = DsWidgets.Rect(_root, "tabs");
         DsWidgets.Place(_tabBar, _layout.Tabs);
@@ -637,9 +645,34 @@ public partial class DsShell
         if (e.Broken) { _actions.Clear(); return; }
         RefreshActions(e);
         RefreshTitle(e);
+        RefreshStatus();
         RefreshStrip(e);
         TickStripCaret(dt);
     }
+
+    /// <summary>
+    /// The game's status line, on the bottom of the title row like the title, and
+    /// clear of the header's buttons when the screen has any.
+    /// </summary>
+    void RefreshStatus()
+    {
+        if (_headerStatus == null) return;
+        string text = DsFrame.HeaderStatus;
+        Rect space = _hud != null ? _hud.TitleSpace : new Rect(0f, 0f, 0f, 0f);
+        bool show = !string.IsNullOrEmpty(text) && space.height > 10f;
+        DsWidgets.SetActive(_headerStatus, show);
+        if (!show) return;
+        if (_headerStatus.text != text) _headerStatus.text = text;
+        float right = _actions.HeaderLeft > 0f ? _actions.HeaderLeft - 24f : _w - 40f;
+        var where = new Rect(right - StatusWidth, space.y, StatusWidth, Mathf.Max(10f, space.height - TitleBottomGap));
+        if (_headerStatusRect != where)
+        {
+            DsWidgets.Place(_headerStatus.rectTransform, where);
+            _headerStatusRect = where;
+        }
+    }
+
+    const float StatusWidth = 360f;
 
     /// <summary>
     /// Let the visible screen replace the tab strip, or put the tabs back.

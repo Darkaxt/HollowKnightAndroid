@@ -39,6 +39,20 @@ namespace DualSouls.Mods.Silksong
         static bool lastAtBench;
         static int benchProfile = -1;
         static readonly Dictionary<string, BenchRecord> benches = new Dictionary<string, BenchRecord>(StringComparer.Ordinal);
+        // #38 death counter and the per-room boss probe it shares with #40.
+        static DeathTally deathTally;
+        static string bossProbeScene;
+        static bool bossProbeFound;
+        static float nextBossProbe;
+        static readonly Func<bool> BossInRoom = () => bossProbeFound || (bossProbeFound = SceneHasBoss());
+        // #40 rebirth in scene: the current room's usable entrance, and the room to return to.
+        internal static bool RebirthEnabled;
+        static string rebirthRoom;
+        static string rebirthGate;
+        static bool rebirthWasDead;
+        static string rebirthArmedScene;
+        static string rebirthArmedGate;
+        internal static int RebirthCount;
 
         [Serializable]
         sealed class StateEnvelope
@@ -114,6 +128,98 @@ namespace DualSouls.Mods.Silksong
             MaintainSecretRadar(game, secretRadar);
             MaintainBossRetry(game, player, bossRetry);
             RecordBench(player);
+            MaintainBossProbe(game.sceneName, player.health <= 0);
+            MaintainDeathTally(game, player);
+            MaintainRebirth(game, player, bossRetry);
+        }
+
+        // Same boss test as BOSS RETRY, sampled until the room is known to hold one.
+        static bool SceneHasBoss()
+        {
+            foreach (HealthManager enemy in HealthManager.EnumerateActiveEnemies())
+                if (enemy != null && !enemy.isDead && enemy.hp >= 200 && enemy.hp < 50000) return true;
+            return false;
+        }
+
+        static void MaintainBossProbe(string scene, bool dead)
+        {
+            if (scene != bossProbeScene) { bossProbeScene = scene; bossProbeFound = false; nextBossProbe = 0f; }
+            if (bossProbeFound || dead || Time.unscaledTime < nextBossProbe) return;
+            nextBossProbe = Time.unscaledTime + 2f;
+            bossProbeFound = SceneHasBoss();
+        }
+
+        static void MaintainDeathTally(GameManager game, PlayerData player)
+        {
+            if (deathTally == null)
+                deathTally = new DeathTally(Path.Combine(Application.persistentDataPath, "dualsouls-death-counter"), "silksong");
+            deathTally.Tick(player, player.profileID, player.playTime, game.sceneName, player.health <= 0, BossInRoom);
+            DsFrame.HeaderStatus = deathTally.Label;
+        }
+
+        internal static string DeathReport()
+        {
+            if (deathTally == null) return "deaths=unbound";
+            return "deaths=" + deathTally.Total + " boss=" + deathTally.BossDeaths + " bossScene=" + (deathTally.BossScene ?? "-") +
+                " label=" + (deathTally.Label ?? "-") + " error=" + (deathTally.LastError ?? "-") +
+                " rebirth=" + RebirthEnabled + " room=" + (rebirthRoom ?? "-") + " gate=" + (rebirthGate ?? "-") +
+                " armed=" + (rebirthArmedScene ?? "-") + " rebirths=" + RebirthCount;
+        }
+
+        // An entrance the hero can be put back through: a live gate without a scripted fade.
+        static string UsableGate(string name)
+        {
+            if (string.IsNullOrEmpty(name) || TransitionPoint.TransitionPoints == null) return null;
+            foreach (TransitionPoint gate in TransitionPoint.TransitionPoints)
+            {
+                if (gate == null || gate.name != name) continue;
+                if (gate.isInactive || gate.customFade || gate.customFadeFSM != null || !gate.gameObject.activeInHierarchy) return null;
+                return name;
+            }
+            return null;
+        }
+
+        static void ResetRebirth()
+        {
+            rebirthRoom = null; rebirthGate = null; rebirthWasDead = false;
+            rebirthArmedScene = null; rebirthArmedGate = null;
+        }
+
+        static void MaintainRebirth(GameManager game, PlayerData player, bool bossRetry)
+        {
+            if (!RebirthEnabled) { ResetRebirth(); return; }
+            string scene = game.sceneName;
+            bool dead = player.health <= 0;
+            if (rebirthArmedScene == null && !dead && !game.IsInSceneTransition && scene != rebirthRoom)
+            {
+                rebirthRoom = scene;
+                rebirthGate = UsableGate(game.entryGateName);
+            }
+            if (dead && !rebirthWasDead && rebirthArmedScene == null && rebirthGate != null && scene == rebirthRoom &&
+                scene != player.respawnScene && scene != player.tempRespawnScene && !(bossRetry && BossInRoom()))
+            {
+                rebirthArmedScene = scene;
+                rebirthArmedGate = rebirthGate;
+            }
+            rebirthWasDead = dead;
+            if (rebirthArmedScene == null || dead || game.IsInSceneTransition) return;
+            if (scene == rebirthArmedScene) return;  // still in the room, the respawn has not started
+            HeroController hero = HeroController.instance;
+            // After the respawn has finished and the hero is standing: the bench's own
+            // sitting state is left by the player, never broken by a scene change.
+            if (hero == null || !hero.acceptingInput || hero.controlReqlinquished || hero.cState.dead) return;
+            string target = rebirthArmedScene, gate = rebirthArmedGate;
+            rebirthArmedScene = null;
+            rebirthArmedGate = null;
+            RebirthCount++;
+            game.BeginSceneTransition(new GameManager.SceneLoadInfo
+            {
+                SceneName = target,
+                EntryGateName = gate,
+                PreventCameraFadeOut = false,
+                WaitForSceneTransitionCameraFade = true,
+                Visualization = GameManager.SceneLoadVisualizations.Default,
+            });
         }
 
         public static void RestoreAll()

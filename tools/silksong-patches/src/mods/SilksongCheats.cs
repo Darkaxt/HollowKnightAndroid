@@ -77,6 +77,16 @@ namespace DualSouls.Mods.Silksong
         bool _infiniteTools;
         bool _infiniteToolsBaseline;
         bool _captured;
+        // #42 assists.
+        // Static so the QA assists report can read them; there is one cheat owner.
+        static float _regenInterval;
+        static int _regenHealth = -1;
+        static float _regenAt;
+        static bool _dashInvincible;
+        static bool _dashTokenHeld;
+        static int _dashFrames;
+        static int _regenGrants;
+        static readonly object DashToken = new object();
 
         internal static bool IsForcedTool(ToolItem tool)
         {
@@ -95,7 +105,8 @@ namespace DualSouls.Mods.Silksong
 
         public bool IsChoice(string id) =>
             id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "all_damage" ||
-            id == "infinite_tools" || id == HeroTint.Id || id == HeroTint.SceneId || id == SilksongItemPickers.AmountId || id == CombatOverlay.BossBarsId || id.StartsWith("active_", StringComparison.Ordinal);
+            id == "infinite_tools" || id == "health_regen" || id == "dash_invincibility" || id == "rebirth_in_scene" ||
+            id == HeroTint.Id || id == HeroTint.SceneId || id == SilksongItemPickers.AmountId || id == CombatOverlay.BossBarsId || id.StartsWith("active_", StringComparison.Ordinal);
 
         public void SetChoice(string id, string value)
         {
@@ -132,6 +143,17 @@ namespace DualSouls.Mods.Silksong
                 case CombatOverlay.BossBarsId:
                     CombatOverlay.BossBars = value == "on";
                     break;
+                case "health_regen":
+                    _regenInterval = value == "fast" ? 3f : value == "slow" ? 8f : 0f;
+                    _regenHealth = -1;
+                    break;
+                case "dash_invincibility":
+                    _dashInvincible = value == "on";
+                    MaintainDashInvincibility();
+                    break;
+                case "rebirth_in_scene":
+                    SilksongGameplayFeatures.RebirthEnabled = value == "on";
+                    break;
                 default:
                     SetActiveTool(id, value == "on");
                     break;
@@ -156,10 +178,56 @@ namespace DualSouls.Mods.Silksong
             MaintainSpeed();
             MaintainAirJump();
             MaintainQuickAttacks();
+            MaintainRegeneration();
+            MaintainDashInvincibility();
+        }
+
+        // #42: one mask back after a quiet spell. Scaled time, so pause stops the clock;
+        // any change of health, including a hit, starts it again.
+        void MaintainRegeneration()
+        {
+            if (_regenInterval <= 0f) return;
+            HeroController hero = HeroController.SilentInstance;
+            PlayerData data = PlayerData.HasInstance ? PlayerData.instance : null;
+            if (hero == null || data == null) return;
+            int health = data.health;
+            if (health <= 0 || health >= data.CurrentMaxHealth || hero.cState.dead || health != _regenHealth)
+            {
+                _regenHealth = health;
+                _regenAt = Time.time + _regenInterval;
+                return;
+            }
+            if (Time.time < _regenAt) return;
+            hero.AddHealth(1);
+            _regenGrants++;
+            _regenHealth = data.health;
+            _regenAt = Time.time + _regenInterval;
+        }
+
+        // #42: the game's own managed invincibility set, held for exactly the dash.
+        // Leaving a scene clears the set, so the token is added again while dashing.
+        void MaintainDashInvincibility()
+        {
+            HeroController hero = HeroController.SilentInstance;
+            bool want = _dashInvincible && hero != null && hero.cState.dashing && !hero.cState.dead;
+            if (want) { HeroInvincibilitySource.Add(DashToken); _dashTokenHeld = true; _dashFrames++; }
+            else if (_dashTokenHeld) { HeroInvincibilitySource.Remove(DashToken); _dashTokenHeld = false; }
+        }
+
+        internal static string AssistReport()
+        {
+            return "regen=" + _regenInterval + " regenHealth=" + _regenHealth + " dash=" + _dashInvincible +
+                " dashHeld=" + _dashTokenHeld + " dashFrames=" + _dashFrames + " regenGrants=" + _regenGrants +
+                " invincible=" + HeroInvincibilitySource.IsActive;
         }
 
         public void RestoreAll()
         {
+            _regenInterval = 0f;
+            _regenHealth = -1;
+            _dashInvincible = false;
+            MaintainDashInvincibility();
+            SilksongGameplayFeatures.RebirthEnabled = false;
             _tint.Set("off");
             _tint.SetScene(false);
             _pickers.RestoreAll();

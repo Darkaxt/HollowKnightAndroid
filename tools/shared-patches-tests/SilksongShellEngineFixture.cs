@@ -277,7 +277,7 @@ public class RenderTexture:Object
     public void Release(){created=false;}
 }
 public class FontAsset{public object material=new();}
-public enum TextAlignmentOptions{Left,Center,TopLeft,Top,TopRight,Bottom}
+public enum TextAlignmentOptions{Left,Center,TopLeft,Top,TopRight,Bottom,BottomRight}
 [Flags]public enum FontStyles{Normal=0,Bold=1,UpperCase=2}
 public class TextMeshProUGUI:Component
 {

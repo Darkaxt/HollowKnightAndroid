@@ -128,11 +128,14 @@ namespace DualSouls.Mods.Silksong
             Row("unlimited_silk", "unlimited_soul", TweakControlKind.Choice, "COMBAT", "UNLIMITED SILK", "Keep Silk available using Silksong's own drain and refill paths.", "off", "off", "on"),
             Cheat("quick_attacks", TweakControlKind.Choice, "COMBAT", "QUICK ATTACKS", "Remove Needle attack cooldowns and allow turning mid-slash.", "off", "off", "on"),
             Cheat("all_damage", TweakControlKind.Choice, "COMBAT", "ALL DAMAGE", "Multiply every hit you deal, spells and tools included. Stacks with Needle damage.", "off", "off", "x2", "x3", "x5", "x10"),
+            Cheat("health_regen", TweakControlKind.Choice, "ASSISTS", "HEALTH REGENERATION", "Restore one mask after a few seconds without taking damage.", "off", "off", "slow", "fast"),
+            Cheat("dash_invincibility", TweakControlKind.Choice, "ASSISTS", "DASH INVINCIBILITY", "Dashing passes through enemies and attacks, like Hollow Knight's Shade Cloak.", "off", "off", "on"),
 
             Row("health_bars", "enemy_health_bars", TweakControlKind.Choice, "ENCOUNTERS", "ENEMY HEALTH BARS", "Show a health bar over each enemy you hit. Bosses use BOSS HEALTH BARS.", "off", "off", "on"),
             Cheat("boss_health_bars", TweakControlKind.Choice, "ENCOUNTERS", "BOSS HEALTH BARS", "Show the name and health of bosses you hit in a bar along the bottom of the screen.", "off", "off", "on"),
             Row("damage_numbers", "damage_numbers", TweakControlKind.Choice, "ENCOUNTERS", "DAMAGE NUMBERS", "Show the damage of each of your hits.", "off", "off", "on"),
             Row("boss_retry", "boss_retry", TweakControlKind.Choice, "ENCOUNTERS", "BOSS RETRY", "Retry supported boss encounters from a safe checkpoint.", "off", "off", "on"),
+            Cheat("rebirth_in_scene", TweakControlKind.Choice, "ENCOUNTERS", "REBIRTH IN SCENE", "After a death, return to the entrance of the room you died in instead of the last bench. Bosses keep BOSS RETRY.", "off", "off", "on"),
 
             Row("equip_anywhere", "equip_anywhere", TweakControlKind.Choice, "CRESTS & TOOLS", "EQUIP ANYWHERE", "Allow Crest and Tool changes away from benches.", "off", "off", "on"),
             Row("charm_costs", "charm_costs", TweakControlKind.Choice, "CRESTS & TOOLS", "TOOL COSTS", "Remove Tool replenishment costs while enabled.", "vanilla", "vanilla", "free"),

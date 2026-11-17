@@ -39,6 +39,16 @@ namespace DualSouls.Mods.HollowKnight
         bool _quickAttacks;
         global::HeroController _quickHero;
         float[] _quickBaseline;
+        // #42 assists.
+        // Static so the QA assists report can read them; there is one cheat owner.
+        static float _regenInterval;
+        static int _regenHealth = -1;
+        static float _regenAt;
+        static bool _dashInvincible;
+        static global::HeroController _dashHero;
+        static bool _dashOwned;
+        static int _dashFrames;
+        static int _regenGrants;
 
         public void SetChoice(string id, string value)
         {
@@ -72,6 +82,17 @@ namespace DualSouls.Mods.HollowKnight
                 case CombatOverlay.BossBarsId:
                     CombatOverlay.BossBars = value == "on";
                     break;
+                case "health_regen":
+                    _regenInterval = value == "fast" ? 3f : value == "slow" ? 8f : 0f;
+                    _regenHealth = -1;
+                    break;
+                case "dash_invincibility":
+                    _dashInvincible = value == "on";
+                    MaintainDashInvincibility();
+                    break;
+                case "rebirth_in_scene":
+                    HollowKnightGameplayFeatures.RebirthEnabled = value == "on";
+                    break;
                 default:
                     throw new ArgumentException("Not a Hollow Knight cheat choice: " + id);
             }
@@ -86,10 +107,71 @@ namespace DualSouls.Mods.HollowKnight
             MaintainSpeed();
             MaintainAirJump();
             MaintainQuickAttacks();
+            MaintainRegeneration();
+            MaintainDashInvincibility();
+        }
+
+        // #42: one mask back after a quiet spell. Scaled time, so pause stops the clock;
+        // any change of health, including a hit, starts it again.
+        void MaintainRegeneration()
+        {
+            if (_regenInterval <= 0f) return;
+            global::HeroController hero = global::HeroController.UnsafeInstance;
+            global::PlayerData data = global::PlayerData.instance;
+            if (hero == null || data == null) return;
+            int health = data.health;
+            if (health <= 0 || health >= data.maxHealth || hero.cState.dead || health != _regenHealth)
+            {
+                _regenHealth = health;
+                _regenAt = Time.time + _regenInterval;
+                return;
+            }
+            if (Time.time < _regenAt) return;
+            hero.AddHealth(1);
+            _regenGrants++;
+            _regenHealth = data.health;
+            _regenAt = Time.time + _regenInterval;
+        }
+
+        // #42: Hollow Knight has no invincibility set, so the hero's own invulnerable
+        // flag is held for the dash. It is taken only when the game had not already
+        // set it, and given back only if it is still ours.
+        void MaintainDashInvincibility()
+        {
+            global::HeroController hero = global::HeroController.UnsafeInstance;
+            if (!ReferenceEquals(hero, _dashHero)) { ReleaseDashInvincibility(); _dashHero = hero; }
+            if (hero == null) return;
+            bool want = _dashInvincible && hero.cState.dashing && !hero.cState.dead;
+            if (want && !_dashOwned && !hero.cState.invulnerable)
+            {
+                hero.cState.invulnerable = true;
+                _dashOwned = true;
+            }
+            else if (!want && _dashOwned) ReleaseDashInvincibility();
+            if (_dashOwned) _dashFrames++;
+        }
+
+        void ReleaseDashInvincibility()
+        {
+            if (_dashOwned && _dashHero != null) _dashHero.cState.invulnerable = false;
+            _dashOwned = false;
+        }
+
+        internal static string AssistReport()
+        {
+            global::HeroController hero = global::HeroController.UnsafeInstance;
+            return "regen=" + _regenInterval + " regenHealth=" + _regenHealth + " dash=" + _dashInvincible +
+                " dashOwned=" + _dashOwned + " dashFrames=" + _dashFrames + " regenGrants=" + _regenGrants +
+                " invulnerable=" + (hero != null && hero.cState.invulnerable);
         }
 
         public void RestoreAll()
         {
+            _regenInterval = 0f;
+            _regenHealth = -1;
+            _dashInvincible = false;
+            ReleaseDashInvincibility();
+            HollowKnightGameplayFeatures.RebirthEnabled = false;
             _tint.Set("off");
             _tint.SetScene(false);
             _picker.RestoreAll();
@@ -105,6 +187,7 @@ namespace DualSouls.Mods.HollowKnight
 
         public void PrepareForStateTransfer()
         {
+            ReleaseDashInvincibility();
             RestoreAirJump();
             RestoreQuickAttacks();
         }

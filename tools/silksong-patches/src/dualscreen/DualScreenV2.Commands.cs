@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die, hit <damage> [hp] [near] (refused on slot 1) | sprites";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die, hit <damage> [hp] [near] (refused on slot 1) | sprites | assists";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -81,6 +81,7 @@ public partial class DualScreenV2
                 if (_shell == null) return "error no shell";
                 return _shell.ShowId(a[1]) ? "ok active=" + _shell.ActiveId : "error unknown tab";
             case "mods-list": return CommandModsList();
+            case "assists": return SilksongGameplayFeatures.DeathReport() + "\n" + SilksongCheats.AssistReport();
             case "mod":
             {
                 if (a.Length < 3) return "error mod <id> <value>";

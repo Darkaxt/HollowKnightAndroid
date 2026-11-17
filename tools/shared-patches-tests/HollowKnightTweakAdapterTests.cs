@@ -19,8 +19,8 @@ public sealed class HollowKnightTweakAdapterTests
         "geo_magnet", "keep_geo_on_death", "journal_one_kill", "geo_multiplier",
     };
 
-    static readonly string[] CheatIds = { "game_speed", "quick_attacks", "all_damage", "boss_health_bars", "add_geo", "infinite_air_jump", "refill_health", "max_health_up", "max_health_down", "hero_colour", "scene_colour", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_crystal_heart", "ability_shade_cloak", "ability_ismas_tear", "ability_dream_nail", "unlock_stags", "unlock_maps", "unlock_all_charms", "picker_amount", "item_prev", "item_next", "item_add", "item_take", "item_set", "award_all_achievements", "reset_achievements", "achievement_prev", "achievement_next", "achievement_award", "achievement_popups" };
-    static readonly string[] CheatChoiceIds = { "hero_colour", "scene_colour", "picker_amount", "boss_health_bars", "game_speed", "quick_attacks", "all_damage", "infinite_air_jump" };
+    static readonly string[] CheatIds = { "game_speed", "quick_attacks", "all_damage", "health_regen", "dash_invincibility", "boss_health_bars", "rebirth_in_scene", "add_geo", "infinite_air_jump", "refill_health", "max_health_up", "max_health_down", "hero_colour", "scene_colour", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_crystal_heart", "ability_shade_cloak", "ability_ismas_tear", "ability_dream_nail", "unlock_stags", "unlock_maps", "unlock_all_charms", "picker_amount", "item_prev", "item_next", "item_add", "item_take", "item_set", "award_all_achievements", "reset_achievements", "achievement_prev", "achievement_next", "achievement_award", "achievement_popups" };
+    static readonly string[] CheatChoiceIds = { "hero_colour", "scene_colour", "picker_amount", "boss_health_bars", "game_speed", "quick_attacks", "all_damage", "health_regen", "dash_invincibility", "rebirth_in_scene", "infinite_air_jump" };
 
     [Fact]
     public void CatalogStartsWithExactRequiredContractAndAppendsExtras()
@@ -810,6 +810,9 @@ public sealed class HollowKnightTweakAdapterTests
             ["lifeblood_flash"] = "vanilla",
             ["game_speed"] = "vanilla",
             ["all_damage"] = "off",
+            ["health_regen"] = "off",
+            ["dash_invincibility"] = "off",
+            ["rebirth_in_scene"] = "off",
             ["hero_colour"] = "off",
             ["scene_colour"] = "off",
             ["picker_amount"] = "1",

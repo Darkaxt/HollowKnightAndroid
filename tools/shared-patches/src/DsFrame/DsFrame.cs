@@ -47,6 +47,12 @@ public static class DsFrame
 
     public static IDsFrameHost Host { get; set; }
 
+    /// <summary>
+    /// A short line the game keeps on the right of the header's title row, such as
+    /// the death counter; null or empty for none.
+    /// </summary>
+    public static string HeaderStatus { get; set; }
+
     public static bool InGame { get { return Host != null && Host.InGame; } }
 
     public static int ContentLayer { get { return Host != null ? Host.ContentLayer : 0; } }

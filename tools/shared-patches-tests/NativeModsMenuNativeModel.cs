@@ -250,7 +250,14 @@ namespace NativeMenuFixture.PROFILE.Engine
             return current;
         }
     }
-    public class RectTransform : Transform { public Vector2 anchoredPosition; public Vector2 sizeDelta = new Vector2(1000, 70); }
+    public class RectTransform : Transform
+    {
+        public enum Axis { Horizontal, Vertical }
+        public Vector2 anchoredPosition; public Vector2 sizeDelta = new Vector2(1000, 70);
+        public Rect rect => new Rect { width = sizeDelta.x, height = sizeDelta.y };
+        public void SetSizeWithCurrentAnchors(Axis axis, float size) { World.Hit("size:" + axis + ":" + size); if (axis == Axis.Horizontal) sizeDelta.x = size; else sizeDelta.y = size; }
+    }
+    public struct Rect { public float width, height; }
     public struct Vector2 { public float x, y; public Vector2(float x, float y) { this.x = x; this.y = y; } }
     public class Behaviour : Component
     {
@@ -285,7 +292,12 @@ namespace NativeMenuFixture.PROFILE.Engine
     public class Canvas : Behaviour { }
     public static class Resources { public static T[] FindObjectsOfTypeAll<T>() where T : class => World.Objects.Where(o => !o.Dead).SelectMany(o => o.Components.OfType<T>()).ToArray(); }
     public static class Time { public static float unscaledTime; }
-    public static class Mathf { public static float Clamp(float value, float min, float max) => Math.Max(min, Math.Min(max, value)); }
+    public static class Mathf
+    {
+        public static float Clamp(float value, float min, float max) => Math.Max(min, Math.Min(max, value));
+        public static float Ceil(float value) => (float)Math.Ceiling(value);
+        public static float Abs(float value) => Math.Abs(value);
+    }
     public static class Debug
     {
         public static void Log(string message)
@@ -545,5 +557,7 @@ namespace NativeMenuFixture.PROFILE.Engine.UI
         public HorizontalWrapMode horizontalOverflow;
         public VerticalWrapMode verticalOverflow;
         public TextAnchor alignment;
+        // Modelled glyph advance: half the font size per character.
+        public float preferredWidth => _text.Length * fontSize * 0.5f;
     }
 }

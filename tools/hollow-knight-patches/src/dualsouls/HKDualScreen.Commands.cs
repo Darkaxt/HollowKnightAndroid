@@ -11,7 +11,7 @@ public partial class HKDualScreen
 {
     const string CommandHelp =
         "help | report | state | pause | mods | skins | skin <list|row N|left N|right N> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
-        "mods-list | mod <id> <value> | pd <field>... | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | save | quit-menu | fonts | hudfit | sprites <text>\n" +
+        "mods-list | mod <id> <value> | pd <field>... | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | save | quit-menu | fonts | hudfit | sprites <text> | assists\n" +
         "geo, charm, die, hit and save refuse slot 1 (the player's own save); use a disposable slot.";
 
     // QA: one hero nail hit on the nearest live enemy through HealthManager.Hit, as a slash
@@ -82,6 +82,7 @@ public partial class HKDualScreen
                 compOn = a[1] == "config" ? -1 : (a[1] == "1" ? 1 : 0);
                 return "ok compOn=" + compOn;
             case "mods-list": return CommandModsList();
+            case "assists": return HollowKnightGameplayFeatures.DeathReport() + "\n" + HollowKnightCheats.AssistReport();
             case "mod":
             {
                 if (a.Length < 3) return "error mod <id> <value>";
