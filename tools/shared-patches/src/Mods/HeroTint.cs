@@ -44,6 +44,8 @@ namespace DualSouls.Mods
         float _nextSceneScan, _nextSceneTint;
 
         public string Mode => _mode;
+        /// <summary>QA report line: hero mode, scene-wide flag and how many scene sprites are tinted.</summary>
+        public static string Diagnostics = "tint: off";
         public bool SceneWide => _scene;
 
         public void Set(string value)
@@ -117,6 +119,7 @@ namespace DualSouls.Mods
             if (now < _nextSceneTint) return;
             _nextSceneTint = now + 0.25f;
             Color tint = TintFor(_mode, now);
+            Diagnostics = "tint: hero=" + _mode + " scene=on sceneSprites=" + _sceneOwned.Count;
             for (int index = _sceneOwned.Count - 1; index >= 0; index--)
             {
                 Owned owned = _sceneOwned[index];
@@ -164,6 +167,7 @@ namespace DualSouls.Mods
             _sceneOwned.Clear();
             _sceneKnown.Clear();
             _sceneHandle = 0;
+            Diagnostics = "tint: hero=" + _mode + " scene=off";
         }
 
         void Scan(HeroController hero)

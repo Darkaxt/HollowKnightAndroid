@@ -69,6 +69,9 @@ namespace DualSouls.Mods.HollowKnight
                 case HollowKnightItemPicker.AmountId:
                     _picker.SetAmount(value);
                     break;
+                case CombatOverlay.BossBarsId:
+                    CombatOverlay.BossBars = value == "on";
+                    break;
                 default:
                     throw new ArgumentException("Not a Hollow Knight cheat choice: " + id);
             }
@@ -90,6 +93,7 @@ namespace DualSouls.Mods.HollowKnight
             _tint.Set("off");
             _tint.SetScene(false);
             _picker.RestoreAll();
+            CombatOverlay.BossBars = false;
             HollowKnightOneHitDamagePatch.DamageMultiplier = 1;
             _gameSpeed = 1f;
             RestoreSpeed();

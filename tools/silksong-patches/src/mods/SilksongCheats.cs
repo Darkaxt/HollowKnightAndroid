@@ -95,7 +95,7 @@ namespace DualSouls.Mods.Silksong
 
         public bool IsChoice(string id) =>
             id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "all_damage" ||
-            id == "infinite_tools" || id == HeroTint.Id || id == HeroTint.SceneId || id == SilksongItemPickers.AmountId || id.StartsWith("active_", StringComparison.Ordinal);
+            id == "infinite_tools" || id == HeroTint.Id || id == HeroTint.SceneId || id == SilksongItemPickers.AmountId || id == CombatOverlay.BossBarsId || id.StartsWith("active_", StringComparison.Ordinal);
 
         public void SetChoice(string id, string value)
         {
@@ -129,6 +129,9 @@ namespace DualSouls.Mods.Silksong
                 case SilksongItemPickers.AmountId:
                     _pickers.SetAmount(value);
                     break;
+                case CombatOverlay.BossBarsId:
+                    CombatOverlay.BossBars = value == "on";
+                    break;
                 default:
                     SetActiveTool(id, value == "on");
                     break;
@@ -160,6 +163,7 @@ namespace DualSouls.Mods.Silksong
             _tint.Set("off");
             _tint.SetScene(false);
             _pickers.RestoreAll();
+            CombatOverlay.BossBars = false;
             SilksongGameplayHooks.AllDamageMultiplier = 1;
             _gameSpeed = 1f;
             RestoreSpeed();

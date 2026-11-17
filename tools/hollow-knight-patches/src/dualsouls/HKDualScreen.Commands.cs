@@ -133,6 +133,8 @@ public partial class HKDualScreen
         sb.Append("skins: stamp=").Append(DualSouls.Skins.HollowKnight.Runtime.HollowKnightSkinRuntime.SkinStamp)
           .Append(' ').Append(skins != null ? DsQaReport.Fields(skins.LastResult, "Status", "Detail") : "no runtime")
           .Append(" pack: ").Append(skins != null ? DsQaReport.Fields(skins.CurrentPack, "Id", "Mode", "SpriteScope") : "none").Append('\n');
+        sb.Append(DualSouls.Mods.HeroTint.Diagnostics).Append('\n');
+        sb.Append(DualSouls.Mods.CombatOverlay.Describe()).Append('\n');
         sb.Append(DsQaReport.Frames()).Append('\n');
         sb.Append(DsQaReport.Errors());
         return sb.ToString();

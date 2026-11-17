@@ -24,14 +24,9 @@ namespace DualSouls.Mods.Silksong
         static bool extraSlotsCaptured;
         static bool extraBlueBaseline;
         static bool extraYellowBaseline;
-        static readonly Dictionary<HealthManager, EnemyVisual> enemies = new Dictionary<HealthManager, EnemyVisual>();
-        static readonly List<HealthManager> deadEnemies = new List<HealthManager>();
-        static readonly List<FloatingNumber> numbers = new List<FloatingNumber>();
         static readonly List<Transform> radarMarks = new List<Transform>();
         static Texture2D pixelTexture;
         static Sprite pixelSprite;
-        static Font numberFont;
-        static float nextEnemyScan;
         static float nextRosaryScan;
         static string radarScene;
         static float radarPhase;
@@ -74,21 +69,6 @@ namespace DualSouls.Mods.Silksong
         {
             public int Count;
             public bool[] Unlocked;
-        }
-
-        sealed class EnemyVisual
-        {
-            public int Maximum;
-            public int Last;
-            public Transform Root;
-            public Transform Fill;
-        }
-
-        sealed class FloatingNumber
-        {
-            public Transform Transform;
-            public TextMesh Text;
-            public float Until;
         }
 
         [Serializable]
@@ -547,69 +527,20 @@ namespace DualSouls.Mods.Silksong
         }
         static void MaintainCombatOverlays(bool barsEnabled, bool numbersEnabled)
         {
-            if (!barsEnabled && !numbersEnabled) { RemoveCombatOverlays(); return; }
-            if (Time.unscaledTime >= nextEnemyScan)
-            {
-                nextEnemyScan = Time.unscaledTime + 0.5f;
-                foreach (HealthManager enemy in HealthManager.EnumerateActiveEnemies())
-                    if (enemy != null && enemy.hp > 0 && enemy.hp < 50000 && !enemies.ContainsKey(enemy))
-                        enemies.Add(enemy, new EnemyVisual { Maximum = enemy.hp, Last = enemy.hp });
-            }
-            deadEnemies.Clear();
-            foreach (KeyValuePair<HealthManager, EnemyVisual> pair in enemies)
-            {
-                HealthManager enemy = pair.Key; EnemyVisual visual = pair.Value;
-                if (enemy == null || enemy.gameObject == null || !enemy.gameObject.activeInHierarchy || enemy.hp <= 0)
-                {
-                    if (visual.Root != null) UnityEngine.Object.Destroy(visual.Root.gameObject);
-                    deadEnemies.Add(enemy); continue;
-                }
-                if (enemy.hp < visual.Last && numbersEnabled) SpawnNumber(enemy.transform.position, visual.Last - enemy.hp);
-                visual.Last = enemy.hp; if (enemy.hp > visual.Maximum) visual.Maximum = enemy.hp;
-                if (barsEnabled) UpdateBar(enemy, visual); else if (visual.Root != null) visual.Root.gameObject.SetActive(false);
-            }
-            foreach (HealthManager enemy in deadEnemies) enemies.Remove(enemy);
-            for (int i = numbers.Count - 1; i >= 0; i--)
-            {
-                FloatingNumber number = numbers[i];
-                if (number.Transform == null || Time.unscaledTime >= number.Until)
-                {
-                    if (number.Transform != null) UnityEngine.Object.Destroy(number.Transform.gameObject);
-                    numbers.RemoveAt(i); continue;
-                }
-                number.Transform.position += Vector3.up * (Time.unscaledDeltaTime * 1.6f);
-                Color color = number.Text.color; color.a = Mathf.Clamp01((number.Until - Time.unscaledTime) / 0.5f); number.Text.color = color;
-            }
+            if (CombatOverlay.NameResolver == null) CombatOverlay.NameResolver = JournalName;
+            CombatOverlay.Tick(barsEnabled, numbersEnabled);
         }
-        static void UpdateBar(HealthManager enemy, EnemyVisual visual)
+        static void RemoveCombatOverlays() { CombatOverlay.Clear(); }
+        static readonly System.Reflection.FieldInfo JournalRecordField =
+            typeof(EnemyDeathEffects).GetField("journalRecord", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        // Boss bar title: the Hunter's Journal name, as mod 28 shows it.
+        static string JournalName(HealthManager enemy)
         {
-            if (visual.Root == null)
-            {
-                var root = new GameObject("DualSouls Enemy Health"); root.transform.SetParent(enemy.transform, false); root.transform.localPosition = new Vector3(0f, 1.35f, 0f); visual.Root = root.transform;
-                visual.Fill = BarPart(root.transform, "Fill", new Color(0.92f, 0.25f, 0.2f, 0.92f), 3201, new Vector3(1.44f, 0.10f, 1f));
-                BarPart(root.transform, "Background", new Color(0f, 0f, 0f, 0.62f), 3200, new Vector3(1.5f, 0.16f, 1f)).SetSiblingIndex(0);
-            }
-            float fill = Mathf.Clamp01(visual.Maximum > 0 ? (float)enemy.hp / visual.Maximum : 0f);
-            visual.Fill.localScale = new Vector3(1.44f * fill, 0.10f, 1f); visual.Fill.localPosition = new Vector3(-0.72f * (1f - fill), 0f, 0f);
-            Vector3 scale = enemy.transform.lossyScale; visual.Root.localScale = new Vector3(scale.x == 0f ? 1f : 1f / scale.x, scale.y == 0f ? 1f : 1f / scale.y, 1f); visual.Root.gameObject.SetActive(true);
+            EnemyDeathEffects effects = enemy.GetComponent<EnemyDeathEffects>() ?? enemy.GetComponentInChildren<EnemyDeathEffects>() ?? enemy.GetComponentInParent<EnemyDeathEffects>();
+            EnemyJournalRecord record = effects != null && JournalRecordField != null ? JournalRecordField.GetValue(effects) as EnemyJournalRecord : null;
+            return record != null ? record.DisplayName.ToString() : null;
         }
-        static Transform BarPart(Transform parent, string name, Color color, int order, Vector3 scale)
-        {
-            var part = new GameObject(name); part.transform.SetParent(parent, false); var renderer = part.AddComponent<SpriteRenderer>(); renderer.sprite = PixelSprite(); renderer.color = color; renderer.sortingOrder = order; part.transform.localScale = scale; return part.transform;
-        }
-        static void SpawnNumber(Vector3 position, int damage)
-        {
-            if (damage <= 0) return; if (numberFont == null) numberFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            var go = new GameObject("DualSouls Damage Number"); go.transform.position = position + Vector3.up * 1.6f; var text = go.AddComponent<TextMesh>(); text.text = damage.ToString(System.Globalization.CultureInfo.InvariantCulture); text.font = numberFont; text.fontSize = 44; text.characterSize = 0.14f; text.anchor = TextAnchor.MiddleCenter; text.color = new Color(1f, 0.92f, 0.5f, 1f);
-            MeshRenderer renderer = go.GetComponent<MeshRenderer>(); if (renderer != null && numberFont != null) { renderer.material = numberFont.material; renderer.sortingOrder = 3210; }
-            numbers.Add(new FloatingNumber { Transform = go.transform, Text = text, Until = Time.unscaledTime + 1.1f });
-        }
-        static void RemoveCombatOverlays()
-        {
-            foreach (EnemyVisual visual in enemies.Values) if (visual.Root != null) UnityEngine.Object.Destroy(visual.Root.gameObject); enemies.Clear();
-            foreach (FloatingNumber number in numbers) if (number.Transform != null) UnityEngine.Object.Destroy(number.Transform.gameObject); numbers.Clear();
-        }
-        static void ReleaseVisualResources() { if (pixelSprite != null) UnityEngine.Object.Destroy(pixelSprite); if (pixelTexture != null) UnityEngine.Object.Destroy(pixelTexture); pixelSprite = null; pixelTexture = null; numberFont = null; }
+        static void ReleaseVisualResources() { if (pixelSprite != null) UnityEngine.Object.Destroy(pixelSprite); if (pixelTexture != null) UnityEngine.Object.Destroy(pixelTexture); pixelSprite = null; pixelTexture = null; CombatOverlay.ReleaseResources(); }
 
         static void MaintainSecretRadar(GameManager game, bool enabled)
         {
@@ -730,6 +661,7 @@ namespace DualSouls.Mods.Silksong
         public static void BeforeEnemyHit(HealthManager target, ref HitInstance hit)
         {
             if (target == null || target.isDead || hit.DamageDealt <= 0) return;
+            if (hit.IsHeroDamage) CombatOverlay.NoteHeroHit(target.SendDamageTo != null ? target.SendDamageTo : target);
             long factor = (hit.IsNailDamage ? Math.Max(NeedleMultiplier, 1) : 1) * (long)Math.Max(AllDamageMultiplier, 1);
             if (factor <= 1) return;
             long scaled = hit.DamageDealt * factor; hit.DamageDealt = scaled > int.MaxValue ? int.MaxValue : (int)scaled;

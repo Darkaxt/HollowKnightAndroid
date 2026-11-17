@@ -344,7 +344,7 @@ namespace DualSouls.Mods.HollowKnight
         }
 
         static bool IsCheatChoice(string id) =>
-            id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "hero_colour" || id == "scene_colour" || id == "picker_amount" ||
+            id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "hero_colour" || id == "scene_colour" || id == "picker_amount" || id == "boss_health_bars" ||
             id == "all_damage";
 
         public void SetCheatChoice(string id, string value)
@@ -824,6 +824,9 @@ namespace DualSouls.Mods.HollowKnight
         {
             if (target == null || target.isDead || hitInstance.DamageDealt <= 0)
                 return;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            HollowKnightGameplayFeatures.NoteEnemyHit(target, hitInstance);
+#endif
             if (DamageMultiplier > 1)
             {
                 long scaled = (long)hitInstance.DamageDealt * DamageMultiplier;

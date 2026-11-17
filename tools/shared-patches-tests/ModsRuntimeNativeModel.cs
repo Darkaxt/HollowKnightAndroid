@@ -162,7 +162,7 @@ public static class SilksongGameplayFeatures
 public sealed class SilksongCheats
 {
     static readonly HashSet<string> Choices = new HashSet<string>(StringComparer.Ordinal) {
-        "game_speed", "quick_attacks", "infinite_tools", "infinite_air_jump", "hero_colour", "scene_colour", "picker_amount", "all_damage" };
+        "game_speed", "quick_attacks", "infinite_tools", "infinite_air_jump", "hero_colour", "scene_colour", "picker_amount", "boss_health_bars", "all_damage" };
     readonly Dictionary<string, string> _choices = new Dictionary<string, string>(StringComparer.Ordinal);
     public bool IsChoice(string id) => Choices.Contains(id) || id.StartsWith("active_", StringComparison.Ordinal);
     public bool IsCommand(string id) => !IsChoice(id);

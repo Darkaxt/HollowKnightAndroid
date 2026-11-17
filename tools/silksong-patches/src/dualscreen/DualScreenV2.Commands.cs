@@ -104,6 +104,8 @@ public partial class DualScreenV2
         var modsRuntime = SilksongModsRuntime.Current;
         var library = modsRuntime != null ? modsRuntime.SkinLibrary : null;
         sb.Append("rotation: ").Append(library != null ? library.Describe() : "no library").Append('\n');
+        sb.Append(DualSouls.Mods.HeroTint.Diagnostics).Append('\n');
+        sb.Append(DualSouls.Mods.CombatOverlay.Describe()).Append('\n');
         sb.Append(DsQaReport.Frames()).Append('\n');
         sb.Append(DsQaReport.Errors());
         return sb.ToString();
