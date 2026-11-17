@@ -344,7 +344,7 @@ namespace DualSouls.Mods.HollowKnight
         }
 
         static bool IsCheatChoice(string id) =>
-            id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "hero_colour" || id == "scene_colour" ||
+            id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "hero_colour" || id == "scene_colour" || id == "picker_amount" ||
             id == "all_damage";
 
         public void SetCheatChoice(string id, string value)
@@ -371,7 +371,8 @@ namespace DualSouls.Mods.HollowKnight
             if (IsCheatChoice(id))
             {
                 string value;
-                if (!_cheatChoices.TryGetValue(id, out value)) value = id == "game_speed" ? "vanilla" : "off";
+                if (!_cheatChoices.TryGetValue(id, out value))
+                    value = id == "game_speed" ? "vanilla" : id == "picker_amount" ? "1" : "off";
                 return Choice(value);
             }
             if (!IsHookAvailable(id)) return TweakActionResult.Fail(

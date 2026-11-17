@@ -194,6 +194,17 @@ namespace DualSouls.Mods.Silksong
             Cheat("unlock_maps", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL MAPS", "Permanently add every area map to this save.", "run", "run"),
             Cheat("max_collectables", TweakControlKind.Command, "UNLOCKS", "FILL COLLECTABLES", "Add up to 99 of every collectable item (Growstone excluded). Can affect quests.", "run", "run"),
 
+            Cheat("picker_amount", TweakControlKind.Choice, "ITEM PICKER", "PICKER AMOUNT", "How many the picker rows below add, take or set.", "1", "1", "5", "10", "50", "99"),
+            Cheat("item_prev", TweakControlKind.Command, "ITEM PICKER", "PREVIOUS ITEM", "Select the previous collectable and show how many you own.", "run", "run"),
+            Cheat("item_next", TweakControlKind.Command, "ITEM PICKER", "NEXT ITEM", "Select the next collectable and show how many you own.", "run", "run"),
+            Cheat("item_add", TweakControlKind.Command, "ITEM PICKER", "ADD AMOUNT", "Add PICKER AMOUNT of the selected item to this save.", "run", "run"),
+            Cheat("item_take", TweakControlKind.Command, "ITEM PICKER", "TAKE AMOUNT", "Take PICKER AMOUNT of the selected item from this save.", "run", "run"),
+            Cheat("item_set", TweakControlKind.Command, "ITEM PICKER", "SET TO AMOUNT", "Set the selected item to exactly PICKER AMOUNT on this save.", "run", "run"),
+            Cheat("tool_prev", TweakControlKind.Command, "ITEM PICKER", "PREVIOUS TOOL", "Select the previous Tool and show its state.", "run", "run"),
+            Cheat("tool_next", TweakControlKind.Command, "ITEM PICKER", "NEXT TOOL", "Select the next Tool and show its state.", "run", "run"),
+            Cheat("tool_unlock", TweakControlKind.Command, "ITEM PICKER", "UNLOCK TOOL", "Permanently unlock the selected Tool, or refill it if already unlocked.", "run", "run"),
+            Cheat("tool_storage", TweakControlKind.Command, "ITEM PICKER", "SET TOOL STORAGE", "Set the selected Tool's base capacity to PICKER AMOUNT until the game restarts.", "run", "run"),
+
             Cheat("award_all_achievements", TweakControlKind.Command, "ACHIEVEMENTS", "UNLOCK ALL ACHIEVEMENTS", "Unlock every achievement on this device.", "run", "run"),
             Cheat("reset_achievements", TweakControlKind.Command, "ACHIEVEMENTS", "RESET ACHIEVEMENTS", "Lock every achievement on this device again.", "run", "run"),
         });

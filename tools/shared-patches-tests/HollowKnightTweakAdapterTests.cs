@@ -19,8 +19,8 @@ public sealed class HollowKnightTweakAdapterTests
         "geo_magnet", "keep_geo_on_death", "journal_one_kill", "geo_multiplier",
     };
 
-    static readonly string[] CheatIds = { "game_speed", "quick_attacks", "all_damage", "add_geo", "infinite_air_jump", "refill_health", "max_health_up", "max_health_down", "hero_colour", "scene_colour", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_crystal_heart", "ability_shade_cloak", "ability_ismas_tear", "ability_dream_nail", "unlock_stags", "unlock_maps", "unlock_all_charms", "award_all_achievements", "reset_achievements" };
-    static readonly string[] CheatChoiceIds = { "hero_colour", "scene_colour", "game_speed", "quick_attacks", "all_damage", "infinite_air_jump" };
+    static readonly string[] CheatIds = { "game_speed", "quick_attacks", "all_damage", "add_geo", "infinite_air_jump", "refill_health", "max_health_up", "max_health_down", "hero_colour", "scene_colour", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_crystal_heart", "ability_shade_cloak", "ability_ismas_tear", "ability_dream_nail", "unlock_stags", "unlock_maps", "unlock_all_charms", "picker_amount", "item_prev", "item_next", "item_add", "item_take", "item_set", "award_all_achievements", "reset_achievements" };
+    static readonly string[] CheatChoiceIds = { "hero_colour", "scene_colour", "picker_amount", "game_speed", "quick_attacks", "all_damage", "infinite_air_jump" };
 
     [Fact]
     public void CatalogStartsWithExactRequiredContractAndAppendsExtras()
@@ -812,6 +812,7 @@ public sealed class HollowKnightTweakAdapterTests
             ["all_damage"] = "off",
             ["hero_colour"] = "off",
             ["scene_colour"] = "off",
+            ["picker_amount"] = "1",
             ["quick_attacks"] = "off",
             ["infinite_air_jump"] = "off",
         };

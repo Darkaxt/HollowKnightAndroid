@@ -95,7 +95,7 @@ namespace DualSouls.Mods.Silksong
 
         public bool IsChoice(string id) =>
             id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "all_damage" ||
-            id == "infinite_tools" || id == HeroTint.Id || id == HeroTint.SceneId || id.StartsWith("active_", StringComparison.Ordinal);
+            id == "infinite_tools" || id == HeroTint.Id || id == HeroTint.SceneId || id == SilksongItemPickers.AmountId || id.StartsWith("active_", StringComparison.Ordinal);
 
         public void SetChoice(string id, string value)
         {
@@ -126,6 +126,9 @@ namespace DualSouls.Mods.Silksong
                 case HeroTint.SceneId:
                     _tint.SetScene(value == "on");
                     break;
+                case SilksongItemPickers.AmountId:
+                    _pickers.SetAmount(value);
+                    break;
                 default:
                     SetActiveTool(id, value == "on");
                     break;
@@ -136,11 +139,13 @@ namespace DualSouls.Mods.Silksong
         public TweakActionResult Readback(string id)
         {
             string value;
-            if (!_choices.TryGetValue(id, out value)) value = id == "game_speed" ? "vanilla" : "off";
+            if (!_choices.TryGetValue(id, out value))
+                value = id == "game_speed" ? "vanilla" : id == SilksongItemPickers.AmountId ? "1" : "off";
             return TweakActionResult.Ok(TweakReadback.Choice(value));
         }
 
         readonly HeroTint _tint = new HeroTint();
+        readonly SilksongItemPickers _pickers = new SilksongItemPickers();
 
         public void Tick()
         {
@@ -154,6 +159,7 @@ namespace DualSouls.Mods.Silksong
         {
             _tint.Set("off");
             _tint.SetScene(false);
+            _pickers.RestoreAll();
             SilksongGameplayHooks.AllDamageMultiplier = 1;
             _gameSpeed = 1f;
             RestoreSpeed();
@@ -324,7 +330,7 @@ namespace DualSouls.Mods.Silksong
                 case "award_all_achievements": case "reset_achievements":
                     return true;
                 default:
-                    return id.StartsWith("ability_", StringComparison.Ordinal);
+                    return id.StartsWith("ability_", StringComparison.Ordinal) || SilksongItemPickers.IsCommand(id);
             }
         }
 
@@ -336,6 +342,7 @@ namespace DualSouls.Mods.Silksong
             PlayerData data = PlayerData.HasInstance ? PlayerData.instance : null;
             if (hero == null || data == null)
                 return TweakActionResult.Fail("Load a save before using " + id + ".");
+            if (SilksongItemPickers.IsCommand(id)) return _pickers.Run(id);
             switch (id)
             {
                 case "refill_health":

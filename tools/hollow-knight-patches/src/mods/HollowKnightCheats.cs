@@ -66,12 +66,16 @@ namespace DualSouls.Mods.HollowKnight
                 case HeroTint.SceneId:
                     _tint.SetScene(value == "on");
                     break;
+                case HollowKnightItemPicker.AmountId:
+                    _picker.SetAmount(value);
+                    break;
                 default:
                     throw new ArgumentException("Not a Hollow Knight cheat choice: " + id);
             }
         }
 
         readonly HeroTint _tint = new HeroTint();
+        readonly HollowKnightItemPicker _picker = new HollowKnightItemPicker();
 
         public void Tick()
         {
@@ -85,6 +89,7 @@ namespace DualSouls.Mods.HollowKnight
         {
             _tint.Set("off");
             _tint.SetScene(false);
+            _picker.RestoreAll();
             HollowKnightOneHitDamagePatch.DamageMultiplier = 1;
             _gameSpeed = 1f;
             RestoreSpeed();
@@ -183,6 +188,7 @@ namespace DualSouls.Mods.HollowKnight
             global::PlayerData data = global::PlayerData.instance;
             if (hero == null || data == null)
                 return TweakActionResult.Fail("Load a save before using " + id + ".");
+            if (HollowKnightItemPicker.IsCommand(id)) return _picker.Run(id, data);
             switch (id)
             {
                 case "refill_health":
