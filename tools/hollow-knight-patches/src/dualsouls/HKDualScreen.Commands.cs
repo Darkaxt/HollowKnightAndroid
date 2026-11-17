@@ -53,7 +53,8 @@ public partial class HKDualScreen
                 var c = ModsController();
                 if (c == null) return "error Mods session not ready";
                 var r = c.Set(a[1], a[2]);
-                return (r.Success ? "ok" : "error " + r.Error) + (r.Pending ? " pending" : "") + " value=" + c.Value(a[1]);
+                return (r.Success ? "ok" : "error " + r.Error) + (r.Pending ? " pending" : "") + " value=" + c.Value(a[1])
+                    + (r.Readback.Kind == DualSouls.Mods.TweakReadbackKind.Text ? " result=" + r.Readback.Value : "");
             }
             case "pd": return CommandPlayerData(a);
             case "charm": return SaveSlotGuard(gm) ?? CommandCharm(a);
