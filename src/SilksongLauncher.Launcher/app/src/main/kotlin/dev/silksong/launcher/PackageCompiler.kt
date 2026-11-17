@@ -280,6 +280,30 @@ object PackageCompiler {
      * reflection, so a signature that has moved is a compile error rather
      * than a null at runtime.
      */
+    /**
+     * One compiler run, and a second if the first one crashed.
+     *
+     * Seen on the Thor on a fresh install: Mono's JIT took a SIGSEGV on a
+     * thread-pool worker two seconds into compiling 0Harmony, with 9.7 GB
+     * free, and the same compile was clean when run again. A compile is a
+     * pure function of its response file, so running it again is safe, and
+     * one runtime fault should not be what fails someone's first port. Only a
+     * crash the platform recorded counts, so compiler errors, cancellation
+     * and memory pressure are reported as before rather than retried.
+     */
+    private suspend fun cscRun(
+        context: android.content.Context,
+        csc: File,
+        rsp: File,
+        root: File,
+        onLine: (String) -> Unit = {},
+    ): Toolchain.Result {
+        val first = MonoRuntime.exec(context, csc, listOf("@${rsp.absolutePath}"), cwd = root, onLine = onLine)
+        if (!first.crashed) return first
+        LauncherLog.log("csc: the compiler crashed; compiling ${rsp.nameWithoutExtension} again")
+        return MonoRuntime.exec(context, csc, listOf("@${rsp.absolutePath}"), cwd = root, onLine = onLine)
+    }
+
     fun compilePatches(
         profile: GameProfile,
         unity: File,
@@ -321,12 +345,7 @@ object PackageCompiler {
             for (f in cs) w.println("\"$f\"")
         }
 
-        val result = MonoRuntime.exec(
-            context,
-            csc,
-            listOf("@${rsp.absolutePath}"),
-            cwd = root,
-        )
+        val result = cscRun(context, csc, rsp, root)
         if (!result.ok || out.length() <= 0) {
             val errors = result.output.lineSequence().filter { it.contains("error CS") }.toList()
             throw IOException(
@@ -408,7 +427,7 @@ object PackageCompiler {
         // compiler that fails with nothing to say is the case that cost the
         // most time here, and one line per invocation is a cheap insurance
         // against meeting it again.
-        val result = MonoRuntime.exec(context, csc, listOf("@${rsp.absolutePath}"), cwd = root) { line ->
+        val result = cscRun(context, csc, rsp, root) { line ->
             val t = line.trimEnd()
             if (t.isNotEmpty()) LauncherLog.log("csc: $t")
         }
@@ -530,7 +549,7 @@ object PackageCompiler {
                 for (f in cs) w.println("\"$f\"")
             }
 
-            val result = MonoRuntime.exec(context, csc, listOf("@${rsp.absolutePath}"), cwd = root) { line ->
+            val result = cscRun(context, csc, rsp, root) { line ->
                 val t = line.trimEnd()
                 if (t.isNotEmpty()) LauncherLog.log("csc: $t")
             }
@@ -703,12 +722,7 @@ object PackageCompiler {
         val log = File(root, "inputsystem.log")
         val sink = log.bufferedWriter()
         val result = try {
-            MonoRuntime.exec(
-            context,
-            csc,
-            listOf("@${rsp.absolutePath}"),
-            cwd = root,
-        ) { line ->
+            cscRun(context, csc, rsp, root) { line ->
                 sink.write(line); sink.write("\n")
                 if (line.contains("error CS")) trySend(Progress("Compiling the Input System", -1f, line.take(90)))
             }

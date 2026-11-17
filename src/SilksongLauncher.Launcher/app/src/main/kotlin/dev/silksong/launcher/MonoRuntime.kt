@@ -295,6 +295,7 @@ object MonoRuntime {
         val collected = StringBuilder()
         var died = false
         var lowMemory = false
+        var crashed = false
         var exitCode: Int? = null
         var peakKb = 0L
         var sampled = 0L
@@ -448,6 +449,7 @@ object MonoRuntime {
         if (died) {
             val death = deathOf(context, slot, pid, startedWall)
             lowMemory = death.lowMemory
+            crashed = death.crashed
             LauncherLog.log("mono: ${death.note}")
             onLine("monojni: ${death.note}")
             if (collected.length < MAX_CAPTURED) collected.append(death.note).append('\n')
@@ -459,7 +461,7 @@ object MonoRuntime {
             LauncherLog.log("mono: ${assembly.name} peaked at ${gb(peakKb * 1024)}; ${memory(context)}")
         }
 
-        Toolchain.Result(exitCode ?: MonoService.FAILED, collected.toString(), lowMemory)
+        Toolchain.Result(exitCode ?: MonoService.FAILED, collected.toString(), lowMemory, crashed)
     }
 
     /** As much output as is kept; the rest is streamed to [onLine] and dropped. */
@@ -945,7 +947,7 @@ object MonoRuntime {
                         else isBuilder(it.processName, slot) && it.timestamp >= since
                     }
             }.getOrNull()
-            if (info != null) return Death(describeExit(info) + free, isLowMemory(info))
+            if (info != null) return Death(describeExit(info) + free, isLowMemory(info), isCrash(info))
         }
         return Death(
             "the build process ended before it finished, and the system has not said why$free",
@@ -954,7 +956,15 @@ object MonoRuntime {
     }
 
     /** What the platform said about a process that is no longer there. */
-    private data class Death(val note: String, val lowMemory: Boolean)
+    private data class Death(val note: String, val lowMemory: Boolean, val crashed: Boolean = false)
+
+    /** Whether the record says the process crashed, natively or otherwise, rather than being taken or exiting. */
+    private fun isCrash(info: android.app.ApplicationExitInfo): Boolean = when (info.reason) {
+        android.app.ApplicationExitInfo.REASON_CRASH_NATIVE,
+        android.app.ApplicationExitInfo.REASON_CRASH -> true
+        android.app.ApplicationExitInfo.REASON_SIGNALED -> info.status == 11 || info.status == 6 || info.status == 7 || info.status == 4
+        else -> false
+    }
 
     /**
      * Whether the platform took the process for its memory.

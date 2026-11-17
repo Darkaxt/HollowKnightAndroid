@@ -109,8 +109,16 @@ object Toolchain {
      * something a caller reads out of [output] because it decides whether a
      * retry is worth making, and a decision that turns on matching a sentence
      * is a decision that breaks the next time the sentence is reworded.
+     *
+     * [crashed] is set, for the same reason, when the platform recorded the
+     * process as having crashed rather than having exited.
      */
-    data class Result(val code: Int, val output: String, val outOfMemory: Boolean = false) {
+    data class Result(
+        val code: Int,
+        val output: String,
+        val outOfMemory: Boolean = false,
+        val crashed: Boolean = false,
+    ) {
         val ok: Boolean get() = code == 0
     }
 
