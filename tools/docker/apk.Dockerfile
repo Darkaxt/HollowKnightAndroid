@@ -18,9 +18,9 @@
 #                understands, and a JDK 25 on PATH emits major version 69,
 #                which fails the dex step with no obvious connection to the JDK.
 #   Android SDK— platform android.jar and build-tools (d8/aapt2/zipalign/
-#                apksigner). No NDK and no CMake: the launcher has no native
-#                code of its own, and the game's own libraries are compiled on
-#                the phone.
+#                apksigner), plus the NDK and CMake for monohost, the
+#                launcher's small native .NET host. The game's own libraries
+#                are still compiled on the phone.
 #   .NET 8 SDK — tools/bundle-surgery, which Gradle stages into the APK and
 #                will not build without.
 #   bsdtar     — the Android module arrives as a macOS .pkg, which is a xar
@@ -83,6 +83,17 @@ RUN set -eux; \
         "platforms;android-${ANDROID_PLATFORM}" \
         "build-tools;36.0.0" \
         "build-tools;35.0.0" >/dev/null; \
+    chmod -R a+rX "$ANDROID_HOME"
+
+# monohost's native toolchain, matching app/build.gradle.kts (ndkVersion and
+# the cmake version), plus build-tools 34, which the native build requests.
+# Left out, AGP downloads ~1 GB of them on every release build, and one corrupt
+# NDK download failed a release (#46). Its own layer so the one above stays cached.
+RUN set -eux; \
+    sdkmanager --install \
+        "ndk;27.2.12479018" \
+        "cmake;3.22.1" \
+        "build-tools;34.0.0" >/dev/null; \
     chmod -R a+rX "$ANDROID_HOME"
 
 # ── .NET 8 ─────────────────────────────────────────────────────────────────
