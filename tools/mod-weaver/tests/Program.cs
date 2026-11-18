@@ -746,6 +746,7 @@ internal static class Program
                 ("SaveGameData", ".ctor", "BeforeSaveGameData"),
                 ("PlayerData", "get_FleaGamesIsJugglingChampion", "FleaGameTarget"),
                 ("PlayerData", "get_FleaGamesIsDodgingSethChampion", "FleaGameTarget"),
+                ("GetConstantsValue", "OnEnter", "FinishConstantsValue"),
             })
             {
                 var target = rewritten.MainModule.GetType(expected.Item1).Methods.Single(m => m.Name == expected.Item2);
@@ -754,6 +755,9 @@ internal static class Program
                     "DualSouls.Mods.Silksong.SilksongGameplayHooks" && called.Name == expected.Item3),
                     expected.Item1 + "." + expected.Item2 + " calls " + expected.Item3);
             }
+            True(rewritten.MainModule.GetType("GetConstantsValue").Methods.Single(m => m.Name == "OnEnter")
+                .Body.Instructions.All(i => !(i.Operand is MethodReference called && called.Name == "Finish")),
+                "GetConstantsValue.OnEnter finishes through FinishConstantsValue only");
             var saveCtorWoven = rewritten.MainModule.GetType("SaveGameData").Methods.Single(m => m.Name == ".ctor");
             True(saveCtorWoven.Body.Instructions[0].OpCode.Code is Code.Ldarga or Code.Ldarga_S &&
                 saveCtorWoven.Body.Instructions[0].Operand == saveCtorWoven.Parameters[0],
@@ -1020,6 +1024,16 @@ internal static class Program
         saveCtorIl.Emit(OpCodes.Ldarg_0);
         saveCtorIl.Emit(OpCodes.Call, game.ImportReference(typeof(object).GetConstructor(System.Type.EmptyTypes)!));
         saveCtorIl.Emit(OpCodes.Ret);
+        var stateAction = Class("FsmStateAction", "HutongGames.PlayMaker");
+        var finish = Method(stateAction, "Finish", game.TypeSystem.Void, false);
+        Ret(finish);
+        var constantsValue = Class("GetConstantsValue");
+        constantsValue.BaseType = stateAction;
+        var constantsEnter = Method(constantsValue, "OnEnter", game.TypeSystem.Void, false);
+        var constantsIl = constantsEnter.Body.GetILProcessor();
+        constantsIl.Emit(OpCodes.Ldarg_0);
+        constantsIl.Emit(OpCodes.Call, finish);
+        constantsIl.Emit(OpCodes.Ret);
         var fleaScore = Fixture.Field(player, "fleaScore", game.TypeSystem.Int32, isStatic: false);
         foreach (var (getter, stock) in new[] {
             ("get_FleaGamesIsJugglingChampion", 30), ("get_FleaGamesIsJugglingSethChampion", 55),
@@ -1161,6 +1175,8 @@ internal static class Program
         AddHook("ShouldKeepDeliveries", patches.MainModule.TypeSystem.Boolean);
         AddHook("BeforeSaveGameData", patches.MainModule.TypeSystem.Void,
             ("playerData", new ByReferenceType(patches.MainModule.ImportReference(player))));
+        AddHook("FinishConstantsValue", patches.MainModule.TypeSystem.Void,
+            ("action", patches.MainModule.ImportReference(constantsValue)));
         {
             var target = Fixture.Method(hooks, "FleaGameTarget", patches.MainModule.TypeSystem.Int32);
             Fixture.Parameter(target, "stock", patches.MainModule.TypeSystem.Int32);

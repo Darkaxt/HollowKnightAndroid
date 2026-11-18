@@ -527,6 +527,9 @@ internal static class Builtin
             ("get_FleaGamesIsBouncingChampion", 42), ("get_FleaGamesIsBouncingSethChampion", 68),
             ("get_FleaGamesIsDodgingChampion", 65), ("get_FleaGamesIsDodgingSethChampion", 90),
         }.Select(t => (Method: Exact(player, t.Getter, false, "System.Boolean"), t.Stock)).ToList();
+        // #41: the festival FSM's own minimum (and so the score it saves) comes from the
+        // GetConstantsValue action reading Constants.FLEA_FESTIVAL_*; its Finish() call becomes the hook.
+        var constantsValue = Exact(Type("GetConstantsValue"), "OnEnter", false, "System.Void");
 
         var beforeHit = Hook("BeforeEnemyHit", "System.Void", "HealthManager", "HitInstance&");
         var beforeDamage = Hook("BeforeHeroDamage", "System.Void", "System.Int32&");
@@ -550,6 +553,7 @@ internal static class Builtin
         var keepDeliveries = Hook("ShouldKeepDeliveries", "System.Boolean");
         var fleaTarget = Hook("FleaGameTarget", "System.Int32", "System.Int32");
         var beforeSaveData = Hook("BeforeSaveGameData", "System.Void", "PlayerData&");
+        var finishConstant = Hook("FinishConstantsValue", "System.Void", "GetConstantsValue");
 
         int mapReturnCount = updateMap.Body.Instructions.Count(i => i.OpCode == OpCodes.Ret);
         if (mapReturnCount == 0)
@@ -572,6 +576,7 @@ internal static class Builtin
             (deliveryHit, beforeDeliveryHit, 1),
             (deliveryBreakAll, keepDeliveries, 1), (deliveryBreakQuiet, keepDeliveries, 1),
             (saveDataCtor, beforeSaveData, 1),
+            (constantsValue, finishConstant, 1),
         }.Concat(fleaTargets.Select(t => (t.Method, fleaTarget, 1))).ToArray();
         int CallCount(MethodDefinition target, MethodDefinition hook) => target.Body.Instructions.Count(i =>
             i.OpCode == OpCodes.Call && i.Operand is MethodReference called &&
@@ -609,6 +614,12 @@ internal static class Builtin
             return anchors.Count == 1 ? (t.Method, Instruction: anchors[0]) : throw new InvalidOperationException(
                 $"Silksong Flea Festival target anchor {t.Stock} is missing or ambiguous in PlayerData.{t.Method.Name}");
         }).ToList();
+
+        var finishCalls = constantsValue.Body.Instructions.Where(i => i.OpCode.Code is Code.Call or Code.Callvirt &&
+            i.Operand is MethodReference called && called.Name == "Finish" && called.Parameters.Count == 0 &&
+            called.DeclaringType.FullName == "HutongGames.PlayMaker.FsmStateAction").ToList();
+        if (finishCalls.Count != 1)
+            throw new InvalidOperationException("Silksong GetConstantsValue.OnEnter Finish call is missing or ambiguous");
 
         void Prefix(MethodDefinition target, MethodDefinition hook, params Instruction[] loads)
         {
@@ -718,6 +729,10 @@ internal static class Builtin
         foreach (var anchor in fleaAnchors)
             anchor.Method.Body.GetILProcessor().InsertAfter(anchor.Instruction,
                 Instruction.Create(OpCodes.Call, module.ImportReference(fleaTarget)));
+        // `this.Finish()` becomes `FinishConstantsValue(this)`, which scales the stored target and then finishes;
+        // replacing the call in place keeps every branch into that statement intact.
+        finishCalls[0].OpCode = OpCodes.Call;
+        finishCalls[0].Operand = module.ImportReference(finishConstant);
         // #39: `if (ShouldKeepDeliveries()) return;` ahead of the stock BreakAll bodies.
         foreach (var breaker in new[] { deliveryBreakAll, deliveryBreakQuiet })
         {

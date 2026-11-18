@@ -1194,12 +1194,34 @@ namespace DualSouls.Mods.Silksong
             return true;
         }
         // #41: percentage of each Flea Festival champion target (stock 30/42/65, Seth 55/68/90).
-        // The festival FSM reads PlayerData's champion getters, so the save keeps its real scores.
+        // Both the champion getters and the game FSM's minimum (read through GetConstantsValue) follow it,
+        // so a score above the lowered target is saved as the real highscore and wins.
         public static int FleaTargetPercent { get; set; } = 100;
         public static int FleaGameTarget(int stock) => FleaTargetPercent >= 100 ? stock : stock * FleaTargetPercent / 100;
+        public static int FleaConstantsScaled { get; private set; }
+        public static void FinishConstantsValue(GetConstantsValue action)
+        {
+            try
+            {
+                if (FleaTargetPercent < 100 && action.storeValue != null && !action.storeValue.IsNone &&
+                    action.storeValue.Type == HutongGames.PlayMaker.VariableType.Int &&
+                    action.variableName != null && !action.variableName.IsNone &&
+                    IsFleaTargetConstant(action.variableName.Value))
+                {
+                    action.storeValue.SetValue(FleaGameTarget((int)action.storeValue.GetValue()));
+                    FleaConstantsScaled++;
+                }
+            }
+            catch (Exception e) { Debug.LogWarning("[DualSouls] Flea Festival target scaling skipped: " + e.Message); }
+            action.Finish();
+        }
+        public static bool IsFleaTargetConstant(string name) => name != null &&
+            (name.StartsWith("FLEA_FESTIVAL_CHAMP_", StringComparison.Ordinal) ||
+             name.StartsWith("FLEA_FESTIVAL_SETH_", StringComparison.Ordinal));
         public static string DeliveryReport()
         {
-            return "easyDeliveries=" + EasyDeliveriesEnabled + " hitsKept=" + DeliveryHitsKept + " breaksKept=" + DeliveryBreaksKept;
+            return "easyDeliveries=" + EasyDeliveriesEnabled + " hitsKept=" + DeliveryHitsKept + " breaksKept=" + DeliveryBreaksKept +
+                " fleaTargetPercent=" + FleaTargetPercent + " fleaConstantsScaled=" + FleaConstantsScaled;
         }
         public static bool DeathObserved { get { return deathObserved; } }
         public static void CompleteDeathHandling() { deathObserved = false; }
