@@ -11,8 +11,7 @@ public partial class HKDualScreen
 {
     const string CommandHelp =
         "help | report | state | pause | mods | skins | skin <list|row N|left N|right N> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
-        "mods-list | mod <id> <value> | pd <field>... | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | dash | travel <scene> <gate> | save | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist]\n" +
-        "geo, charm, die, hit, hurt, dash, travel and save refuse slot 1 (the player's own save); use a disposable slot.";
+        "mods-list | mod <id> <value> | pd <field>... | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | dash | travel <scene> <gate> | save | load <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist]\n";
 
     // QA: one hero nail hit on the nearest live enemy through HealthManager.Hit, as a slash
     // would land. The optional hp first sets the target's health, e.g. above the boss threshold.
@@ -136,6 +135,16 @@ public partial class HKDualScreen
                 }
                 gm.SaveGame();
                 return "ok slot=" + gm.profileID;
+            case "load":
+            {
+                // QA: load a save through the game's own profile-menu path; injected gamepad
+                // presses lose their key-up on this device and leave the menu scrolling.
+                int slot;
+                if (a.Length < 2 || !int.TryParse(a[1], out slot) || slot < 1 || slot > 4) return "error load <1-4>";
+                if (gm == null || gm.gameState != GlobalEnums.GameState.MAIN_MENU) return "error not on the main menu";
+                gm.LoadGameFromUI(slot);
+                return "ok loading slot " + slot;
+            }
             case "quit-menu":
                 if (ui == null) return "error no UIManager";
                 ui.StartCoroutine(ui.ReturnToMainMenu());
@@ -214,7 +223,6 @@ public partial class HKDualScreen
         return PlayerData.instance != null ? DsQaReport.Fields(PlayerData.instance, names) : "error no PlayerData";
     }
 
-    // QA commands that change the save refuse slot 1, which holds the player's own game.
     // QA hooks for what injected input cannot reach. hurt: non-lethal damage
     // through the game's own TakeHealth, so the HUD follows.
     static string CommandHurt(string[] a, GameManager gm)
@@ -263,10 +271,11 @@ public partial class HKDualScreen
         return "ok travelling to " + a[1] + " via " + a[2];
     }
 
+    // Every slot on the test device is QA data (owner, 2026-11-18), so no slot is refused.
     static string SaveSlotGuard(GameManager gm)
     {
         if (gm == null) return "error no GameManager";
-        return gm.profileID == 1 ? "error refused on slot 1 (player save); use a disposable slot" : null;
+        return null;
     }
 
     // QA: own charms on a disposable save so the Charms pane can be exercised without playing to them.

@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die, hit <damage> [hp] [near] (refused on slot 1) | hurt <n>, dash, travel <scene> <gate> (refused on slot 1) | sprites | assists | collect [checklist]";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | sprites | assists | collect [checklist]";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -29,7 +29,7 @@ public partial class DualScreenV2
         int numbers = near ? a.Length - 1 : a.Length;
         if (numbers < 2 || !int.TryParse(a[1], out damage) || damage <= 0 || (numbers > 2 && !int.TryParse(a[2], out hp)))
             return "error hit <damage> [hp] [near]";
-        if (gm == null || gm.profileID == 1) return "error refused on slot 1 (player save); use a disposable slot";
+        if (gm == null) return "error no GameManager";
         var hero = HeroController.SilentInstance;
         if (hero == null) return "error no HeroController";
         HealthManager target = null;
@@ -161,7 +161,6 @@ public partial class DualScreenV2
         var pd = PlayerData.instance;
         if (hero == null || pd == null) return "error no HeroController";
         if (gm == null || gm.GameState != GlobalEnums.GameState.PLAYING) return "error not playing";
-        if (gm.profileID == 1) return "error refused on slot 1 (player save); use a disposable slot";
         FieldInfo health = typeof(PlayerData).GetField("health", BindingFlags.Public | BindingFlags.Instance);
         FieldInfo blue = typeof(PlayerData).GetField("healthBlue", BindingFlags.Public | BindingFlags.Instance);
         if (health == null) return "error no PlayerData.health";
@@ -177,7 +176,7 @@ public partial class DualScreenV2
     {
         int amount;
         if (a.Length < 2 || !int.TryParse(a[1], out amount) || amount <= 0) return "error hurt <amount>";
-        if (gm == null || gm.profileID == 1) return "error refused on slot 1 (player save); use a disposable slot";
+        if (gm == null) return "error no GameManager";
         var pd = PlayerData.instance;
         if (pd == null) return "error no PlayerData";
         pd.TakeHealth(Mathf.Min(amount, pd.health - 1), false, false);
@@ -187,7 +186,7 @@ public partial class DualScreenV2
     // dash: the hero's own dash start, as the dash button would trigger it.
     string CommandDash(GameManager gm)
     {
-        if (gm == null || gm.profileID == 1) return "error refused on slot 1 (player save); use a disposable slot";
+        if (gm == null) return "error no GameManager";
         var hero = HeroController.instance;
         if (hero == null) return "error no HeroController";
         if (!hero.CanDash()) return "error hero cannot dash now";
@@ -201,7 +200,7 @@ public partial class DualScreenV2
     string CommandTravel(string[] a, GameManager gm)
     {
         if (a.Length < 3) return "error travel <scene> <gate>";
-        if (gm == null || gm.profileID == 1) return "error refused on slot 1 (player save); use a disposable slot";
+        if (gm == null) return "error no GameManager";
         if (gm.GameState != GlobalEnums.GameState.PLAYING || gm.IsInSceneTransition) return "error not playing";
         gm.BeginSceneTransition(new GameManager.SceneLoadInfo
         {
