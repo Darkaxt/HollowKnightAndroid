@@ -80,6 +80,20 @@ public partial class SilksongGameplayPerformanceTests
         actions[0] = new("RESET", callback); bar.Set(actions, default); Assert.Equal(++measures, label.Measurements);
     }
     [Fact]
+    public void Header_buttons_report_their_left_edge_per_band()
+    {
+        var host = new GameObject("action-host").AddComponent<RectTransform>();
+        var bar = new DsActionBar(); bar.Build(host, 1240, 300);
+        Action callback = () => { };
+        bar.Set(new List<DsAction> { new("CHECKLIST", callback), new("FULL MAP", callback) }, default);
+        // Two rows spread down 300: gap (300-108)/3 = 64, so rows at 64..118 and 182..236.
+        Assert.True(bar.HeaderLeftIn(182, 236) > 0f);
+        Assert.Equal(0f, bar.HeaderLeftIn(120, 180));
+        Assert.True(bar.HeaderLeftIn(0, 300) <= bar.HeaderLeftIn(182, 236));
+        bar.Set(new List<DsAction> { new("USE", callback, place: DsActionPlace.Pane) }, new Rect(0, 182, 300, 54));
+        Assert.Equal(0f, bar.HeaderLeftIn(0, 300));
+    }
+    [Fact]
     public void Unchanged_label_uses_current_callback_availability_and_geometry()
     {
         var host = new GameObject("action-host").AddComponent<RectTransform>();

@@ -67,7 +67,8 @@ public partial class DsShell
     Rect _headerStatusRect;
     string _headerRawTitle, _headerCapsTitle;
     Rect _headerTitleRect;
-    bool _headerTitlePlaced;
+    bool _headerTitlePlaced, _headerTitleSqueezed;
+    const float TitleButtonGap = 16f;
     // A screen's replacement tab strip, e.g. the map's marker icons.
     readonly List<DsStripItem> _stripBuffer = new List<DsStripItem>();
     readonly List<RectTransform> _stripRoots = new List<RectTransform>();
@@ -967,6 +968,29 @@ public partial class DsShell
         // words, which read as a gap between the title and the divider rather
         // than as a title above one.
         var where = new Rect(0f, space.y, _w, Mathf.Max(10f, space.height - TitleBottomGap));
+        // A second stacked header button (CHECKLIST over FULL MAP) sits on the
+        // title's row: keep the title centred but clear of it, shrinking a long
+        // name to fit rather than running under the button.
+        float buttons = _actions.HeaderLeftIn(where.y, where.yMax);
+        bool squeeze = false;
+        if (buttons > 0f)
+        {
+            float half = Mathf.Max(60f, buttons - TitleButtonGap - _w * 0.5f);
+            if (half < _w * 0.5f)
+            {
+                where = new Rect(_w * 0.5f - half, where.y, half * 2f, where.height);
+                squeeze = true;
+            }
+        }
+        if (_headerTitleSqueezed != squeeze)
+        {
+            _headerTitleSqueezed = squeeze;
+            _headerTitle.enableWordWrapping = !squeeze;
+            _headerTitle.fontSizeMax = TitleSize;
+            _headerTitle.fontSizeMin = TitleSize * 0.6f;
+            _headerTitle.enableAutoSizing = squeeze;
+            if (!squeeze) _headerTitle.fontSize = TitleSize;
+        }
         if (!_headerTitlePlaced || _headerTitleRect != where)
         {
             DsWidgets.Place(_headerTitle.rectTransform, where);

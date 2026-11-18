@@ -109,7 +109,7 @@ public class DsActionBar
         public Image Plate;
         public Rect Hit;          // layout space, for the shell's hit testing
         public Action Invoke;
-        public bool Live, Placed, Measured;
+        public bool Live, Placed, Measured, Header;
         public string MeasuredText;
         public object Font, Material;
         public float Size, MinSize, MaxSize, CharacterSpace, LineSpace, ParagraphSpace, Width;
@@ -177,6 +177,24 @@ public class DsActionBar
 
     /// <summary>The left edge of the header's buttons, in layout space; 0 with none shown.</summary>
     public float HeaderLeft { get; private set; }
+
+    /// <summary>
+    /// The left edge of the header buttons that share the band from
+    /// <paramref name="top"/> to <paramref name="bottom"/> (layout space, y down);
+    /// 0 when none do. A second stacked button lands on the title's row.
+    /// </summary>
+    public float HeaderLeftIn(float top, float bottom)
+    {
+        float left = 0f;
+        for (int i = 0; i < _rows.Count && i < _wanted.Count; i++)
+        {
+            var row = _rows[i];
+            if (!row.Placed || !row.Header) continue;
+            if (row.Hit.yMax <= top || row.Hit.y >= bottom) continue;
+            left = left == 0f ? row.Hit.x : Mathf.Min(left, row.Hit.x);
+        }
+        return left;
+    }
 
     /// <param name="host">
     /// Covers the whole panel, in layout space. The bar draws in two corners
@@ -258,6 +276,7 @@ public class DsActionBar
             {
                 where = new Rect(paneX, paneTop + paneSeen * (RowH + PaneGap), paneW, RowH);
                 paneSeen++;
+                row.Header = false;
             }
             else
             {
@@ -274,6 +293,7 @@ public class DsActionBar
                                  w, RowH);
                 HeaderLeft = headerSeen == 0 ? where.x : Mathf.Min(HeaderLeft, where.x);
                 headerSeen++;
+                row.Header = true;
             }
 
             if (!row.Placed || row.Hit != where)
