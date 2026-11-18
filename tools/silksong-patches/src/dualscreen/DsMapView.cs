@@ -1052,7 +1052,7 @@ public class DsMapView
 
         // Pan is carried in map units so that it survives the game rescaling the
         // map under us, which is the same reason the framing is.
-        _pan = ClampPan(_pan, halfHeight, _rtW / (float)Mathf.Max(_rtH, 1),
+        _pan = ClampPan(_pan, halfHeight, _rtW / (float)Mathf.Max(_rtH, 1), _zoom,
             Mode == Frame.World, DsConfig.Int("map_pan_limit", 60));
 
         // Pinch. Applied last so it composes with either framing.
@@ -1705,15 +1705,17 @@ public class DsMapView
     }
 
     /// <summary>
-    /// How far the view may wander. On the area map the view centre stays inside
-    /// the zone's frame, as Hollow Knight's map does, so neither a drag nor a
-    /// fling can carry the zone off the panel. The full map is the whole of
-    /// Pharloom, so there it keeps the wide radius.
+    /// How far the view may wander. On the area map this is Hollow Knight's
+    /// limit, frame * (1 - 1/zoom), which zoomed in reaches every edge of the
+    /// zone; with a floor of half the frame so the map can still be nudged at
+    /// zoom 1 without most of it leaving the panel. The full map is the whole
+    /// of Pharloom, so there it keeps the wide radius.
     /// </summary>
-    static Vector2 ClampPan(Vector2 pan, float frameHalfHeight, float aspect, bool world, float worldLimit)
+    static Vector2 ClampPan(Vector2 pan, float frameHalfHeight, float aspect, float zoom, bool world, float worldLimit)
     {
         if (world) return Vector2.ClampMagnitude(pan, worldLimit);
-        float maxY = Mathf.Max(0f, frameHalfHeight), maxX = maxY * Mathf.Max(aspect, 0f);
+        float reach = Mathf.Max(0.5f, 1f - 1f / Mathf.Max(zoom, 1f));
+        float maxY = Mathf.Max(0f, frameHalfHeight) * reach, maxX = maxY * Mathf.Max(aspect, 0f);
         return new Vector2(Mathf.Clamp(pan.x, -maxX, maxX), Mathf.Clamp(pan.y, -maxY, maxY));
     }
 
