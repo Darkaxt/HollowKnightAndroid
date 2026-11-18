@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool|int field> <value> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | delivery <list|give <name>|hit|break|state> | crest [tools <type>|equip <slot> <tool>|unlock <tool>] | sprites | assists | collect [checklist]";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool|int field> <value> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | delivery <list|give <name>|hit|break|state> | crest [tools <type>|equip <slot> <tool>|unlock <tool>] | inv [fsm|next <pane>|send <event>|tools] | sprites | assists | collect [checklist]";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -52,6 +52,66 @@ public partial class DualScreenV2
         });
         return "ok target=" + target.gameObject.name + " hp=" + before + "->" + target.hp + " distance=" + Mathf.Sqrt(best).ToString("0.0")
             + " hooks=+" + (DualSouls.Mods.CombatOverlay.HookCalls - hooks) + " heroHits=+" + (DualSouls.Mods.CombatOverlay.HeroHits - heroHits);
+    }
+
+    // QA (#43): drive the game's own inventory without injected input. `inv` reports the
+    // "Inventory Control" FSM (GameManager.inventoryFSM) state and its transitions, so the open
+    // event can be read off the device; `inv next <pane>` is InventoryPaneList.SetNextOpen;
+    // `inv send <event>` sends an FSM event; `inv tools` lists the Tools pane's crest slots as drawn.
+    string CommandInventory(string[] a, GameManager gm)
+    {
+        if (gm == null) return "error no GameManager";
+        PlayMakerFSM fsm = gm.inventoryFSM;
+        if (fsm == null) return "error no inventory FSM";
+        string sub = a.Length > 1 ? a[1].ToLowerInvariant() : "fsm";
+        if (sub == "next" && a.Length == 3) { InventoryPaneList.SetNextOpen(a[2]); return "ok next=" + InventoryPaneList.NextPaneOpen; }
+        if (sub == "send" && a.Length >= 3)
+        {
+            string name = string.Join(" ", a, 2, a.Length - 2), before = fsm.ActiveStateName;
+            fsm.SendEvent(name);
+            return "ok sent=" + name + " state=" + before + "->" + fsm.ActiveStateName;
+        }
+        if (sub == "tools") return InventoryToolsReport();
+        if (sub != "fsm") return "error inv [fsm|next <pane>|send <event>|tools]";
+        var sb = new StringBuilder();
+        sb.Append("state=").Append(fsm.ActiveStateName).Append(" open=")
+          .Append(PlayerData.HasInstance && PlayerData.instance.isInventoryOpen).Append(" next=").Append(InventoryPaneList.NextPaneOpen);
+        sb.Append("\nglobal:");
+        foreach (var t in fsm.FsmGlobalTransitions) sb.Append(' ').Append(t.EventName).Append("->").Append(t.ToState);
+        foreach (var state in fsm.FsmStates)
+        {
+            sb.Append('\n').Append(state.Name).Append(':');
+            foreach (var t in state.Transitions) sb.Append(' ').Append(t.EventName).Append("->").Append(t.ToState);
+        }
+        return sb.ToString();
+    }
+
+    static string InventoryToolsReport()
+    {
+        var managers = Resources.FindObjectsOfTypeAll<InventoryItemToolManager>();
+        var field = typeof(InventoryItemToolManager).GetField("crestList", BindingFlags.Instance | BindingFlags.NonPublic);
+        var sb = new StringBuilder();
+        foreach (var manager in managers)
+        {
+            if (manager == null || !manager.gameObject.scene.IsValid()) continue;
+            var list = field != null ? field.GetValue(manager) as InventoryToolCrestList : null;
+            sb.Append("manager active=").Append(manager.gameObject.activeInHierarchy);
+            if (list == null) { sb.Append(" crestList=null\n"); continue; }
+            var crest = list.CurrentCrest;
+            sb.Append(" crest=").Append(crest != null && crest.CrestData != null ? crest.CrestData.name : "-");
+            int i = 0;
+            foreach (InventoryToolCrestSlot slot in list.GetSlots())
+            {
+                if (slot == null) continue;
+                Vector3 p = slot.transform.localPosition;
+                sb.Append("\n  ").Append(i++).Append(' ').Append(slot.Type).Append(slot.IsLocked ? " locked" : "")
+                  .Append(slot.gameObject.activeInHierarchy ? "" : " inactive")
+                  .Append(" at=").Append(p.x.ToString("0.00")).Append(',').Append(p.y.ToString("0.00"))
+                  .Append(" tool=").Append(slot.EquippedItem != null ? slot.EquippedItem.name : "-");
+            }
+            sb.Append('\n');
+        }
+        return sb.Length == 0 ? "error no InventoryItemToolManager" : sb.ToString().TrimEnd();
     }
 
     void PollCommands() { DsCommandFile.Poll(RunCommand); }
@@ -126,6 +186,7 @@ public partial class DualScreenV2
                 if (a[1] == "unlock" && a.Length >= 3) return SilksongGameplayFeatures.CrestUnlockTool(string.Join(" ", a, 2, a.Length - 2));
                 return "error crest [tools <type>|equip <slot> <tool name>|unlock <tool name>]";
             }
+            case "inv": return CommandInventory(a, gm);
             case "sprites":
                 var skinRuntime = SilksongSkinRuntime.Current;
                 return skinRuntime != null ? skinRuntime.DescribeCollections() : "error no skin runtime";
