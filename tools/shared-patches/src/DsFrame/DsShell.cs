@@ -665,6 +665,26 @@ public partial class DsShell
         if (_headerStatus.text != text) _headerStatus.text = text;
         float right = _actions.HeaderLeft > 0f ? _actions.HeaderLeft - 24f : _w - 40f;
         var where = new Rect(right - StatusWidth, space.y, StatusWidth, Mathf.Max(10f, space.height - TitleBottomGap));
+        // A long centred title ("FORGOTTEN CROSSROADS") reaches under the status:
+        // then the status moves up a row, over the title's row instead of on it.
+        // Measured only when the title, the status or the header edge changes.
+        string title = _headerTitle != null && _headerTitle.gameObject.activeSelf ? _headerTitle.text : "";
+        if (title != _statusFitTitle || text != _statusFitText || right != _statusFitRight)
+        {
+            _statusFitTitle = title; _statusFitText = text; _statusFitRight = right;
+            _statusRaised = false;
+            try
+            {
+                if (!string.IsNullOrEmpty(title))
+                {
+                    float titleRight = _w * 0.5f + _headerTitle.GetPreferredValues(title).x * 0.5f;
+                    _statusRaised = right - _headerStatus.GetPreferredValues(text).x < titleRight + 16f;
+                }
+            }
+            catch { }
+        }
+        if (_statusRaised)
+            where = new Rect(right - StatusWidth, space.y - StatusRaise, StatusWidth, StatusRaise - 8f);
         if (_headerStatusRect != where)
         {
             DsWidgets.Place(_headerStatus.rectTransform, where);
@@ -673,6 +693,10 @@ public partial class DsShell
     }
 
     const float StatusWidth = 360f;
+    const float StatusRaise = 56f;
+    string _statusFitTitle, _statusFitText;
+    float _statusFitRight = -1f;
+    bool _statusRaised;
 
     /// <summary>
     /// Let the visible screen replace the tab strip, or put the tabs back.

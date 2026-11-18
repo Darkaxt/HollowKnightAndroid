@@ -91,7 +91,51 @@ namespace HollowKnightPatches.Lower
         Vector3 _compassPos;
         bool _compassOn;
 
-        public HkMapView(Transform owner) { _owner = owner; }
+        public HkMapView(Transform owner) { _owner = owner; Last = this; }
+
+        /// <summary>The most recently built view (QA mapdump).</summary>
+        public static HkMapView Last;
+
+        /// <summary>QA: what the lower map camera is pointed at and what it can see.</summary>
+        public string Dump()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append("clone=").Append(_clone != null ? (_clone.activeSelf ? "on" : "off") : "null")
+              .Append(" available=").Append(_available).Append(" any=").Append(_anyAvailable)
+              .Append(" setup=").Append(_needsSetup).Append(" content=").Append(_contentVisible)
+              .Append(" presenting=").Append(_presenting).Append(" world=").Append(_worldMode)
+              .Append(" zone=").Append(_lastZone).Append(" scene=").Append(_lastScene);
+            if (_cam != null)
+                sb.Append("\ncam enabled=").Append(_cam.enabled).Append(" pos=").Append(_cam.transform.position)
+                  .Append(" ortho=").Append(_cam.orthographicSize.ToString("0.00")).Append(" rt=").Append(_rt != null ? _rt.width + "x" + _rt.height : "null");
+            sb.Append("\nfit areaB=").Append(_areaBValid ? _areaB.ToString() : "none").Append(" fallback=").Append(_fallbackValid)
+              .Append(" for=").Append(_areaBFor);
+            if (_clone != null)
+            {
+                int total = 0, active = 0, onLayer = 0, opaque = 0;
+                Bounds vis = new Bounds(); bool any = false;
+                foreach (var r in _clone.GetComponentsInChildren<SpriteRenderer>(true))
+                {
+                    total++;
+                    if (!r.enabled || !r.gameObject.activeInHierarchy) continue;
+                    active++;
+                    if (r.gameObject.layer == Layer) onLayer++;
+                    if (r.color.a > 0.05f) { opaque++; if (any) vis.Encapsulate(r.bounds); else { vis = r.bounds; any = true; } }
+                }
+                sb.Append("\nsprites total=").Append(total).Append(" active=").Append(active).Append(" onLayer=").Append(onLayer)
+                  .Append(" visibleAlpha=").Append(opaque).Append(" bounds=").Append(any ? vis.ToString() : "none")
+                  .Append(" clonePos=").Append(_clone.transform.position).Append(" scale=").Append(_clone.transform.lossyScale);
+                var area = AreaObjFor(_map, _lastZone);
+                sb.Append("\narea=").Append(area != null ? area.name + (area.activeInHierarchy ? " on" : " off") : "null");
+                if (area != null)
+                {
+                    int rooms = 0, roomsOn = 0;
+                    for (int i = 0; i < area.transform.childCount; i++) { rooms++; if (area.transform.GetChild(i).gameObject.activeSelf) roomsOn++; }
+                    sb.Append(" rooms=").Append(roomsOn).Append('/').Append(rooms);
+                }
+            }
+            return sb.ToString();
+        }
 
         public RenderTexture Texture { get { return _rt; } }
         public bool WorldMode { get { return _worldMode; } }

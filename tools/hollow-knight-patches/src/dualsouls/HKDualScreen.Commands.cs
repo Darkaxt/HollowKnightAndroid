@@ -11,7 +11,7 @@ public partial class HKDualScreen
 {
     const string CommandHelp =
         "help | report | state | pause | mods | skins | skin <list|row N|left N|right N> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
-        "mods-list | mod <id> <value> | pd <field>... | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | dash | travel <scene> <gate> | save | load <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist]\n";
+        "mods-list | mod <id> <value> | pd <field>... | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | dash | travel <scene> <gate> | save | load <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist] | mapdump\n";
 
     // QA: one hero nail hit on the nearest live enemy through HealthManager.Hit, as a slash
     // would land. The optional hp first sets the target's health, e.g. above the boss threshold.
@@ -65,6 +65,8 @@ public partial class HKDualScreen
                 return "collect " + HollowKnightPatches.Lower.HkMapScreen.ChecklistReport() +
                        " pins=" + HollowKnightPatches.Lower.HkMapView.LastPinsShown;
             case "state": return CommandState(gm, ui);
+            case "mapdump":
+                return HollowKnightPatches.Lower.HkMapView.Last != null ? HollowKnightPatches.Lower.HkMapView.Last.Dump() : "error no map view";
             case "pause":
                 if (gm == null) return "error no GameManager";
                 bool was = gm.IsGamePaused();
