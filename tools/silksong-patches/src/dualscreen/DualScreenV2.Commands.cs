@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | delivery <list|give <name>|hit|break|state> | crest [tools <type>|equip <slot> <tool>|unlock <tool>] | inv [fsm|next <pane>|send <event>|tools] | fsm find <text> | fsm show|send|set|goto <object>|<fsm>|<arg>[|<value>] | gates <scene> | sprites | assists | collect [checklist]";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | delivery <list|give <name>|hit|break|state> | crest [tools <type>|equip <slot> <tool>|unlock <tool>] | inv [fsm|next <pane>|send <event>|tools] | fsm find <text> | fsm show|send|set|goto <object>|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | sprites | assists | collect [checklist]";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -123,6 +123,64 @@ public partial class DualScreenV2
         SceneTeleportMap.SceneInfo info;
         if (map == null || !map.TryGetValue(a[1], out info) || info == null) return "error no teleport-map entry for " + a[1];
         return "gates=" + string.Join(",", info.TransitionGates.ToArray()) + " respawns=" + string.Join(",", info.RespawnPoints.ToArray());
+    }
+
+    // QA: every component in a loaded scene (name contains <scene>) that carries a PlayerDataTest
+    // field -- activators, additive-load conditions, deactivators -- with its conditions, whether
+    // they pass now, and the GameObject fields it switches. Optional text filters the object name.
+    static string CommandPlayerDataTests(string[] a)
+    {
+        if (a.Length < 2) return "error pdtests <scene> [text]";
+        string text = a.Length > 2 ? string.Join(" ", a, 2, a.Length - 2) : null;
+        var sb = new StringBuilder();
+        int shown = 0;
+        const BindingFlags Fields = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        foreach (var component in Resources.FindObjectsOfTypeAll<MonoBehaviour>())
+        {
+            if (component == null || !component.gameObject.scene.IsValid()
+                || component.gameObject.scene.name.IndexOf(a[1], StringComparison.OrdinalIgnoreCase) < 0) continue;
+            if (text != null && component.gameObject.name.IndexOf(text, StringComparison.OrdinalIgnoreCase) < 0) continue;
+            var fields = component.GetType().GetFields(Fields);
+            bool any = false;
+            foreach (var field in fields)
+            {
+                var test = field.FieldType == typeof(PlayerDataTest) ? field.GetValue(component) as PlayerDataTest : null;
+                if (test == null || !test.IsDefined) continue;
+                if (!any)
+                {
+                    if (++shown > 50) { sb.Append("...\n"); return sb.ToString().TrimEnd(); }
+                    Transform parent = component.transform.parent;
+                    sb.Append(parent != null ? parent.name + "/" : "").Append(component.gameObject.name)
+                      .Append(" [").Append(component.GetType().Name).Append("] active=").Append(component.gameObject.activeInHierarchy);
+                    foreach (var target in fields)
+                    {
+                        var go = target.FieldType == typeof(GameObject) ? target.GetValue(component) as GameObject : null;
+                        if (go != null) sb.Append(' ').Append(target.Name).Append('=').Append(go.name).Append(go.activeInHierarchy ? "(on)" : "(off)");
+                    }
+                    any = true;
+                }
+                sb.Append("\n  ").Append(field.Name).Append(" pass=").Append(test.IsFulfilled).Append(':');
+                for (int g = 0; g < test.TestGroups.Length; g++)
+                {
+                    if (g > 0) sb.Append(" OR");
+                    foreach (var t in test.TestGroups[g].Tests)
+                    {
+                        sb.Append(' ').Append(t.FieldName).Append(' ');
+                        switch (t.Type)
+                        {
+                            case PlayerDataTest.TestType.Bool: sb.Append("==").Append(t.BoolValue); break;
+                            case PlayerDataTest.TestType.Int:
+                            case PlayerDataTest.TestType.Enum: sb.Append(t.NumType).Append(' ').Append(t.IntValue); break;
+                            case PlayerDataTest.TestType.Float: sb.Append(t.NumType).Append(' ').Append(t.FloatValue); break;
+                            default: sb.Append(t.Type).Append(' ').Append(t.StringType).Append(" \"").Append(t.StringValue).Append('"'); break;
+                        }
+                        sb.Append(PlayerData.HasInstance && t.IsFulfilled(PlayerData.instance) ? "(ok)" : "(no)");
+                    }
+                }
+            }
+            if (any) sb.Append('\n');
+        }
+        return shown == 0 ? "none" : sb.ToString().TrimEnd();
     }
 
     // QA: inspect and drive any loaded PlayMaker FSM (festival games, NPC flows) without injected
@@ -316,6 +374,7 @@ public partial class DualScreenV2
             case "inv": return CommandInventory(a, gm);
             case "fsm": return CommandFsm(line);
             case "gates": return CommandGates(a);
+            case "pdtests": return CommandPlayerDataTests(a);
             case "sprites":
                 var skinRuntime = SilksongSkinRuntime.Current;
                 return skinRuntime != null ? skinRuntime.DescribeCollections() : "error no skin runtime";
