@@ -22,6 +22,7 @@
     <Content Include="fixtures/skin-runtime-chain.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../docs/superpowers/specs/data/hollow-knight-skin-catalog-v1.txt" Link="docs/superpowers/specs/data/hollow-knight-skin-catalog-v1.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/mods/HollowKnightGameplayFeatures.cs" Link="source-contracts/HollowKnightGameplayFeatures.cs" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../silksong-patches/src/mods/SilksongGameplayFeatures.cs" Link="source-contracts/SilksongGameplayFeatures.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/mods/HollowKnightGameTweakApi.cs" Link="source-contracts/HollowKnightGameTweakApi.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/dualsouls/HkStageHooks.cs" Link="source-contracts/HkStageHooks.cs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../hollow-knight-patches/src/dualsouls/HKDualScreen.cs" Link="source-contracts/HKDualScreen.cs" CopyToOutputDirectory="PreserveNewest" />

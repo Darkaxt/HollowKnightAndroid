@@ -153,7 +153,10 @@ namespace DualSouls.Mods.Silksong
         {
             if (deathTally == null)
                 deathTally = new DeathTally(Path.Combine(Application.persistentDataPath, "dualsouls-death-counter"), "silksong");
-            deathTally.Tick(player, player.profileID, player.playTime, game.sceneName, player.health <= 0, BossInRoom);
+            // The slot the player picked: a new game's PlayerData.profileID stays 0 until its
+            // first save, which is the first death, so that death would never count.
+            int slot = game.IsGameplayScene() ? game.profileID : 0;
+            deathTally.Tick(player, slot, player.playTime, game.sceneName, player.health <= 0, BossInRoom);
             DsFrame.HeaderStatus = deathTally.Label;
         }
 

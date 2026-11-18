@@ -20,15 +20,17 @@ namespace DualSouls.Mods.HollowKnight
             "openedStagNest", "openedHiddenStation",
         };
 
+        // Command, ownership flag, and the "can" flag the game's own pickup sets with it
+        // (HeroController.CanDash reads canDash, not hasDash).
         static readonly string[,] Abilities =
         {
-            { "ability_double_jump", "hasDoubleJump" },
-            { "ability_dash", "hasDash" },
-            { "ability_wall_jump", "hasWalljump" },
-            { "ability_crystal_heart", "hasSuperDash" },
-            { "ability_shade_cloak", "hasShadowDash" },
-            { "ability_ismas_tear", "hasAcidArmour" },
-            { "ability_dream_nail", "hasDreamNail" },
+            { "ability_double_jump", "hasDoubleJump", null },
+            { "ability_dash", "hasDash", "canDash" },
+            { "ability_wall_jump", "hasWalljump", "canWallJump" },
+            { "ability_crystal_heart", "hasSuperDash", "canSuperDash" },
+            { "ability_shade_cloak", "hasShadowDash", "canShadowDash" },
+            { "ability_ismas_tear", "hasAcidArmour", null },
+            { "ability_dream_nail", "hasDreamNail", null },
         };
 
         float _gameSpeed = 1f;
@@ -425,8 +427,9 @@ namespace DualSouls.Mods.HollowKnight
                 string field = Abilities[index, 1];
                 bool next = !data.GetBool(field);
                 data.SetBool(field, next);
+                if (Abilities[index, 2] != null) data.SetBool(Abilities[index, 2], next);
                 // Shade Cloak upgrades Mothwing Cloak, so granting it grants the dash.
-                if (next && field == "hasShadowDash") data.SetBool("hasDash", true);
+                if (next && field == "hasShadowDash") { data.SetBool("hasDash", true); data.SetBool("canDash", true); }
                 return Text(field + " " + (next ? "on" : "off"));
             }
             return TweakActionResult.Fail("No Hollow Knight cheat command exists for " + id + ".");

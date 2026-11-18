@@ -123,6 +123,20 @@ public sealed class HollowKnightModsSourceContractTests
         Assert.DoesNotContain("if (!pd.atBench) return", pane, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TheDeathCounterBindsToTheChosenSlotBeforeTheFirstSave()
+    {
+        // Thor, 2.0.49: the first death of a new Hollow Knight game read DEATHS 0,
+        // because PlayerData.profileID is only written by the save that death makes.
+        foreach (string name in new[] { "HollowKnightGameplayFeatures.cs", "SilksongGameplayFeatures.cs" })
+        {
+            string features = Source(name);
+            Assert.Contains("int slot = game.IsGameplayScene() ? game.profileID : 0;", features, StringComparison.Ordinal);
+            Assert.Contains("deathTally.Tick(player, slot,", features, StringComparison.Ordinal);
+            Assert.DoesNotContain("deathTally.Tick(player, player.profileID", features, StringComparison.Ordinal);
+        }
+    }
+
     static string Source(string name) =>
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "source-contracts", name));
 }
