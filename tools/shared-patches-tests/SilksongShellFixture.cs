@@ -112,6 +112,23 @@ public static class DsLogoArt{public static readonly Sprite Sprite=new(){name="e
 public static class DsRuleArt{public static readonly Sprite Horizontal=new(),Vertical=new();}
 public static class DsSliderArt{public static readonly Sprite Track=new(),Thumb=new();}
 public static class DsTrashArt{public static readonly Sprite Sprite=new();}
+// #37 the checklist panel and collectible data are engine/game-data seams; no table means no CHECKLIST action.
+public sealed class DsChecklistPanel
+{
+    public DsChecklistPanel(RectTransform parent, Rect bounds){}
+    public bool Visible{get;private set;}
+    public void SetVisible(bool on){Visible=on;}
+    public void Show(System.Collections.Generic.List<DualSouls.Mods.ChecklistArea> areas, DualSouls.Mods.ChecklistArea totals,
+                     System.Collections.Generic.IList<System.Collections.Generic.KeyValuePair<string,string>> kinds){}
+}
+public static class SsCollectibles
+{
+    public static readonly System.Collections.Generic.KeyValuePair<string,string>[] Kinds=new System.Collections.Generic.KeyValuePair<string,string>[0];
+    public static DualSouls.Mods.CollectibleTable Table=>null;
+    public static int PinsShown=>0;
+    public static System.Collections.Generic.List<DualSouls.Mods.ChecklistArea> Checklist(out DualSouls.Mods.ChecklistArea totals)
+    {totals=new DualSouls.Mods.ChecklistArea("All");return new System.Collections.Generic.List<DualSouls.Mods.ChecklistArea>();}
+}
 public static class DsGameArt
 {
     static readonly DsCursorArt Cursor=new();

@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die, hit <damage> [hp] [near] (refused on slot 1) | hurt <n>, dash, travel <scene> <gate> (refused on slot 1) | sprites | assists";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die, hit <damage> [hp] [near] (refused on slot 1) | hurt <n>, dash, travel <scene> <gate> (refused on slot 1) | sprites | assists | collect [checklist]";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -64,6 +64,10 @@ public partial class DualScreenV2
         {
             case "help": return CommandHelp;
             case "report": return CommandReport(gm);
+            case "collect":
+                // #37: what the checklist shows and how many pins are on the map; "checklist" toggles the panel.
+                if (a.Length > 1 && a[1] == "checklist") DsMapScreen.RequestChecklistToggle = true;
+                return "collect " + DsMapScreen.ChecklistReport() + " pins=" + SsCollectibles.PinsShown;
             case "state": return CommandState(gm);
             case "pause":
                 if (gm == null) return "error no GameManager";

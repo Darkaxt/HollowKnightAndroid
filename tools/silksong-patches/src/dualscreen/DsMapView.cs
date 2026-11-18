@@ -327,6 +327,9 @@ public class DsMapView
         // to the quick map on the main screen, where they are wanted.
         if (Mode == Frame.World && !GameMapShowing) HideNextAreaArrows();
 
+        // #37 collectible pins, on the rooms of the live map.
+        SsCollectibles.TickPins(_map, GAME_UI_LAYER);
+
         _cleared = false;
         Animate(Time.unscaledDeltaTime);
         Aim();

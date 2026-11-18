@@ -16,6 +16,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using DualSouls.DualScreen;
+using DualSouls.Mods;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.SceneManagement;
@@ -59,6 +60,12 @@ namespace HollowKnightPatches.Lower
         Renderer[] _compassRs;
         readonly List<Material> _ownedMaterials = new List<Material>();
         float _nextPoll;
+
+        // ── #37 collectible pins ──
+        CollectiblePins _pins;
+        HkCollectibles.MapIndex _pinIndex;
+        int _pinStamp = int.MinValue;
+        bool _pinsDirty;
 
         // ── fit ──
         Bounds _areaB;
@@ -232,6 +239,8 @@ namespace HollowKnightPatches.Lower
             for (int i = 0; i < _ownedMaterials.Count; i++)
                 if (_ownedMaterials[i] != null) UnityEngine.Object.Destroy(_ownedMaterials[i]);
             _ownedMaterials.Clear();
+            if (_pins != null) _pins.Clear();   // they die with the clone
+            _pinIndex = null; _pinsDirty = false;
             if (_clone != null) UnityEngine.Object.Destroy(_clone);
             _clone = null; _map = null; _realMap = null; _source = null;
             _compassRsFor = null; _compassRs = null; _compassAlphaApplied = -1f;
@@ -368,6 +377,7 @@ namespace HollowKnightPatches.Lower
                     // This setup already revealed everything mapped so far.
                     _lastScenesMapped = pd.scenesMapped != null ? pd.scenesMapped.Count + (pd.mapAllRooms ? 1000000 : 0) : -1;
                     _forceFrames = Mathf.Max(_forceFrames, 3);
+                    _pinsDirty = true; _nextPoll = 0f;
                 }
                 catch (Exception e)
                 {
@@ -405,6 +415,7 @@ namespace HollowKnightPatches.Lower
                         catch (Exception e) { Debug.LogWarning("[HkMap] compass re-anchor: " + e.Message); }
                         _lastScene = sc;
                         _compassPending = false;
+                        _pinsDirty = true;   // rooms just left wrote their pickups to SceneData
                     }
                 }
                 // Re-assert tracking on HK's own condition (Wayward Compass, not in an interior).
@@ -443,6 +454,9 @@ namespace HollowKnightPatches.Lower
             if (Time.unscaledTime < _nextPoll) return;
             _nextPoll = Time.unscaledTime + 0.5f;
 
+            int cs = HkCollectibles.Stamp();
+            if (_pinsDirty || cs != _pinStamp) { _pinStamp = cs; _pinsDirty = false; RefreshPins(); }
+
             int sg = 17;
             try { sg = (pd.shadeScene ?? "").GetHashCode() * 31 + (pd.dreamGateScene ?? "").GetHashCode() + (int)pd.dreamGateX; } catch { }
             if (_lastSgStamp != int.MinValue && sg != _lastSgStamp) _needsSetup = true;
@@ -477,6 +491,33 @@ namespace HollowKnightPatches.Lower
             _lastPinStamp = PinStamp();
             _forceFrames = Mathf.Max(_forceFrames, 2);
         }
+
+        // ── #37 collectible pins ────────────────────────────────────────────
+
+        void RefreshPins()
+        {
+            var table = HkCollectibles.Table;
+            if (table == null || _map == null || _clone == null) return;
+            try
+            {
+                if (_pins == null) _pins = new CollectiblePins(table);
+                if (_pinIndex == null || _pinIndex.Root != _clone) _pinIndex = new HkCollectibles.MapIndex(_map);
+                int sortLayer = 0, sortOrder = 0;
+                var cr = _map.compassIcon != null ? _map.compassIcon.GetComponentInChildren<SpriteRenderer>(true) : null;
+                if (cr != null) { sortLayer = cr.sortingLayerID; sortOrder = cr.sortingOrder; }
+                _pins.Refresh(_pinIndex.RoomOf, HkCollectibles.Collected, _clone.transform, HkCollectibles.PinSize,
+                              _clone.transform.position.z - 0.5f, Layer, sortLayer, sortOrder);
+                LastPinsShown = _pins.Shown;
+                _forceFrames = Mathf.Max(_forceFrames, 1);
+            }
+            catch (Exception e) { Debug.LogWarning("[HkMap] pins: " + e.Message); }
+        }
+
+        /// <summary>Pins currently showing (QA).</summary>
+        public int PinsShown { get { return _pins != null ? _pins.Shown : 0; } }
+
+        /// <summary>Pins after the latest refresh of any view (QA command).</summary>
+        public static int LastPinsShown;
 
         // ── framing ─────────────────────────────────────────────────────────
 

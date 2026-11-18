@@ -11,7 +11,7 @@ public partial class HKDualScreen
 {
     const string CommandHelp =
         "help | report | state | pause | mods | skins | skin <list|row N|left N|right N> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
-        "mods-list | mod <id> <value> | pd <field>... | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | dash | travel <scene> <gate> | save | quit-menu | fonts | hudfit | sprites <text> | assists\n" +
+        "mods-list | mod <id> <value> | pd <field>... | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | dash | travel <scene> <gate> | save | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist]\n" +
         "geo, charm, die, hit, hurt, dash, travel and save refuse slot 1 (the player's own save); use a disposable slot.";
 
     // QA: one hero nail hit on the nearest live enemy through HealthManager.Hit, as a slash
@@ -60,6 +60,11 @@ public partial class HKDualScreen
         {
             case "help": return CommandHelp;
             case "report": return CommandReport(gm, ui);
+            case "collect":
+                // #37: what the checklist shows and how many pins are on the map; "checklist" toggles the panel.
+                if (a.Length > 1 && a[1] == "checklist") HollowKnightPatches.Lower.HkMapScreen.RequestChecklistToggle = true;
+                return "collect " + HollowKnightPatches.Lower.HkMapScreen.ChecklistReport() +
+                       " pins=" + HollowKnightPatches.Lower.HkMapView.LastPinsShown;
             case "state": return CommandState(gm, ui);
             case "pause":
                 if (gm == null) return "error no GameManager";
