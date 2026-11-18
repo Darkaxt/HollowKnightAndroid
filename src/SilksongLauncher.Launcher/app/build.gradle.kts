@@ -248,11 +248,31 @@ val fetchMonoRuntime by tasks.registering {
         // unpacks far enough to look fine and fails much later.
         val have = file.isFile && sha256Of(file) == monoSha256
         if (!have) {
-            val url = "https://globalcdn.nuget.org/packages/$pkg.$monoVersion.nupkg"
+            // Two NuGet hosts, a few attempts each: a CI runner once failed the
+            // whole release on a transient DNS miss for the CDN (#46). The hash
+            // check below makes either source equally trustworthy.
+            val urls = listOf(
+                "https://globalcdn.nuget.org/packages/$pkg.$monoVersion.nupkg",
+                "https://api.nuget.org/v3-flatcontainer/$pkg/$monoVersion/$pkg.$monoVersion.nupkg",
+            )
             logger.lifecycle("mono runtime: downloading $monoVersion")
-            uri(url).toURL().openStream().use { input ->
-                file.outputStream().use { input.copyTo(it) }
+            var last: Exception? = null
+            download@ for (attempt in 0 until 3) {
+                for (url in urls) {
+                    try {
+                        uri(url).toURL().openStream().use { input ->
+                            file.outputStream().use { input.copyTo(it) }
+                        }
+                        last = null
+                        break@download
+                    } catch (e: java.io.IOException) {
+                        last = e
+                        logger.warn("mono runtime: $url failed (${e.javaClass.simpleName}: ${e.message})")
+                    }
+                }
+                if (attempt < 2) Thread.sleep(5000L shl attempt)
             }
+            if (last != null) throw GradleException("mono runtime $monoVersion download failed", last)
             val got = sha256Of(file)
             if (got != monoSha256) {
                 file.delete()
