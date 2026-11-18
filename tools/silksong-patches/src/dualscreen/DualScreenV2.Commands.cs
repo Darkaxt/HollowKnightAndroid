@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | delivery <list|give <name>|hit|break|state> | crest [tools <type>|equip <slot> <tool>|unlock <tool>] | inv [fsm|next <pane>|send <event>|tools] | fsm find <text> | fsm show|send|set|goto <object>|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | sprites | assists | collect [checklist]";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | delivery <list|give <name>|hit|break|state> | crest [tools <type>|equip <slot> <tool>|unlock <tool>] | inv [fsm|next <pane>|send <event>|tools] | fsm find <text> | fsm show|send|set|goto <object>[#n]|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | sprites | assists | collect [checklist]";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -190,7 +190,7 @@ public partial class DualScreenV2
     static string CommandFsm(string line)
     {
         string[] words = line.Split((char[])null, 3, StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length < 3) return "error fsm find <text> | fsm show|send|set|goto <object>|<fsm>|...";
+        if (words.Length < 3) return "error fsm find <text> | fsm show|send|set|goto <object>[#n]|<fsm>|...";
         string sub = words[1].ToLowerInvariant();
         var all = Resources.FindObjectsOfTypeAll<PlayMakerFSM>();
         if (sub == "find")
@@ -198,13 +198,18 @@ public partial class DualScreenV2
             string text = words[2].Trim();
             var sb = new StringBuilder();
             int shown = 0;
+            var seen = new System.Collections.Generic.Dictionary<string, int>();
             foreach (var f in all)
             {
                 if (f == null || !f.gameObject.scene.IsValid()) continue;
                 if (f.gameObject.name.IndexOf(text, StringComparison.OrdinalIgnoreCase) < 0
                     && f.FsmName.IndexOf(text, StringComparison.OrdinalIgnoreCase) < 0) continue;
                 if (++shown > 60) { sb.Append("...\n"); break; }
-                sb.Append(f.gameObject.name).Append('|').Append(f.FsmName).Append(" state=").Append(f.ActiveStateName)
+                // #n is the 1-based position that `show|send|set|goto <object>#n|<fsm>` selects.
+                string key = f.gameObject.name + "|" + f.FsmName;
+                int n;
+                seen[key] = n = (seen.TryGetValue(key, out n) ? n : 0) + 1;
+                sb.Append(f.gameObject.name).Append('#').Append(n).Append('|').Append(f.FsmName).Append(" state=").Append(f.ActiveStateName)
                   .Append(f.gameObject.activeInHierarchy ? "" : " inactive").Append(" scene=").Append(f.gameObject.scene.name).Append('\n');
             }
             return shown == 0 ? "none" : sb.ToString().TrimEnd();
@@ -212,12 +217,17 @@ public partial class DualScreenV2
         string[] p = words[2].Split('|');
         if (p.Length < 2) return "error expected <object>|<fsm>";
         PlayMakerFSM fsm = null;
-        int matches = 0;
+        int matches = 0, pick;
+        string objectName = p[0].Trim();
+        int hash = objectName.LastIndexOf('#');
+        if (hash > 0 && int.TryParse(objectName.Substring(hash + 1), out pick) && pick > 0) objectName = objectName.Substring(0, hash);
+        else pick = 0;
         foreach (var f in all)
         {
-            if (f == null || !f.gameObject.scene.IsValid() || f.gameObject.name != p[0].Trim() || f.FsmName != p[1].Trim()) continue;
+            if (f == null || !f.gameObject.scene.IsValid() || f.gameObject.name != objectName || f.FsmName != p[1].Trim()) continue;
             matches++;
-            if (fsm == null || (!fsm.gameObject.activeInHierarchy && f.gameObject.activeInHierarchy)) fsm = f;
+            if (pick > 0) { if (matches == pick) fsm = f; }
+            else if (fsm == null || (!fsm.gameObject.activeInHierarchy && f.gameObject.activeInHierarchy)) fsm = f;
         }
         if (fsm == null) return "error no FSM " + p[0] + "|" + p[1];
         string arg = p.Length > 2 ? p[2].Trim() : "";
