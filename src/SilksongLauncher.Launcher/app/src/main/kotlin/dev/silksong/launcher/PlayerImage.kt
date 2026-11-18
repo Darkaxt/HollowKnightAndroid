@@ -223,6 +223,22 @@ object PlayerImage {
     private fun contentStampFile(root: File) = File(root, "content.stamp")
 
     /**
+     * The same stamp, kept beside the bundles it describes.
+     *
+     * The copy under the build root goes with the app's data, so a reinstall
+     * re-opened all two thousand bundles to learn they were already Android
+     * ones: 62 s on an Ayn Thor, every fresh install, for nothing. The bundles
+     * themselves were rewritten in place and stayed retargeted. A marker in
+     * their own folder survives with them, and it can only match a tree that
+     * still has exactly the count, size and newest timestamp it recorded.
+     * Only .bundle files enter the stamp, so the marker never changes it.
+     */
+    private fun depotStampFile(aa: File) = File(aa, ".dualsouls-retargeted")
+
+    private fun stampMatches(file: File, stamp: String): Boolean =
+        try { file.isFile && file.readText() == stamp } catch (_: IOException) { false }
+
+    /**
      * Forgets that the content tree was retargeted.
      *
      * For when the depot moves to a folder this app has not seen before. The
@@ -842,8 +858,11 @@ object PlayerImage {
 
         // Nothing a patch edit does can reach the content tree, and this step
         // is minutes of opening bundles to conclude exactly that.
-        if (contentStampFile(root).takeIf { it.isFile }?.readText() == contentStamp(aa)) {
-            LauncherLog.log("content is already retargeted; skipping")
+        val current = contentStamp(aa)
+        val known = stampMatches(contentStampFile(root), current)
+        if (known || stampMatches(depotStampFile(aa), current)) {
+            if (!known) contentStampFile(root).writeText(current)
+            LauncherLog.log("content is already retargeted (${if (known) "build stamp" else "depot marker"}); skipping")
             send(Progress("Content ready", 1f, "already retargeted"))
             return@channelFlow
         }
@@ -924,7 +943,12 @@ object PlayerImage {
         // Recomputed rather than reused: the run just rewrote these files, so
         // the stamp that identifies "already retargeted" is the state they are
         // in now, not the state they were in when the run started.
-        contentStampFile(root).writeText(contentStamp(aa))
+        val done = contentStamp(aa)
+        contentStampFile(root).writeText(done)
+        // Best effort: a depot this app cannot write to just keeps the old cost.
+        try { depotStampFile(aa).writeText(done) } catch (e: IOException) {
+            LauncherLog.log("could not mark the depot as retargeted: ${e.message}")
+        }
         send(Progress("Content ready", 1f, "$total bundles"))
     }.flowOn(Dispatchers.IO)
 

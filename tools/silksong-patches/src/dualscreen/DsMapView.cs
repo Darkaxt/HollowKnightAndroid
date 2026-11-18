@@ -73,6 +73,12 @@ public class DsMapView
 
     Vector2 _pan;
     float _zoom = 1f;
+    // #45: a flick keeps the map gliding, and RESET eases back rather than
+    // jumping, as Hollow Knight's lower map already does.
+    Vector2 _fling;
+    float _resetT = 1f, _resetZoom = 1f;
+    Vector2 _resetPan;
+    const float ResetSeconds = 0.35f;
     public const float MinZoom = 0.25f;
     public const float MaxZoom = 6f;
     float _mapUnitsPerPixel = 0.01f;
@@ -322,6 +328,7 @@ public class DsMapView
         if (Mode == Frame.World && !GameMapShowing) HideNextAreaArrows();
 
         _cleared = false;
+        Animate(Time.unscaledDeltaTime);
         Aim();
         Diagnose();
         return true;
@@ -1692,8 +1699,15 @@ public class DsMapView
     {
         // Dragging the map right should move the map right, so the camera goes
         // left. Panel y is up and world y is up, so neither axis needs flipping.
+        _resetT = 1f;
         _pan -= panelDelta * _mapUnitsPerPixel;
     }
+
+    /// <summary>A flick: keep panning at this panel velocity, easing to a stop.</summary>
+    public void Fling(Vector2 panelVelocity) { _resetT = 1f; _fling = panelVelocity; }
+
+    /// <summary>A finger came down: stop any glide or reset in progress.</summary>
+    public void StopMotion() { _fling = Vector2.zero; _resetT = 1f; }
 
     /// <summary>
     /// Pinch. A factor above 1 spreads the fingers, which means zoom in.
@@ -1703,11 +1717,39 @@ public class DsMapView
     /// player zoom to a single room's worth of parchment or to a dot in the
     /// middle of nothing are both ways of losing the map with no obvious way
     /// back.
+    ///
+    /// <paramref name="fromCentre"/> is the pinch point's offset from the
+    /// panel's centre, in panel pixels: the part of the map under the fingers
+    /// stays under them.
     /// </summary>
-    public void Zoom(float factor)
+    public void Zoom(float factor, Vector2 fromCentre)
     {
         if (factor <= 0f || float.IsNaN(factor)) return;
+        _resetT = 1f;
+        float old = _zoom;
         _zoom = Mathf.Clamp(_zoom * factor, MinZoom, MaxZoom);
+        float f = _zoom / old;
+        if (Mathf.Abs(f - 1f) < 1e-5f) return;
+        _pan += fromCentre * (_mapUnitsPerPixel - _mapUnitsPerPixel / f);
+        _mapUnitsPerPixel /= f;   // until the next Aim, so a second pinch event this frame composes
+    }
+
+    void Animate(float dt)
+    {
+        if (_resetT < 1f)
+        {
+            _resetT = Mathf.Min(1f, _resetT + dt / ResetSeconds);
+            float k = 1f - Mathf.Pow(1f - _resetT, 3f);
+            _zoom = Mathf.Lerp(_resetZoom, 1f, k);
+            _pan = Vector2.Lerp(_resetPan, Vector2.zero, k);
+            if (_resetT >= 1f) { _zoom = 1f; _pan = Vector2.zero; }
+        }
+        if (_fling.sqrMagnitude > 0f)
+        {
+            _pan -= _fling * dt * _mapUnitsPerPixel;
+            _fling *= Mathf.Exp(-5f * dt);
+            if (_fling.sqrMagnitude < 900f) _fling = Vector2.zero;
+        }
     }
 
     /// <summary>The zoom the player has chosen on top of the framing. 1 is none.</summary>
@@ -1755,7 +1797,32 @@ public class DsMapView
             Debug.Log("[DsMap] ResetView (pan was " + _pan + ", zoom " + _zoom.ToString("F2") + ")");
         _pan = Vector2.zero;
         _zoom = 1f;
+        _fling = Vector2.zero;
+        _resetT = 1f;
         _worldLatched = false;
+    }
+
+    /// <summary>
+    /// RESET as the player sees it: ease back to the framing this mode opens at
+    /// rather than cutting to it. In the full map the new framing is Hornet
+    /// where she is now, so the latch moves first and the pan that keeps the
+    /// current view in place is what eases out.
+    /// </summary>
+    public void ResetAnimated()
+    {
+        _fling = Vector2.zero;
+        if (Mode == Frame.World && _worldLatched && _map != null)
+        {
+            Vector3 next = WorldCentreLocal();
+            float scale = Mathf.Abs(_map.transform.lossyScale.y);
+            if (scale < 1e-4f || float.IsNaN(scale)) scale = 1f;
+            Vector3 shift = _map.transform.TransformPoint(_worldCentreLocal) - _map.transform.TransformPoint(next);
+            _worldCentreLocal = next;
+            _pan += new Vector2(shift.x, shift.y) / scale;
+        }
+        _resetZoom = _zoom;
+        _resetPan = _pan;
+        _resetT = 0f;
     }
 
     /// <summary>

@@ -140,6 +140,10 @@ public partial class SilksongGameplayPerformanceTests
         actions.Clear(); map.CollectActions(actions); var reset = actions.Find(a => a.Label == "RESET"); Assert.NotNull(reset.Invoke);
         Time.unscaledTime += 3.3f; actions.Clear(); map.CollectActions(actions);
         var faded = actions.Find(a => a.Label == "RESET"); Assert.Same(reset.Invoke, faded.Invoke); Assert.InRange(faded.Alpha, .49f, .51f);
-        reset.Invoke(); Assert.False(view.ViewMoved);
+        // #45: RESET eases back over ResetSeconds, as on Hollow Knight, rather than snapping.
+        reset.Invoke(); Assert.True(view.ViewMoved);
+        var animate = typeof(DsMapView).GetMethod("Animate", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        for (int i = 0; i < 30; i++) animate.Invoke(view, new object[] { .016f });
+        Assert.False(view.ViewMoved);
     }
 }

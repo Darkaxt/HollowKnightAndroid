@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die, hit <damage> [hp] [near] (refused on slot 1) | sprites | assists";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die, hit <damage> [hp] [near] (refused on slot 1) | hurt <n>, dash, travel <scene> <gate> (refused on slot 1) | sprites | assists";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -98,6 +98,9 @@ public partial class DualScreenV2
                 return DsQaReport.Fields(PlayerData.instance, names);
             case "die": return CommandDie(gm);
             case "hit": return CommandHit(a, gm);
+            case "hurt": return CommandHurt(a, gm);
+            case "dash": return CommandDash(gm);
+            case "travel": return CommandTravel(a, gm);
             case "sprites":
                 var skinRuntime = SilksongSkinRuntime.Current;
                 return skinRuntime != null ? skinRuntime.DescribeCollections() : "error no skin runtime";
@@ -162,6 +165,49 @@ public partial class DualScreenV2
         health.SetValue(pd, 1);
         return DsQaReport.Invoke(hero, hero, "TakeDamage", new object[] { hero.gameObject }, "CollisionSide.top", "HazardType.NON_HAZARD")
                + " " + DsQaReport.Fields(pd, "health");
+    }
+
+    // QA hooks for what injected input cannot reach (InControl ignores adb key events).
+    // hurt: non-lethal damage through the game's own TakeHealth, so the HUD follows.
+    string CommandHurt(string[] a, GameManager gm)
+    {
+        int amount;
+        if (a.Length < 2 || !int.TryParse(a[1], out amount) || amount <= 0) return "error hurt <amount>";
+        if (gm == null || gm.profileID == 1) return "error refused on slot 1 (player save); use a disposable slot";
+        var pd = PlayerData.instance;
+        if (pd == null) return "error no PlayerData";
+        pd.TakeHealth(Mathf.Min(amount, pd.health - 1), false, false);
+        return "ok " + DsQaReport.Fields(pd, "health", "maxHealth");
+    }
+
+    // dash: the hero's own dash start, as the dash button would trigger it.
+    string CommandDash(GameManager gm)
+    {
+        if (gm == null || gm.profileID == 1) return "error refused on slot 1 (player save); use a disposable slot";
+        var hero = HeroController.instance;
+        if (hero == null) return "error no HeroController";
+        if (!hero.CanDash()) return "error hero cannot dash now";
+        MethodInfo dash = typeof(HeroController).GetMethod("HeroDash", BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { typeof(bool) }, null);
+        if (dash == null) return "error no HeroController.HeroDash(bool)";
+        dash.Invoke(hero, new object[] { false });
+        return "ok " + DsQaReport.Fields(hero.cState, "dashing");
+    }
+
+    // travel: a normal scene transition through a named entrance.
+    string CommandTravel(string[] a, GameManager gm)
+    {
+        if (a.Length < 3) return "error travel <scene> <gate>";
+        if (gm == null || gm.profileID == 1) return "error refused on slot 1 (player save); use a disposable slot";
+        if (gm.GameState != GlobalEnums.GameState.PLAYING || gm.IsInSceneTransition) return "error not playing";
+        gm.BeginSceneTransition(new GameManager.SceneLoadInfo
+        {
+            SceneName = a[1],
+            EntryGateName = a[2],
+            PreventCameraFadeOut = false,
+            WaitForSceneTransitionCameraFade = true,
+            Visualization = GameManager.SceneLoadVisualizations.Default,
+        });
+        return "ok travelling to " + a[1] + " via " + a[2];
     }
 
     static DualSouls.Mods.TweakController ModsController()

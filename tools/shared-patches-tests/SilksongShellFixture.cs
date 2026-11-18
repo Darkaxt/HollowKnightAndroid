@@ -189,6 +189,7 @@ public partial class DsMapView
     Camera _rooms,_decor,_srcRooms,_srcDecor;bool _visible,_contentDark;float _settleUntil;
     Transform _compass;
     string _lastScene;
+    Vector3 _worldCentreLocal;public Vector3 NextWorldCentre;Vector3 WorldCentreLocal()=>NextWorldCentre;
     bool _zoneBoundsOk,_describedRig;
     int _lastDropped;
     MapNextAreaDisplay[] _arrows;

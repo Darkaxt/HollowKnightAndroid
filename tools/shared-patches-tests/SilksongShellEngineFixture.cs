@@ -27,6 +27,7 @@ public struct Vector3
     public Vector3(float x,float y,float z){this.x=x;this.y=y;this.z=z;}
     public static Vector3 one=>new(1,1,1); public static Vector3 zero=>new(0,0,0);
     public static Vector3 operator +(Vector3 a,Vector3 b)=>new(a.x+b.x,a.y+b.y,a.z+b.z);
+    public static Vector3 operator -(Vector3 a,Vector3 b)=>new(a.x-b.x,a.y-b.y,a.z-b.z);
 }
 public struct Bounds { public Vector3 center,size; public Bounds(Vector3 center,Vector3 size){this.center=center;this.size=size;} }
 // Identity/translation model only, not native transform/rotation proof.

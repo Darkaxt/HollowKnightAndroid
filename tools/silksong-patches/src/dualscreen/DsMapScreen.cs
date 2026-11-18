@@ -205,6 +205,7 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip,
     public void OnShow()
     {
         _view.ResetPan();
+        _view.StopMotion();
         _nextHeader = 0f;
     }
 
@@ -479,6 +480,7 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip,
 
         if (_state != State.Map) return;
 
+        if (g.Type == DsGestureType.Down) _view.StopMotion();
         if (SliderGesture(g, p)) return;
 
         // Any touch on the map counts as interaction, whether or not it moves
@@ -498,7 +500,11 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip,
                 break;
 
             case DsGestureType.Pinch:
-                if (_mapRect.Contains(p)) _view.Zoom(g.Scale);
+                if (_mapRect.Contains(p)) _view.Zoom(g.Scale, p - _mapRect.center);
+                break;
+
+            case DsGestureType.Fling:
+                if (_mapRect.Contains(p)) _view.Fling(g.Delta);
                 break;
         }
     }
@@ -712,7 +718,7 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip,
 
     void ResetView()
     {
-        _view.ResetView();
+        _view.ResetAnimated();
         _lastTouch = 0f;
     }
 

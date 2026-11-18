@@ -11,8 +11,8 @@ public partial class HKDualScreen
 {
     const string CommandHelp =
         "help | report | state | pause | mods | skins | skin <list|row N|left N|right N> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
-        "mods-list | mod <id> <value> | pd <field>... | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | save | quit-menu | fonts | hudfit | sprites <text> | assists\n" +
-        "geo, charm, die, hit and save refuse slot 1 (the player's own save); use a disposable slot.";
+        "mods-list | mod <id> <value> | pd <field>... | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | dash | travel <scene> <gate> | save | quit-menu | fonts | hudfit | sprites <text> | assists\n" +
+        "geo, charm, die, hit, hurt, dash, travel and save refuse slot 1 (the player's own save); use a disposable slot.";
 
     // QA: one hero nail hit on the nearest live enemy through HealthManager.Hit, as a slash
     // would land. The optional hp first sets the target's health, e.g. above the boss threshold.
@@ -106,6 +106,9 @@ public partial class HKDualScreen
                 return "ok geo=" + (PlayerData.instance != null ? PlayerData.instance.geo : -1);
             }
             case "hit": return CommandHit(a, gm);
+            case "hurt": return CommandHurt(a, gm);
+            case "dash": return CommandDash(gm);
+            case "travel": return CommandTravel(a, gm);
             case "die":
             {
                 // QA: one lethal hit through the game's own damage path, so death rotation runs for real.
@@ -207,6 +210,54 @@ public partial class HKDualScreen
     }
 
     // QA commands that change the save refuse slot 1, which holds the player's own game.
+    // QA hooks for what injected input cannot reach. hurt: non-lethal damage
+    // through the game's own TakeHealth, so the HUD follows.
+    static string CommandHurt(string[] a, GameManager gm)
+    {
+        int amount;
+        if (a.Length < 2 || !int.TryParse(a[1], out amount) || amount <= 0) return "error hurt <amount>";
+        string guard = SaveSlotGuard(gm);
+        if (guard != null) return guard;
+        var pd = PlayerData.instance;
+        if (pd == null) return "error no PlayerData";
+        pd.TakeHealth(Mathf.Min(amount, pd.health - 1));
+        return "ok " + DsQaReport.Fields(pd, "health", "maxHealth");
+    }
+
+    // dash: the hero's own dash start, as the dash button would trigger it.
+    static string CommandDash(GameManager gm)
+    {
+        string guard = SaveSlotGuard(gm);
+        if (guard != null) return guard;
+        var hero = HeroController.instance;
+        if (hero == null) return "error no HeroController";
+        const BindingFlags Private = BindingFlags.NonPublic | BindingFlags.Instance;
+        MethodInfo canDash = typeof(HeroController).GetMethod("CanDash", Private, null, Type.EmptyTypes, null);
+        MethodInfo dash = typeof(HeroController).GetMethod("HeroDash", Private, null, Type.EmptyTypes, null);
+        if (canDash == null || dash == null) return "error no HeroController.CanDash/HeroDash";
+        if (!(bool)canDash.Invoke(hero, null)) return "error hero cannot dash now";
+        dash.Invoke(hero, null);
+        return "ok " + DsQaReport.Fields(hero.cState, "dashing");
+    }
+
+    // travel: a normal scene transition through a named entrance.
+    static string CommandTravel(string[] a, GameManager gm)
+    {
+        if (a.Length < 3) return "error travel <scene> <gate>";
+        string guard = SaveSlotGuard(gm);
+        if (guard != null) return guard;
+        if (gm.gameState != GlobalEnums.GameState.PLAYING || gm.IsInSceneTransition) return "error not playing";
+        gm.BeginSceneTransition(new GameManager.SceneLoadInfo
+        {
+            SceneName = a[1],
+            EntryGateName = a[2],
+            PreventCameraFadeOut = false,
+            WaitForSceneTransitionCameraFade = true,
+            Visualization = GameManager.SceneLoadVisualizations.Default,
+        });
+        return "ok travelling to " + a[1] + " via " + a[2];
+    }
+
     static string SaveSlotGuard(GameManager gm)
     {
         if (gm == null) return "error no GameManager";
