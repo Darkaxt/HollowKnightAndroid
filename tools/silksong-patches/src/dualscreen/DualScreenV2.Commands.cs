@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool field> <true|false> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | sprites | assists | collect [checklist]";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool field> <true|false> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | delivery <list|give <name>|hit|break|state> | sprites | assists | collect [checklist]";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -114,6 +114,7 @@ public partial class DualScreenV2
             case "hurt": return CommandHurt(a, gm);
             case "dash": return CommandDash(gm);
             case "travel": return CommandTravel(a, gm);
+            case "delivery": return CommandDelivery(a, gm);
             case "sprites":
                 var skinRuntime = SilksongSkinRuntime.Current;
                 return skinRuntime != null ? skinRuntime.DescribeCollections() : "error no skin runtime";
@@ -161,6 +162,87 @@ public partial class DualScreenV2
         sb.Append(DsQaReport.Frames()).Append('\n');
         sb.Append(DsQaReport.Errors());
         return sb.ToString();
+    }
+
+    // #39 QA on a disposable save: start a courier delivery, hurt Hornet through the game's own
+    // damage path, and make the static DeliveryQuestItem.BreakAll call that the Bellway and
+    // Ventrica arrival FSMs make. Each reply ends with the active delivery items.
+    string CommandDelivery(string[] a, GameManager gm)
+    {
+        if (a.Length < 2) return "error delivery <list|give <name>|hit|break|state>";
+        if (gm == null) return "error no GameManager";
+        var hero = HeroController.SilentInstance;
+        string result;
+        switch (a[1])
+        {
+            case "list":
+            {
+                var sb = new StringBuilder("ok");
+                foreach (BasicQuestBase basic in QuestManager.GetAllQuests())
+                {
+                    var quest = basic as FullQuestBase;
+                    if (quest == null) continue;
+                    foreach (FullQuestBase.QuestTarget target in quest.Targets)
+                        if (target.Counter is DeliveryQuestItem)
+                            sb.Append(' ').Append(quest.name).Append(':').Append(target.Counter.name).Append('x').Append(target.Count)
+                              .Append(quest.IsAccepted ? (quest.IsCompleted ? "(done)" : "(active)") : "");
+                }
+                foreach (DeliveryQuestItemStandalone item in Resources.FindObjectsOfTypeAll<DeliveryQuestItemStandalone>())
+                    sb.Append(" standalone:").Append(item.name).Append('x').Append(item.TargetCount);
+                return sb.ToString();
+            }
+            case "give":
+            {
+                if (a.Length != 3) return "error delivery give <quest or standalone item name>";
+                result = null;
+                foreach (BasicQuestBase basic in QuestManager.GetAllQuests())
+                {
+                    var quest = basic as FullQuestBase;
+                    if (quest == null || quest.name != a[2]) continue;
+                    foreach (FullQuestBase.QuestTarget target in quest.Targets)
+                    {
+                        var item = target.Counter as DeliveryQuestItem;
+                        if (item == null) continue;
+                        quest.BeginQuest(null, false);
+                        item.Collect(target.Count, false);
+                        result = "ok began " + quest.name + " with " + item.name + "x" + target.Count;
+                        break;
+                    }
+                    break;
+                }
+                if (result == null)
+                    foreach (DeliveryQuestItemStandalone item in Resources.FindObjectsOfTypeAll<DeliveryQuestItemStandalone>())
+                    {
+                        if (item.name != a[2]) continue;
+                        item.Collect(item.TargetCount, false);
+                        result = "ok collected " + item.name + "x" + item.TargetCount;
+                        break;
+                    }
+                if (result == null) return "error no delivery quest or standalone item " + a[2];
+                break;
+            }
+            case "hit":
+            {
+                if (hero == null) return "error no HeroController";
+                var pd = PlayerData.instance;
+                int before = pd.health;
+                hero.TakeDamage(hero.gameObject, GlobalEnums.CollisionSide.left, 1, GlobalEnums.HazardType.ENEMY);
+                result = "ok health=" + before + "->" + pd.health;
+                break;
+            }
+            case "break":
+                DeliveryQuestItem.BreakAll();
+                result = "ok BreakAll";
+                break;
+            case "state":
+                result = "ok";
+                break;
+            default: return "error delivery <list|give <name>|hit|break|state>";
+        }
+        var items = new StringBuilder();
+        foreach (DeliveryQuestItem.ActiveItem active in DeliveryQuestItem.GetActiveItems())
+            items.Append(' ').Append(active.Item.name).Append('=').Append(active.CurrentCount).Append('/').Append(active.MaxCount);
+        return result + " | active:" + (items.Length == 0 ? " none" : items.ToString()) + " | " + SilksongGameplayHooks.DeliveryReport();
     }
 
     // QA: one lethal hit through the game's own damage path, so death rotation runs for real.

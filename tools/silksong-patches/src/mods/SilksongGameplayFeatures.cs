@@ -793,7 +793,36 @@ namespace DualSouls.Mods.Silksong
             EnemyJournalKillData.KillData data = PlayerData.instance.EnemyJournalKillData.GetKillData(record.name);
             if (data.Kills < record.KillsRequired) { data.Kills = record.KillsRequired - 1; PlayerData.instance.EnemyJournalKillData.RecordKillData(record.name, data); }
         }
-        public static void BeforeHeroDeath(bool nonLethal) { if (KeepRosariesEnabled && !nonLethal) deathObserved = true; }
+        public static void BeforeHeroDeath(bool nonLethal)
+        {
+            if (KeepRosariesEnabled && !nonLethal) deathObserved = true;
+            // HeroController.Die calls DeliveryQuestItem.BreakAll first thing: a death still breaks deliveries.
+            deliveryDeathPending = true;
+        }
+
+        // #39 Easy Deliveries (Nexus mod 53 behaviour): hits no longer chip delivery items, and the
+        // scripted BreakAll/BreakAllNoEffects calls (Bellway and Ventrica arrival, flea caravan travel,
+        // CriticalDamage, lava) leave them whole. Death and the courier timer stay vanilla.
+        public static bool EasyDeliveriesEnabled { get; set; }
+        static bool deliveryDeathPending;
+        public static int DeliveryHitsKept { get; private set; }
+        public static int DeliveryBreaksKept { get; private set; }
+        public static void BeforeDeliveryHit(ref int hits)
+        {
+            if (!EasyDeliveriesEnabled || hits <= 0) return;
+            hits = 0; DeliveryHitsKept++;
+        }
+        public static bool ShouldKeepDeliveries()
+        {
+            bool death = deliveryDeathPending; deliveryDeathPending = false;
+            if (!EasyDeliveriesEnabled || death) return false;
+            DeliveryBreaksKept++;
+            return true;
+        }
+        public static string DeliveryReport()
+        {
+            return "easyDeliveries=" + EasyDeliveriesEnabled + " hitsKept=" + DeliveryHitsKept + " breaksKept=" + DeliveryBreaksKept;
+        }
         public static bool DeathObserved { get { return deathObserved; } }
         public static void CompleteDeathHandling() { deathObserved = false; }
         public static void BeforeToolReplenishCost(ref float cost)
@@ -841,7 +870,7 @@ namespace DualSouls.Mods.Silksong
         }
         public static void Reset()
         {
-            NeedleMultiplier = 1; AllDamageMultiplier = 1; DamageCapEnabled = false; InnateCompassEnabled = false; JournalOneKillEnabled = false; ToolCostsFreeEnabled = false; KeepRosariesEnabled = false; RosaryMultiplier = 1; deathObserved = false;
+            NeedleMultiplier = 1; AllDamageMultiplier = 1; DamageCapEnabled = false; InnateCompassEnabled = false; JournalOneKillEnabled = false; ToolCostsFreeEnabled = false; KeepRosariesEnabled = false; RosaryMultiplier = 1; deathObserved = false; EasyDeliveriesEnabled = false; deliveryDeathPending = false;
         }
     }
 }

@@ -130,6 +130,7 @@ namespace DualSouls.Mods.Silksong
             Cheat("all_damage", TweakControlKind.Choice, "COMBAT", "ALL DAMAGE", "Multiply every hit you deal, spells and tools included. Stacks with Needle damage.", "off", "off", "x2", "x3", "x5", "x10"),
             Cheat("health_regen", TweakControlKind.Choice, "ASSISTS", "HEALTH REGENERATION", "Restore one mask after a few seconds without taking damage.", "off", "off", "slow", "fast"),
             Cheat("dash_invincibility", TweakControlKind.Choice, "ASSISTS", "DASH INVINCIBILITY", "Dashing passes through enemies and attacks, like Hollow Knight's Shade Cloak.", "off", "off", "on"),
+            Cheat("easy_deliveries", TweakControlKind.Choice, "ASSISTS", "EASY DELIVERIES", "Delivery items survive hits and fast travel. Dying still breaks them, and timed deliveries keep their timer.", "off", "off", "on"),
 
             Row("health_bars", "enemy_health_bars", TweakControlKind.Choice, "ENCOUNTERS", "ENEMY HEALTH BARS", "Show a health bar over each enemy you hit. Bosses use BOSS HEALTH BARS.", "off", "off", "on"),
             Cheat("boss_health_bars", TweakControlKind.Choice, "ENCOUNTERS", "BOSS HEALTH BARS", "Show the name and health of bosses you hit in a bar along the bottom of the screen.", "off", "off", "on"),

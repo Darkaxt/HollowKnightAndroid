@@ -740,6 +740,9 @@ internal static class Program
                 ("GameMap", "UpdateGameMap", "BeginAuthoritativeMapUpdate"),
                 ("GameMap", "UpdateGameMap", "EndAuthoritativeMapUpdate"),
                 ("InventoryToolCrestSlot", "set_SaveData", "BeforeAuthoritativeCrestSlotSet"),
+                ("DeliveryQuestItem", "TakeHit", "BeforeDeliveryHit"),
+                ("DeliveryQuestItem", "BreakAll", "ShouldKeepDeliveries"),
+                ("DeliveryQuestItem", "BreakAllNoEffects", "ShouldKeepDeliveries"),
             })
             {
                 var target = rewritten.MainModule.GetType(expected.Item1).Methods.Single(m => m.Name == expected.Item2);
@@ -997,6 +1000,10 @@ internal static class Program
         var crestSlot = Class("InventoryToolCrestSlot");
         Ret(Method(crestSlot, "set_SaveData", game.TypeSystem.Void, false,
             ("value", slotData)));
+        var deliveryItem = Class("DeliveryQuestItem");
+        Ret(Method(deliveryItem, "TakeHit", game.TypeSystem.Void, true, ("hits", game.TypeSystem.Int32)));
+        Ret(Method(deliveryItem, "BreakAll", game.TypeSystem.Void, true));
+        Ret(Method(deliveryItem, "BreakAllNoEffects", game.TypeSystem.Void, true));
         var health = Class("HealthManager");
         Ret(Method(health, "Hit", hitResponse, false, ("hit", hitInstance)));
         var hero = Class("HeroController");
@@ -1119,6 +1126,9 @@ internal static class Program
         AddHook("BeforeAuthoritativeCrestSlotSet", patches.MainModule.TypeSystem.Void,
             ("slot", patches.MainModule.ImportReference(crestSlot)),
             ("value", patches.MainModule.ImportReference(slotData)));
+        AddHook("BeforeDeliveryHit", patches.MainModule.TypeSystem.Void,
+            ("hits", new ByReferenceType(patches.MainModule.TypeSystem.Int32)));
+        AddHook("ShouldKeepDeliveries", patches.MainModule.TypeSystem.Boolean);
         InstrumentGrantHook("BeginAuthoritativeSilkGrant", begin: true);
         InstrumentGrantHook("EndAuthoritativeSilkGrant", begin: false);
         InstrumentGrantHook("BeginAuthoritativeSilkPartsGrant", begin: true);

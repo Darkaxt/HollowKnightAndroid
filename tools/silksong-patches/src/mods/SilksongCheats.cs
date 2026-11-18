@@ -105,7 +105,7 @@ namespace DualSouls.Mods.Silksong
 
         public bool IsChoice(string id) =>
             id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "all_damage" ||
-            id == "infinite_tools" || id == "health_regen" || id == "dash_invincibility" || id == "rebirth_in_scene" ||
+            id == "infinite_tools" || id == "health_regen" || id == "dash_invincibility" || id == "rebirth_in_scene" || id == "easy_deliveries" ||
             id == HeroTint.Id || id == HeroTint.SceneId || id == SilksongItemPickers.AmountId || id == CombatOverlay.BossBarsId || id.StartsWith("active_", StringComparison.Ordinal);
 
         public void SetChoice(string id, string value)
@@ -153,6 +153,9 @@ namespace DualSouls.Mods.Silksong
                     break;
                 case "rebirth_in_scene":
                     SilksongGameplayFeatures.RebirthEnabled = value == "on";
+                    break;
+                case "easy_deliveries":
+                    SilksongGameplayHooks.EasyDeliveriesEnabled = value == "on";
                     break;
                 default:
                     SetActiveTool(id, value == "on");
@@ -228,6 +231,7 @@ namespace DualSouls.Mods.Silksong
             _dashInvincible = false;
             MaintainDashInvincibility();
             SilksongGameplayFeatures.RebirthEnabled = false;
+            SilksongGameplayHooks.EasyDeliveriesEnabled = false;
             _tint.Set("off");
             _tint.SetScene(false);
             _pickers.RestoreAll();

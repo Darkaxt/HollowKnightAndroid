@@ -514,6 +514,10 @@ internal static class Builtin
             throw new InvalidOperationException("Silksong HeroController.playerData field is missing or ambiguous");
         var updateMap = Exact(gameMap, "UpdateGameMap", false, "System.Boolean");
         var setCrestSlot = Exact(crestSlot, "set_SaveData", false, "System.Void", "ToolCrestsData/SlotData");
+        var delivery = Type("DeliveryQuestItem");
+        var deliveryHit = Exact(delivery, "TakeHit", true, "System.Void", "System.Int32");
+        var deliveryBreakAll = Exact(delivery, "BreakAll", true, "System.Void");
+        var deliveryBreakQuiet = Exact(delivery, "BreakAllNoEffects", true, "System.Void");
 
         var beforeHit = Hook("BeforeEnemyHit", "System.Void", "HealthManager", "HitInstance&");
         var beforeDamage = Hook("BeforeHeroDamage", "System.Void", "System.Int32&");
@@ -533,6 +537,8 @@ internal static class Builtin
         var endMapUpdate = Hook("EndAuthoritativeMapUpdate", "System.Void");
         var authoritativeCrestSlot = Hook("BeforeAuthoritativeCrestSlotSet", "System.Void",
             "InventoryToolCrestSlot", "ToolCrestsData/SlotData");
+        var beforeDeliveryHit = Hook("BeforeDeliveryHit", "System.Void", "System.Int32&");
+        var keepDeliveries = Hook("ShouldKeepDeliveries", "System.Boolean");
 
         int mapReturnCount = updateMap.Body.Instructions.Count(i => i.OpCode == OpCodes.Ret);
         if (mapReturnCount == 0)
@@ -552,6 +558,8 @@ internal static class Builtin
             (addSilkParts, beginSilkPartsGrant, 1), (addSilkParts, endSilkPartsGrant, 1),
             (updateMap, beginMapUpdate, 1), (updateMap, endMapUpdate, 1),
             (setCrestSlot, authoritativeCrestSlot, 1),
+            (deliveryHit, beforeDeliveryHit, 1),
+            (deliveryBreakAll, keepDeliveries, 1), (deliveryBreakQuiet, keepDeliveries, 1),
         };
         int CallCount(MethodDefinition target, MethodDefinition hook) => target.Body.Instructions.Count(i =>
             i.OpCode == OpCodes.Call && i.Operand is MethodReference called &&
@@ -683,6 +691,17 @@ internal static class Builtin
             Instruction.Create(OpCodes.Ldarg_0),
             Instruction.Create(OpCodes.Ldarg, setCrestSlot.Parameters[0]));
 
+        Prefix(deliveryHit, beforeDeliveryHit,
+            Instruction.Create(OpCodes.Ldarga, deliveryHit.Parameters[0]));
+        // #39: `if (ShouldKeepDeliveries()) return;` ahead of the stock BreakAll bodies.
+        foreach (var breaker in new[] { deliveryBreakAll, deliveryBreakQuiet })
+        {
+            var processor = breaker.Body.GetILProcessor();
+            var first = breaker.Body.Instructions[0];
+            processor.InsertBefore(first, processor.Create(OpCodes.Call, module.ImportReference(keepDeliveries)));
+            processor.InsertBefore(first, processor.Create(OpCodes.Brfalse, first));
+            processor.InsertBefore(first, processor.Create(OpCodes.Ret));
+        }
         {
             var processor = isEquipped.Body.GetILProcessor();
             var first = isEquipped.Body.Instructions[0];
@@ -701,7 +720,7 @@ internal static class Builtin
             processor.InsertAfter(load, processor.Create(OpCodes.Call, module.ImportReference(freeCost)));
         }
 
-        notes.Add("Silksong gameplay hooks: needle, damage cap, Silk grants, compass, tool costs, Rosaries, journal, and death handling woven");
+        notes.Add("Silksong gameplay hooks: needle, damage cap, Silk grants, compass, tool costs, Rosaries, journal, deliveries, and death handling woven");
         return true;
     }
 
