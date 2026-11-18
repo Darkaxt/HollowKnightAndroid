@@ -124,6 +124,20 @@ public static class DsQaReport
         return sb.ToString();
     }
 
+    /// <summary>QA: set a public bool field of <paramref name="target"/> (e.g. a map flag on a disposable save).</summary>
+    public static string SetBool(object target, string name, string value)
+    {
+        if (target == null) return "error no target";
+        bool on;
+        if (value == "true" || value == "on" || value == "1") on = true;
+        else if (value == "false" || value == "off" || value == "0") on = false;
+        else return "error value must be true|false";
+        FieldInfo f = target.GetType().GetField(name, BindingFlags.Public | BindingFlags.Instance);
+        if (f == null || f.FieldType != typeof(bool)) return "error no bool field " + name;
+        f.SetValue(target, on);
+        return "ok " + Fields(target, name);
+    }
+
     static string Format(object value)
     {
         if (value == null) return "null";

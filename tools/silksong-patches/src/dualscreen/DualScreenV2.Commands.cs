@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | sprites | assists | collect [checklist]";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool field> <true|false> | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | sprites | assists | collect [checklist]";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -100,6 +100,9 @@ public partial class DualScreenV2
                 var names = new string[a.Length - 1];
                 Array.Copy(a, 1, names, 0, names.Length);
                 return DsQaReport.Fields(PlayerData.instance, names);
+            case "pdset":
+                if (a.Length != 3) return "error pdset <bool field> <true|false>";
+                return DsQaReport.SetBool(PlayerData.instance, a[1], a[2]);
             case "die": return CommandDie(gm);
             case "hit": return CommandHit(a, gm);
             case "hurt": return CommandHurt(a, gm);
