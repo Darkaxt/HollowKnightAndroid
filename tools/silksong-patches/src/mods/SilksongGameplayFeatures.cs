@@ -24,6 +24,11 @@ namespace DualSouls.Mods.Silksong
         static bool extraSlotsCaptured;
         static bool extraBlueBaseline;
         static bool extraYellowBaseline;
+        // #43: crest slot arrays as shipped, while UNLIMITED TOOL SLOTS adds its extra row.
+        static readonly Dictionary<ToolCrest, ToolCrest.SlotInfo[]> crestSlotOriginals = new Dictionary<ToolCrest, ToolCrest.SlotInfo[]>();
+        static FieldInfo crestSlotsField;
+        static bool toolSlotsTidy;
+        const int ExtraSlotsPerColour = 3;
         static readonly List<Transform> radarMarks = new List<Transform>();
         static Texture2D pixelTexture;
         static Sprite pixelSprite;
@@ -115,6 +120,7 @@ namespace DualSouls.Mods.Silksong
                 RestorePlayerOwned();
                 ResetBossRuntime();
                 owner = player;
+                toolSlotsTidy = false;
                 EnsureBenches(player.profileID);
             }
 
@@ -517,6 +523,7 @@ namespace DualSouls.Mods.Silksong
             if (!value.IsUnlocked || slot == null || slot.Crest == null || slot.Crest.CrestData == null) return;
             CrestBaseline baseline;
             if (!crestBaselines.TryGetValue(slot.Crest.CrestData.name, out baseline)) return;
+            if (slot.SlotIndex >= OriginalSlotCount(slot.Crest.CrestData)) return;
             int required = slot.SlotIndex + 1;
             if (required <= 0) return;
             if (baseline.Unlocked.Length < required) Array.Resize(ref baseline.Unlocked, required);
@@ -527,6 +534,8 @@ namespace DualSouls.Mods.Silksong
         static void MaintainToolSlots(PlayerData player, bool enabled)
         {
             if (!enabled) { RestoreToolSlots(player); return; }
+            toolSlotsTidy = false;
+            ExtendCrestSlots();
             bool changed = false;
             if (!extraSlotsCaptured)
             {
@@ -544,8 +553,10 @@ namespace DualSouls.Mods.Silksong
                 CrestBaseline baseline;
                 if (!crestBaselines.TryGetValue(crest.name, out baseline))
                 {
-                    baseline = new CrestBaseline { Count = data.Slots.Count, Unlocked = new bool[data.Slots.Count] };
-                    for (int i = 0; i < data.Slots.Count; i++) baseline.Unlocked[i] = data.Slots[i].IsUnlocked;
+                    // A save written with the row on already holds the extra entries; they are never baseline.
+                    int count = Math.Min(data.Slots.Count, OriginalSlotCount(crest));
+                    baseline = new CrestBaseline { Count = count, Unlocked = new bool[count] };
+                    for (int i = 0; i < count; i++) baseline.Unlocked[i] = data.Slots[i].IsUnlocked;
                     crestBaselines.Add(crest.name, baseline);
                 }
                 bool crestChanged = false;
@@ -569,8 +580,9 @@ namespace DualSouls.Mods.Silksong
         }
         static void RestoreToolSlots(PlayerData player)
         {
+            bool arraysRestored = RestoreCrestSlots();
             if (player == null) { crestBaselines.Clear(); extraSlotsCaptured = false; return; }
-            bool changed = crestBaselines.Count != 0 || extraSlotsCaptured;
+            bool changed = arraysRestored || crestBaselines.Count != 0 || extraSlotsCaptured;
             foreach (KeyValuePair<string, CrestBaseline> pair in crestBaselines)
             {
                 ToolCrest crest = ToolItemManager.GetCrestByName(pair.Key);
@@ -594,8 +606,181 @@ namespace DualSouls.Mods.Silksong
                 player.UnlockedExtraYellowSlot = extraYellowBaseline;
             }
             extraSlotsCaptured = false;
+            // Once per save with the row off: entries past a crest's shipped slots (a save written
+            // with the row on) are dropped, because IsToolEquipped reads every entry and would keep
+            // those tools acting.
+            List<ToolCrest> crests;
+            if (!toolSlotsTidy && ReferenceEquals(owner, player) && (crests = ToolItemManager.GetAllCrests()).Count != 0)
+            {
+                foreach (ToolCrest crest in crests)
+                {
+                    if (crest == null || crest.Slots == null) continue;
+                    ToolCrestsData.Data data = player.ToolEquips.GetData(crest.name);
+                    if (data.Slots == null || data.Slots.Count <= crest.Slots.Length) continue;
+                    data.Slots.RemoveRange(crest.Slots.Length, data.Slots.Count - crest.Slots.Length);
+                    player.ToolEquips.SetData(crest.name, data);
+                    changed = true;
+                }
+                toolSlotsTidy = true;
+            }
             if (changed && PlayerData.HasInstance && ReferenceEquals(PlayerData.instance, player))
                 ToolItemManager.SendEquippedChangedEvent(true);
+        }
+
+        static int OriginalSlotCount(ToolCrest crest)
+        {
+            ToolCrest.SlotInfo[] original;
+            if (crestSlotOriginals.TryGetValue(crest, out original)) return original.Length;
+            return crest.Slots != null ? crest.Slots.Length : 0;
+        }
+
+        // #43: a row of blue and yellow slots under every crest. The crest assets change only in
+        // memory; the shipped arrays come back when the row is turned off.
+        static void ExtendCrestSlots()
+        {
+            if (crestSlotOriginals.Count != 0) return;
+            if (crestSlotsField == null)
+                crestSlotsField = typeof(ToolCrest).GetField("slots", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (crestSlotsField == null) return;
+            foreach (ToolCrest crest in ToolItemManager.GetAllCrests())
+            {
+                ToolCrest.SlotInfo[] original = crest != null ? crest.Slots : null;
+                if (original == null || original.Length == 0 || crestSlotOriginals.ContainsKey(crest)) continue;
+                crestSlotOriginals.Add(crest, original);
+                crestSlotsField.SetValue(crest, WithExtraSlots(original));
+            }
+        }
+
+        static bool RestoreCrestSlots()
+        {
+            if (crestSlotOriginals.Count == 0) return false;
+            foreach (KeyValuePair<ToolCrest, ToolCrest.SlotInfo[]> pair in crestSlotOriginals)
+                if (pair.Key != null) crestSlotsField.SetValue(pair.Key, pair.Value);
+            crestSlotOriginals.Clear();
+            return true;
+        }
+
+        static ToolCrest.SlotInfo[] WithExtraSlots(ToolCrest.SlotInfo[] original)
+        {
+            int first = original.Length, extra = 2 * ExtraSlotsPerColour;
+            var slots = new ToolCrest.SlotInfo[first + extra];
+            Array.Copy(original, slots, first);
+            float lowest = 0f;
+            for (int i = 0; i < first; i++) lowest = Mathf.Min(lowest, original[i].Position.y);
+            float y = Mathf.Min(-3.5f, lowest - 1.25f);
+            for (int k = 0; k < extra; k++)
+                slots[first + k] = new ToolCrest.SlotInfo
+                {
+                    Type = k < ExtraSlotsPerColour ? ToolItemType.Blue : ToolItemType.Yellow,
+                    Position = new Vector2(1.5f * k - 0.75f * (extra - 1), y),
+                    NavUpIndex = -1, NavDownIndex = -1, NavLeftIndex = -1, NavRightIndex = -1,
+                    NavUpFallbackIndex = -1, NavDownFallbackIndex = -1, NavLeftFallbackIndex = -1, NavRightFallbackIndex = -1,
+                };
+            // Navigation: an extra slot links to its nearest slot in each direction; a shipped slot
+            // only switches to an extra one that fits that direction better than its current link.
+            for (int i = 0; i < slots.Length; i++)
+                for (int dir = 0; dir < 4; dir++)
+                {
+                    int best = -1;
+                    float bestDistance = float.MaxValue;
+                    for (int j = i < first ? first : 0; j < slots.Length; j++)
+                    {
+                        if (j == i || NavDirection(slots[i].Position, slots[j].Position) != dir) continue;
+                        float distance = Vector2.Distance(slots[i].Position, slots[j].Position);
+                        if (distance < bestDistance) { bestDistance = distance; best = j; }
+                    }
+                    if (best < 0) continue;
+                    int current = GetNav(slots[i], dir);
+                    if (current >= 0 && current < slots.Length && current != i
+                        && NavDirection(slots[i].Position, slots[current].Position) == dir
+                        && Vector2.Distance(slots[i].Position, slots[current].Position) <= bestDistance) continue;
+                    SetNav(ref slots[i], dir, best);
+                }
+            return slots;
+        }
+
+        // 0 up, 1 down, 2 left, 3 right (the order of InventoryToolCrestSlot.Selectables).
+        static int NavDirection(Vector2 from, Vector2 to)
+        {
+            Vector2 d = to - from;
+            if (d.sqrMagnitude < 0.0001f) return -1;
+            if (Mathf.Abs(d.x) >= Mathf.Abs(d.y)) return d.x > 0f ? 3 : 2;
+            return d.y > 0f ? 0 : 1;
+        }
+
+        static int GetNav(ToolCrest.SlotInfo slot, int dir)
+        {
+            switch (dir)
+            {
+                case 0: return slot.NavUpIndex;
+                case 1: return slot.NavDownIndex;
+                case 2: return slot.NavLeftIndex;
+                default: return slot.NavRightIndex;
+            }
+        }
+
+        static void SetNav(ref ToolCrest.SlotInfo slot, int dir, int index)
+        {
+            switch (dir)
+            {
+                case 0: slot.NavUpIndex = index; break;
+                case 1: slot.NavDownIndex = index; break;
+                case 2: slot.NavLeftIndex = index; break;
+                default: slot.NavRightIndex = index; break;
+            }
+        }
+
+        // QA (#43): the current crest's slots and what each holds.
+        public static string CrestReport()
+        {
+            PlayerData player = PlayerData.instance;
+            ToolCrest crest = player != null ? ToolItemManager.GetCrestByName(player.CurrentCrestID) : null;
+            if (crest == null || crest.Slots == null) return "error no current crest";
+            ToolCrestsData.Data data = player.ToolEquips.GetData(crest.name);
+            int saved = data.Slots != null ? data.Slots.Count : 0;
+            var sb = new System.Text.StringBuilder();
+            sb.Append("crest=").Append(crest.name).Append(" slots=").Append(crest.Slots.Length)
+              .Append(" shipped=").Append(OriginalSlotCount(crest)).Append(" saved=").Append(saved);
+            for (int i = 0; i < Math.Max(crest.Slots.Length, saved); i++)
+            {
+                string tool = i < saved ? data.Slots[i].EquippedTool : null;
+                sb.Append("\n  ").Append(i).Append(' ').Append(i < crest.Slots.Length ? crest.Slots[i].Type.ToString() : "(no slot)")
+                  .Append(i < saved && !data.Slots[i].IsUnlocked ? " locked" : "")
+                  .Append(" tool=").Append(string.IsNullOrEmpty(tool) ? "-"
+                      : tool + (ToolItemManager.IsToolEquipped(tool) ? "(equipped)" : "(not equipped)"));
+            }
+            return sb.ToString();
+        }
+
+        // QA (#43): put an unlocked tool in slot index of the current crest.
+        public static string CrestEquip(int index, string toolName)
+        {
+            PlayerData player = PlayerData.instance;
+            ToolCrest crest = player != null ? ToolItemManager.GetCrestByName(player.CurrentCrestID) : null;
+            if (crest == null || crest.Slots == null) return "error no current crest";
+            if (index < 0 || index >= crest.Slots.Length) return "error slot index 0.." + (crest.Slots.Length - 1);
+            ToolItem tool = ToolItemManager.GetToolByName(toolName);
+            if (tool == null) return "error no tool " + toolName;
+            if (tool.Type != crest.Slots[index].Type) return "error " + toolName + " is " + tool.Type + ", slot is " + crest.Slots[index].Type;
+            ToolCrestsData.Data data = player.ToolEquips.GetData(crest.name);
+            if (data.Slots == null) data.Slots = new List<ToolCrestsData.SlotData>();
+            while (data.Slots.Count <= index) data.Slots.Add(new ToolCrestsData.SlotData { IsUnlocked = true });
+            ToolCrestsData.SlotData slot = data.Slots[index];
+            slot.EquippedTool = tool.name;
+            data.Slots[index] = slot;
+            player.ToolEquips.SetData(crest.name, data);
+            ToolItemManager.SendEquippedChangedEvent(true);
+            return "ok " + CrestReport();
+        }
+
+        // QA (#43): unlocked tools of one type, to pick a name for CrestEquip.
+        public static string CrestTools(string type)
+        {
+            var sb = new System.Text.StringBuilder("ok");
+            foreach (ToolItem tool in ToolItemManager.GetUnlockedTools())
+                if (tool != null && string.Equals(tool.Type.ToString(), type, StringComparison.OrdinalIgnoreCase))
+                    sb.Append(' ').Append(tool.name);
+            return sb.ToString();
         }
 
         static void MaintainRosaryMagnet(bool enabled)
@@ -717,7 +902,7 @@ namespace DualSouls.Mods.Silksong
         {
             PlayerData player = owner;
             if (player != null) { RestoreMap(player); RestoreToolSlots(player); }
-            else { ClearMapOwnership(); crestBaselines.Clear(); extraSlotsCaptured = false; }
+            else { ClearMapOwnership(); crestBaselines.Clear(); extraSlotsCaptured = false; RestoreCrestSlots(); }
             if (releaseOwner) owner = null;
         }
 

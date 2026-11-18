@@ -141,7 +141,7 @@ namespace DualSouls.Mods.Silksong
 
             Row("equip_anywhere", "equip_anywhere", TweakControlKind.Choice, "CRESTS & TOOLS", "EQUIP ANYWHERE", "Allow Crest and Tool changes away from benches.", "off", "off", "on"),
             Row("charm_costs", "charm_costs", TweakControlKind.Choice, "CRESTS & TOOLS", "TOOL COSTS", "Remove Tool replenishment costs while enabled.", "vanilla", "vanilla", "free"),
-            Row("unlimited_notches", "unlimited_notches", TweakControlKind.Choice, "CRESTS & TOOLS", "UNLIMITED TOOL SLOTS", "Equip Tools without the normal Crest slot limit.", "off", "off", "on"),
+            Row("unlimited_notches", "unlimited_notches", TweakControlKind.Choice, "CRESTS & TOOLS", "UNLIMITED TOOL SLOTS", "Unlock every Crest slot and add 3 blue and 3 yellow slots to each Crest.", "off", "off", "on"),
             Cheat("infinite_tools", TweakControlKind.Choice, "CRESTS & TOOLS", "INFINITE TOOL USE", "Tools never run out of uses while enabled.", "off", "off", "on"),
             Cheat("refill_tools", TweakControlKind.Command, "CRESTS & TOOLS", "REFILL TOOLS", "Refill every unlocked Tool to its full capacity now.", "run", "run"),
 
