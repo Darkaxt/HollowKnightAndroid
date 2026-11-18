@@ -393,7 +393,29 @@ namespace DualSouls.DualScreen
 
         bool IsOwnedCamera(Camera camera)
         {
-            return camera == Camera || camera == OverlayCamera;
+            return camera == Camera || camera == OverlayCamera || IsPrivateCamera(camera);
+        }
+
+        // Off-screen cameras that render the private layers into a texture
+        // shown on the lower display (the Hollow Knight map). The layer sweeps
+        // must leave them alone, or their culling mask ends up empty.
+        static readonly System.Collections.Generic.List<Camera> _privateCameras = new System.Collections.Generic.List<Camera>();
+
+        public static void AddPrivateCamera(Camera camera)
+        {
+            if (camera != null && !_privateCameras.Contains(camera)) _privateCameras.Add(camera);
+        }
+
+        public static void RemovePrivateCamera(Camera camera)
+        {
+            _privateCameras.Remove(camera);
+        }
+
+        public static bool IsPrivateCamera(Camera camera)
+        {
+            for (int i = 0; i < _privateCameras.Count; i++)
+                if (_privateCameras[i] == camera) return true;
+            return false;
         }
 
         public void SetVisible(bool visible)

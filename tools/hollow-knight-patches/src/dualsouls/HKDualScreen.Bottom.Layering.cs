@@ -107,6 +107,7 @@ public partial class HKDualScreen
         {
             var cam = _allCams[ci];
             if (cam == null || cam == hudCam2 || cam == promptCam || cam == attrCam) continue;
+            if (DualSouls.DualScreen.DirectDisplayPresentation.IsPrivateCamera(cam)) continue;   // the lower map's off-screen camera
             int m = cam.cullingMask;
             if ((m & privMask) != 0) cam.cullingMask = m & ~privMask;   // write only when a private bit is actually set (native setter isn't free)
         }

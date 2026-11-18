@@ -220,6 +220,9 @@ namespace HollowKnightPatches.Lower
             _cam.allowMSAA = false;
             _cam.useOcclusionCulling = false;
             _cam.enabled = false;
+            // It renders the private content layer into the page's texture;
+            // keep the on-screen layer sweeps from clearing its mask.
+            DirectDisplayPresentation.AddPrivateCamera(_cam);
 
             // Every teardown path of the page (the shell rebuilding destroys
             // its hosts) disposes the rig through this, so nothing leaks.
@@ -302,6 +305,7 @@ namespace HollowKnightPatches.Lower
         {
             ReleaseTexture();
             DestroyClone();
+            if (_cam != null) DirectDisplayPresentation.RemovePrivateCamera(_cam);
             if (_rig != null) { UnityEngine.Object.Destroy(_rig); _rig = null; }
             _cam = null;
         }
