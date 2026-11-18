@@ -29,6 +29,7 @@ namespace DualSouls.Mods.Silksong
         static FieldInfo crestSlotsField;
         static bool toolSlotsTidy;
         const int ExtraSlotsPerColour = 3;
+        const string FloatingMarker = "@floating";
         static readonly List<Transform> radarMarks = new List<Transform>();
         static Texture2D pixelTexture;
         static Sprite pixelSprite;
@@ -41,6 +42,10 @@ namespace DualSouls.Mods.Silksong
         static float nextBossInspection;
         static int bossProfile = -1;
         static Action stateTransferPreparation;
+        static Func<PlayerData, bool> saveOwnership;
+        static Action<PlayerData, PlayerData> saveCleaner;
+        static MethodInfo memberwiseClone;
+        static bool droppedEquipsRestored;
         static bool lastAtBench;
         static int benchProfile = -1;
         static readonly Dictionary<string, BenchRecord> benches = new Dictionary<string, BenchRecord>(StringComparer.Ordinal);
@@ -107,6 +112,164 @@ namespace DualSouls.Mods.Silksong
 
         public static void SetStateTransferPreparation(Action prepare) { stateTransferPreparation = prepare; }
         public static void RestorePlayerOwnedForStateTransfer() { RestorePlayerOwned(false); }
+        public static void SetSaveCleaner(Func<PlayerData, bool> owns, Action<PlayerData, PlayerData> clean)
+        {
+            saveOwnership = owns;
+            saveCleaner = clean;
+        }
+
+        // #48: every Silksong save builds SaveGameData(playerData, sceneData) and serializes it
+        // later on a worker thread, so the live PlayerData cannot be reverted around the save.
+        // When a row owns PlayerData values, the save gets a shallow copy holding the baselines
+        // instead; the live object is never touched. Nothing owned: the save is unchanged.
+        internal static void PrepareSaveData(ref PlayerData playerData)
+        {
+            PlayerData live = playerData;
+            if (live == null) return;
+            try
+            {
+                bool mine = ReferenceEquals(owner, live);
+                bool owned = mine && (mappedScenesOwned.Count != 0 || mapFlagsOwned.Count != 0 || extraSlotsCaptured
+                    || crestBaselines.Count != 0 || crestSlotOriginals.Count != 0);
+                Func<PlayerData, bool> owns = saveOwnership;
+                bool others = owns != null && owns(live);
+                List<string> dropped = null;
+                if (owned || others)
+                {
+                    if (memberwiseClone == null)
+                        memberwiseClone = typeof(object).GetMethod("MemberwiseClone", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var copy = (PlayerData)memberwiseClone.Invoke(live, null);
+                    if (owned) dropped = CleanOwned(live, copy);
+                    if (others) saveCleaner?.Invoke(live, copy);
+                    playerData = copy;
+                }
+                if (mine) WriteDroppedEquips(live.profileID, dropped);
+            }
+            catch (Exception error)
+            {
+                playerData = live;
+                Debug.LogWarning("[DualSouls] Silksong save cleanup skipped: " + error);
+            }
+        }
+
+        static List<string> CleanOwned(PlayerData live, PlayerData copy)
+        {
+            if (mappedScenesOwned.Count != 0 && live.scenesMapped != null)
+            {
+                var scenes = new HashSet<string>(live.scenesMapped, live.scenesMapped.Comparer);
+                foreach (string scene in mappedScenesOwned) scenes.Remove(scene);
+                copy.scenesMapped = scenes;
+            }
+            foreach (KeyValuePair<string, bool> flag in mapFlagsOwned) SetMapFlagValue(copy, flag.Key, flag.Value);
+            // Tools taken out of slots the row added or unlocked are kept in a sidecar file and put
+            // back when the save is loaded with the row on.
+            var dropped = new List<string>();
+            if (extraSlotsCaptured)
+            {
+                copy.UnlockedExtraBlueSlot = extraBlueBaseline;
+                copy.UnlockedExtraYellowSlot = extraYellowBaseline;
+                // IsToolEquipped reads every floating slot entry whatever the flags say.
+                if ((!extraBlueBaseline || !extraYellowBaseline) && live.ExtraToolEquips != null)
+                {
+                    var floating = new FloatingCrestSlotsData();
+                    foreach (string id in live.ExtraToolEquips.GetValidNames())
+                    {
+                        ToolCrestsData.SlotData slot = live.ExtraToolEquips.GetData(id);
+                        ToolItem tool = string.IsNullOrEmpty(slot.EquippedTool) ? null : ToolItemManager.GetToolByName(slot.EquippedTool);
+                        if (tool != null && ((tool.Type == ToolItemType.Blue && !extraBlueBaseline)
+                            || (tool.Type == ToolItemType.Yellow && !extraYellowBaseline)))
+                        {
+                            dropped.Add(FloatingMarker + "\t" + id + "\t" + slot.EquippedTool);
+                            continue;
+                        }
+                        floating.SetData(id, slot);
+                    }
+                    copy.ExtraToolEquips = floating;
+                }
+            }
+            if ((crestBaselines.Count == 0 && crestSlotOriginals.Count == 0) || live.ToolEquips == null) return dropped;
+            // Crest entries as they were before the row: slots it added are dropped and slots it
+            // unlocked are locked again.
+            var equips = new ToolCrestsData();
+            foreach (KeyValuePair<string, ToolCrestsData.Data> pair in live.ToolEquips.Enumerate())
+            {
+                ToolCrestsData.Data data = pair.Value;
+                if (data.Slots != null)
+                {
+                    var slots = new List<ToolCrestsData.SlotData>(data.Slots);
+                    CrestBaseline baseline;
+                    bool hasBaseline = crestBaselines.TryGetValue(pair.Key, out baseline);
+                    ToolCrest crest = hasBaseline ? null : ToolItemManager.GetCrestByName(pair.Key);
+                    int keep = hasBaseline ? baseline.Count : crest != null ? OriginalSlotCount(crest) : slots.Count;
+                    for (int i = 0; i < slots.Count; i++)
+                    {
+                        ToolCrestsData.SlotData slot = slots[i];
+                        bool locked = i < keep && hasBaseline && i < baseline.Unlocked.Length && !baseline.Unlocked[i];
+                        if (i < keep && !locked) continue;
+                        if (!string.IsNullOrEmpty(slot.EquippedTool))
+                            dropped.Add(pair.Key + "\t" + i + "\t" + slot.EquippedTool);
+                        slot.EquippedTool = null;
+                        slot.IsUnlocked = false;
+                        slots[i] = slot;
+                    }
+                    if (slots.Count > keep) slots.RemoveRange(keep, slots.Count - keep);
+                    data.Slots = slots;
+                }
+                equips.SetData(pair.Key, data);
+            }
+            copy.ToolEquips = equips;
+            return dropped;
+        }
+
+        static string DroppedEquipsPath(int profile) { return Path.Combine(Application.persistentDataPath, "dualsouls-extra-tool-slots", "silksong-profile-" + profile + ".txt"); }
+
+        static void WriteDroppedEquips(int profile, List<string> dropped)
+        {
+            string path = DroppedEquipsPath(profile);
+            if (dropped == null || dropped.Count == 0)
+            {
+                if (File.Exists(path)) File.Delete(path);
+                return;
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            File.WriteAllText(path, string.Join("\n", dropped.ToArray()));
+        }
+
+        // With the row on, put back the tools a clean save took out of the crests (#48).
+        static bool RestoreDroppedEquips(PlayerData player)
+        {
+            string path = DroppedEquipsPath(player.profileID);
+            if (!File.Exists(path)) return false;
+            bool changed = false;
+            foreach (string line in File.ReadAllLines(path))
+            {
+                string[] parts = line.Split('\t');
+                int index;
+                if (parts.Length != 3) continue;
+                if (parts[0] == FloatingMarker)
+                {
+                    ToolItem floatingTool = ToolItemManager.GetToolByName(parts[2]);
+                    if (floatingTool == null || !floatingTool.IsUnlocked || ToolItemManager.IsToolEquipped(floatingTool.name)
+                        || !string.IsNullOrEmpty(player.ExtraToolEquips.GetData(parts[1]).EquippedTool)) continue;
+                    ToolItemManager.SetExtraEquippedTool(parts[1], floatingTool.name);
+                    changed = true;
+                    continue;
+                }
+                if (!int.TryParse(parts[1], out index) || index < 0) continue;
+                ToolCrest crest = ToolItemManager.GetCrestByName(parts[0]);
+                ToolItem tool = ToolItemManager.GetToolByName(parts[2]);
+                if (crest == null || crest.Slots == null || index >= crest.Slots.Length || tool == null
+                    || !tool.IsUnlocked || tool.Type != crest.Slots[index].Type || ToolItemManager.IsToolEquipped(tool.name)) continue;
+                ToolCrestsData.Data data = player.ToolEquips.GetData(crest.name);
+                if (data.Slots == null || index >= data.Slots.Count || !string.IsNullOrEmpty(data.Slots[index].EquippedTool)) continue;
+                ToolCrestsData.SlotData slot = data.Slots[index];
+                slot.EquippedTool = tool.name;
+                data.Slots[index] = slot;
+                player.ToolEquips.SetData(crest.name, data);
+                changed = true;
+            }
+            return changed;
+        }
 
         public static void Tick(bool fastTransitions, bool autoMap, bool innateCompass,
             bool secretRadar, bool healthBars, bool damageNumbers, bool bossRetry,
@@ -121,6 +284,7 @@ namespace DualSouls.Mods.Silksong
                 ResetBossRuntime();
                 owner = player;
                 toolSlotsTidy = false;
+                droppedEquipsRestored = false;
                 EnsureBenches(player.profileID);
             }
 
@@ -575,6 +739,11 @@ namespace DualSouls.Mods.Silksong
                 }
                 if (crestChanged) { player.ToolEquips.SetData(crest.name, data); changed = true; }
             }
+            if (!droppedEquipsRestored && ReferenceEquals(owner, player) && ToolItemManager.GetAllCrests().Count != 0)
+            {
+                droppedEquipsRestored = true;
+                if (RestoreDroppedEquips(player)) changed = true;
+            }
             if (changed && PlayerData.HasInstance && ReferenceEquals(PlayerData.instance, player))
                 ToolItemManager.SendEquippedChangedEvent(true);
         }
@@ -1014,6 +1183,8 @@ namespace DualSouls.Mods.Silksong
         }
         public static bool DeathObserved { get { return deathObserved; } }
         public static void CompleteDeathHandling() { deathObserved = false; }
+        // #48: prefix of SaveGameData(PlayerData, SceneData), which every save path runs.
+        public static void BeforeSaveGameData(ref PlayerData playerData) { SilksongGameplayFeatures.PrepareSaveData(ref playerData); }
         public static void BeforeToolReplenishCost(ref float cost)
         {
             if (ToolCostsFreeEnabled && cost > 0f) cost = 0f;

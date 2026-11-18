@@ -302,6 +302,13 @@ namespace DualSouls.Mods.Silksong
             data.infiniteAirJump = true;
         }
 
+        // #48: a save holds the air-jump flag as it was before the row.
+        internal bool OwnsSaveValues(PlayerData live) { return _airJumpPlayer != null && ReferenceEquals(_airJumpPlayer, live); }
+        internal void CleanSaveValues(PlayerData live, PlayerData copy)
+        {
+            if (OwnsSaveValues(live)) copy.infiniteAirJump = _airJumpBaseline;
+        }
+
         void RestoreAirJump()
         {
             if (_airJumpPlayer != null) _airJumpPlayer.infiniteAirJump = _airJumpBaseline;

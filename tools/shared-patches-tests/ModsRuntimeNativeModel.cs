@@ -149,6 +149,9 @@ public static class SilksongGameplayFeatures
     public static bool FailRestore;
     public static Action StateTransferPreparation;
     public static void SetStateTransferPreparation(Action value) => StateTransferPreparation = value;
+    public static Func<PlayerData, bool> SaveOwnership;
+    public static Action<PlayerData, PlayerData> SaveCleaner;
+    public static void SetSaveCleaner(Func<PlayerData, bool> owns, Action<PlayerData, PlayerData> clean) { SaveOwnership = owns; SaveCleaner = clean; }
     public static void RestoreAll() { if (FailRestore) throw new InvalidOperationException("modeled native restore failure"); }
     public static void RestorePlayerOwnedForStateTransfer() { }
     public static void SaveState(int slot) { }
@@ -170,6 +173,8 @@ public sealed class SilksongCheats
     public void RestoreAll() => _choices.Clear();
     public void Tick() { }
     public void PrepareForStateTransfer() { }
+    public bool OwnsSaveValues(PlayerData live) => false;
+    public void CleanSaveValues(PlayerData live, PlayerData copy) { }
     public void SetChoice(string id, string value) => _choices[id] = value;
     public DualSouls.Mods.TweakActionResult Readback(string id) => DualSouls.Mods.TweakActionResult.Ok(
         DualSouls.Mods.TweakReadback.Choice(_choices.TryGetValue(id, out string v) ? v : id == "game_speed" || id == "flea_games" ? "vanilla" : id == "picker_amount" ? "1" : "off"));

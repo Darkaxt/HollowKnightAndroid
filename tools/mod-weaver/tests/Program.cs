@@ -743,6 +743,7 @@ internal static class Program
                 ("DeliveryQuestItem", "TakeHit", "BeforeDeliveryHit"),
                 ("DeliveryQuestItem", "BreakAll", "ShouldKeepDeliveries"),
                 ("DeliveryQuestItem", "BreakAllNoEffects", "ShouldKeepDeliveries"),
+                ("SaveGameData", ".ctor", "BeforeSaveGameData"),
                 ("PlayerData", "get_FleaGamesIsJugglingChampion", "FleaGameTarget"),
                 ("PlayerData", "get_FleaGamesIsDodgingSethChampion", "FleaGameTarget"),
             })
@@ -753,6 +754,10 @@ internal static class Program
                     "DualSouls.Mods.Silksong.SilksongGameplayHooks" && called.Name == expected.Item3),
                     expected.Item1 + "." + expected.Item2 + " calls " + expected.Item3);
             }
+            var saveCtorWoven = rewritten.MainModule.GetType("SaveGameData").Methods.Single(m => m.Name == ".ctor");
+            True(saveCtorWoven.Body.Instructions[0].OpCode.Code is Code.Ldarga or Code.Ldarga_S &&
+                saveCtorWoven.Body.Instructions[0].Operand == saveCtorWoven.Parameters[0],
+                "SaveGameData.ctor passes playerData by reference before the base constructor");
             var updateMap = rewritten.MainModule.GetType("GameMap").Methods.Single(m => m.Name == "UpdateGameMap");
             Equal(1, updateMap.Body.Instructions.Count(i => i.OpCode == OpCodes.Ret),
                 "GameMap.UpdateGameMap has one guarded return epilogue");
@@ -1006,6 +1011,15 @@ internal static class Program
         Ret(Method(deliveryItem, "TakeHit", game.TypeSystem.Void, true, ("hits", game.TypeSystem.Int32)));
         Ret(Method(deliveryItem, "BreakAll", game.TypeSystem.Void, true));
         Ret(Method(deliveryItem, "BreakAllNoEffects", game.TypeSystem.Void, true));
+        var sceneData = Class("SceneData");
+        var saveGameData = Class("SaveGameData");
+        var saveCtor = Method(saveGameData, ".ctor", game.TypeSystem.Void, false,
+            ("playerData", player), ("sceneData", sceneData));
+        saveCtor.IsSpecialName = saveCtor.IsRuntimeSpecialName = true;
+        var saveCtorIl = saveCtor.Body.GetILProcessor();
+        saveCtorIl.Emit(OpCodes.Ldarg_0);
+        saveCtorIl.Emit(OpCodes.Call, game.ImportReference(typeof(object).GetConstructor(System.Type.EmptyTypes)!));
+        saveCtorIl.Emit(OpCodes.Ret);
         var fleaScore = Fixture.Field(player, "fleaScore", game.TypeSystem.Int32, isStatic: false);
         foreach (var (getter, stock) in new[] {
             ("get_FleaGamesIsJugglingChampion", 30), ("get_FleaGamesIsJugglingSethChampion", 55),
@@ -1145,6 +1159,8 @@ internal static class Program
         AddHook("BeforeDeliveryHit", patches.MainModule.TypeSystem.Void,
             ("hits", new ByReferenceType(patches.MainModule.TypeSystem.Int32)));
         AddHook("ShouldKeepDeliveries", patches.MainModule.TypeSystem.Boolean);
+        AddHook("BeforeSaveGameData", patches.MainModule.TypeSystem.Void,
+            ("playerData", new ByReferenceType(patches.MainModule.ImportReference(player))));
         {
             var target = Fixture.Method(hooks, "FleaGameTarget", patches.MainModule.TypeSystem.Int32);
             Fixture.Parameter(target, "stock", patches.MainModule.TypeSystem.Int32);

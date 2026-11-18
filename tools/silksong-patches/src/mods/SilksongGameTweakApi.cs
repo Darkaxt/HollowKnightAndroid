@@ -86,6 +86,23 @@ namespace DualSouls.Mods.Silksong
             _baselineOwner = this;
             _silkGrantOwner = this;
             SilksongGameplayFeatures.SetStateTransferPreparation(PrepareForStateTransfer);
+            SilksongGameplayFeatures.SetSaveCleaner(OwnsSaveValues, CleanSaveValues);
+        }
+
+        // #48: values a save must hold at their baselines; see SilksongGameplayFeatures.PrepareSaveData.
+        bool OwnsSaveValues(PlayerData live)
+        {
+            return (_silkOwned && ReferenceEquals(_silkPlayer, live)) || _cheats.OwnsSaveValues(live);
+        }
+
+        void CleanSaveValues(PlayerData live, PlayerData copy)
+        {
+            if (_silkOwned && ReferenceEquals(_silkPlayer, live) && _silkGrantDepth == 0)
+            {
+                copy.silk = _silkBaseline;
+                copy.silkParts = _silkPartsBaseline;
+            }
+            _cheats.CleanSaveValues(live, copy);
         }
 
         public void RestoreBaseline()
@@ -110,6 +127,7 @@ namespace DualSouls.Mods.Silksong
             SilksongGameplayHooks.Reset();
             SilksongGameplayFeatures.RestoreAll();
             SilksongGameplayFeatures.SetStateTransferPreparation(null);
+            SilksongGameplayFeatures.SetSaveCleaner(null, null);
             if (ReferenceEquals(_silkGrantOwner, this)) _silkGrantOwner = null;
         }
 

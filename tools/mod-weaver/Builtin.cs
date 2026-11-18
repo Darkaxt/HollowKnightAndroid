@@ -518,6 +518,8 @@ internal static class Builtin
         var deliveryHit = Exact(delivery, "TakeHit", true, "System.Void", "System.Int32");
         var deliveryBreakAll = Exact(delivery, "BreakAll", true, "System.Void");
         var deliveryBreakQuiet = Exact(delivery, "BreakAllNoEffects", true, "System.Void");
+        // #48: every save path builds SaveGameData(playerData, sceneData) before serializing it.
+        var saveDataCtor = Exact(Type("SaveGameData"), ".ctor", false, "System.Void", "PlayerData", "SceneData");
         // #41: the Flea Festival's champion tests are `highscore > N` getters the festival FSM reads.
         var fleaTargets = new (string Getter, int Stock)[]
         {
@@ -547,6 +549,7 @@ internal static class Builtin
         var beforeDeliveryHit = Hook("BeforeDeliveryHit", "System.Void", "System.Int32&");
         var keepDeliveries = Hook("ShouldKeepDeliveries", "System.Boolean");
         var fleaTarget = Hook("FleaGameTarget", "System.Int32", "System.Int32");
+        var beforeSaveData = Hook("BeforeSaveGameData", "System.Void", "PlayerData&");
 
         int mapReturnCount = updateMap.Body.Instructions.Count(i => i.OpCode == OpCodes.Ret);
         if (mapReturnCount == 0)
@@ -568,6 +571,7 @@ internal static class Builtin
             (setCrestSlot, authoritativeCrestSlot, 1),
             (deliveryHit, beforeDeliveryHit, 1),
             (deliveryBreakAll, keepDeliveries, 1), (deliveryBreakQuiet, keepDeliveries, 1),
+            (saveDataCtor, beforeSaveData, 1),
         }.Concat(fleaTargets.Select(t => (t.Method, fleaTarget, 1))).ToArray();
         int CallCount(MethodDefinition target, MethodDefinition hook) => target.Body.Instructions.Count(i =>
             i.OpCode == OpCodes.Call && i.Operand is MethodReference called &&
@@ -708,6 +712,8 @@ internal static class Builtin
 
         Prefix(deliveryHit, beforeDeliveryHit,
             Instruction.Create(OpCodes.Ldarga, deliveryHit.Parameters[0]));
+        Prefix(saveDataCtor, beforeSaveData,
+            Instruction.Create(OpCodes.Ldarga, saveDataCtor.Parameters[0]));
         // #41: `highscore > N` becomes `highscore > FleaGameTarget(N)`.
         foreach (var anchor in fleaAnchors)
             anchor.Method.Body.GetILProcessor().InsertAfter(anchor.Instruction,
