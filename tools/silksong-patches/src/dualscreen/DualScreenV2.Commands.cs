@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool field> <true|false> | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | sprites | assists | collect [checklist]";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool field> <true|false> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | sprites | assists | collect [checklist]";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -103,6 +103,12 @@ public partial class DualScreenV2
             case "pdset":
                 if (a.Length != 3) return "error pdset <bool field> <true|false>";
                 return DsQaReport.SetBool(PlayerData.instance, a[1], a[2]);
+            case "mapsetup":
+                // The game's own room-state pass (what opening its map runs): mapped/visited rooms
+                // pick up scenesMapped, mapAllRooms and the quill. QA after pdset on a disposable save.
+                if (gm == null || gm.gameMap == null) return "error no GameMap";
+                gm.gameMap.SetupMap(false);
+                return "ok SetupMap " + DsQaReport.Fields(PlayerData.instance, "mapAllRooms", "hasQuill");
             case "die": return CommandDie(gm);
             case "hit": return CommandHit(a, gm);
             case "hurt": return CommandHurt(a, gm);
