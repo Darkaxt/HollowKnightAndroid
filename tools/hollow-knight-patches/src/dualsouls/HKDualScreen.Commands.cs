@@ -66,7 +66,8 @@ public partial class HKDualScreen
                        " pins=" + HollowKnightPatches.Lower.HkMapView.LastPinsShown;
             case "state": return CommandState(gm, ui);
             case "mapdump":
-                return HollowKnightPatches.Lower.HkMapView.Last != null ? HollowKnightPatches.Lower.HkMapView.Last.Dump() : "error no map view";
+                return (HollowKnightPatches.Lower.HkMapView.Last != null ? HollowKnightPatches.Lower.HkMapView.Last.Dump() : "error no map view") +
+                       "\n" + (HollowKnightPatches.Lower.HkMapScreen.Last != null ? HollowKnightPatches.Lower.HkMapScreen.Last.RawDump() : "no map page");
             case "pause":
                 if (gm == null) return "error no GameManager";
                 bool was = gm.IsGamePaused();

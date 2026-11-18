@@ -61,6 +61,7 @@ namespace HollowKnightPatches.Lower
 
         public HkMapScreen()
         {
+            Last = this;
             _toggleMode = ToggleMode;
             _resetView = ResetView;
             _enterMarkers = () => SetMarkerMode(true);
@@ -226,6 +227,21 @@ namespace HollowKnightPatches.Lower
         }
 
         public int PinsShown { get { return _view != null ? _view.PinsShown : 0; } }
+
+        /// <summary>The most recently built page (QA mapdump).</summary>
+        public static HkMapScreen Last;
+
+        /// <summary>QA: the on-screen image that shows the map texture.</summary>
+        public string RawDump()
+        {
+            if (_raw == null) return "raw=null";
+            var rt = _raw.rectTransform;
+            return "raw active=" + _raw.gameObject.activeInHierarchy + " enabled=" + _raw.enabled +
+                   " tex=" + (_raw.texture == null ? "null" : _raw.texture == (_view != null ? _view.Texture : null) ? "view" : "other") +
+                   " color=" + _raw.color + " size=" + rt.rect.size + " state=" + _state +
+                   " panel=" + (_mapPanel != null && _mapPanel.gameObject.activeInHierarchy) +
+                   " checklist=" + ChecklistVisible;
+        }
 
         void Apply(State s, bool force)
         {

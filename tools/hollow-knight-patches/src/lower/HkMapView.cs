@@ -134,7 +134,35 @@ namespace HollowKnightPatches.Lower
                     sb.Append(" rooms=").Append(roomsOn).Append('/').Append(rooms);
                 }
             }
+            sb.Append("\nrt drawn=").Append(DrawnPixels());
+            if (_cam != null && _rt != null)
+            {
+                try { _cam.targetTexture = _rt; _cam.Render(); sb.Append(" afterRender=").Append(DrawnPixels()); }
+                catch (Exception e) { sb.Append(" render failed: ").Append(e.GetType().Name); }
+                sb.Append(" mask=").Append(_cam.cullingMask).Append(" layer=").Append(Layer);
+            }
             return sb.ToString();
+        }
+
+        /// <summary>QA: RenderTexture pixels that differ from the background.</summary>
+        string DrawnPixels()
+        {
+            if (_rt == null || !_rt.IsCreated()) return "no-rt";
+            var prev = RenderTexture.active;
+            var tex = new Texture2D(_rt.width, _rt.height, TextureFormat.RGBA32, false);
+            try
+            {
+                RenderTexture.active = _rt;
+                tex.ReadPixels(new Rect(0, 0, _rt.width, _rt.height), 0, 0, false);
+                tex.Apply(false);
+                Color32 g = DsTheme.Ground;
+                int n = 0;
+                foreach (var p in tex.GetPixels32())
+                    if (Mathf.Abs(p.r - g.r) > 8 || Mathf.Abs(p.g - g.g) > 8 || Mathf.Abs(p.b - g.b) > 8) n++;
+                return n + "/" + (_rt.width * _rt.height);
+            }
+            catch (Exception e) { return "read failed: " + e.GetType().Name; }
+            finally { RenderTexture.active = prev; UnityEngine.Object.Destroy(tex); }
         }
 
         public RenderTexture Texture { get { return _rt; } }
