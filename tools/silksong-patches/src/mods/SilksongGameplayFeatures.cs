@@ -46,6 +46,7 @@ namespace DualSouls.Mods.Silksong
         static Action<PlayerData, PlayerData> saveCleaner;
         static MethodInfo memberwiseClone;
         static bool droppedEquipsRestored;
+        static string droppedRestoreReport = "-";
         static bool lastAtBench;
         static int benchProfile = -1;
         static readonly Dictionary<string, BenchRecord> benches = new Dictionary<string, BenchRecord>(StringComparer.Ordinal);
@@ -239,7 +240,8 @@ namespace DualSouls.Mods.Silksong
         static bool RestoreDroppedEquips(PlayerData player)
         {
             string path = DroppedEquipsPath(player.profileID);
-            if (!File.Exists(path)) return false;
+            droppedRestoreReport = "profile=" + player.profileID + " scene=" + (GameManager.SilentInstance != null ? GameManager.SilentInstance.sceneName : "-");
+            if (!File.Exists(path)) { droppedRestoreReport += " no-file"; return false; }
             bool changed = false;
             foreach (string line in File.ReadAllLines(path))
             {
@@ -249,8 +251,11 @@ namespace DualSouls.Mods.Silksong
                 if (parts[0] == FloatingMarker)
                 {
                     ToolItem floatingTool = ToolItemManager.GetToolByName(parts[2]);
-                    if (floatingTool == null || !floatingTool.IsUnlocked || ToolItemManager.IsToolEquipped(floatingTool.name)
-                        || !string.IsNullOrEmpty(player.ExtraToolEquips.GetData(parts[1]).EquippedTool)) continue;
+                    string floatingSkip = floatingTool == null ? "no-tool" : !floatingTool.IsUnlocked ? "locked-tool"
+                        : ToolItemManager.IsToolEquipped(floatingTool.name) ? "already-equipped"
+                        : !string.IsNullOrEmpty(player.ExtraToolEquips.GetData(parts[1]).EquippedTool) ? "slot-taken" : null;
+                    droppedRestoreReport += " " + parts[2] + "@" + parts[1] + "=" + (floatingSkip ?? "restored");
+                    if (floatingSkip != null) continue;
                     ToolItemManager.SetExtraEquippedTool(parts[1], floatingTool.name);
                     changed = true;
                     continue;
@@ -258,10 +263,14 @@ namespace DualSouls.Mods.Silksong
                 if (!int.TryParse(parts[1], out index) || index < 0) continue;
                 ToolCrest crest = ToolItemManager.GetCrestByName(parts[0]);
                 ToolItem tool = ToolItemManager.GetToolByName(parts[2]);
-                if (crest == null || crest.Slots == null || index >= crest.Slots.Length || tool == null
-                    || !tool.IsUnlocked || tool.Type != crest.Slots[index].Type || ToolItemManager.IsToolEquipped(tool.name)) continue;
-                ToolCrestsData.Data data = player.ToolEquips.GetData(crest.name);
-                if (data.Slots == null || index >= data.Slots.Count || !string.IsNullOrEmpty(data.Slots[index].EquippedTool)) continue;
+                ToolCrestsData.Data data = crest != null ? player.ToolEquips.GetData(crest.name) : default(ToolCrestsData.Data);
+                string skip = crest == null || crest.Slots == null ? "no-crest" : index >= crest.Slots.Length ? "no-slot"
+                    : tool == null ? "no-tool" : !tool.IsUnlocked ? "locked-tool" : tool.Type != crest.Slots[index].Type ? "wrong-type"
+                    : ToolItemManager.IsToolEquipped(tool.name) ? "already-equipped"
+                    : data.Slots == null || index >= data.Slots.Count ? "no-entry"
+                    : !string.IsNullOrEmpty(data.Slots[index].EquippedTool) ? "slot-taken" : null;
+                droppedRestoreReport += " " + parts[2] + "@" + parts[0] + "/" + index + "=" + (skip ?? "restored");
+                if (skip != null) continue;
                 ToolCrestsData.SlotData slot = data.Slots[index];
                 slot.EquippedTool = tool.name;
                 data.Slots[index] = slot;
@@ -909,7 +918,8 @@ namespace DualSouls.Mods.Silksong
             int saved = data.Slots != null ? data.Slots.Count : 0;
             var sb = new System.Text.StringBuilder();
             sb.Append("crest=").Append(crest.name).Append(" slots=").Append(crest.Slots.Length)
-              .Append(" shipped=").Append(OriginalSlotCount(crest)).Append(" saved=").Append(saved);
+              .Append(" shipped=").Append(OriginalSlotCount(crest)).Append(" saved=").Append(saved)
+              .Append(" restore=[").Append(droppedRestoreReport).Append(']');
             for (int i = 0; i < Math.Max(crest.Slots.Length, saved); i++)
             {
                 string tool = i < saved ? data.Slots[i].EquippedTool : null;
