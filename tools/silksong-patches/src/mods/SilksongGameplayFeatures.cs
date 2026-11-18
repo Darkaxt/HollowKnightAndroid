@@ -940,6 +940,7 @@ namespace DualSouls.Mods.Silksong
             if (index < 0 || index >= crest.Slots.Length) return "error slot index 0.." + (crest.Slots.Length - 1);
             ToolItem tool = ToolItemManager.GetToolByName(toolName);
             if (tool == null) return "error no tool " + toolName;
+            if (!tool.IsUnlocked) return "error " + toolName + " is not unlocked (crest unlock <tool name>)";
             if (tool.Type != crest.Slots[index].Type) return "error " + toolName + " is " + tool.Type + ", slot is " + crest.Slots[index].Type;
             ToolCrestsData.Data data = player.ToolEquips.GetData(crest.name);
             if (data.Slots == null) data.Slots = new List<ToolCrestsData.SlotData>();
@@ -950,6 +951,15 @@ namespace DualSouls.Mods.Silksong
             player.ToolEquips.SetData(crest.name, data);
             ToolItemManager.SendEquippedChangedEvent(true);
             return "ok " + CrestReport();
+        }
+
+        // QA (#48): unlock a tool on a disposable test save so it can be equipped.
+        public static string CrestUnlockTool(string toolName)
+        {
+            ToolItem tool = ToolItemManager.GetToolByName(toolName);
+            if (tool == null) return "error no tool " + toolName;
+            if (!tool.IsUnlocked) tool.Unlock(null, ToolItem.PopupFlags.None);
+            return "ok " + tool.name + " unlocked=" + tool.IsUnlocked + " type=" + tool.Type;
         }
 
         // QA (#43): unlocked tools of one type, to pick a name for CrestEquip.

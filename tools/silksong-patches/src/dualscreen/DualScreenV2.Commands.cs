@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool|int field> <value> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | delivery <list|give <name>|hit|break|state> | crest [tools <type>|equip <slot> <tool>] | sprites | assists | collect [checklist]";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool|int field> <value> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | delivery <list|give <name>|hit|break|state> | crest [tools <type>|equip <slot> <tool>|unlock <tool>] | sprites | assists | collect [checklist]";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -123,7 +123,8 @@ public partial class DualScreenV2
                 if (a[1] == "tools" && a.Length == 3) return SilksongGameplayFeatures.CrestTools(a[2]);
                 if (a[1] == "equip" && a.Length >= 4 && int.TryParse(a[2], out slotIndex))
                     return SilksongGameplayFeatures.CrestEquip(slotIndex, string.Join(" ", a, 3, a.Length - 3));
-                return "error crest [tools <type>|equip <slot> <tool name>]";
+                if (a[1] == "unlock" && a.Length >= 3) return SilksongGameplayFeatures.CrestUnlockTool(string.Join(" ", a, 2, a.Length - 2));
+                return "error crest [tools <type>|equip <slot> <tool name>|unlock <tool name>]";
             }
             case "sprites":
                 var skinRuntime = SilksongSkinRuntime.Current;
