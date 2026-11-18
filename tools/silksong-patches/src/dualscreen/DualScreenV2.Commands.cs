@@ -193,12 +193,13 @@ public partial class DualScreenV2
             }
             case "give":
             {
-                if (a.Length != 3) return "error delivery give <quest or standalone item name>";
+                if (a.Length < 3) return "error delivery give <quest or standalone item name>";
+                string wanted = string.Join(" ", a, 2, a.Length - 2);
                 result = null;
                 foreach (BasicQuestBase basic in QuestManager.GetAllQuests())
                 {
                     var quest = basic as FullQuestBase;
-                    if (quest == null || quest.name != a[2]) continue;
+                    if (quest == null || quest.name != wanted) continue;
                     foreach (FullQuestBase.QuestTarget target in quest.Targets)
                     {
                         var item = target.Counter as DeliveryQuestItem;
@@ -213,12 +214,12 @@ public partial class DualScreenV2
                 if (result == null)
                     foreach (DeliveryQuestItemStandalone item in Resources.FindObjectsOfTypeAll<DeliveryQuestItemStandalone>())
                     {
-                        if (item.name != a[2]) continue;
+                        if (item.name != wanted) continue;
                         item.Collect(item.TargetCount, false);
                         result = "ok collected " + item.name + "x" + item.TargetCount;
                         break;
                     }
-                if (result == null) return "error no delivery quest or standalone item " + a[2];
+                if (result == null) return "error no delivery quest or standalone item " + wanted;
                 break;
             }
             case "hit":
