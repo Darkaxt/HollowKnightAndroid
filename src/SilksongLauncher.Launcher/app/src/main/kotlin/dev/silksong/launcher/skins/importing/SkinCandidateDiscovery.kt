@@ -14,7 +14,7 @@ import java.nio.charset.StandardCharsets
 import java.text.Normalizer
 
 class SkinCandidateDiscovery(
-    catalog: CatalogPathSet,
+    private val catalog: CatalogPathSet,
     private val limits: SkinLimits = SkinLimits.V1,
 ) {
     private val mapper = SkinCatalogMapper(catalog, limits)
@@ -31,7 +31,7 @@ class SkinCandidateDiscovery(
             prefixes.putIfAbsent(rawPrefix.toHex(), Prefix(rawPrefix, layoutCode(components.take(prefixCount))))
         }
         if (prefixes.isEmpty()) {
-            return SkinResult.Error(SkinImportCode.NO_CANDIDATE, "No catalog-backed skin candidate was found")
+            return SkinResult.Error(SkinImportCode.NO_CANDIDATE, noCandidateDetail(archive, regular))
         }
         val recognized = prefixes.values.toList()
         if (recognized.size > 1 && recognized.any { it.bytes.isEmpty() }) {
@@ -49,6 +49,39 @@ class SkinCandidateDiscovery(
         }
         return finish(archive, outermost)
     }
+
+    /**
+     * Says why nothing matched (#44). CustomizerT2D packs carry Unity sprite atlases in a
+     * Texture2D folder (sactx-N-WxH-FORMAT-Name-HASH.png); skins only replace collection atlases.
+     */
+    private fun noCandidateDetail(archive: AuthorizedZip, regular: List<RawZipEntry>): String {
+        val example = if (catalog.profile.profileId == "silksong") {
+            "Knight/atlas0.png or Hornet CrestWeapon Whip Cln/atlas0.png"
+        } else {
+            "Knight.png or Hornet.png"
+        }
+        val spriteAtlasOnly = regular.isNotEmpty() && regular.any { entry ->
+            archive.canonicalPaths.getValue(entry.centralIndex).let { components ->
+                components.dropLast(1).any { it.isAsciiIgnoringCase("texture2d") } ||
+                    components.lastOrNull()?.startsAsciiIgnoringCase("sactx-") == true
+            }
+        }
+        return if (spriteAtlasOnly) {
+            "Only Texture2D sprite atlases were found (a Customizer Texture2D folder or sactx-* files). " +
+                "These can't be applied as skins; the pack needs collection atlases such as $example"
+        } else {
+            "No file matches a skin texture this game supports (for example $example)"
+        }
+    }
+
+    private fun ByteArray.isAsciiIgnoringCase(expected: String): Boolean =
+        size == expected.length && startsAsciiIgnoringCase(expected)
+
+    private fun ByteArray.startsAsciiIgnoringCase(expected: String): Boolean =
+        size >= expected.length && expected.indices.all { index ->
+            val byte = this[index].toInt() and 0xff
+            byte < 0x80 && byte.toChar().lowercaseChar() == expected[index].lowercaseChar()
+        }
 
     private fun ambiguousPrefixes(prefixes: List<Prefix>): Boolean {
         val components = prefixes.map { splitRaw(it.bytes) }

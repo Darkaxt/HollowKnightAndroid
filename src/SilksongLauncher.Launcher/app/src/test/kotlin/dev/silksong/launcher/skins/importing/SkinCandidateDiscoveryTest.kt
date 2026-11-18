@@ -101,6 +101,27 @@ class SkinCandidateDiscoveryTest {
         )
     }
 
+    @Test
+    fun `explains why a Texture2D-only or unrelated pack has no candidate`() {
+        val spriteAtlases = detail(listOf(
+            "Pack/Texture2D/sactx-0-4096x4096-BC7-Hornet-5bdf1644.png",
+            "Pack/active.txt",
+        ))
+        assertTrue(spriteAtlases, spriteAtlases.startsWith("Only Texture2D sprite atlases were found"))
+        val unrelated = detail(listOf("Pack/Boss Cln/atlas0.png"))
+        assertTrue(unrelated, unrelated.startsWith("No file matches a skin texture this game supports"))
+    }
+
+    private fun detail(names: List<String>): String {
+        val built = RawZipFixture.build(names.map { RawZipFixture.Entry(it.toByteArray(), byteArrayOf(1)) })
+        val file = File(root, "archive-${next++}.zip").apply { writeBytes(built.bytes) }
+        val zip = (BoundedZipReader().read(file) as SkinResult.Ok).value
+        val authorized = (ZipPathAuthority().validate(zip) as SkinResult.Ok).value
+        val result = SkinCandidateDiscovery(catalog).discover(authorized) as SkinResult.Error
+        assertEquals(SkinImportCode.NO_CANDIDATE, result.code)
+        return result.detail
+    }
+
     private fun discover(names: List<String>): dev.silksong.launcher.skins.contracts.CandidateSet {
         val built = RawZipFixture.build(names.map { RawZipFixture.Entry(it.toByteArray(), byteArrayOf(1)) })
         val file = File(root, "archive-${next++}.zip").apply { writeBytes(built.bytes) }
