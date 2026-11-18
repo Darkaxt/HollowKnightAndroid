@@ -175,7 +175,7 @@ def generate(output, source_root, manifest, shared_source_root=None, frame_sourc
             identity.append(dict(source=str(src('DsMapView.cs')),member='DsMapView.'+field,
                 source_file_sha256=hashlib.sha256(src('DsMapView.cs').read_bytes()).hexdigest(),
                 declaration_utf8_lf_sha256=hashlib.sha256(value.encode()).hexdigest(),declaration_identical=True))
-    for name in ('SetVisible','LateTick','Mode','Pan','Zoom','ZoomLevel','SetZoom','ResetPan','ResetZoom','ViewMoved','ResetView','Fling','StopMotion','Animate','ResetAnimated','SetMode','Poll','Rebind','FindSourceCameras','Classify'):
+    for name in ('SetVisible','LateTick','Mode','Pan','Zoom','ZoomLevel','SetZoom','ResetPan','ResetZoom','ViewMoved','ResetView','Fling','StopMotion','ClampPan','Animate','ResetAnimated','SetMode','Poll','Rebind','FindSourceCameras','Classify'):
         value=member(class_text(text,'DsMapView'),name)
         adapted=value.replace('Poll(', 'PollSources(', 1) if name=='Poll' else value
         bodies.append(adapted)

@@ -42,6 +42,22 @@ public class SilksongMapMotionTests
         Assert.Equal(settled,Field<Vector2>(view,"_pan").x);
     }
 
+    static Vector2 Clamp(Vector2 pan,float half,float aspect,bool world,float limit)=>
+        (Vector2)typeof(DsMapView).GetMethod("ClampPan",BindingFlags.NonPublic|BindingFlags.Static)!.Invoke(null,new object[]{pan,half,aspect,world,limit})!;
+
+    [Fact]
+    public void AFlingCannotCarryTheAreaMapOffThePanel()
+    {
+        // Thor, 2.0.47: one quick swipe threw Moss Grotto clean off the panel,
+        // because the area map shared the full map's 60-unit radius.
+        var held=Clamp(new Vector2(-40f,25f),2f,1.25f,false,60f);
+        Assert.Equal(-2.5f,held.x,4);Assert.Equal(2f,held.y,4);
+        var inside=Clamp(new Vector2(1f,-0.5f),2f,1.25f,false,60f);
+        Assert.Equal(1f,inside.x,4);Assert.Equal(-0.5f,inside.y,4);
+        // The full map is the whole world and keeps its wide radius.
+        Assert.Equal(-40f,Clamp(new Vector2(-40f,0f),2f,1.25f,true,60f).x,4);
+    }
+
     [Fact]
     public void TouchingTheMapStopsAGlide()
     {

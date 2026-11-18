@@ -10,6 +10,7 @@ public struct Vector2
     public Vector2(float x,float y){this.x=x;this.y=y;}
     public static Vector2 zero=>new(0,0); public static Vector2 one=>new(1,1);
     public float sqrMagnitude=>x*x+y*y; public float magnitude=>MathF.Sqrt(sqrMagnitude);
+    public static Vector2 ClampMagnitude(Vector2 v,float max){float m=v.magnitude;return m>max&&m>0f?new Vector2(v.x*max/m,v.y*max/m):v;}
     public static Vector2 operator +(Vector2 a,Vector2 b)=>new(a.x+b.x,a.y+b.y);
     public static Vector2 operator -(Vector2 a,Vector2 b)=>new(a.x-b.x,a.y-b.y);
     public static Vector2 operator *(Vector2 a,float b)=>new(a.x*b,a.y*b);
