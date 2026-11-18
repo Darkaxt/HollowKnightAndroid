@@ -136,6 +136,14 @@ public static class DsQaReport
             intField.SetValue(target, number);
             return "ok " + Fields(target, name);
         }
+        if (intField != null && intField.FieldType.IsEnum)
+        {
+            object parsed;
+            try { parsed = Enum.Parse(intField.FieldType, value, true); }
+            catch (ArgumentException) { return "error value must be one of " + string.Join(",", Enum.GetNames(intField.FieldType)); }
+            intField.SetValue(target, parsed);
+            return "ok " + Fields(target, name);
+        }
         bool on;
         if (value == "true" || value == "on" || value == "1") on = true;
         else if (value == "false" || value == "off" || value == "0") on = false;
