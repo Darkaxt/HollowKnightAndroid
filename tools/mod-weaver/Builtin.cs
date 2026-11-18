@@ -518,6 +518,13 @@ internal static class Builtin
         var deliveryHit = Exact(delivery, "TakeHit", true, "System.Void", "System.Int32");
         var deliveryBreakAll = Exact(delivery, "BreakAll", true, "System.Void");
         var deliveryBreakQuiet = Exact(delivery, "BreakAllNoEffects", true, "System.Void");
+        // #41: the Flea Festival's champion tests are `highscore > N` getters the festival FSM reads.
+        var fleaTargets = new (string Getter, int Stock)[]
+        {
+            ("get_FleaGamesIsJugglingChampion", 30), ("get_FleaGamesIsJugglingSethChampion", 55),
+            ("get_FleaGamesIsBouncingChampion", 42), ("get_FleaGamesIsBouncingSethChampion", 68),
+            ("get_FleaGamesIsDodgingChampion", 65), ("get_FleaGamesIsDodgingSethChampion", 90),
+        }.Select(t => (Method: Exact(player, t.Getter, false, "System.Boolean"), t.Stock)).ToList();
 
         var beforeHit = Hook("BeforeEnemyHit", "System.Void", "HealthManager", "HitInstance&");
         var beforeDamage = Hook("BeforeHeroDamage", "System.Void", "System.Int32&");
@@ -539,6 +546,7 @@ internal static class Builtin
             "InventoryToolCrestSlot", "ToolCrestsData/SlotData");
         var beforeDeliveryHit = Hook("BeforeDeliveryHit", "System.Void", "System.Int32&");
         var keepDeliveries = Hook("ShouldKeepDeliveries", "System.Boolean");
+        var fleaTarget = Hook("FleaGameTarget", "System.Int32", "System.Int32");
 
         int mapReturnCount = updateMap.Body.Instructions.Count(i => i.OpCode == OpCodes.Ret);
         if (mapReturnCount == 0)
@@ -560,7 +568,7 @@ internal static class Builtin
             (setCrestSlot, authoritativeCrestSlot, 1),
             (deliveryHit, beforeDeliveryHit, 1),
             (deliveryBreakAll, keepDeliveries, 1), (deliveryBreakQuiet, keepDeliveries, 1),
-        };
+        }.Concat(fleaTargets.Select(t => (t.Method, fleaTarget, 1))).ToArray();
         int CallCount(MethodDefinition target, MethodDefinition hook) => target.Body.Instructions.Count(i =>
             i.OpCode == OpCodes.Call && i.Operand is MethodReference called &&
             called.DeclaringType.FullName == hookTypeName && called.Name == hook.Name &&
@@ -590,6 +598,13 @@ internal static class Builtin
             called.ReturnType.MetadataType == MetadataType.Single && called.Parameters.Count == 0).ToList();
         if (costAnchors.Count != 1)
             throw new InvalidOperationException("Silksong tool replenishment cost anchor is missing or ambiguous");
+        var fleaAnchors = fleaTargets.Select(t =>
+        {
+            var anchors = t.Method.Body.Instructions.Where(i => i.OpCode.Code is Code.Ldc_I4 or Code.Ldc_I4_S &&
+                Convert.ToInt32(i.Operand) == t.Stock && i.Next?.OpCode == OpCodes.Cgt).ToList();
+            return anchors.Count == 1 ? (t.Method, Instruction: anchors[0]) : throw new InvalidOperationException(
+                $"Silksong Flea Festival target anchor {t.Stock} is missing or ambiguous in PlayerData.{t.Method.Name}");
+        }).ToList();
 
         void Prefix(MethodDefinition target, MethodDefinition hook, params Instruction[] loads)
         {
@@ -693,6 +708,10 @@ internal static class Builtin
 
         Prefix(deliveryHit, beforeDeliveryHit,
             Instruction.Create(OpCodes.Ldarga, deliveryHit.Parameters[0]));
+        // #41: `highscore > N` becomes `highscore > FleaGameTarget(N)`.
+        foreach (var anchor in fleaAnchors)
+            anchor.Method.Body.GetILProcessor().InsertAfter(anchor.Instruction,
+                Instruction.Create(OpCodes.Call, module.ImportReference(fleaTarget)));
         // #39: `if (ShouldKeepDeliveries()) return;` ahead of the stock BreakAll bodies.
         foreach (var breaker in new[] { deliveryBreakAll, deliveryBreakQuiet })
         {
@@ -720,7 +739,7 @@ internal static class Builtin
             processor.InsertAfter(load, processor.Create(OpCodes.Call, module.ImportReference(freeCost)));
         }
 
-        notes.Add("Silksong gameplay hooks: needle, damage cap, Silk grants, compass, tool costs, Rosaries, journal, deliveries, and death handling woven");
+        notes.Add("Silksong gameplay hooks: needle, damage cap, Silk grants, compass, tool costs, Rosaries, journal, deliveries, Flea Festival targets, and death handling woven");
         return true;
     }
 

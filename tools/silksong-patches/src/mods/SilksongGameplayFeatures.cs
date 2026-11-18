@@ -819,6 +819,10 @@ namespace DualSouls.Mods.Silksong
             DeliveryBreaksKept++;
             return true;
         }
+        // #41: percentage of each Flea Festival champion target (stock 30/42/65, Seth 55/68/90).
+        // The festival FSM reads PlayerData's champion getters, so the save keeps its real scores.
+        public static int FleaTargetPercent { get; set; } = 100;
+        public static int FleaGameTarget(int stock) => FleaTargetPercent >= 100 ? stock : stock * FleaTargetPercent / 100;
         public static string DeliveryReport()
         {
             return "easyDeliveries=" + EasyDeliveriesEnabled + " hitsKept=" + DeliveryHitsKept + " breaksKept=" + DeliveryBreaksKept;
@@ -870,7 +874,7 @@ namespace DualSouls.Mods.Silksong
         }
         public static void Reset()
         {
-            NeedleMultiplier = 1; AllDamageMultiplier = 1; DamageCapEnabled = false; InnateCompassEnabled = false; JournalOneKillEnabled = false; ToolCostsFreeEnabled = false; KeepRosariesEnabled = false; RosaryMultiplier = 1; deathObserved = false; EasyDeliveriesEnabled = false; deliveryDeathPending = false;
+            NeedleMultiplier = 1; AllDamageMultiplier = 1; DamageCapEnabled = false; InnateCompassEnabled = false; JournalOneKillEnabled = false; ToolCostsFreeEnabled = false; KeepRosariesEnabled = false; RosaryMultiplier = 1; deathObserved = false; EasyDeliveriesEnabled = false; deliveryDeathPending = false; FleaTargetPercent = 100;
         }
     }
 }

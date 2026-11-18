@@ -11,7 +11,7 @@ public partial class HKDualScreen
 {
     const string CommandHelp =
         "help | report | state | pause | mods | skins | skin <list|row N|left N|right N> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
-        "mods-list | mod <id> <value> | pd <field>... | pdset <bool field> <true|false> | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | dash | travel <scene> <gate> | save | load <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist] | mapdump\n";
+        "mods-list | mod <id> <value> | pd <field>... | pdset <bool|int field> <value> | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | dash | travel <scene> <gate> | save | load <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist] | mapdump\n";
 
     // QA: one hero nail hit on the nearest live enemy through HealthManager.Hit, as a slash
     // would land. The optional hp first sets the target's health, e.g. above the boss threshold.
@@ -101,7 +101,7 @@ public partial class HKDualScreen
             }
             case "pd": return CommandPlayerData(a);
             case "pdset":
-                if (a.Length != 3) return "error pdset <bool field> <true|false>";
+                if (a.Length != 3) return "error pdset <bool|int field> <value>";
                 return SaveSlotGuard(gm) ?? DsQaReport.SetBool(PlayerData.instance, a[1], a[2]);
             case "charm": return SaveSlotGuard(gm) ?? CommandCharm(a);
             case "geo":

@@ -124,10 +124,18 @@ public static class DsQaReport
         return sb.ToString();
     }
 
-    /// <summary>QA: set a public bool field of <paramref name="target"/> (e.g. a map flag on a disposable save).</summary>
+    /// <summary>QA: set a public bool or int field of <paramref name="target"/> (e.g. a map flag on a disposable save).</summary>
     public static string SetBool(object target, string name, string value)
     {
         if (target == null) return "error no target";
+        FieldInfo intField = target.GetType().GetField(name, BindingFlags.Public | BindingFlags.Instance);
+        int number;
+        if (intField != null && intField.FieldType == typeof(int))
+        {
+            if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out number)) return "error value must be an integer";
+            intField.SetValue(target, number);
+            return "ok " + Fields(target, name);
+        }
         bool on;
         if (value == "true" || value == "on" || value == "1") on = true;
         else if (value == "false" || value == "off" || value == "0") on = false;

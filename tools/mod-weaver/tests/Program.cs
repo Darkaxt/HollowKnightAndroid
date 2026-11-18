@@ -743,6 +743,8 @@ internal static class Program
                 ("DeliveryQuestItem", "TakeHit", "BeforeDeliveryHit"),
                 ("DeliveryQuestItem", "BreakAll", "ShouldKeepDeliveries"),
                 ("DeliveryQuestItem", "BreakAllNoEffects", "ShouldKeepDeliveries"),
+                ("PlayerData", "get_FleaGamesIsJugglingChampion", "FleaGameTarget"),
+                ("PlayerData", "get_FleaGamesIsDodgingSethChampion", "FleaGameTarget"),
             })
             {
                 var target = rewritten.MainModule.GetType(expected.Item1).Methods.Single(m => m.Name == expected.Item2);
@@ -1004,6 +1006,20 @@ internal static class Program
         Ret(Method(deliveryItem, "TakeHit", game.TypeSystem.Void, true, ("hits", game.TypeSystem.Int32)));
         Ret(Method(deliveryItem, "BreakAll", game.TypeSystem.Void, true));
         Ret(Method(deliveryItem, "BreakAllNoEffects", game.TypeSystem.Void, true));
+        var fleaScore = Fixture.Field(player, "fleaScore", game.TypeSystem.Int32, isStatic: false);
+        foreach (var (getter, stock) in new[] {
+            ("get_FleaGamesIsJugglingChampion", 30), ("get_FleaGamesIsJugglingSethChampion", 55),
+            ("get_FleaGamesIsBouncingChampion", 42), ("get_FleaGamesIsBouncingSethChampion", 68),
+            ("get_FleaGamesIsDodgingChampion", 65), ("get_FleaGamesIsDodgingSethChampion", 90) })
+        {
+            var champion = Method(player, getter, game.TypeSystem.Boolean, false);
+            var championIl = champion.Body.GetILProcessor();
+            championIl.Emit(OpCodes.Ldarg_0);
+            championIl.Emit(OpCodes.Ldfld, fleaScore);
+            championIl.Emit(OpCodes.Ldc_I4_S, (sbyte)stock);
+            championIl.Emit(OpCodes.Cgt);
+            championIl.Emit(OpCodes.Ret);
+        }
         var health = Class("HealthManager");
         Ret(Method(health, "Hit", hitResponse, false, ("hit", hitInstance)));
         var hero = Class("HeroController");
@@ -1129,6 +1145,13 @@ internal static class Program
         AddHook("BeforeDeliveryHit", patches.MainModule.TypeSystem.Void,
             ("hits", new ByReferenceType(patches.MainModule.TypeSystem.Int32)));
         AddHook("ShouldKeepDeliveries", patches.MainModule.TypeSystem.Boolean);
+        {
+            var target = Fixture.Method(hooks, "FleaGameTarget", patches.MainModule.TypeSystem.Int32);
+            Fixture.Parameter(target, "stock", patches.MainModule.TypeSystem.Int32);
+            var targetIl = target.Body.GetILProcessor();
+            targetIl.Emit(OpCodes.Ldarg_0);
+            targetIl.Emit(OpCodes.Ret);
+        }
         InstrumentGrantHook("BeginAuthoritativeSilkGrant", begin: true);
         InstrumentGrantHook("EndAuthoritativeSilkGrant", begin: false);
         InstrumentGrantHook("BeginAuthoritativeSilkPartsGrant", begin: true);

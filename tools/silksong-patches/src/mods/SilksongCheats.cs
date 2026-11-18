@@ -105,7 +105,7 @@ namespace DualSouls.Mods.Silksong
 
         public bool IsChoice(string id) =>
             id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "all_damage" ||
-            id == "infinite_tools" || id == "health_regen" || id == "dash_invincibility" || id == "rebirth_in_scene" || id == "easy_deliveries" ||
+            id == "infinite_tools" || id == "health_regen" || id == "dash_invincibility" || id == "rebirth_in_scene" || id == "easy_deliveries" || id == "flea_games" ||
             id == HeroTint.Id || id == HeroTint.SceneId || id == SilksongItemPickers.AmountId || id == CombatOverlay.BossBarsId || id.StartsWith("active_", StringComparison.Ordinal);
 
         public void SetChoice(string id, string value)
@@ -157,6 +157,9 @@ namespace DualSouls.Mods.Silksong
                 case "easy_deliveries":
                     SilksongGameplayHooks.EasyDeliveriesEnabled = value == "on";
                     break;
+                case "flea_games":
+                    SilksongGameplayHooks.FleaTargetPercent = value == "half" ? 50 : value == "minimal" ? 0 : 100;
+                    break;
                 default:
                     SetActiveTool(id, value == "on");
                     break;
@@ -168,7 +171,7 @@ namespace DualSouls.Mods.Silksong
         {
             string value;
             if (!_choices.TryGetValue(id, out value))
-                value = id == "game_speed" ? "vanilla" : id == SilksongItemPickers.AmountId ? "1" : "off";
+                value = id == "game_speed" || id == "flea_games" ? "vanilla" : id == SilksongItemPickers.AmountId ? "1" : "off";
             return TweakActionResult.Ok(TweakReadback.Choice(value));
         }
 
@@ -232,6 +235,7 @@ namespace DualSouls.Mods.Silksong
             MaintainDashInvincibility();
             SilksongGameplayFeatures.RebirthEnabled = false;
             SilksongGameplayHooks.EasyDeliveriesEnabled = false;
+            SilksongGameplayHooks.FleaTargetPercent = 100;
             _tint.Set("off");
             _tint.SetScene(false);
             _pickers.RestoreAll();
