@@ -94,28 +94,29 @@ static class SsCollectibles
             return _areas.TryGetValue(scene, out a) ? a : null;
         }
 
-        /// <summary>#47 QA: the room's state on this map (missing, no-sprite, unmapped, inactive, drawn).</summary>
+        /// <summary>#47 QA: the room's state on this map (missing, unmapped, inactive, drawn, drawn-centre).</summary>
         public string Why(string scene)
         {
             GameMapScene r;
             if (!_rooms.TryGetValue(scene, out r) || r == null) return "missing";
-            if (r.BoundsSprite == null) return "no-sprite";
             if (!r.IsMapped) return "unmapped";
             if (!r.gameObject.activeInHierarchy) return "inactive(" + (r.gameObject.activeSelf ? "parent" : "self") + ")";
-            return "drawn";
+            return r.BoundsSprite == null ? "drawn-centre" : "drawn";
         }
 
+        // A room without a bounds sprite (Bone_12 has no SpriteRenderer of its own) still
+        // gets a pin: at its centre, as GameMap.GetMapPosition places the compass there.
         public CollectiblePins.Room? RoomOf(string scene)
         {
             GameMapScene r;
             if (!_rooms.TryGetValue(scene, out r) || r == null) return null;
             var sprite = r.BoundsSprite;
-            if (sprite == null) return null;
             return new CollectiblePins.Room
             {
                 Transform = r.transform,
-                SpriteSize = sprite.bounds.size,
+                SpriteSize = sprite != null ? (Vector2)sprite.bounds.size : Vector2.zero,
                 Shown = r.IsMapped && r.gameObject.activeInHierarchy,
+                Centre = sprite == null,
             };
         }
     }

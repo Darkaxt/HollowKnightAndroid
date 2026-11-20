@@ -20,6 +20,9 @@ namespace DualSouls.Mods
             public Vector2 SpriteSize;
             /// <summary>False hides the room's pins even when its object is active (Silksong rough rooms).</summary>
             public bool Shown;
+            /// <summary>The room has no bounds sprite (#47, Silksong Bone_12): pin at its centre,
+            /// where GameMap.GetMapPosition puts the compass for such a room.</summary>
+            public bool Centre;
         }
 
         readonly CollectibleTable _table;
@@ -132,8 +135,8 @@ namespace DualSouls.Mods
         GameObject Make(CollectibleSpot spot, Room room, Transform mapRoot, float size, float worldZ,
                         int layer, int sortingLayerId, int sortingOrder)
         {
-            float ox, oy;
-            if (!_table.TryRoomOffset(spot, room.SpriteSize.x, room.SpriteSize.y, out ox, out oy)) return null;
+            float ox = 0f, oy = 0f;
+            if (!room.Centre && !_table.TryRoomOffset(spot, room.SpriteSize.x, room.SpriteSize.y, out ox, out oy)) return null;
             var go = new GameObject("DsPin " + spot.Kind) { layer = layer };
             var t = go.transform;
             t.SetParent(room.Transform, false);
