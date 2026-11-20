@@ -94,6 +94,17 @@ static class SsCollectibles
             return _areas.TryGetValue(scene, out a) ? a : null;
         }
 
+        /// <summary>#47 QA: the room's state on this map (missing, no-sprite, unmapped, inactive, drawn).</summary>
+        public string Why(string scene)
+        {
+            GameMapScene r;
+            if (!_rooms.TryGetValue(scene, out r) || r == null) return "missing";
+            if (r.BoundsSprite == null) return "no-sprite";
+            if (!r.IsMapped) return "unmapped";
+            if (!r.gameObject.activeInHierarchy) return "inactive(" + (r.gameObject.activeSelf ? "parent" : "self") + ")";
+            return "drawn";
+        }
+
         public CollectiblePins.Room? RoomOf(string scene)
         {
             GameMapScene r;
@@ -144,6 +155,28 @@ static class SsCollectibles
     static FieldInfo _fiCompass;
 
     public static int PinsShown { get { return _pins != null ? _pins.Shown : 0; } }
+
+    /// <summary>#47 QA: every spot whose scene starts with <paramref name="prefix"/>, with the
+    /// pin decision of the last refresh, the room's map state and the collected flag.</summary>
+    public static string WhyReport(string prefix)
+    {
+        var t = Table;
+        if (t == null) return "error no table";
+        var sb = new System.Text.StringBuilder();
+        int n = 0;
+        foreach (var s in t.Spots)
+        {
+            if (!s.Scene.StartsWith(prefix, StringComparison.Ordinal)) continue;
+            bool got;
+            try { got = Collected(s); } catch { got = false; }
+            sb.Append('\n').Append(s.Scene).Append(' ').Append(s.Kind).Append(" pin=")
+              .Append(_pins != null ? (_pins.ReasonOf(s) ?? "-") : "no-pins")
+              .Append(" room=").Append(_pinIndex != null ? _pinIndex.Why(s.Scene) : "no-map")
+              .Append(" collected=").Append(got).Append(" key=").Append(s.Key);
+            n++;
+        }
+        return "why " + prefix + " spots=" + n + " pins=" + PinsShown + sb;
+    }
 
     /// <summary>Keep the pins on the live map current; cheap, once a second.</summary>
     public static void TickPins(GameMap map, int layer)

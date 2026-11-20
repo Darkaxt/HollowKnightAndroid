@@ -33,6 +33,16 @@ namespace DualSouls.Mods
 
         public int Shown { get; private set; }
 
+        readonly Dictionary<CollectibleSpot, string> _reasons = new Dictionary<CollectibleSpot, string>();
+
+        /// <summary>#47 QA: why the last <see cref="Refresh"/> did or did not pin a spot
+        /// (shown, no-room, room-hidden, collected, offset), or null before the first refresh.</summary>
+        public string ReasonOf(CollectibleSpot spot)
+        {
+            string r;
+            return spot != null && _reasons.TryGetValue(spot, out r) ? r : null;
+        }
+
         public static Color ColorOf(string kind)
         {
             switch (kind)
@@ -91,12 +101,15 @@ namespace DualSouls.Mods
                 _pins.TryGetValue(spot, out pin);
                 Room? room = roomOf(spot.Scene);
                 bool want = room.HasValue && room.Value.Transform != null && room.Value.Shown;
+                string reason = !room.HasValue || room.Value.Transform == null ? "no-room" : want ? "shown" : "room-hidden";
                 bool got = false;
                 if (want)
                 {
                     try { got = collected(spot); } catch { got = false; }
                     want = !got;
+                    if (got) reason = "collected";
                 }
+                _reasons[spot] = reason;
                 if (!want)
                 {
                     if (pin != null && pin.activeSelf) pin.SetActive(false);
@@ -108,7 +121,7 @@ namespace DualSouls.Mods
                     if (pin != null) UnityEngine.Object.Destroy(pin);
                     pin = Make(spot, r, mapRoot, size, worldZ, layer, sortingLayerId, sortingOrder);
                     _pins[spot] = pin;
-                    if (pin == null) continue;
+                    if (pin == null) { _reasons[spot] = "offset"; continue; }
                 }
                 if (!pin.activeSelf) pin.SetActive(true);
                 shown++;
@@ -146,6 +159,7 @@ namespace DualSouls.Mods
             foreach (var pin in _pins.Values)
                 if (pin != null) UnityEngine.Object.Destroy(pin);
             _pins.Clear();
+            _reasons.Clear();
             Shown = 0;
         }
     }

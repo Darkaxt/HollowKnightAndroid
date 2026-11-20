@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | delivery <list|give <name>|hit|break|state> | crest [tools <type>|equip <slot> <tool>|unlock <tool>] | inv [fsm|next <pane>|send <event>|tools] | fsm find <text> | fsm show|send|set|goto <object>[#n]|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | sprites | assists | collect [checklist]";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | delivery <list|give <name>|hit|break|state> | crest [tools <type>|equip <slot> <tool>|unlock <tool>] | inv [fsm|next <pane>|send <event>|tools] | fsm find <text> | fsm show|send|set|goto <object>[#n]|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | sprites | assists | collect [checklist|why <scene prefix>]";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -322,6 +322,8 @@ public partial class DualScreenV2
             case "collect":
                 // #37: what the checklist shows and how many pins are on the map; "checklist" toggles the panel.
                 if (a.Length > 1 && a[1] == "checklist") DsMapScreen.RequestChecklistToggle = true;
+                // #47: "collect why <scene prefix>" says why each spot there is or is not pinned.
+                if (a.Length > 2 && a[1] == "why") return SsCollectibles.WhyReport(a[2]);
                 return "collect " + DsMapScreen.ChecklistReport() + " pins=" + SsCollectibles.PinsShown;
             case "state": return CommandState(gm);
             case "pause":
