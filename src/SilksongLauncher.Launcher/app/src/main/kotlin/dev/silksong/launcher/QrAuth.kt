@@ -20,6 +20,7 @@ import `in`.dragonbra.javasteam.steam.authentication.AuthSessionDetails
 import `in`.dragonbra.javasteam.steam.authentication.IChallengeUrlChanged
 import `in`.dragonbra.javasteam.steam.authentication.QrAuthSession
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -39,6 +40,13 @@ object QrAuth {
         /** Successful sign-in. Persist these. */
         data class Success(val accountName: String, val refreshToken: String) : Event()
     }
+
+    /**
+     * The QR session ended before anyone scanned it (#33). Not a
+     * CancellationException, so it is never mistaken for the caller
+     * cancelling the flow; the screen answers it with a new QR.
+     */
+    class SessionEnded(val detail: String, cause: Throwable) : RuntimeException(detail, cause)
 
     /**
      * Runs the QR sign-in to completion (or throws on cancellation/timeout/error).
@@ -97,7 +105,9 @@ object QrAuth {
         }, "QrAuth-poll").apply { isDaemon = true; start() }
 
         // While the worker is polling, periodically re-emit the
-        // current URL so the UI re-renders if it rotated.
+        // current URL so the UI re-renders if it rotated. delay() (not
+        // Thread.sleep) so cancelling the flow ends this loop at once; the
+        // caller then closes the session, which ends the worker.
         var lastEmitted = latestUrl.get()
         while (worker.isAlive) {
             val current = latestUrl.get()
@@ -105,15 +115,18 @@ object QrAuth {
                 emit(Event.ChallengeUrl(current))
                 lastEmitted = current
             }
-            try {
-                Thread.sleep(500)
-            } catch (_: InterruptedException) {
-                break
-            }
+            delay(500)
         }
 
         worker.join()
-        errorRef.get()?.let { throw it }
+        errorRef.get()?.let { t ->
+            // #33: the poll ends without a scan when the CM connection drops
+            // (JavaSteam cancels pending jobs: a message-less
+            // CancellationException) or Steam expires the session.
+            val detail = LoginErrors.describe(t) + " dropped=" + session.droppedAfterConnect
+            LauncherLog.log("QR session ended without a scan: $detail")
+            throw SessionEnded(detail, t)
+        }
         val result = resultRef.get() ?: throw RuntimeException("polling returned no result")
 
         emit(Event.Polling)

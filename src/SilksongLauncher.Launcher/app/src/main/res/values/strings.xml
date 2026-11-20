@@ -189,4 +189,8 @@
     <string name="login_status_done">Signed in as %1$s</string>
     <string name="login_status_error">Login failed: %1$s</string>
     <string name="login_cancel">Cancel</string>
+    <string name="login_qr_retry">New QR code</string>
+    <string name="login_status_qr_renewing">The QR code expired. Getting a new one…</string>
+    <string name="login_status_qr_expired">The QR code expired. Press New QR code to get another.</string>
+    <string name="login_error_connection">the connection to Steam was lost. Try again.</string>
 </resources>

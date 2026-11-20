@@ -52,6 +52,17 @@
             android:textColor="@color/text_dim"
             android:textSize="11sp"
             android:layout_marginTop="6dp" />
+
+        <!-- #33: shown when the QR code expired or failed; starts a new QR session. -->
+        <Button
+            android:id="@+id/btn_qr_retry"
+            style="@style/DualSouls.Button.Secondary"
+            android:layout_width="240dp"
+            android:layout_height="wrap_content"
+            android:text="@string/login_qr_retry"
+            android:textSize="14sp"
+            android:visibility="gone"
+            android:layout_marginTop="6dp" />
     </LinearLayout>
 
     <!-- Right: the form. -->

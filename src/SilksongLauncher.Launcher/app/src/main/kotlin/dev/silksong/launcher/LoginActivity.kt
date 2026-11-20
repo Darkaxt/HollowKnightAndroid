@@ -47,6 +47,14 @@ class LoginActivity : Activity() {
         const val EXTRA_ACCOUNT = "account_name"
         const val EXTRA_TOKEN = "refresh_token"
         private const val DEVICE_NAME = "Silksong Launcher (Android)"
+
+        /**
+         * #33: Steam ends an unscanned QR session after about a minute. Each
+         * end brings a fresh QR this many times (about ten minutes), then the
+         * screen clears the code and offers a new one on request instead of
+         * keeping the connection, and the screen, alive indefinitely.
+         */
+        private const val MAX_QR_RENEWALS = 10
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -66,6 +74,10 @@ class LoginActivity : Activity() {
     private lateinit var rowGuard: View
     private lateinit var editGuard: EditText
     private lateinit var btnGuard: Button
+    private lateinit var btnQrRetry: Button
+
+    /** Fresh QR sessions started since the last one the user asked for. */
+    private var qrRenewals = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,10 +94,16 @@ class LoginActivity : Activity() {
         rowGuard = findViewById(R.id.row_guard)
         editGuard = findViewById(R.id.edit_guard)
         btnGuard = findViewById(R.id.btn_guard)
+        btnQrRetry = findViewById(R.id.btn_qr_retry)
 
         btnCancel.setOnClickListener { cancelAndFinish() }
         btnSignIn.setOnClickListener { startCredentials() }
         btnGuard.setOnClickListener { submitGuard() }
+        btnQrRetry.setOnClickListener {
+            qrRenewals = 0
+            stopAuth()
+            startQr()
+        }
 
         editPassword.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE) { startCredentials(); true } else false
@@ -119,8 +137,11 @@ class LoginActivity : Activity() {
     // ── QR ──────────────────────────────────────────────────────────────────
 
     private fun startQr() {
+        btnQrRetry.visibility = View.GONE
         progress.visibility = View.VISIBLE
-        status.text = getString(R.string.login_status_connecting)
+        status.text = getString(
+            if (qrRenewals > 0) R.string.login_status_qr_renewing else R.string.login_status_connecting,
+        )
 
         val s = SteamSession()
         session = s
@@ -129,7 +150,7 @@ class LoginActivity : Activity() {
             try {
                 QrAuth.run(s, deviceName = DEVICE_NAME)
                     .onEach { event -> handleQrEvent(event) }
-                    .catch { t -> showError(t) }
+                    .catch { t -> onQrEnded(t) }
                     .collect { /* handled via onEach */ }
             } finally {
                 s.close()
@@ -156,6 +177,32 @@ class LoginActivity : Activity() {
         }
     }
 
+    /**
+     * #33: an unscanned QR session that Steam ended is replaced with a new one
+     * (up to [MAX_QR_RENEWALS]); after that, or on any other failure, the dead
+     * code is cleared and "New QR code" offered.
+     */
+    private fun onQrEnded(t: Throwable) {
+        if (isFinishing || isDestroyed) return
+        imgQr.setImageBitmap(null)
+        if (t is QrAuth.SessionEnded && qrRenewals < MAX_QR_RENEWALS) {
+            qrRenewals++
+            LauncherLog.log("Renewing the QR code ($qrRenewals/$MAX_QR_RENEWALS)")
+            startQr()
+            return
+        }
+        if (t is QrAuth.SessionEnded) {
+            LauncherLog.log("QR code expired after $qrRenewals renewals; waiting for New QR code")
+            submitCode = null
+            progress.visibility = View.GONE
+            status.text = getString(R.string.login_status_qr_expired)
+        } else {
+            showError(t)
+        }
+        btnQrRetry.visibility = View.VISIBLE
+        btnQrRetry.requestFocus()
+    }
+
     // ── account name + password ─────────────────────────────────────────────
 
     private fun startCredentials() {
@@ -168,6 +215,7 @@ class LoginActivity : Activity() {
 
         hideKeyboard()
         stopAuth()
+        btnQrRetry.visibility = View.GONE
 
         // The QR belonged to the session just closed, so it can no longer be
         // completed by scanning it.
@@ -256,13 +304,13 @@ class LoginActivity : Activity() {
     }
 
     private fun showError(t: Throwable) {
-        LauncherLog.log("Login error: ${t.message}")
+        LauncherLog.log("Login error: ${LoginErrors.describe(t)}")
         submitCode = null
         progress.visibility = View.GONE
         rowGuard.visibility = View.GONE
         status.text = getString(
             R.string.login_status_error,
-            t.message ?: t.javaClass.simpleName,
+            LoginErrors.userReason(t) ?: getString(R.string.login_error_connection),
         )
     }
 

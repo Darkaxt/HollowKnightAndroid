@@ -83,10 +83,24 @@ class SteamSession : Closeable {
     private val licenseList = AtomicReference<List<License>>(emptyList())
     private val licensesArrived = CountDownLatch(1)
 
+    private val everConnected = AtomicBoolean(false)
+
+    /** True once the CM connection has dropped after connecting (#33: the QR session dies with it). */
+    @Volatile
+    var droppedAfterConnect = false
+        private set
+
     init {
         subscribe(LicenseListCallback::class.java) { cb ->
             licenseList.set(cb.licenseList)
             licensesArrived.countDown()
+        }
+        subscribe(ConnectedCallback::class.java) { everConnected.set(true) }
+        subscribe(DisconnectedCallback::class.java) { cb ->
+            if (everConnected.get()) {
+                droppedAfterConnect = true
+                LauncherLog.log("Steam disconnected (user=${cb.isUserInitiated})")
+            }
         }
     }
 
