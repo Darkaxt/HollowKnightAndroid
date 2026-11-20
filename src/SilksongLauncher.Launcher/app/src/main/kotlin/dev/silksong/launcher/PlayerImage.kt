@@ -235,6 +235,16 @@ object PlayerImage {
      */
     private fun depotStampFile(aa: File) = File(aa, ".dualsouls-retargeted")
 
+    /** Best effort: a depot this app cannot write to just keeps the old cost. */
+    private fun markDepot(aa: File, stamp: String) {
+        try {
+            depotStampFile(aa).writeText(stamp)
+            LauncherLog.log("marked the depot as retargeted")
+        } catch (e: IOException) {
+            LauncherLog.log("could not mark the depot as retargeted: ${e.message}")
+        }
+    }
+
     private fun stampMatches(file: File, stamp: String): Boolean =
         try { file.isFile && file.readText() == stamp } catch (_: IOException) { false }
 
@@ -860,8 +870,12 @@ object PlayerImage {
         // is minutes of opening bundles to conclude exactly that.
         val current = contentStamp(aa)
         val known = stampMatches(contentStampFile(root), current)
-        if (known || stampMatches(depotStampFile(aa), current)) {
+        val marked = stampMatches(depotStampFile(aa), current)
+        if (known || marked) {
             if (!known) contentStampFile(root).writeText(current)
+            // #46: a tree retargeted before the marker existed only has the build
+            // stamp, which a reinstall wipes; mark it now so a reinstall can skip too.
+            if (!marked) markDepot(aa, current)
             LauncherLog.log("content is already retargeted (${if (known) "build stamp" else "depot marker"}); skipping")
             send(Progress("Content ready", 1f, "already retargeted"))
             return@channelFlow
@@ -945,10 +959,7 @@ object PlayerImage {
         // in now, not the state they were in when the run started.
         val done = contentStamp(aa)
         contentStampFile(root).writeText(done)
-        // Best effort: a depot this app cannot write to just keeps the old cost.
-        try { depotStampFile(aa).writeText(done) } catch (e: IOException) {
-            LauncherLog.log("could not mark the depot as retargeted: ${e.message}")
-        }
+        markDepot(aa, done)
         send(Progress("Content ready", 1f, "$total bundles"))
     }.flowOn(Dispatchers.IO)
 
