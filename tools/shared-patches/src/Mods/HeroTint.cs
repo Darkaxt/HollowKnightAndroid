@@ -16,8 +16,10 @@ namespace DualSouls.Mods
         public static readonly string[] Values =
         {
             "off", "red", "blue", "green", "purple", "gold", "fire", "ice",
-            "shadow", "red_shadow", "gold_shadow", "rainbow_1", "rainbow_2",
+            "shadow", "red_shadow", "gold_shadow", "rainbow_1", "rainbow_2", DeathRandom,
         };
+        /// <summary>#24: a new pseudorandom variant each time the hero dies.</summary>
+        public const string DeathRandom = "random_on_death";
 
         sealed class Owned
         {
@@ -42,6 +44,9 @@ namespace DualSouls.Mods
         bool _scene;
         int _sceneHandle;
         float _nextSceneScan, _nextSceneTint;
+        readonly DeathTintPalette _palette = new DeathTintPalette(Environment.TickCount);
+        Color _deathTint = Color.white;
+        bool _wasDead;
 
         public string Mode => _mode;
         /// <summary>QA report line: hero mode, scene-wide flag and how many scene sprites are tinted.</summary>
@@ -53,6 +58,7 @@ namespace DualSouls.Mods
             if (Array.IndexOf(Values, value) < 0) throw new ArgumentException("Unknown hero colour: " + value);
             _mode = value;
             if (value == "off") { Restore(); RestoreScene(); }
+            if (value == DeathRandom && _palette.Hue < 0f) NextDeathVariant();
             _nextSceneTint = 0f;
         }
 
@@ -73,6 +79,14 @@ namespace DualSouls.Mods
                 Restore();
                 _hero = hero;
                 _nextScan = 0f;
+                _wasDead = false;
+            }
+            if (_mode == DeathRandom)
+            {
+                // The variant changes as the hero dies, so the respawn already wears it.
+                bool dead = hero.cState != null && hero.cState.dead;
+                if (dead && !_wasDead) NextDeathVariant();
+                _wasDead = dead;
             }
             // Effects attach children after spawn; a slow rescan picks them up.
             if (Time.unscaledTime >= _nextScan)
@@ -102,6 +116,15 @@ namespace DualSouls.Mods
             }
             _owned.Clear();
             _hero = null;
+        }
+
+        void NextDeathVariant()
+        {
+            _palette.Next(out float r, out float g, out float b);
+            _deathTint = new Color(r, g, b);
+            Diagnostics = "tint: hero=" + DeathRandom + " variant=" + _palette.Deaths +
+                " hue=" + _palette.Hue.ToString("0.000") + " sat=" + _palette.Saturation.ToString("0.00") +
+                " scene=" + (_scene ? "on" : "off");
         }
 
         void TickScene(HeroController hero)
@@ -187,7 +210,7 @@ namespace DualSouls.Mods
         // Solid presets use mod 19's colours. Its multi-colour presets paint quad corners
         // that tk2d rebuilds on every animation frame, so they become their blended tint
         // here, and the two rainbows cycle the hue instead.
-        static Color TintFor(string mode, float time)
+        Color TintFor(string mode, float time)
         {
             switch (mode)
             {
@@ -203,6 +226,7 @@ namespace DualSouls.Mods
                 case "gold_shadow": return new Color(0.8f, 0.65f, 0.15f);
                 case "rainbow_1": return Color.HSVToRGB(Mathf.Repeat(time * 0.25f, 1f), 0.8f, 1f);
                 case "rainbow_2": return Color.HSVToRGB(Mathf.Repeat(time * 0.15f, 1f), 0.35f, 1f);
+                case DeathRandom: return _deathTint;
                 default: return Color.white;
             }
         }
