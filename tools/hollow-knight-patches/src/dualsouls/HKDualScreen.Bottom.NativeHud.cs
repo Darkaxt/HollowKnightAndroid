@@ -538,6 +538,10 @@ public partial class HKDualScreen
             float ortho = Mathf.Max(size.y * .5f, size.x * .5f / aspect) * 1.001f;
             if (!NativeHudFinite(ortho) || ortho <= .00001f) { nativeHudFitReady = false; return; }
             var center = (nativeHudViewMin + nativeHudViewMax) * .5f;
+            float cx, cy;
+            HollowKnightPatches.Lower.HkShellPolicy.HudAnchor(nativeHudViewMin.x, nativeHudViewMax.y,
+                ortho, ortho * aspect, out cx, out cy);
+            center.x = cx; center.y = cy;
             center.z = (Quaternion.Inverse(rotation) * hudCameraStateSource.transform.position).z;
             camera.rect = new Rect(d.x / BOTTOM_W, 1 - (d.y + d.height) / BOTTOM_H, d.width / BOTTOM_W, d.height / BOTTOM_H);
             camera.aspect = aspect; camera.orthographic = true; camera.orthographicSize = ortho;

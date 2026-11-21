@@ -22,6 +22,17 @@ namespace HollowKnightPatches.Lower
             return !everInGame || now - idleSince >= grace;
         }
 
+        /// <summary>Where the HUD camera looks, for a fitted HUD extent and the camera's
+        /// half height/half width: the HUD's top-left corner sits on the band's top-left
+        /// corner, as Silksong anchors its HUD on the first mask. Centring it instead
+        /// splits the spare band width on both sides and leaves the HUD floating mid-header.</summary>
+        public static void HudAnchor(float minX, float maxY, float halfH, float halfW,
+                                     out float centerX, out float centerY)
+        {
+            centerX = minX + halfW;
+            centerY = maxY - halfH;
+        }
+
         /// <summary>The live HUD's header band, converted from layout units to bottom-panel
         /// pixels (top-left origin). False when the layout or header has no size.</summary>
         public static bool HudBand(float layoutW, float layoutH, float headerW, float headerH,

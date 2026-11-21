@@ -92,6 +92,19 @@ public sealed class HkShellPolicyTests
     }
 
     [Fact]
+    public void Hud_anchor_puts_the_hud_top_left_corner_on_the_band_corner()
+    {
+        // Height-limited HUD (4 wide, 2 tall) in a 4:1 band: half height 1, half width 4.
+        HkShellPolicy.HudAnchor(-2f, 1f, 1f, 4f, out float cx, out float cy);
+        Assert.Equal(2f, cx, 3);   // view spans -2..6: the HUD's left edge is the view's left edge
+        Assert.Equal(0f, cy, 3);
+        // Width-limited HUD (4 wide, 1 tall) in a 1:1 band: half height 2, half width 2.
+        HkShellPolicy.HudAnchor(-2f, 0.5f, 2f, 2f, out cx, out cy);
+        Assert.Equal(0f, cx, 3);
+        Assert.Equal(-1.5f, cy, 3); // view spans -3.5..0.5: the HUD's top edge is the view's top edge
+    }
+
+    [Fact]
     public void Hud_band_converts_header_space_to_bottom_panel_pixels()
     {
         Assert.True(HkShellPolicy.HudBand(1240f, 1080f, 1000f, 200f, 2480f, 2160f, 10f, 0.62f, 0.62f,
