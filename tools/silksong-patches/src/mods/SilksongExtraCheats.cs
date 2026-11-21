@@ -39,6 +39,10 @@ namespace DualSouls.Mods.Silksong
         static HeroController _sparedHero;
         static FieldInfo _takeNoDamage;
         int _recallSlot = 1;
+        string _arriveScene;
+        string _arriveFrom;
+        Vector3 _arrivePosition;
+        float _arriveDeadline;
 
         internal static bool NoHazardDamage;
 
@@ -82,6 +86,7 @@ namespace DualSouls.Mods.Silksong
         public void Tick()
         {
             ReleaseSparedHit();
+            MaintainArrival();
             MaintainFlight();
             MaintainDashCooldown();
             MaintainVignette();
@@ -100,6 +105,7 @@ namespace DualSouls.Mods.Silksong
             RestoreVignette();
             _needolinSilk = false;
             _recallSlot = 1;
+            _arriveScene = null;
         }
 
         public void PrepareForStateTransfer()
@@ -267,8 +273,28 @@ namespace DualSouls.Mods.Silksong
                 Arrive(position);
                 return Text("recalled to slot " + _recallSlot + " in this room");
             }
-            SilksongGameplayFeatures.Transport(target.scene, position, scene => Arrive(position));
+            _arriveScene = target.scene;
+            _arriveFrom = game.sceneName;
+            _arrivePosition = position;
+            _arriveDeadline = Time.realtimeSinceStartup + 30f;
+            SilksongGameplayFeatures.Transport(target.scene, position, null);
             return Text("recalling to slot " + _recallSlot + " in " + target.scene);
+        }
+
+        // #55: the game places the hero at the room's respawn point after the load
+        // callback, so a recall into another room is applied once the hero stands in
+        // it. A transition that never reaches the room drops the pending recall.
+        void MaintainArrival()
+        {
+            if (_arriveScene == null) return;
+            if (Time.realtimeSinceStartup > _arriveDeadline) { _arriveScene = null; return; }
+            GameManager game = GameManager.SilentInstance;
+            HeroController hero = HeroController.UnsafeInstance;
+            if (game == null || hero == null || game.IsInSceneTransition || hero.cState.dead ||
+                hero.transitionState != HeroTransitionState.WAITING_TO_TRANSITION) return;
+            if (game.sceneName == _arriveFrom) return;
+            if (game.sceneName == _arriveScene) Arrive(_arrivePosition);
+            _arriveScene = null;
         }
 
         void Arrive(Vector3 position)

@@ -20,6 +20,14 @@ namespace HollowKnightPatches.Lower
             Path.Combine(Application.persistentDataPath, "dualsouls-loadout-presets", "hollow-knight",
                          "profile-" + profile, "preset-" + preset + ".txt");
 
+        // The slot the player picked: a new game's PlayerData.profileID stays 0 until
+        // its first save, so the GameManager's slot keys the presets.
+        static int Slot(PlayerData pd)
+        {
+            var gm = GameManager.UnsafeInstance;
+            return gm != null ? gm.profileID : pd.profileID;
+        }
+
         /// <summary>Why presets cannot be loaded right now, or null when they can.</summary>
         public static string BlockReason(PlayerData pd)
         {
@@ -35,7 +43,7 @@ namespace HollowKnightPatches.Lower
         public static bool Exists(int preset)
         {
             var pd = PlayerData.instance;
-            return pd != null && preset >= 1 && preset <= Count && File.Exists(PathFor(pd.profileID, preset));
+            return pd != null && preset >= 1 && preset <= Count && File.Exists(PathFor(Slot(pd), preset));
         }
 
         public static string Save(int preset)
@@ -43,7 +51,7 @@ namespace HollowKnightPatches.Lower
             var pd = PlayerData.instance;
             if (!DsFrame.InGame || pd == null || pd.equippedCharms == null) return "Load a save first";
             if (preset < 1 || preset > Count) return "No such preset";
-            string path = PathFor(pd.profileID, preset);
+            string path = PathFor(Slot(pd), preset);
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             File.WriteAllText(path, string.Join(",", pd.equippedCharms.ConvertAll(n => n.ToString()).ToArray()));
             return "Preset " + preset + " saved (" + pd.equippedCharms.Count + " charms)";
@@ -59,7 +67,7 @@ namespace HollowKnightPatches.Lower
             string reason = BlockReason(pd);
             if (reason != null) return reason;
             if (preset < 1 || preset > Count) return "No such preset";
-            string path = PathFor(pd.profileID, preset);
+            string path = PathFor(Slot(pd), preset);
             if (!File.Exists(path)) return "Preset " + preset + " is empty";
 
             var wanted = new List<int>();

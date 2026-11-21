@@ -15,7 +15,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, travel <scene> <gate> | delivery <list|give <name>|hit|break|state> | crest [tools <type>|equip <slot> <tool>|unlock <tool>] | inv [fsm|next <pane>|send <event>|tools] | fsm find <text> | fsm show|send|set|goto <object>[#n]|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | sprites | assists | collect [checklist|why <scene prefix>]";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, perform on|off, travel <scene> <gate> | delivery <list|give <name>|hit|break|state> | crest [tools <type>|equip <slot> <tool>|unlock <tool>] | inv [fsm|next <pane>|send <event>|tools] | fsm find <text> | fsm show|send|set|goto <object>[#n]|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | sprites | assists | collect [checklist|why <scene prefix>]";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -386,6 +386,11 @@ public partial class DualScreenV2
                 return DsQaReport.Invoke(hero, hero, "TakeDamage", new object[] { hero.gameObject }, "CollisionSide.bottom", "HazardType.SPIKES")
                        + " " + before + " -> " + DsQaReport.Fields(pd, "health");
             }
+            case "perform":
+                // QA (#54): the game's own Needolin performing flag, which a held input sets.
+                if (a.Length != 2 || (a[1] != "on" && a[1] != "off")) return "error perform on|off";
+                HeroPerformanceRegion.IsPerforming = a[1] == "on";
+                return "ok performing=" + HeroPerformanceRegion.IsPerforming;
             case "hit": return CommandHit(a, gm);
             case "hurt": return CommandHurt(a, gm);
             case "dash": return CommandDash(gm);

@@ -30,6 +30,10 @@ namespace DualSouls.Mods.HollowKnight
 
         static global::HeroController _sparedHero;
         int _recallSlot = 1;
+        string _arriveScene;
+        string _arriveFrom;
+        Vector3 _arrivePosition;
+        float _arriveDeadline;
 
         internal static bool NoHazardDamage;
 
@@ -70,6 +74,7 @@ namespace DualSouls.Mods.HollowKnight
         public void Tick()
         {
             ReleaseSparedHit();
+            MaintainArrival();
             MaintainFlight();
             MaintainDashCooldown();
             MaintainVignette();
@@ -87,6 +92,7 @@ namespace DualSouls.Mods.HollowKnight
             _noVignette = false;
             RestoreVignette();
             _recallSlot = 1;
+            _arriveScene = null;
         }
 
         public void PrepareForStateTransfer()
@@ -220,7 +226,8 @@ namespace DualSouls.Mods.HollowKnight
             global::HeroController hero = global::HeroController.UnsafeInstance;
             if (game == null || hero == null || game.playerData == null)
                 return TweakActionResult.Fail("Load a save before using " + id + ".");
-            string path = RecallPath(game.playerData.profileID, _recallSlot);
+            // The picked slot: a new game's PlayerData.profileID stays 0 until its first save.
+            string path = RecallPath(game.profileID, _recallSlot);
             if (id == "mark_recall")
             {
                 if (hero.cState.dead || hero.transitionState != GlobalEnums.HeroTransitionState.WAITING_TO_TRANSITION)
@@ -243,8 +250,28 @@ namespace DualSouls.Mods.HollowKnight
                 Arrive(position);
                 return Text("recalled to slot " + _recallSlot + " in this room");
             }
-            HollowKnightGameplayFeatures.Transport(target.scene, position, scene => Arrive(position));
+            _arriveScene = target.scene;
+            _arriveFrom = game.sceneName;
+            _arrivePosition = position;
+            _arriveDeadline = Time.realtimeSinceStartup + 30f;
+            HollowKnightGameplayFeatures.Transport(target.scene, position, null);
             return Text("recalling to slot " + _recallSlot + " in " + target.scene);
+        }
+
+        // #55: the game places the hero at the room's respawn point after the load
+        // callback, so a recall into another room is applied once the hero stands in
+        // it. A transition that never reaches the room drops the pending recall.
+        void MaintainArrival()
+        {
+            if (_arriveScene == null) return;
+            if (Time.realtimeSinceStartup > _arriveDeadline) { _arriveScene = null; return; }
+            global::GameManager game = global::GameManager.UnsafeInstance;
+            global::HeroController hero = global::HeroController.UnsafeInstance;
+            if (game == null || hero == null || game.IsInSceneTransition || hero.cState.dead ||
+                hero.transitionState != GlobalEnums.HeroTransitionState.WAITING_TO_TRANSITION) return;
+            if (game.sceneName == _arriveFrom) return;
+            if (game.sceneName == _arriveScene) Arrive(_arrivePosition);
+            _arriveScene = null;
         }
 
         void Arrive(Vector3 position)
