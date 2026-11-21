@@ -18,6 +18,10 @@ namespace DualSouls.Mods.Silksong
     internal sealed class SilksongExtraCheats
     {
         const float FlightSpeed = 20f;
+
+        // QA (#49): a held movement input for the flight, set by the `fly` command,
+        // because the host cannot hold the game's stick.
+        public static Vector2 QaFlightInput;
         const float NeedolinSilkInterval = 1f;
 
         bool _noclip;
@@ -134,7 +138,7 @@ namespace DualSouls.Mods.Silksong
             InputHandler input = InputHandler.UnsafeInstance;
             if (hero.acceptingInput && input != null && input.inputActions != null)
             {
-                Vector2 move = input.inputActions.MoveVector.Vector;
+                Vector2 move = input.inputActions.MoveVector.Vector + QaFlightInput;
                 _flightPosition += new Vector3(move.x, move.y, 0f) * (FlightSpeed * Time.deltaTime);
             }
             hero.AffectedByGravity(false);
@@ -146,6 +150,7 @@ namespace DualSouls.Mods.Silksong
         {
             if (_flightSeeded && _flightHero != null && !_flightHero.cState.dead) _flightHero.AffectedByGravity(true);
             _flightSeeded = false;
+            QaFlightInput = Vector2.zero;
             SilksongGameplayHooks.NoclipActive = false;
         }
 

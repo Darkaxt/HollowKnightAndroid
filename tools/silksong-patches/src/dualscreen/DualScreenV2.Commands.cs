@@ -386,6 +386,16 @@ public partial class DualScreenV2
                 return DsQaReport.Invoke(hero, hero, "TakeDamage", new object[] { hero.gameObject }, "CollisionSide.bottom", "HazardType.SPIKES")
                        + " " + before + " -> " + DsQaReport.Fields(pd, "health");
             }
+            case "fly":
+            {
+                // QA (#49): hold the flight's movement input (x y in -1..1; 0 0 releases).
+                float fx, fy;
+                if (a.Length != 3 || !float.TryParse(a[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out fx) ||
+                    !float.TryParse(a[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out fy))
+                    return "error fly x y";
+                SilksongExtraCheats.QaFlightInput = new Vector2(Mathf.Clamp(fx, -1f, 1f), Mathf.Clamp(fy, -1f, 1f));
+                return "ok fly=" + SilksongExtraCheats.QaFlightInput.x + "," + SilksongExtraCheats.QaFlightInput.y;
+            }
             case "perform":
                 // QA (#54): the game's own Needolin performing flag, which a held input sets.
                 if (a.Length != 2 || (a[1] != "on" && a[1] != "off")) return "error perform on|off";

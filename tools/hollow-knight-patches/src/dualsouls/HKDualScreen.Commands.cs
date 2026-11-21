@@ -141,6 +141,16 @@ public partial class HKDualScreen
                 hero.TakeDamage(hero.gameObject, GlobalEnums.CollisionSide.top, 1, 1);
                 return "ok health=" + pd.health;
             }
+            case "fly":
+            {
+                // QA (#49): hold the flight's movement input (x y in -1..1; 0 0 releases).
+                float fx, fy;
+                if (a.Length != 3 || !float.TryParse(a[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out fx) ||
+                    !float.TryParse(a[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out fy))
+                    return "error fly x y";
+                HollowKnightExtraCheats.QaFlightInput = new Vector2(Mathf.Clamp(fx, -1f, 1f), Mathf.Clamp(fy, -1f, 1f));
+                return "ok fly=" + HollowKnightExtraCheats.QaFlightInput.x + "," + HollowKnightExtraCheats.QaFlightInput.y;
+            }
             case "hazard":
             {
                 // QA (#52): one spike hit through the game's own damage path, so the hazard

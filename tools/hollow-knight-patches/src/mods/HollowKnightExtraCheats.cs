@@ -16,6 +16,10 @@ namespace DualSouls.Mods.HollowKnight
     {
         const float FlightSpeed = 20f;
 
+        // QA (#49): a held movement input for the flight, set by the `fly` command,
+        // because the host cannot hold the game's stick.
+        public static Vector2 QaFlightInput;
+
         bool _noclip;
         global::HeroController _flightHero;
         Vector3 _flightPosition;
@@ -122,7 +126,7 @@ namespace DualSouls.Mods.HollowKnight
             global::InputHandler input = global::InputHandler.Instance;
             if (hero.acceptingInput && input != null && input.inputActions != null)
             {
-                Vector2 move = input.inputActions.moveVector.Vector;
+                Vector2 move = input.inputActions.moveVector.Vector + QaFlightInput;
                 _flightPosition += new Vector3(move.x, move.y, 0f) * (FlightSpeed * Time.deltaTime);
             }
             hero.AffectedByGravity(false);
@@ -135,6 +139,7 @@ namespace DualSouls.Mods.HollowKnight
         {
             if (_flightSeeded && _flightHero != null && !_flightHero.cState.dead) _flightHero.AffectedByGravity(true);
             _flightSeeded = false;
+            QaFlightInput = Vector2.zero;
             HollowKnightGameplayHooks.NoclipActive = false;
         }
 
