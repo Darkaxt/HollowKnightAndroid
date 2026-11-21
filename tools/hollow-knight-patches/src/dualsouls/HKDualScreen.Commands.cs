@@ -89,6 +89,14 @@ public partial class HKDualScreen
                 compOn = a[1] == "config" ? -1 : (a[1] == "1" ? 1 : 0);
                 return "ok compOn=" + compOn;
             case "mods-list": return CommandModsList();
+            case "preset":
+            {
+                int n;
+                if (a.Length < 3 || !int.TryParse(a[2], out n)) return "error preset <save|load> N";
+                if (a[1] == "save") return "ok " + HollowKnightPatches.Lower.HkCharmPresets.Save(n);
+                if (a[1] == "load") return "ok " + HollowKnightPatches.Lower.HkCharmPresets.Load(n);
+                return "error preset <save|load> N";
+            }
             case "assists": return HollowKnightGameplayFeatures.DeathReport() + "\n" + HollowKnightCheats.AssistReport();
             case "mod":
             {

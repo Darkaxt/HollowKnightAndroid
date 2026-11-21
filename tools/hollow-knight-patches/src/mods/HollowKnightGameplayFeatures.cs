@@ -308,6 +308,23 @@ namespace DualSouls.Mods.HollowKnight
             });
         }
 
+        // #55 recall points: move the hero only. Unlike a save state no save data is
+        // loaded, so health, items and progress stay as they are.
+        public static void Transport(string scene, Vector3 position, Action<string> completed)
+        {
+            GameManager game = RequireGame();
+            game.BeginSceneTransition(new StateSceneLoadInfo
+            {
+                SceneName = scene,
+                EntryGateName = "",
+                PreventCameraFadeOut = true,
+                WaitForSceneTransitionCameraFade = false,
+                Visualization = GameManager.SceneLoadVisualizations.ContinueFromSave,
+                Position = position,
+                Completed = completed,
+            });
+        }
+
         public static void DeleteState(int slot)
         {
             ValidateSlot(slot);

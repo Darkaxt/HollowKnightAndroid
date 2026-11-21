@@ -309,7 +309,7 @@ internal static class Builtin
         // The exact native SetBool implementation writes the singleton, not its receiver.
         var currentPlayer = Exact(player, "get_instance", true, "PlayerData");
         var beforeHit = Hook(oneHit, OneHitPatchMethod, "HealthManager", "HitInstance&");
-        var beforeDamage = Hook(hooks, "BeforeTakeDamage", "System.Int32&");
+        var beforeDamage = Hook(hooks, "BeforeTakeDamage", "System.Int32&", "System.Int32");
         var beforeGeo = Hook(hooks, "BeforeAddGeo", "System.Int32&");
         var beforeDeath = Hook(hooks, "BeforeDeath");
         var beforeJournal = Hook(hooks, "BeforeJournalSetInt", "PlayerData", "System.String", "System.Int32&");
@@ -338,7 +338,7 @@ internal static class Builtin
         var prefixes = new[]
         {
             (hit, beforeHit, new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldarga, hit.Parameters[0]) }),
-            (damage, beforeDamage, new[] { Instruction.Create(OpCodes.Ldarga, damage.Parameters[2]) }),
+            (damage, beforeDamage, new[] { Instruction.Create(OpCodes.Ldarga, damage.Parameters[2]), Instruction.Create(OpCodes.Ldarg, damage.Parameters[3]) }),
             (geo, beforeGeo, new[] { Instruction.Create(OpCodes.Ldarga, geo.Parameters[0]) }),
             (quietGeo, beforeGeo, new[] { Instruction.Create(OpCodes.Ldarga, quietGeo.Parameters[0]) }),
             (die, beforeDeath, Array.Empty<Instruction>()),
@@ -532,7 +532,7 @@ internal static class Builtin
         var constantsValue = Exact(Type("GetConstantsValue"), "OnEnter", false, "System.Void");
 
         var beforeHit = Hook("BeforeEnemyHit", "System.Void", "HealthManager", "HitInstance&");
-        var beforeDamage = Hook("BeforeHeroDamage", "System.Void", "System.Int32&");
+        var beforeDamage = Hook("BeforeHeroDamage", "System.Void", "System.Int32&", "GlobalEnums.HazardType");
         var beforeDeath = Hook("BeforeHeroDeath", "System.Void", "System.Boolean");
         var beforeCurrency = Hook("BeforeCurrencyChange", "System.Void", "System.Int32&", "CurrencyType");
         var beforeQuietGeo = Hook("BeforeAddGeoQuietly", "System.Void", "System.Int32&");
@@ -679,7 +679,8 @@ internal static class Builtin
         Prefix(hit, beforeHit, Instruction.Create(OpCodes.Ldarg_0),
             Instruction.Create(OpCodes.Ldarga, hit.Parameters[0]));
         Prefix(takeDamage, beforeDamage,
-            Instruction.Create(OpCodes.Ldarga, takeDamage.Parameters[2]));
+            Instruction.Create(OpCodes.Ldarga, takeDamage.Parameters[2]),
+            Instruction.Create(OpCodes.Ldarg, takeDamage.Parameters[3]));
         Prefix(die, beforeDeath,
             Instruction.Create(OpCodes.Ldarg, die.Parameters[0]));
         Prefix(changeCurrency, beforeCurrency,

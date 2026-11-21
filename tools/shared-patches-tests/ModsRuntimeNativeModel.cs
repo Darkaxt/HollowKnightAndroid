@@ -165,7 +165,8 @@ public static class SilksongGameplayFeatures
 public sealed class SilksongCheats
 {
     static readonly HashSet<string> Choices = new HashSet<string>(StringComparer.Ordinal) {
-        "game_speed", "quick_attacks", "infinite_tools", "infinite_air_jump", "hero_colour", "scene_colour", "picker_amount", "boss_health_bars", "all_damage", "health_regen", "dash_invincibility", "rebirth_in_scene", "easy_deliveries", "flea_games" };
+        "game_speed", "quick_attacks", "infinite_tools", "infinite_air_jump", "hero_colour", "scene_colour", "picker_amount", "boss_health_bars", "all_damage", "health_regen", "dash_invincibility", "rebirth_in_scene", "easy_deliveries", "flea_games",
+        "recall_slot", "no_hazard_damage", "needolin_silk_regen", "disable_vignette", "noclip", "no_dash_cooldown" };
     readonly Dictionary<string, string> _choices = new Dictionary<string, string>(StringComparer.Ordinal);
     public bool IsChoice(string id) => Choices.Contains(id) || id.StartsWith("active_", StringComparison.Ordinal);
     public bool IsCommand(string id) => !IsChoice(id);
@@ -177,7 +178,7 @@ public sealed class SilksongCheats
     public void CleanSaveValues(PlayerData live, PlayerData copy) { }
     public void SetChoice(string id, string value) => _choices[id] = value;
     public DualSouls.Mods.TweakActionResult Readback(string id) => DualSouls.Mods.TweakActionResult.Ok(
-        DualSouls.Mods.TweakReadback.Choice(_choices.TryGetValue(id, out string v) ? v : id == "game_speed" || id == "flea_games" ? "vanilla" : id == "picker_amount" ? "1" : "off"));
+        DualSouls.Mods.TweakReadback.Choice(_choices.TryGetValue(id, out string v) ? v : id == "game_speed" || id == "flea_games" ? "vanilla" : id == "picker_amount" || id == "recall_slot" ? "1" : "off"));
     public DualSouls.Mods.TweakActionResult Run(string id) =>
         DualSouls.Mods.TweakActionResult.Ok(DualSouls.Mods.TweakReadback.Text(id));
 }

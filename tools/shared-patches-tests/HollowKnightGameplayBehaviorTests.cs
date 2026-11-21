@@ -453,7 +453,7 @@ public sealed class HollowKnightGameplayBehaviorTests : System.IDisposable
     {
         int damage = 4;
         HollowKnightGameplayHooks.DamageCapEnabled = true;
-        HollowKnightGameplayHooks.BeforeTakeDamage(ref damage);
+        HollowKnightGameplayHooks.BeforeTakeDamage(ref damage, 1);
         Assert.Equal(1, damage);
 
         int geo = 7;

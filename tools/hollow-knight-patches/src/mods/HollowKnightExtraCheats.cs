@@ -1,0 +1,281 @@
+#if UNITY_ANDROID && !UNITY_EDITOR
+using System;
+using System.IO;
+using DualSouls.Mods;
+using UnityEngine;
+
+namespace DualSouls.Mods.HollowKnight
+{
+    /// <summary>
+    /// #58 Nexus top-100 review: noclip flight (#49), no dash cooldown (#50), no hazard
+    /// damage (#52), disable vignette (#53), recall points (#55) and the extra-mode
+    /// unlock (#57). Mods are behaviour references only. Choice effects are overlays
+    /// released by <see cref="RestoreAll"/>; nothing here is written into the save.
+    /// </summary>
+    internal sealed class HollowKnightExtraCheats
+    {
+        const float FlightSpeed = 20f;
+
+        bool _noclip;
+        global::HeroController _flightHero;
+        Vector3 _flightPosition;
+        bool _flightSeeded;
+
+        bool _noDashCooldown;
+        global::HeroController _dashHero;
+        float[] _dashBaseline;
+
+        bool _noVignette;
+        SpriteRenderer _vignette;
+
+        static global::HeroController _sparedHero;
+        int _recallSlot = 1;
+
+        internal static bool NoHazardDamage;
+
+        public static bool IsChoice(string id) =>
+            id == "noclip" || id == "no_dash_cooldown" || id == "no_hazard_damage" ||
+            id == "disable_vignette" || id == "recall_slot";
+
+        public static bool IsCommand(string id) =>
+            id == "mark_recall" || id == "recall" || id == "unlock_extra_modes";
+
+        public void SetChoice(string id, string value)
+        {
+            switch (id)
+            {
+                case "noclip":
+                    _noclip = value == "on";
+                    if (!_noclip) ReleaseFlight();
+                    break;
+                case "no_dash_cooldown":
+                    _noDashCooldown = value == "on";
+                    if (_noDashCooldown) MaintainDashCooldown(); else RestoreDashCooldown();
+                    break;
+                case "no_hazard_damage":
+                    NoHazardDamage = value == "on";
+                    HollowKnightGameplayHooks.SpareHazardHit = NoHazardDamage ? SpareHit : null;
+                    break;
+                case "disable_vignette":
+                    _noVignette = value == "on";
+                    if (!_noVignette) RestoreVignette();
+                    break;
+                case "recall_slot":
+                    int slot;
+                    _recallSlot = int.TryParse(value, out slot) && slot >= 1 && slot <= 5 ? slot : 1;
+                    break;
+            }
+        }
+
+        public void Tick()
+        {
+            ReleaseSparedHit();
+            MaintainFlight();
+            MaintainDashCooldown();
+            MaintainVignette();
+        }
+
+        public void RestoreAll()
+        {
+            _noclip = false;
+            ReleaseFlight();
+            _noDashCooldown = false;
+            RestoreDashCooldown();
+            NoHazardDamage = false;
+            HollowKnightGameplayHooks.SpareHazardHit = null;
+            ReleaseSparedHit();
+            _noVignette = false;
+            RestoreVignette();
+            _recallSlot = 1;
+        }
+
+        public void PrepareForStateTransfer()
+        {
+            ReleaseFlight();
+            RestoreDashCooldown();
+        }
+
+        // #49: DebugMod-style flight. The hero's position is held and moved with the
+        // game's own movement input; damage is cancelled in BeforeTakeDamage. During
+        // scene transitions and deaths the game owns the hero, so the hold re-seeds.
+        void MaintainFlight()
+        {
+            global::HeroController hero = global::HeroController.UnsafeInstance;
+            if (!ReferenceEquals(hero, _flightHero)) { ReleaseFlight(); _flightHero = hero; }
+            HollowKnightGameplayHooks.NoclipActive = false;
+            if (!_noclip || hero == null) return;
+            if (hero.cState.dead || hero.cState.hazardDeath ||
+                hero.transitionState != GlobalEnums.HeroTransitionState.WAITING_TO_TRANSITION)
+            {
+                _flightSeeded = false;
+                return;
+            }
+            HollowKnightGameplayHooks.NoclipActive = true;
+            Vector3 current = hero.transform.position;
+            if (!_flightSeeded) { _flightPosition = current; _flightSeeded = true; }
+            global::InputHandler input = global::InputHandler.Instance;
+            if (hero.acceptingInput && input != null && input.inputActions != null)
+            {
+                Vector2 move = input.inputActions.moveVector.Vector;
+                _flightPosition += new Vector3(move.x, move.y, 0f) * (FlightSpeed * Time.deltaTime);
+            }
+            hero.AffectedByGravity(false);
+            Rigidbody2D body = hero.GetComponent<Rigidbody2D>();
+            if (body != null) body.velocity = Vector2.zero;
+            hero.transform.position = _flightPosition;
+        }
+
+        void ReleaseFlight()
+        {
+            if (_flightSeeded && _flightHero != null && !_flightHero.cState.dead) _flightHero.AffectedByGravity(true);
+            _flightSeeded = false;
+            HollowKnightGameplayHooks.NoclipActive = false;
+        }
+
+        // #50: the game's own dash timers, as QUICK ATTACKS does for the nail.
+        void MaintainDashCooldown()
+        {
+            if (!_noDashCooldown) return;
+            global::HeroController hero = global::HeroController.UnsafeInstance;
+            if (hero == null || ReferenceEquals(_dashHero, hero)) return;
+            RestoreDashCooldown();
+            _dashHero = hero;
+            _dashBaseline = new[] { hero.DASH_COOLDOWN, hero.DASH_COOLDOWN_CH, hero.SHADOW_DASH_COOLDOWN };
+            hero.DASH_COOLDOWN = 0f;
+            hero.DASH_COOLDOWN_CH = 0f;
+            hero.SHADOW_DASH_COOLDOWN = 0f;
+        }
+
+        void RestoreDashCooldown()
+        {
+            if (_dashHero != null && _dashBaseline != null)
+            {
+                _dashHero.DASH_COOLDOWN = _dashBaseline[0];
+                _dashHero.DASH_COOLDOWN_CH = _dashBaseline[1];
+                _dashHero.SHADOW_DASH_COOLDOWN = _dashBaseline[2];
+            }
+            _dashHero = null;
+            _dashBaseline = null;
+        }
+
+        // #52: called from the woven TakeDamage head for hazard hits (spikes, acid,
+        // pits). The game's own takeNoDamage flag skips the mask loss while the rest of
+        // the hit, including the hazard respawn, runs normally. Released next tick.
+        static readonly Action SpareHit = SpareHazardHit;
+
+        internal static void SpareHazardHit()
+        {
+            global::HeroController hero = global::HeroController.UnsafeInstance;
+            if (hero == null || hero.takeNoDamage) return;
+            hero.takeNoDamage = true;
+            _sparedHero = hero;
+        }
+
+        static void ReleaseSparedHit()
+        {
+            if (_sparedHero != null) _sparedHero.takeNoDamage = false;
+            _sparedHero = null;
+        }
+
+        // #53: the vignette sprite the game draws around the hero.
+        void MaintainVignette()
+        {
+            if (!_noVignette) return;
+            global::HeroController hero = global::HeroController.UnsafeInstance;
+            SpriteRenderer vignette = hero == null ? null : hero.vignette;
+            if (!ReferenceEquals(vignette, _vignette)) RestoreVignette();
+            if (vignette == null || !vignette.enabled) return;
+            vignette.enabled = false;
+            _vignette = vignette;
+        }
+
+        void RestoreVignette()
+        {
+            if (_vignette != null) _vignette.enabled = true;
+            _vignette = null;
+        }
+
+        internal static string Report()
+        {
+            global::HeroController hero = global::HeroController.UnsafeInstance;
+            return "noclip=" + HollowKnightGameplayHooks.NoclipActive + " hazardSpare=" + NoHazardDamage +
+                (hero == null ? "" : " dashCd=" + hero.DASH_COOLDOWN + "/" + hero.SHADOW_DASH_COOLDOWN +
+                " vignette=" + (hero.vignette != null && hero.vignette.enabled) +
+                " pos=" + hero.transform.position.x.ToString("0.0") + "," + hero.transform.position.y.ToString("0.0"));
+        }
+
+        [Serializable]
+        sealed class RecallPoint
+        {
+            public string scene;
+            public float x;
+            public float y;
+            public float z;
+        }
+
+        public TweakActionResult Run(string id)
+        {
+            if (id == "unlock_extra_modes") return UnlockExtraModes();
+            global::GameManager game = global::GameManager.instance;
+            global::HeroController hero = global::HeroController.UnsafeInstance;
+            if (game == null || hero == null || game.playerData == null)
+                return TweakActionResult.Fail("Load a save before using " + id + ".");
+            string path = RecallPath(game.playerData.profileID, _recallSlot);
+            if (id == "mark_recall")
+            {
+                if (hero.cState.dead || hero.transitionState != GlobalEnums.HeroTransitionState.WAITING_TO_TRANSITION)
+                    return TweakActionResult.Fail("Mark a recall point while standing in a room.");
+                Vector3 at = hero.transform.position;
+                var point = new RecallPoint { scene = game.sceneName, x = at.x, y = at.y, z = at.z };
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                File.WriteAllText(path, JsonUtility.ToJson(point));
+                return Text("recall " + _recallSlot + " marked in " + point.scene);
+            }
+            if (!File.Exists(path)) return TweakActionResult.Fail("Recall slot " + _recallSlot + " is empty.");
+            RecallPoint target = JsonUtility.FromJson<RecallPoint>(File.ReadAllText(path));
+            if (target == null || string.IsNullOrEmpty(target.scene))
+                return TweakActionResult.Fail("Recall slot " + _recallSlot + " is unreadable.");
+            if (hero.cState.dead || hero.transitionState != GlobalEnums.HeroTransitionState.WAITING_TO_TRANSITION)
+                return TweakActionResult.Fail("Recall needs the Knight standing in a room.");
+            var position = new Vector3(target.x, target.y, target.z);
+            if (target.scene == game.sceneName)
+            {
+                Arrive(position);
+                return Text("recalled to slot " + _recallSlot + " in this room");
+            }
+            HollowKnightGameplayFeatures.Transport(target.scene, position, scene => Arrive(position));
+            return Text("recalling to slot " + _recallSlot + " in " + target.scene);
+        }
+
+        void Arrive(Vector3 position)
+        {
+            global::HeroController hero = global::HeroController.UnsafeInstance;
+            if (hero == null) return;
+            hero.transform.position = position;
+            Rigidbody2D body = hero.GetComponent<Rigidbody2D>();
+            if (body != null) body.velocity = Vector2.zero;
+            _flightSeeded = false;
+            // Spikes after a recall respawn the hero here, not in the previous room.
+            global::PlayerData data = global::PlayerData.instance;
+            if (data != null) data.SetHazardRespawn(position, hero.cState.facingRight);
+        }
+
+        static string RecallPath(int profile, int slot) =>
+            Path.Combine(Application.persistentDataPath, "dualsouls-recall-points", "profile-" + profile, "slot-" + slot + ".json");
+
+        // #57: the game's own status records, as its PermadeathUnlock and Godhome
+        // completion set them.
+        static TweakActionResult UnlockExtraModes()
+        {
+            global::GameManager game = global::GameManager.instance;
+            if (game == null) return TweakActionResult.Fail("The game is not ready yet.");
+            game.SetStatusRecordInt("RecPermadeathMode", 1);
+            game.SetStatusRecordInt("RecBossRushMode", 1);
+            game.SaveStatusRecords();
+            return Text("Steel Soul and Godseeker unlocked");
+        }
+
+        static TweakActionResult Text(string value) => TweakActionResult.Ok(TweakReadback.Text(value));
+    }
+}
+#endif

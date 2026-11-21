@@ -113,13 +113,16 @@ namespace DualSouls.Mods.Silksong
         static readonly IReadOnlyList<TweakDescriptor> Rows = Array.AsReadOnly(new[]
         {
 
-            Row("run_speed", "run_speed", TweakControlKind.Choice, "WORLD", "RUN SPEED", "Choose Hornet's normal, +25%, or +50% movement pace.", "vanilla", "vanilla", "plus_25", "plus_50"),
+            Row("run_speed", "run_speed", TweakControlKind.Choice, "WORLD", "RUN SPEED", "Choose Hornet's normal, +25%, +50%, or +100% movement pace.", "vanilla", "vanilla", "plus_25", "plus_50", "plus_100"),
             Row("fast_transitions", "fast_transitions", TweakControlKind.Choice, "WORLD", "FAST TRANSITIONS", "Shorten supported scene transitions.", "off", "off", "on"),
             Row("auto_map", "auto_map", TweakControlKind.Choice, "WORLD", "AUTO MAP", "Reveal visited rooms on the map automatically.", "off", "off", "on"),
             Row("innate_compass", "innate_compass", TweakControlKind.Choice, "WORLD", "INNATE COMPASS", "Show Hornet on the map without requiring a compass tool.", "off", "off", "on"),
             Row("bench_teleport", "bench_teleport", TweakControlKind.Route, "WORLD", "BENCH TELEPORT", "Open the recorded-bench destination list.", "open", "open"),
             Row("secret_radar", "secret_radar", TweakControlKind.Choice, "WORLD", "SECRET RADAR", "Signal nearby secrets without changing progression.", "off", "off", "on"),
             Cheat("game_speed", TweakControlKind.Choice, "WORLD", "GAME SPEED", "Slow down or speed up gameplay. Pause and hit-stop keep their normal timing.", "vanilla", "vanilla", "x0_5", "x0_75", "x1_5", "x2"),
+            Cheat("recall_slot", TweakControlKind.Choice, "WORLD", "RECALL SLOT", "Choose the recall point used by the two rows below.", "1", "1", "2", "3", "4", "5"),
+            Cheat("mark_recall", TweakControlKind.Command, "WORLD", "MARK RECALL POINT", "Remember this room and Hornet's position in the selected slot.", "run", "run"),
+            Cheat("recall", TweakControlKind.Command, "WORLD", "RECALL", "Return Hornet to the selected recall point. Health, items and progress stay as they are now.", "run", "run"),
 
             Row("nail_damage", "nail_damage", TweakControlKind.Choice, "COMBAT", "NEEDLE DAMAGE", "Multiply Needle damage while preserving upgrades.", "x1", "x1", "x2", "x3", "x5"),
             Row("damage_received", "damage_taken", TweakControlKind.Choice, "COMBAT", "DAMAGE TAKEN", "Choose normal damage, prevent death, or full invincibility.", "vanilla", "vanilla", "prevent_death", "invincible"),
@@ -130,6 +133,8 @@ namespace DualSouls.Mods.Silksong
             Cheat("all_damage", TweakControlKind.Choice, "COMBAT", "ALL DAMAGE", "Multiply every hit you deal, spells and tools included. Stacks with Needle damage.", "off", "off", "x2", "x3", "x5", "x10"),
             Cheat("health_regen", TweakControlKind.Choice, "ASSISTS", "HEALTH REGENERATION", "Restore one mask after a few seconds without taking damage.", "off", "off", "slow", "fast"),
             Cheat("dash_invincibility", TweakControlKind.Choice, "ASSISTS", "DASH INVINCIBILITY", "Dashing passes through enemies and attacks, like Hollow Knight's Shade Cloak.", "off", "off", "on"),
+            Cheat("no_hazard_damage", TweakControlKind.Choice, "ASSISTS", "NO HAZARD DAMAGE", "Spikes, acid and other hazards still send you back to the last safe spot, but take no mask.", "off", "off", "on"),
+            Cheat("needolin_silk_regen", TweakControlKind.Choice, "ASSISTS", "NEEDOLIN SILK REGEN", "Playing the Needolin refills Silk, one unit per second.", "off", "off", "on"),
             Cheat("easy_deliveries", TweakControlKind.Choice, "ASSISTS", "EASY DELIVERIES", "Delivery items survive hits and fast travel. Dying still breaks them, and timed deliveries keep their timer.", "off", "off", "on"),
             Cheat("flea_games", TweakControlKind.Choice, "ASSISTS", "FLEA FESTIVAL TARGETS", "Lower the scores needed to become a Flea Festival champion and to beat Seth. Minimal: any score wins.", "vanilla", "vanilla", "half", "minimal"),
 
@@ -159,8 +164,11 @@ namespace DualSouls.Mods.Silksong
 
             Row("instant_dialogue", "instant_dialogue", TweakControlKind.Choice, "PRESENTATION", "INSTANT DIALOGUE", "Show dialogue text immediately instead of printing it over time.", "off", "off", "on"),
             Row("disable_world_rumble", "disable_world_rumble", TweakControlKind.Choice, "PRESENTATION", "DISABLE WORLD RUMBLE", "Prevent ambient world rumble effects.", "off", "off", "on"),
+            Cheat("disable_vignette", TweakControlKind.Choice, "PRESENTATION", "DISABLE VIGNETTE", "Hide the dark vignette drawn around Hornet, so room edges and dark areas are easier to see.", "off", "off", "on"),
             Row("ignore_frost_slowdown", "ignore_frost_slowdown", TweakControlKind.Choice, "PLAYER", "IGNORE FROST SLOWDOWN", "Prevent frost buildup from slowing Hornet.", "off", "off", "on"),
             Cheat("infinite_air_jump", TweakControlKind.Choice, "PLAYER", "INFINITE AIR JUMP", "Jump again in mid-air as often as you like.", "off", "off", "on"),
+            Cheat("noclip", TweakControlKind.Choice, "PLAYER", "NOCLIP FLIGHT", "Fly through walls in any direction with the movement input, taking no damage. Turning it off drops you where you are.", "off", "off", "on"),
+            Cheat("no_dash_cooldown", TweakControlKind.Choice, "PLAYER", "NO DASH COOLDOWN", "Dash again straight away.", "off", "off", "on"),
             Cheat("refill_health", TweakControlKind.Command, "PLAYER", "REFILL HEALTH", "Restore all masks now.", "run", "run"),
             Cheat("max_health_up", TweakControlKind.Command, "PLAYER", "MAX HEALTH +1", "Permanently add one mask to this save.", "run", "run"),
             Cheat("max_health_down", TweakControlKind.Command, "PLAYER", "MAX HEALTH -1", "Permanently remove one mask from this save (minimum 1).", "run", "run"),
@@ -199,6 +207,7 @@ namespace DualSouls.Mods.Silksong
             Cheat("unlock_fast_travel", TweakControlKind.Command, "UNLOCKS", "UNLOCK FAST TRAVEL", "Permanently open every Bellway station and Ventrica tube.", "run", "run"),
             Cheat("unlock_maps", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL MAPS", "Permanently add every area map to this save.", "run", "run"),
             Cheat("max_collectables", TweakControlKind.Command, "UNLOCKS", "FILL COLLECTABLES", "Add up to 99 of every collectable item (Growstone excluded). Can affect quests.", "run", "run"),
+            Cheat("unlock_extra_modes", TweakControlKind.Command, "UNLOCKS", "UNLOCK EXTRA MODES", "Unlock Steel Soul mode on the title screen, through the game's own record.", "run", "run"),
 
             Cheat("picker_amount", TweakControlKind.Choice, "ITEM PICKER", "PICKER AMOUNT", "How many the picker rows below add, take or set.", "1", "1", "5", "10", "50", "99"),
             Cheat("item_prev", TweakControlKind.Command, "ITEM PICKER", "PREVIOUS ITEM", "Select the previous collectable and show how many you own.", "run", "run"),
@@ -291,7 +300,7 @@ namespace DualSouls.Mods.Silksong
             {
                 switch (id)
                 {
-                    case "run_speed": if (value == "vanilla") _api.RestoreRunSpeed(); else _api.SetRunSpeedMultiplier(value == "plus_25" ? 1.25f : 1.5f); break;
+                    case "run_speed": if (value == "vanilla") _api.RestoreRunSpeed(); else _api.SetRunSpeedMultiplier(value == "plus_25" ? 1.25f : value == "plus_100" ? 2f : 1.5f); break;
                     case "fast_transitions": _api.SetFastTransitions(On(value)); break;
                     case "auto_map": _api.SetAutoMap(On(value)); break;
                     case "innate_compass": _api.SetInnateCompass(On(value)); break;

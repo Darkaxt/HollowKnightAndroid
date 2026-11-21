@@ -503,6 +503,23 @@ namespace DualSouls.Mods.Silksong
             });
         }
 
+        // #55 recall points: move the hero only. Unlike a save state no save data is
+        // loaded, so health, items and progress stay as they are.
+        public static void Transport(string scene, Vector3 position, Action<string> completed)
+        {
+            GameManager game = RequireGame();
+            game.BeginSceneTransition(new StateSceneLoadInfo
+            {
+                SceneName = scene,
+                EntryGateName = "",
+                PreventCameraFadeOut = true,
+                WaitForSceneTransitionCameraFade = false,
+                Visualization = GameManager.SceneLoadVisualizations.ContinueFromSave,
+                Position = position,
+                Completed = completed,
+            });
+        }
+
         static string StateDirectory { get { return Path.Combine(Application.persistentDataPath, "dualsouls-save-states", "silksong"); } }
         static string ProfileStateDirectory(int profile) { return Path.Combine(StateDirectory, "profile-" + profile); }
         static string StatePath(int slot, int profile) { return Path.Combine(ProfileStateDirectory(profile), "slot-" + slot + ".json"); }
@@ -1150,7 +1167,17 @@ namespace DualSouls.Mods.Silksong
             if (factor <= 1) return;
             long scaled = hit.DamageDealt * factor; hit.DamageDealt = scaled > int.MaxValue ? int.MaxValue : (int)scaled;
         }
-        public static void BeforeHeroDamage(ref int damageAmount) { if (DamageCapEnabled && damageAmount > 1) damageAmount = 1; }
+        // Set by the noclip cheat (#49) while Hornet is flying.
+        public static bool NoclipActive { get; set; }
+        // Woven at the head of HeroController.TakeDamage with the game's own hazard type.
+        public static void BeforeHeroDamage(ref int damageAmount, HazardType hazardType)
+        {
+            if (NoclipActive) { damageAmount = 0; return; }
+            if (DamageCapEnabled && damageAmount > 1) damageAmount = 1;
+            if (damageAmount > 0 && SilksongExtraCheats.NoHazardDamage && hazardType != HazardType.ENEMY &&
+                hazardType != HazardType.NON_HAZARD && hazardType != HazardType.EXPLOSION)
+                SilksongExtraCheats.SpareHazardHit();
+        }
         public static void BeforeCurrencyChange(ref int amount, CurrencyType type)
         {
             if (type != CurrencyType.Money || amount <= 0 || RosaryMultiplier <= 1) return;
@@ -1272,7 +1299,7 @@ namespace DualSouls.Mods.Silksong
         }
         public static void Reset()
         {
-            NeedleMultiplier = 1; AllDamageMultiplier = 1; DamageCapEnabled = false; InnateCompassEnabled = false; JournalOneKillEnabled = false; ToolCostsFreeEnabled = false; KeepRosariesEnabled = false; RosaryMultiplier = 1; deathObserved = false; EasyDeliveriesEnabled = false; deliveryDeathPending = false; FleaTargetPercent = 100;
+            NoclipActive = false; NeedleMultiplier = 1; AllDamageMultiplier = 1; DamageCapEnabled = false; InnateCompassEnabled = false; JournalOneKillEnabled = false; ToolCostsFreeEnabled = false; KeepRosariesEnabled = false; RosaryMultiplier = 1; deathObserved = false; EasyDeliveriesEnabled = false; deliveryDeathPending = false; FleaTargetPercent = 100;
         }
     }
 }

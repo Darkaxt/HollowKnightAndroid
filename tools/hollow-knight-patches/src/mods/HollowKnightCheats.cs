@@ -96,12 +96,16 @@ namespace DualSouls.Mods.HollowKnight
                     HollowKnightGameplayFeatures.RebirthEnabled = value == "on";
                     break;
                 default:
-                    throw new ArgumentException("Not a Hollow Knight cheat choice: " + id);
+                    if (!HollowKnightExtraCheats.IsChoice(id))
+                        throw new ArgumentException("Not a Hollow Knight cheat choice: " + id);
+                    _extra.SetChoice(id, value);
+                    break;
             }
         }
 
         readonly HeroTint _tint = new HeroTint();
         readonly HollowKnightItemPicker _picker = new HollowKnightItemPicker();
+        readonly HollowKnightExtraCheats _extra = new HollowKnightExtraCheats();
 
         public void Tick()
         {
@@ -111,6 +115,7 @@ namespace DualSouls.Mods.HollowKnight
             MaintainQuickAttacks();
             MaintainRegeneration();
             MaintainDashInvincibility();
+            _extra.Tick();
         }
 
         // #42: one mask back after a quiet spell. Scaled time, so pause stops the clock;
@@ -164,11 +169,12 @@ namespace DualSouls.Mods.HollowKnight
             global::HeroController hero = global::HeroController.UnsafeInstance;
             return "regen=" + _regenInterval + " regenHealth=" + _regenHealth + " dash=" + _dashInvincible +
                 " dashOwned=" + _dashOwned + " dashFrames=" + _dashFrames + " regenGrants=" + _regenGrants +
-                " invulnerable=" + (hero != null && hero.cState.invulnerable);
+                " invulnerable=" + (hero != null && hero.cState.invulnerable) + " " + HollowKnightExtraCheats.Report();
         }
 
         public void RestoreAll()
         {
+            _extra.RestoreAll();
             _regenInterval = 0f;
             _regenHealth = -1;
             _dashInvincible = false;
@@ -189,6 +195,7 @@ namespace DualSouls.Mods.HollowKnight
 
         public void PrepareForStateTransfer()
         {
+            _extra.PrepareForStateTransfer();
             ReleaseDashInvincibility();
             RestoreAirJump();
             RestoreQuickAttacks();
@@ -275,6 +282,7 @@ namespace DualSouls.Mods.HollowKnight
                 return Achievements(id == "award_all_achievements");
             if (id.StartsWith("achievement_", StringComparison.Ordinal))
                 return AchievementPicker(id);
+            if (HollowKnightExtraCheats.IsCommand(id)) return _extra.Run(id);
             global::HeroController hero = global::HeroController.UnsafeInstance;
             global::PlayerData data = global::PlayerData.instance;
             if (hero == null || data == null)

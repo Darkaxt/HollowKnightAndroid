@@ -147,7 +147,7 @@ namespace DualSouls.Mods.Silksong
 
         public void SetRunSpeedMultiplier(float multiplier)
         {
-            if (multiplier != 1.25f && multiplier != 1.5f) throw new ArgumentOutOfRangeException(nameof(multiplier));
+            if (multiplier != 1.25f && multiplier != 1.5f && multiplier != 2f) throw new ArgumentOutOfRangeException(nameof(multiplier));
             _runSpeedMultiplier = multiplier;
             MaintainRunSpeed();
         }
@@ -334,7 +334,7 @@ namespace DualSouls.Mods.Silksong
             switch (id)
             {
                 case "run_speed":
-                    return Choice(_runSpeedMultiplier == 1.5f ? "plus_50" :
+                    return Choice(_runSpeedMultiplier == 2f ? "plus_100" : _runSpeedMultiplier == 1.5f ? "plus_50" :
                                   _runSpeedMultiplier == 1.25f ? "plus_25" : "vanilla");
                 case "fast_transitions": return OnOff(_fastTransitions);
                 case "auto_map": return OnOff(_autoMap);

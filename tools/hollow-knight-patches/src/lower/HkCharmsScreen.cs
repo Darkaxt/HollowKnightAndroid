@@ -252,6 +252,11 @@ namespace HollowKnightPatches.Lower
         float _nextApply;
         float _statusUntil;
         readonly Action _toggle;
+        // #56 loadout presets, in the header: which preset, SAVE and LOAD.
+        int _preset = 1;
+        bool _presetSaved;
+        string _presetLabel = "PRESET 1";
+        readonly Action _cyclePreset, _savePreset, _loadPreset;
 
         public string Id { get { return "charms"; } }
         public string Title { get { return "Charms"; } }
@@ -262,6 +267,9 @@ namespace HollowKnightPatches.Lower
         {
             _sections.Add(_all);
             _toggle = Toggle;
+            _cyclePreset = () => { _preset = _preset % HkCharmPresets.Count + 1; _presetSaved = HkCharmPresets.Exists(_preset); _presetLabel = "PRESET " + _preset; };
+            _savePreset = () => { SetStatus(HkCharmPresets.Save(_preset)); _presetSaved = HkCharmPresets.Exists(_preset); Refresh(true); };
+            _loadPreset = () => { SetStatus(HkCharmPresets.Load(_preset)); Refresh(true); };
         }
 
         public void Build(RectTransform host)
@@ -333,6 +341,7 @@ namespace HollowKnightPatches.Lower
         public void OnShow()
         {
             _attempts = 0;
+            _presetSaved = HkCharmPresets.Exists(_preset);
             _signature = int.MinValue;
             if (!_built) return;
             Refresh(true);
@@ -595,6 +604,9 @@ namespace HollowKnightPatches.Lower
         public void CollectActions(List<DsAction> into)
         {
             if (!_built || !DsFrame.InGame) return;
+            into.Add(new DsAction(_presetLabel, _cyclePreset));
+            into.Add(new DsAction("SAVE", _savePreset));
+            into.Add(new DsAction("LOAD", _presetSaved ? _loadPreset : null, !_presetSaved));
             int n = _selNum;
             if (n < 1 || n > CharmCount || !_got[n]) return;
             var pd = PlayerData.instance;

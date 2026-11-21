@@ -8,8 +8,8 @@ namespace SharedPatches.Tests;
 
 public sealed class SilksongTweakAdapterTests
 {
-    static readonly string[] CheatIds = { "game_speed", "quick_attacks", "all_damage", "health_regen", "dash_invincibility", "easy_deliveries", "flea_games", "boss_health_bars", "rebirth_in_scene", "infinite_tools", "refill_tools", "add_rosaries", "add_shards", "infinite_air_jump", "refill_health", "max_health_up", "max_health_down", "hero_colour", "scene_colour", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_glide", "ability_charge_attack", "ability_needolin", "ability_clawline", "ability_super_jump", "active_magnetite_brooch", "active_shard_pendant", "active_weighted_belt", "active_barbed_bracelet", "active_dead_bugs_purse", "active_shell_satchel", "active_magnetite_dice", "active_scuttlebrace", "active_ascendants_grip", "active_spider_strings", "active_silkspeed_anklets", "active_thiefs_mark", "active_longclaw", "active_pin_badge", "active_quick_sling", "active_weavelight", "active_warding_bell", "unlock_all_tools", "unlock_all_crests", "unlock_fast_travel", "unlock_maps", "max_collectables", "picker_amount", "item_prev", "item_next", "item_add", "item_take", "item_set", "tool_prev", "tool_next", "tool_unlock", "tool_storage", "award_all_achievements", "reset_achievements", "achievement_prev", "achievement_next", "achievement_award", "achievement_popups" };
-    static readonly string[] CheatChoiceIds = { "hero_colour", "scene_colour", "picker_amount", "boss_health_bars", "game_speed", "quick_attacks", "all_damage", "health_regen", "dash_invincibility", "rebirth_in_scene", "easy_deliveries", "flea_games", "infinite_tools", "infinite_air_jump", "active_magnetite_brooch", "active_shard_pendant", "active_weighted_belt", "active_barbed_bracelet", "active_dead_bugs_purse", "active_shell_satchel", "active_magnetite_dice", "active_scuttlebrace", "active_ascendants_grip", "active_spider_strings", "active_silkspeed_anklets", "active_thiefs_mark", "active_longclaw", "active_pin_badge", "active_quick_sling", "active_weavelight", "active_warding_bell" };
+    static readonly string[] CheatIds = { "game_speed", "recall_slot", "mark_recall", "recall", "quick_attacks", "all_damage", "health_regen", "dash_invincibility", "no_hazard_damage", "needolin_silk_regen", "easy_deliveries", "flea_games", "boss_health_bars", "rebirth_in_scene", "infinite_tools", "refill_tools", "add_rosaries", "add_shards", "disable_vignette", "infinite_air_jump", "noclip", "no_dash_cooldown", "refill_health", "max_health_up", "max_health_down", "hero_colour", "scene_colour", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_glide", "ability_charge_attack", "ability_needolin", "ability_clawline", "ability_super_jump", "active_magnetite_brooch", "active_shard_pendant", "active_weighted_belt", "active_barbed_bracelet", "active_dead_bugs_purse", "active_shell_satchel", "active_magnetite_dice", "active_scuttlebrace", "active_ascendants_grip", "active_spider_strings", "active_silkspeed_anklets", "active_thiefs_mark", "active_longclaw", "active_pin_badge", "active_quick_sling", "active_weavelight", "active_warding_bell", "unlock_all_tools", "unlock_all_crests", "unlock_fast_travel", "unlock_maps", "max_collectables", "unlock_extra_modes", "picker_amount", "item_prev", "item_next", "item_add", "item_take", "item_set", "tool_prev", "tool_next", "tool_unlock", "tool_storage", "award_all_achievements", "reset_achievements", "achievement_prev", "achievement_next", "achievement_award", "achievement_popups" };
+    static readonly string[] CheatChoiceIds = { "hero_colour", "scene_colour", "picker_amount", "boss_health_bars", "game_speed", "quick_attacks", "all_damage", "health_regen", "dash_invincibility", "rebirth_in_scene", "easy_deliveries", "flea_games", "infinite_tools", "infinite_air_jump", "active_magnetite_brooch", "active_shard_pendant", "active_weighted_belt", "active_barbed_bracelet", "active_dead_bugs_purse", "active_shell_satchel", "active_magnetite_dice", "active_scuttlebrace", "active_ascendants_grip", "active_spider_strings", "active_silkspeed_anklets", "active_thiefs_mark", "active_longclaw", "active_pin_badge", "active_quick_sling", "active_weavelight", "active_warding_bell", "recall_slot", "no_hazard_damage", "needolin_silk_regen", "disable_vignette", "noclip", "no_dash_cooldown" };
 
     [Fact]
     public void CatalogStartsWithExactRequiredContractAndSilksongNamesThenAppendsExtras()
@@ -60,7 +60,7 @@ public sealed class SilksongTweakAdapterTests
     {
         var expected = new Dictionary<string, Dictionary<string, string>>
         {
-            ["run_speed"] = Map(("vanilla", "run:restore"), ("plus_25", "run:1.25"), ("plus_50", "run:1.5")),
+            ["run_speed"] = Map(("vanilla", "run:restore"), ("plus_25", "run:1.25"), ("plus_50", "run:1.5"), ("plus_100", "run:2")),
             ["fast_transitions"] = OffOn("fast-transitions"),
             ["auto_map"] = OffOn("auto-map"),
             ["innate_compass"] = OffOn("compass"),
@@ -625,6 +625,12 @@ public sealed class SilksongTweakAdapterTests
             ["quick_attacks"] = "off",
             ["infinite_tools"] = "off",
             ["infinite_air_jump"] = "off",
+            ["recall_slot"] = "1",
+            ["no_hazard_damage"] = "off",
+            ["disable_vignette"] = "off",
+            ["noclip"] = "off",
+            ["no_dash_cooldown"] = "off",
+            ["needolin_silk_regen"] = "off",
             ["active_magnetite_brooch"] = "off",
             ["active_shard_pendant"] = "off",
             ["active_weighted_belt"] = "off",
@@ -648,7 +654,7 @@ public sealed class SilksongTweakAdapterTests
         {
             string BoolValue(string prefix) =>
                 call == prefix + ":True" ? "on" : "off";
-            if (call.StartsWith("run:", StringComparison.Ordinal)) _actual["run_speed"] = call == "run:1.25" ? "plus_25" : call == "run:1.5" ? "plus_50" : "vanilla";
+            if (call.StartsWith("run:", StringComparison.Ordinal)) _actual["run_speed"] = call == "run:1.25" ? "plus_25" : call == "run:1.5" ? "plus_50" : call == "run:2" ? "plus_100" : "vanilla";
             else if (call.StartsWith("fast-transitions:", StringComparison.Ordinal)) _actual["fast_transitions"] = BoolValue("fast-transitions");
             else if (call.StartsWith("auto-map:", StringComparison.Ordinal)) _actual["auto_map"] = BoolValue("auto-map");
             else if (call.StartsWith("compass:", StringComparison.Ordinal)) _actual["innate_compass"] = BoolValue("compass");

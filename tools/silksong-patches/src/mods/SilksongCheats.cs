@@ -106,7 +106,7 @@ namespace DualSouls.Mods.Silksong
         public bool IsChoice(string id) =>
             id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "all_damage" ||
             id == "infinite_tools" || id == "health_regen" || id == "dash_invincibility" || id == "rebirth_in_scene" || id == "easy_deliveries" || id == "flea_games" ||
-            id == HeroTint.Id || id == HeroTint.SceneId || id == SilksongItemPickers.AmountId || id == CombatOverlay.BossBarsId || id.StartsWith("active_", StringComparison.Ordinal);
+            id == HeroTint.Id || id == HeroTint.SceneId || id == SilksongItemPickers.AmountId || id == CombatOverlay.BossBarsId || SilksongExtraCheats.IsChoice(id) || id.StartsWith("active_", StringComparison.Ordinal);
 
         public void SetChoice(string id, string value)
         {
@@ -161,7 +161,8 @@ namespace DualSouls.Mods.Silksong
                     SilksongGameplayHooks.FleaTargetPercent = value == "half" ? 50 : value == "minimal" ? 0 : 100;
                     break;
                 default:
-                    SetActiveTool(id, value == "on");
+                    if (SilksongExtraCheats.IsChoice(id)) _extra.SetChoice(id, value);
+                    else SetActiveTool(id, value == "on");
                     break;
             }
             _choices[id] = value;
@@ -171,12 +172,13 @@ namespace DualSouls.Mods.Silksong
         {
             string value;
             if (!_choices.TryGetValue(id, out value))
-                value = id == "game_speed" || id == "flea_games" ? "vanilla" : id == SilksongItemPickers.AmountId ? "1" : "off";
+                value = id == "game_speed" || id == "flea_games" ? "vanilla" : id == SilksongItemPickers.AmountId || id == "recall_slot" ? "1" : "off";
             return TweakActionResult.Ok(TweakReadback.Choice(value));
         }
 
         readonly HeroTint _tint = new HeroTint();
         readonly SilksongItemPickers _pickers = new SilksongItemPickers();
+        readonly SilksongExtraCheats _extra = new SilksongExtraCheats();
 
         public void Tick()
         {
@@ -186,6 +188,7 @@ namespace DualSouls.Mods.Silksong
             MaintainQuickAttacks();
             MaintainRegeneration();
             MaintainDashInvincibility();
+            _extra.Tick();
         }
 
         // #42: one mask back after a quiet spell. Scaled time, so pause stops the clock;
@@ -224,11 +227,12 @@ namespace DualSouls.Mods.Silksong
         {
             return "regen=" + _regenInterval + " regenHealth=" + _regenHealth + " dash=" + _dashInvincible +
                 " dashHeld=" + _dashTokenHeld + " dashFrames=" + _dashFrames + " regenGrants=" + _regenGrants +
-                " invincible=" + HeroInvincibilitySource.IsActive;
+                " invincible=" + HeroInvincibilitySource.IsActive + " " + SilksongExtraCheats.Report();
         }
 
         public void RestoreAll()
         {
+            _extra.RestoreAll();
             _regenInterval = 0f;
             _regenHealth = -1;
             _dashInvincible = false;
@@ -258,6 +262,7 @@ namespace DualSouls.Mods.Silksong
         // Runs before a save-state transfer so the captured state holds no overlay.
         public void PrepareForStateTransfer()
         {
+            _extra.PrepareForStateTransfer();
             RestoreAirJump();
             RestoreQuickAttacks();
         }
@@ -451,7 +456,7 @@ namespace DualSouls.Mods.Silksong
                 case "achievement_prev": case "achievement_next": case "achievement_award": case "achievement_popups":
                     return true;
                 default:
-                    return id.StartsWith("ability_", StringComparison.Ordinal) || SilksongItemPickers.IsCommand(id);
+                    return id.StartsWith("ability_", StringComparison.Ordinal) || SilksongItemPickers.IsCommand(id) || SilksongExtraCheats.IsCommand(id);
             }
         }
 
@@ -461,6 +466,7 @@ namespace DualSouls.Mods.Silksong
                 return Achievements(id == "award_all_achievements");
             if (id.StartsWith("achievement_", StringComparison.Ordinal))
                 return AchievementPicker(id);
+            if (SilksongExtraCheats.IsCommand(id)) return _extra.Run(id);
             HeroController hero = HeroController.instance;
             PlayerData data = PlayerData.HasInstance ? PlayerData.instance : null;
             if (hero == null || data == null)

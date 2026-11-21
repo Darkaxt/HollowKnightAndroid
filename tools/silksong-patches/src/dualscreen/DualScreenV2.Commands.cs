@@ -342,6 +342,14 @@ public partial class DualScreenV2
                 if (_shell == null) return "error no shell";
                 return _shell.ShowId(a[1]) ? "ok active=" + _shell.ActiveId : "error unknown tab";
             case "mods-list": return CommandModsList();
+            case "preset":
+            {
+                int n;
+                if (a.Length < 3 || !int.TryParse(a[2], out n)) return "error preset <save|load> N";
+                if (a[1] == "save") return "ok " + DsLoadoutPresets.Save(n);
+                if (a[1] == "load") return "ok " + DsLoadoutPresets.Load(n);
+                return "error preset <save|load> N";
+            }
             case "assists": return SilksongGameplayFeatures.DeathReport() + "\n" + SilksongCheats.AssistReport();
             case "mod":
             {

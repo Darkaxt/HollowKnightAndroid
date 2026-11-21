@@ -559,7 +559,7 @@ internal static class Program
             m.Body.GetILProcessor().Emit(OpCodes.Ret);
         }
         var hooks = PatchType("HollowKnightGameplayHooks");
-        Hook(hooks,"BeforeTakeDamage",new ByReferenceType(game.TypeSystem.Int32));
+        Hook(hooks,"BeforeTakeDamage",new ByReferenceType(game.TypeSystem.Int32),game.TypeSystem.Int32);
         Hook(hooks,"BeforeAddGeo",new ByReferenceType(game.TypeSystem.Int32));
         Hook(hooks,"BeforeJournalSetInt",player,game.TypeSystem.String,new ByReferenceType(game.TypeSystem.Int32));
         Hook(hooks,"BeforeDeath");
@@ -676,7 +676,7 @@ internal static class Program
             TypeAttributes.Public | TypeAttributes.Abstract | TypeAttributes.Sealed,
             patches.MainModule.TypeSystem.Object);
         patches.MainModule.Types.Add(hooks);
-        AddHook("BeforeTakeDamage", ("damageAmount", new ByReferenceType(patches.MainModule.TypeSystem.Int32)));
+        AddHook("BeforeTakeDamage", ("damageAmount", new ByReferenceType(patches.MainModule.TypeSystem.Int32)), ("hazardType", patches.MainModule.TypeSystem.Int32));
         AddHook("BeforeAddGeo", ("amount", new ByReferenceType(patches.MainModule.TypeSystem.Int32)));
         AddHook("BeforeJournalSetInt",
             ("playerData", patches.MainModule.ImportReference(player)),
@@ -1139,7 +1139,8 @@ internal static class Program
             ("target", patches.MainModule.ImportReference(health)),
             ("hit", new ByReferenceType(patches.MainModule.ImportReference(hitInstance))));
         AddHook("BeforeHeroDamage", patches.MainModule.TypeSystem.Void,
-            ("amount", new ByReferenceType(patches.MainModule.TypeSystem.Int32)));
+            ("amount", new ByReferenceType(patches.MainModule.TypeSystem.Int32)),
+            ("hazard", patches.MainModule.ImportReference(hazard)));
         AddHook("BeforeCurrencyChange", patches.MainModule.TypeSystem.Void,
             ("amount", new ByReferenceType(patches.MainModule.TypeSystem.Int32)),
             ("type", patches.MainModule.ImportReference(currencyType)));

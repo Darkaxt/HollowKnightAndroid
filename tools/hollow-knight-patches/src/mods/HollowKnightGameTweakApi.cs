@@ -196,7 +196,7 @@ namespace DualSouls.Mods.HollowKnight
 
         public void SetRunSpeedMultiplier(float multiplier)
         {
-            if (multiplier != 1.25f && multiplier != 1.5f)
+            if (multiplier != 1.25f && multiplier != 1.5f && multiplier != 2f)
                 throw new System.ArgumentOutOfRangeException(nameof(multiplier));
             _runSpeedMultiplier = multiplier;
             MaintainRunSpeed();
@@ -345,7 +345,8 @@ namespace DualSouls.Mods.HollowKnight
 
         static bool IsCheatChoice(string id) =>
             id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "hero_colour" || id == "scene_colour" || id == "picker_amount" || id == "boss_health_bars" ||
-            id == "all_damage" || id == "health_regen" || id == "dash_invincibility" || id == "rebirth_in_scene";
+            id == "all_damage" || id == "health_regen" || id == "dash_invincibility" || id == "rebirth_in_scene" ||
+            id == "noclip" || id == "no_dash_cooldown" || id == "no_hazard_damage" || id == "disable_vignette" || id == "recall_slot";
 
         public void SetCheatChoice(string id, string value)
         {
@@ -372,7 +373,7 @@ namespace DualSouls.Mods.HollowKnight
             {
                 string value;
                 if (!_cheatChoices.TryGetValue(id, out value))
-                    value = id == "game_speed" ? "vanilla" : id == "picker_amount" ? "1" : "off";
+                    value = id == "game_speed" ? "vanilla" : id == "picker_amount" || id == "recall_slot" ? "1" : "off";
                 return Choice(value);
             }
             if (!IsHookAvailable(id)) return TweakActionResult.Fail(
@@ -380,7 +381,7 @@ namespace DualSouls.Mods.HollowKnight
             switch (id)
             {
                 case "run_speed":
-                    return Live(Choice(_runSpeedMultiplier == 1.5f ? "plus_50" :
+                    return Live(Choice(_runSpeedMultiplier == 2f ? "plus_100" : _runSpeedMultiplier == 1.5f ? "plus_50" :
                                   _runSpeedMultiplier == 1.25f ? "plus_25" : "vanilla"), RunSpeedMismatch());
                 case "fast_transitions": return OnOff(_fastTransitions);
                 case "auto_map": return OnOff(_autoMap);
@@ -746,9 +747,18 @@ namespace DualSouls.Mods.HollowKnight
 #endif
         }
 
-        public static void BeforeTakeDamage(ref int damageAmount)
+        // Set by the noclip cheat (#49) while the hero is flying.
+        public static bool NoclipActive { get; set; }
+        /// <summary>Set while NO HAZARD DAMAGE is on; spares the mask loss of a hazard hit.</summary>
+        public static System.Action SpareHazardHit { get; set; }
+
+        // Woven at the head of HeroController.TakeDamage; hazardType is the game's own
+        // value (1 enemy, 2 spikes, 3 acid, 4 lava, 5 pit).
+        public static void BeforeTakeDamage(ref int damageAmount, int hazardType)
         {
+            if (NoclipActive) { damageAmount = 0; return; }
             if (DamageCapEnabled && damageAmount > 1) damageAmount = 1;
+            if (damageAmount > 0 && hazardType > 1 && SpareHazardHit != null) SpareHazardHit();
         }
 
         public static void BeforeAddGeo(ref int amount)
@@ -782,6 +792,8 @@ namespace DualSouls.Mods.HollowKnight
 
         public static void Reset()
         {
+            NoclipActive = false;
+            SpareHazardHit = null;
             DamageCapEnabled = false;
             KeepGeoEnabled = false;
             JournalOneKillEnabled = false;

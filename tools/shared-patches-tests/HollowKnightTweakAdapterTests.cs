@@ -19,8 +19,8 @@ public sealed class HollowKnightTweakAdapterTests
         "geo_magnet", "keep_geo_on_death", "journal_one_kill", "geo_multiplier",
     };
 
-    static readonly string[] CheatIds = { "game_speed", "quick_attacks", "all_damage", "health_regen", "dash_invincibility", "boss_health_bars", "rebirth_in_scene", "add_geo", "infinite_air_jump", "refill_health", "max_health_up", "max_health_down", "hero_colour", "scene_colour", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_crystal_heart", "ability_shade_cloak", "ability_ismas_tear", "ability_dream_nail", "unlock_stags", "unlock_maps", "unlock_all_charms", "picker_amount", "item_prev", "item_next", "item_add", "item_take", "item_set", "award_all_achievements", "reset_achievements", "achievement_prev", "achievement_next", "achievement_award", "achievement_popups" };
-    static readonly string[] CheatChoiceIds = { "hero_colour", "scene_colour", "picker_amount", "boss_health_bars", "game_speed", "quick_attacks", "all_damage", "health_regen", "dash_invincibility", "rebirth_in_scene", "infinite_air_jump" };
+    static readonly string[] CheatIds = { "game_speed", "recall_slot", "mark_recall", "recall", "quick_attacks", "all_damage", "health_regen", "dash_invincibility", "no_hazard_damage", "boss_health_bars", "rebirth_in_scene", "add_geo", "disable_vignette", "infinite_air_jump", "noclip", "no_dash_cooldown", "refill_health", "max_health_up", "max_health_down", "hero_colour", "scene_colour", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_crystal_heart", "ability_shade_cloak", "ability_ismas_tear", "ability_dream_nail", "unlock_stags", "unlock_maps", "unlock_all_charms", "unlock_extra_modes", "picker_amount", "item_prev", "item_next", "item_add", "item_take", "item_set", "award_all_achievements", "reset_achievements", "achievement_prev", "achievement_next", "achievement_award", "achievement_popups" };
+    static readonly string[] CheatChoiceIds = { "hero_colour", "scene_colour", "picker_amount", "boss_health_bars", "game_speed", "quick_attacks", "all_damage", "health_regen", "dash_invincibility", "rebirth_in_scene", "infinite_air_jump", "recall_slot", "no_hazard_damage", "disable_vignette", "noclip", "no_dash_cooldown" };
 
     [Fact]
     public void CatalogStartsWithExactRequiredContractAndAppendsExtras()
@@ -108,7 +108,7 @@ public sealed class HollowKnightTweakAdapterTests
         TweakActionResult result = adapter.Apply("run_speed", "plus_50");
 
         Assert.True(row.IsAvailable);
-        Assert.Equal(new[] { "vanilla", "plus_25", "plus_50" }, row.Values);
+        Assert.Equal(new[] { "vanilla", "plus_25", "plus_50", "plus_100" }, row.Values);
         Assert.True(result.Success);
         Assert.Equal(new[] { "run:1.5" }, api.Calls);
     }
@@ -190,7 +190,7 @@ public sealed class HollowKnightTweakAdapterTests
     {
         var expected = new Dictionary<string, Dictionary<string, string>>
         {
-            ["run_speed"] = Map(("vanilla", "run:restore"), ("plus_25", "run:1.25"), ("plus_50", "run:1.5")),
+            ["run_speed"] = Map(("vanilla", "run:restore"), ("plus_25", "run:1.25"), ("plus_50", "run:1.5"), ("plus_100", "run:2")),
             ["fast_transitions"] = OffOn("fast-transitions"),
             ["auto_map"] = OffOn("auto-map"),
             ["innate_compass"] = OffOn("compass"),
@@ -819,13 +819,18 @@ public sealed class HollowKnightTweakAdapterTests
             ["boss_health_bars"] = "off",
             ["quick_attacks"] = "off",
             ["infinite_air_jump"] = "off",
+            ["recall_slot"] = "1",
+            ["no_hazard_damage"] = "off",
+            ["disable_vignette"] = "off",
+            ["noclip"] = "off",
+            ["no_dash_cooldown"] = "off",
         };
 
         void Track(string call)
         {
             string BoolValue(string prefix) =>
                 call == prefix + ":True" ? "on" : "off";
-            if (call.StartsWith("run:", StringComparison.Ordinal)) _actual["run_speed"] = call == "run:1.25" ? "plus_25" : call == "run:1.5" ? "plus_50" : "vanilla";
+            if (call.StartsWith("run:", StringComparison.Ordinal)) _actual["run_speed"] = call == "run:1.25" ? "plus_25" : call == "run:1.5" ? "plus_50" : call == "run:2" ? "plus_100" : "vanilla";
             else if (call.StartsWith("fast-transitions:", StringComparison.Ordinal)) _actual["fast_transitions"] = BoolValue("fast-transitions");
             else if (call.StartsWith("auto-map:", StringComparison.Ordinal)) _actual["auto_map"] = BoolValue("auto-map");
             else if (call.StartsWith("compass:", StringComparison.Ordinal)) _actual["innate_compass"] = BoolValue("compass");
@@ -855,7 +860,7 @@ public sealed class HollowKnightTweakAdapterTests
 
         public void SetCheatChoice(string id, string value)
         {
-            SetActive(id, value != (id == "game_speed" ? "vanilla" : "off"), "cheat:" + id + ":" + value);
+            SetActive(id, value != (id == "game_speed" ? "vanilla" : id == "recall_slot" || id == "picker_amount" ? "1" : "off"), "cheat:" + id + ":" + value);
             _actual[id] = value;
         }
 

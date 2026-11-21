@@ -59,13 +59,16 @@ namespace DualSouls.Mods.HollowKnight
 
         static readonly IReadOnlyList<TweakDescriptor> Rows = Array.AsReadOnly(new[]
         {
-            Row("run_speed", "run_speed", TweakControlKind.Choice, "WORLD", "RUN SPEED", "Choose the Knight's normal, +25%, or +50% movement pace.", "vanilla", "vanilla", "plus_25", "plus_50"),
+            Row("run_speed", "run_speed", TweakControlKind.Choice, "WORLD", "RUN SPEED", "Choose the Knight's normal, +25%, +50%, or +100% movement pace.", "vanilla", "vanilla", "plus_25", "plus_50", "plus_100"),
             Row("fast_transitions", "fast_transitions", TweakControlKind.Choice, "WORLD", "FAST TRANSITIONS", "Shorten supported scene transitions.", "off", "off", "on"),
             Row("auto_map", "auto_map", TweakControlKind.Choice, "WORLD", "AUTO MAP", "Reveal visited rooms on the map automatically.", "off", "off", "on"),
             Row("innate_compass", "innate_compass", TweakControlKind.Choice, "WORLD", "INNATE COMPASS", "Show the Knight on the map without requiring Wayward Compass.", "off", "off", "on"),
             Row("bench_teleport", "bench_teleport", TweakControlKind.Route, "WORLD", "BENCH TELEPORT", "Open the recorded-bench destination list.", "open", "open"),
             Row("secret_radar", "secret_radar", TweakControlKind.Choice, "WORLD", "SECRET RADAR", "Signal nearby secrets without changing progression.", "off", "off", "on"),
             Cheat("game_speed", TweakControlKind.Choice, "WORLD", "GAME SPEED", "Slow down or speed up gameplay. Pause and hit-stop keep their normal timing.", "vanilla", "vanilla", "x0_5", "x0_75", "x1_5", "x2"),
+            Cheat("recall_slot", TweakControlKind.Choice, "WORLD", "RECALL SLOT", "Choose the recall point used by the two rows below.", "1", "1", "2", "3", "4", "5"),
+            Cheat("mark_recall", TweakControlKind.Command, "WORLD", "MARK RECALL POINT", "Remember this room and the Knight's position in the selected slot.", "run", "run"),
+            Cheat("recall", TweakControlKind.Command, "WORLD", "RECALL", "Return the Knight to the selected recall point. Health, items and progress stay as they are now.", "run", "run"),
             Row("nail_damage", "nail_damage", TweakControlKind.Choice, "COMBAT", "NAIL DAMAGE", "Multiply nail damage while preserving smith upgrades.", "x1", "x1", "x2", "x3", "x5"),
             Row("damage_received", "damage_taken", TweakControlKind.Choice, "COMBAT", "DAMAGE TAKEN", "Choose normal damage, keep masks, or ignore damage entirely.", "vanilla", "vanilla", "no_mask_loss", "invincible"),
             Row("damage_cap", "damage_cap", TweakControlKind.Choice, "COMBAT", "DAMAGE CAP", "Limit damage received from a single hit.", "off", "off", "on"),
@@ -75,6 +78,7 @@ namespace DualSouls.Mods.HollowKnight
             Cheat("all_damage", TweakControlKind.Choice, "COMBAT", "ALL DAMAGE", "Multiply every hit you deal, spells and tools included. Stacks with nail damage.", "off", "off", "x2", "x3", "x5", "x10"),
             Cheat("health_regen", TweakControlKind.Choice, "ASSISTS", "HEALTH REGENERATION", "Restore one mask after a few seconds without taking damage.", "off", "off", "slow", "fast"),
             Cheat("dash_invincibility", TweakControlKind.Choice, "ASSISTS", "DASH INVINCIBILITY", "The regular dash passes through enemies and attacks, like the Shade Cloak.", "off", "off", "on"),
+            Cheat("no_hazard_damage", TweakControlKind.Choice, "ASSISTS", "NO HAZARD DAMAGE", "Spikes, acid and other hazards still send you back to the last safe spot, but take no mask.", "off", "off", "on"),
             Row("health_bars", "enemy_health_bars", TweakControlKind.Choice, "ENCOUNTERS", "ENEMY HEALTH BARS", "Show a health bar over each enemy you hit. Bosses use BOSS HEALTH BARS.", "off", "off", "on"),
             Cheat("boss_health_bars", TweakControlKind.Choice, "ENCOUNTERS", "BOSS HEALTH BARS", "Show the name and health of bosses you hit in a bar along the bottom of the screen.", "off", "off", "on"),
             Row("damage_numbers", "damage_numbers", TweakControlKind.Choice, "ENCOUNTERS", "DAMAGE NUMBERS", "Show the damage of each of your hits.", "off", "off", "on"),
@@ -93,8 +97,11 @@ namespace DualSouls.Mods.HollowKnight
             Row("geo_multiplier", "geo_multiplier", TweakControlKind.Choice, "ECONOMY", "GEO MULTIPLIER", "Multiply supported Geo awards.", "x1", "x1", "x2", "x3", "x5"),
             Cheat("add_geo", TweakControlKind.Command, "ECONOMY", "ADD 1000 GEO", "Add 1000 Geo now.", "run", "run"),
             Row("lifeblood_flash", "lifeblood_flash", TweakControlKind.Choice, "PRESENTATION", "LIFEBLOOD FLASH", "Use the original flash, a softened flash, or no flash.", "vanilla", "vanilla", "soft", "off"),
+            Cheat("disable_vignette", TweakControlKind.Choice, "PRESENTATION", "DISABLE VIGNETTE", "Hide the dark vignette drawn around the Knight, so room edges and dark areas are easier to see.", "off", "off", "on"),
 
             Cheat("infinite_air_jump", TweakControlKind.Choice, "PLAYER", "INFINITE AIR JUMP", "Jump again in mid-air as often as you like.", "off", "off", "on"),
+            Cheat("noclip", TweakControlKind.Choice, "PLAYER", "NOCLIP FLIGHT", "Fly through walls in any direction with the movement input, taking no damage. Turning it off drops you where you are.", "off", "off", "on"),
+            Cheat("no_dash_cooldown", TweakControlKind.Choice, "PLAYER", "NO DASH COOLDOWN", "Dash again straight away, including the Shade Cloak dash.", "off", "off", "on"),
             Cheat("refill_health", TweakControlKind.Command, "PLAYER", "REFILL HEALTH", "Restore all masks now.", "run", "run"),
             Cheat("max_health_up", TweakControlKind.Command, "PLAYER", "MAX HEALTH +1", "Permanently add one mask to this save.", "run", "run"),
             Cheat("max_health_down", TweakControlKind.Command, "PLAYER", "MAX HEALTH -1", "Permanently remove one mask from this save (minimum 1).", "run", "run"),
@@ -112,6 +119,7 @@ namespace DualSouls.Mods.HollowKnight
             Cheat("unlock_stags", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL STAGS", "Permanently open every Stag Station on this save.", "run", "run"),
             Cheat("unlock_maps", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL MAPS", "Permanently add every area map to this save.", "run", "run"),
             Cheat("unlock_all_charms", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL CHARMS", "Permanently add all 40 charms. Fragile charms are repaired, Kingsoul is whole and Grimmchild starts at level 1.", "run", "run"),
+            Cheat("unlock_extra_modes", TweakControlKind.Command, "UNLOCKS", "UNLOCK EXTRA MODES", "Unlock Steel Soul and Godseeker mode on the title screen, through the game's own records.", "run", "run"),
 
             Cheat("picker_amount", TweakControlKind.Choice, "ITEM PICKER", "PICKER AMOUNT", "How many the picker rows below add, take or set.", "1", "1", "5", "10", "50", "99"),
             Cheat("item_prev", TweakControlKind.Command, "ITEM PICKER", "PREVIOUS ITEM", "Select the previous countable item and show how many you own.", "run", "run"),
@@ -218,7 +226,7 @@ namespace DualSouls.Mods.HollowKnight
                 {
                     case "run_speed":
                         if (value == "vanilla") _api.RestoreRunSpeed();
-                        else _api.SetRunSpeedMultiplier(value == "plus_25" ? 1.25f : 1.5f);
+                        else _api.SetRunSpeedMultiplier(value == "plus_25" ? 1.25f : value == "plus_100" ? 2f : 1.5f);
                         break;
                     case "fast_transitions": _api.SetFastTransitions(On(value)); break;
                     case "auto_map": _api.SetAutoMap(On(value)); break;
