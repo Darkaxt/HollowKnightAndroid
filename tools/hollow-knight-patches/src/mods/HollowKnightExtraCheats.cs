@@ -288,7 +288,7 @@ namespace DualSouls.Mods.HollowKnight
         }
 
         static string RecallPath(int profile, int slot) =>
-            Path.Combine(Application.persistentDataPath, "dualsouls-recall-points", "profile-" + profile, "slot-" + slot + ".json");
+            Path.Combine(Application.persistentDataPath, "dualsouls-recall-points", "hollow-knight", "profile-" + profile, "slot-" + slot + ".json");
 
         // #57: the game's own status records, as its PermadeathUnlock and Godhome
         // completion set them.

@@ -266,14 +266,14 @@ namespace DualSouls.Mods.HollowKnight
             HeroController hero = HeroController.UnsafeInstance;
             if (hero == null) throw new InvalidOperationException("The Knight is not ready for a save state.");
             string json = CaptureStateJson(game, hero);
-            WriteStateSidecar(StatePath(slot, game.playerData.profileID), json);
+            WriteStateSidecar(StatePath(slot, game.profileID), json);
         }
 
         public static void LoadState(int slot, Action<string> completed = null)
         {
             ValidateSlot(slot);
             GameManager game = RequireGame();
-            LoadStateFile(StatePath(slot, game.playerData.profileID), completed);
+            LoadStateFile(StatePath(slot, game.profileID), completed);
         }
 
         static void LoadStateFile(string path, Action<string> completed = null)
@@ -289,9 +289,13 @@ namespace DualSouls.Mods.HollowKnight
                 throw new InvalidDataException("The selected save-state sidecar is incomplete.");
 
             GameManager game = RequireGame();
-            int currentProfileId = game.playerData.profileID;
+            // The slot is the GameManager's: a new game's PlayerData.profileID stays 0
+            // until its first save, and passing that 0 back would re-bind the run to
+            // no slot at all.
+            int currentProfileId = game.profileID;
+            int savedProfileId = envelope.save.playerData.profileID;
             if (envelope.profileId != currentProfileId ||
-                envelope.save.playerData.profileID != currentProfileId)
+                (savedProfileId != currentProfileId && savedProfileId != 0))
                 throw new InvalidDataException("The selected save-state belongs to another profile.");
             MethodInfo load = typeof(GameManager).GetMethod(
                 "SetLoadedGameData", BindingFlags.Instance | BindingFlags.NonPublic,
@@ -299,6 +303,10 @@ namespace DualSouls.Mods.HollowKnight
             if (load == null) throw new MissingMethodException("GameManager.SetLoadedGameData(SaveGameData,int)");
             stateTransferPreparation?.Invoke();
             load.Invoke(game, new object[] { envelope.save, currentProfileId });
+            // The hero reads PlayerData.instance only in Start and Respawn, so without
+            // this its health and silk would keep going to the replaced object.
+            HeroController hero = HeroController.UnsafeInstance;
+            if (hero != null) hero.playerData = game.playerData;
             owner = null;
             game.BeginSceneTransition(new StateSceneLoadInfo
             {
@@ -334,7 +342,7 @@ namespace DualSouls.Mods.HollowKnight
         {
             ValidateSlot(slot);
             GameManager game = RequireGame();
-            string path = StatePath(slot, game.playerData.profileID);
+            string path = StatePath(slot, game.profileID);
             if (File.Exists(path)) File.Delete(path);
         }
 
@@ -342,7 +350,7 @@ namespace DualSouls.Mods.HollowKnight
         {
             ValidateSlot(slot);
             GameManager game = RequireGame();
-            return File.Exists(StatePath(slot, game.playerData.profileID));
+            return File.Exists(StatePath(slot, game.profileID));
         }
 
         static string StateDirectory => Path.Combine(Application.persistentDataPath, "dualsouls-save-states");
@@ -369,7 +377,7 @@ namespace DualSouls.Mods.HollowKnight
             Vector3 position = hero.transform.position;
             string json = JsonUtility.ToJson(new StateEnvelope
             {
-                profileId = game.playerData.profileID,
+                profileId = game.profileID,
                 scene = game.sceneName,
                 x = position.x,
                 y = position.y,
@@ -834,12 +842,12 @@ namespace DualSouls.Mods.HollowKnight
             HeroController hero = HeroController.UnsafeInstance;
             if (hero == null) return;
             string json = CaptureStateJson(game, hero);
-            WriteStateSidecar(BossStatePath(game.playerData.profileID), json);
+            WriteStateSidecar(BossStatePath(game.profileID), json);
         }
         static void LoadBossState()
         {
             GameManager game = RequireGame();
-            string path = BossStatePath(game.playerData.profileID);
+            string path = BossStatePath(game.profileID);
             if (File.Exists(path)) LoadStateFile(path);
         }
     }

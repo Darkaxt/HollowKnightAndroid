@@ -493,6 +493,10 @@ namespace DualSouls.Mods.Silksong
             if (load == null) throw new MissingMethodException("GameManager.SetLoadedGameData(SaveGameData,int)");
             stateTransferPreparation?.Invoke();
             load.Invoke(game, new object[] { save, profile });
+            // The hero reads PlayerData.instance only in Start and Respawn, so without
+            // this its health and silk would keep going to the replaced object.
+            HeroController hero = HeroController.UnsafeInstance;
+            if (hero != null) hero.playerData = game.playerData;
             owner = null;
             ResetBossRuntime();
             game.BeginSceneTransition(new StateSceneLoadInfo
