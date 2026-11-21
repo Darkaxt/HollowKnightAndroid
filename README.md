@@ -9,7 +9,7 @@ the HUD, inventory, map and other pages.
 
 This repository does not contain Team Cherry game files. Signed APKs are
 published on the [Releases](https://github.com/Darkaxt/HollowKnightAndroid/releases)
-page; the current release is **v2.0.77**.
+page; the current release is **v2.0.78**.
 
 <p align="center">
   <img src="docs/icon.png" alt="Dual Souls app icon, combining Hollow Knight and Silksong" width="200" />
