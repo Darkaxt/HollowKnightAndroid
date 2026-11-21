@@ -375,6 +375,17 @@ public partial class DualScreenV2
                 gm.gameMap.SetupMap(false);
                 return "ok SetupMap " + DsQaReport.Fields(PlayerData.instance, "mapAllRooms", "hasQuill");
             case "die": return CommandDie(gm);
+            case "hazard":
+            {
+                // QA (#52): one spike hit through the game's own damage path.
+                var hero = HeroController.instance;
+                var pd = PlayerData.instance;
+                if (hero == null || pd == null) return "error no HeroController";
+                if (gm == null || gm.GameState != GlobalEnums.GameState.PLAYING) return "error not playing";
+                string before = DsQaReport.Fields(pd, "health");
+                return DsQaReport.Invoke(hero, hero, "TakeDamage", new object[] { hero.gameObject }, "CollisionSide.bottom", "HazardType.SPIKES")
+                       + " " + before + " -> " + DsQaReport.Fields(pd, "health");
+            }
             case "hit": return CommandHit(a, gm);
             case "hurt": return CommandHurt(a, gm);
             case "dash": return CommandDash(gm);

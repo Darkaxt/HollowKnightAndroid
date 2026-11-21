@@ -141,6 +141,18 @@ public partial class HKDualScreen
                 hero.TakeDamage(hero.gameObject, GlobalEnums.CollisionSide.top, 1, 1);
                 return "ok health=" + pd.health;
             }
+            case "hazard":
+            {
+                // QA (#52): one spike hit through the game's own damage path, so the hazard
+                // respawn and NO HAZARD DAMAGE run for real.
+                var hero = HeroController.instance;
+                var pd = PlayerData.instance;
+                if (hero == null || pd == null) return "error no HeroController";
+                if (gm == null || gm.gameState != GlobalEnums.GameState.PLAYING) return "error not playing";
+                int before = pd.health;
+                hero.TakeDamage(hero.gameObject, GlobalEnums.CollisionSide.bottom, 1, 2);
+                return "ok health " + before + "->" + pd.health;
+            }
             case "save":
                 if (gm == null) return "error no GameManager";
                 {
