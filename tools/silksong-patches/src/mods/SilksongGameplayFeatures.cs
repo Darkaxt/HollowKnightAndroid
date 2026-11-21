@@ -77,6 +77,11 @@ namespace DualSouls.Mods.Silksong
             public string saveJson;
         }
 
+        // An empty entry gate only finishes the GameManager side of the entry, which
+        // leaves the hero in EXITING_SCENE without input or HUD. The game's own
+        // "dreamGate" entry finishes the hero where NotifyFinished placed it.
+        const string HeroEntry = "dreamGate";
+
         sealed class StateSceneLoadInfo : GameManager.SceneLoadInfo
         {
             public Vector3 Position;
@@ -493,7 +498,7 @@ namespace DualSouls.Mods.Silksong
             game.BeginSceneTransition(new StateSceneLoadInfo
             {
                 SceneName = envelope.scene,
-                EntryGateName = "",
+                EntryGateName = HeroEntry,
                 PreventCameraFadeOut = true,
                 WaitForSceneTransitionCameraFade = false,
                 AlwaysUnloadUnusedAssets = true,
@@ -511,7 +516,7 @@ namespace DualSouls.Mods.Silksong
             game.BeginSceneTransition(new StateSceneLoadInfo
             {
                 SceneName = scene,
-                EntryGateName = "",
+                EntryGateName = HeroEntry,
                 PreventCameraFadeOut = true,
                 WaitForSceneTransitionCameraFade = false,
                 Visualization = GameManager.SceneLoadVisualizations.ContinueFromSave,

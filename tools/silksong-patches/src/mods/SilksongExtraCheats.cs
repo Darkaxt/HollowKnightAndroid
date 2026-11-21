@@ -281,9 +281,9 @@ namespace DualSouls.Mods.Silksong
             return Text("recalling to slot " + _recallSlot + " in " + target.scene);
         }
 
-        // #55: the game places the hero at the room's respawn point after the load
-        // callback, so a recall into another room is applied once the hero stands in
-        // it. A transition that never reaches the room drops the pending recall.
+        // #55: a recall into another room is applied again once the hero has finished
+        // entering it, so nothing the room does on entry can leave her elsewhere. A
+        // transition that never reaches the room drops the pending recall.
         void MaintainArrival()
         {
             if (_arriveScene == null) return;
