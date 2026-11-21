@@ -34,7 +34,9 @@ public sealed class HollowKnightModsSourceContractTests
         Assert.Contains("ProfileStateDirectory", features, StringComparison.Ordinal);
         Assert.Contains("\"profile-\" + profileId", features, StringComparison.Ordinal);
         Assert.Contains("envelope.profileId != currentProfileId", features, StringComparison.Ordinal);
-        Assert.Contains("envelope.save.playerData.profileID != currentProfileId", features, StringComparison.Ordinal);
+        Assert.Contains("int currentProfileId = game.profileID;", features, StringComparison.Ordinal);
+        Assert.Contains("(savedProfileId != currentProfileId && savedProfileId != 0)", features, StringComparison.Ordinal);
+        Assert.DoesNotContain("game.playerData.profileID", features, StringComparison.Ordinal);
         Assert.Contains("new object[] { envelope.save, currentProfileId }", features, StringComparison.Ordinal);
         Assert.Contains("stateTransferPreparation?.Invoke()", features, StringComparison.Ordinal);
         Assert.Contains("SetStateTransferPreparation(PrepareForStateTransfer)", api, StringComparison.Ordinal);
