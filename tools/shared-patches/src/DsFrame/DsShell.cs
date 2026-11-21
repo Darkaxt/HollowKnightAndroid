@@ -662,25 +662,28 @@ public partial class DsShell
         Rect space = _hud != null ? _hud.TitleSpace : new Rect(0f, 0f, 0f, 0f);
         bool show = !string.IsNullOrEmpty(text) && space.height > 10f;
         DsWidgets.SetActive(_headerStatus, show);
-        if (!show) return;
+        if (!show)
+        {
+            _titleShift = 0f;
+            _statusFitTitle = null;   // re-measure when it comes back
+            return;
+        }
         if (_headerStatus.text != text) _headerStatus.text = text;
         float right = _actions.HeaderLeft > 0f ? _actions.HeaderLeft - 24f : _w - 40f;
         var where = new Rect(right - StatusWidth, space.y, StatusWidth, Mathf.Max(10f, space.height - TitleBottomGap));
-        // A long centred title ("FORGOTTEN CROSSROADS") reaches under the status:
-        // then the status moves up a row, over the title's row instead of on it.
         // Measured only when the title, the status or the header edge changes.
+        // RefreshTitle applies the shift on the next frame.
         string title = _headerTitle != null && _headerTitle.gameObject.activeSelf ? _headerTitle.text : "";
         if (title != _statusFitTitle || text != _statusFitText || right != _statusFitRight)
         {
             _statusFitTitle = title; _statusFitText = text; _statusFitRight = right;
             _statusRaised = false;
+            _titleShift = 0f;
             try
             {
                 if (!string.IsNullOrEmpty(title))
-                {
-                    float titleRight = _w * 0.5f + _headerTitle.GetPreferredValues(title).x * 0.5f;
-                    _statusRaised = right - _headerStatus.GetPreferredValues(text).x < titleRight + 16f;
-                }
+                    _statusRaised = DsHeaderLayout.StatusFit(_w, _headerTitle.GetPreferredValues(title).x, right,
+                                              _headerStatus.GetPreferredValues(text).x, out _titleShift);
             }
             catch { }
         }
@@ -698,6 +701,7 @@ public partial class DsShell
     string _statusFitTitle, _statusFitText;
     float _statusFitRight = -1f;
     bool _statusRaised;
+    float _titleShift;
 
     /// <summary>
     /// Let the visible screen replace the tab strip, or put the tabs back.
@@ -991,6 +995,8 @@ public partial class DsShell
             _headerTitle.enableAutoSizing = squeeze;
             if (!squeeze) _headerTitle.fontSize = TitleSize;
         }
+        // Slid left only as far as keeps the status on this row (RefreshStatus).
+        where.x -= _titleShift;
         if (!_headerTitlePlaced || _headerTitleRect != where)
         {
             DsWidgets.Place(_headerTitle.rectTransform, where);
