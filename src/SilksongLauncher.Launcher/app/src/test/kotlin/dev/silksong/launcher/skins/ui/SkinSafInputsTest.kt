@@ -55,7 +55,7 @@ class SkinSafInputsTest {
         assertThrows(IllegalStateException::class.java) { inputs.single().openOnce() }
     }
 
-    @Test fun `subfolders are listed once for archives and loose PNGs only`() {
+    @Test fun `a folder of skin folders is packed whole with relative paths and its archives stay separate`() {
         val provider = object : Provider(emptyList()) {
             override fun rowsFor(tree: String) = when (tree) {
                 "tree" -> listOf(
@@ -65,15 +65,41 @@ class SkinSafInputsTest {
                 "d1" -> listOf(
                     SkinDocument("d1/a", "Angel.zip", SkinDocumentKind.FILE),
                     SkinDocument("d1/n", "notes.txt", SkinDocumentKind.FILE),
-                    SkinDocument("d1/deeper", "deeper", SkinDocumentKind.DIRECTORY),
                 )
-                "d2" -> listOf(SkinDocument("d2/k", "Knight.png", SkinDocumentKind.FILE))
-                else -> error("listed too deep: $tree")
+                "d2" -> listOf(
+                    SkinDocument("d2/k", "Knight.png", SkinDocumentKind.FILE),
+                    SkinDocument("d2/c", "Charms", SkinDocumentKind.DIRECTORY),
+                )
+                "d2/c" -> listOf(SkinDocument("d2/c/1", "Charm_1.png", SkinDocumentKind.FILE))
+                else -> emptyList()
             }
+        }.apply { treeName = "Lore picks" }
+        val inputs = (SkinSafInputs(provider).folder("tree") as SkinResult.Ok).value
+        assertEquals(listOf("Angel.zip", "Lore picks.zip"), inputs.map { it.displayName })
+        val zip = java.util.zip.ZipInputStream(inputs.last().openOnce())
+        val names = generateSequence { zip.nextEntry }.map { it.name.also { zip.readBytes() } }.toList()
+        assertEquals(listOf("Lore picks/Golden Knight/Knight.png", "Lore picks/Golden Knight/Charms/Charm_1.png"), names)
+    }
+
+    @Test fun `folder walk stops at its depth bound`() {
+        val provider = object : Provider(emptyList()) {
+            override fun rowsFor(tree: String) =
+                listOf(SkinDocument("$tree/d", "d", SkinDocumentKind.DIRECTORY), SkinDocument("$tree/p", "Knight.png", SkinDocumentKind.FILE))
         }
         val inputs = (SkinSafInputs(provider).folder("tree") as SkinResult.Ok).value
-        assertEquals(listOf("Angel.zip", "Golden Knight.zip"), inputs.map { it.displayName })
-        assertEquals(3, provider.listings)
+        assertEquals(7, provider.listings)
+        val zip = java.util.zip.ZipInputStream(inputs.single().openOnce())
+        val names = generateSequence { zip.nextEntry }.map { it.name.also { zip.readBytes() } }.toList()
+        assertEquals("folder/d/d/d/d/d/d/Knight.png", names.last())
+        assertEquals(7, names.size)
+    }
+
+    @Test fun `unsafe folder names fail closed`() {
+        val provider = object : Provider(emptyList()) {
+            override fun rowsFor(tree: String) =
+                if (tree == "tree") listOf(SkinDocument("d", "..", SkinDocumentKind.DIRECTORY)) else emptyList()
+        }
+        assertTrue(SkinSafInputs(provider).folder("tree") is SkinResult.Error)
     }
 
     @Test fun `subfolder rows share the folder row budget`() {
@@ -91,7 +117,7 @@ class SkinSafInputsTest {
         assertEquals(0, provider.opens)
     }
 
-    @Test fun `virtual or unknown rows fail closed and folder is never recursively listed`() {
+    @Test fun `virtual or unknown rows fail closed`() {
         for (kind in listOf(SkinDocumentKind.VIRTUAL, SkinDocumentKind.UNKNOWN)) {
             val provider = Provider(listOf(SkinDocument("id", "x", kind)))
             assertTrue(SkinSafInputs(provider).folder("tree") is SkinResult.Error)

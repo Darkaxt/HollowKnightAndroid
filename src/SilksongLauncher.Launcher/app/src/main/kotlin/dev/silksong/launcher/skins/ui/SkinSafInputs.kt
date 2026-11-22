@@ -35,21 +35,29 @@ internal class SkinSafInputs(
     }
 
     /**
-     * Archives in the chosen folder are imported as before. Loose PNGs (an unpacked CustomKnight skin) are
-     * streamed as one uncompressed ZIP named after their folder, so they pass the same quarantine and
-     * validation as any archive (#66). Immediate subfolders are listed once more, for their archives and
-     * loose PNGs only; nothing deeper is listed. All listings share one provider-row budget.
+     * A chosen folder imports like an archive of itself (#66). Its PNGs, at any depth up to
+     * [MAX_FOLDER_DEPTH], are streamed as one uncompressed ZIP named after the folder, keeping their
+     * relative paths, so the normal quarantine, candidate discovery and PNG validation decide which
+     * skins it holds: an unpacked skin, a nested Silksong pack, or a folder of several skins. Archives
+     * found in the same walk are imported separately as before. All listings share one row budget.
      */
     fun folder(tree: String): SkinResult<List<SkinImportInput>> = try {
         val identities = mutableSetOf<String>()
         var rows = 0
-        fun list(document: String): Pair<List<SkinDocument>, List<SkinDocument>>? {
+        val archives = mutableListOf<SkinDocument>()
+        val pngs = mutableListOf<Pair<String, SkinDocument>>()
+        val rootOthers = mutableListOf<SkinDocument>()
+        var overflow = false
+        // Breadth-first so the root's own rows are read first; paths are relative to the chosen folder.
+        val pending = ArrayDeque(listOf(Triple(tree, "", 0)))
+        while (pending.isNotEmpty()) {
+            val (document, path, depth) = pending.removeFirst()
             val files = mutableListOf<SkinDocument>()
             val directories = mutableListOf<SkinDocument>()
             provider.children(document).use { cursor ->
                 while (true) {
                     val row = cursor.next() ?: break
-                    if (++rows > rowLimit) return null
+                    if (++rows > rowLimit) { overflow = true; break }
                     require(identities.add(row.id)) { "Duplicate document identity" }
                     when (row.kind) {
                         SkinDocumentKind.FILE -> files += row
@@ -58,37 +66,45 @@ internal class SkinSafInputs(
                     }
                 }
             }
-            return files.sortedBy { it.id } to directories.sortedBy { it.id }
+            if (overflow) break
+            for (file in files.sortedBy { it.id }) when {
+                isArchive(file) -> archives += file
+                isPng(file) -> pngs += "$path${component(file.displayName)}" to file
+                depth == 0 -> rootOthers += file
+            }
+            if (depth < MAX_FOLDER_DEPTH) {
+                directories.sortedBy { it.id }.forEach {
+                    pending += Triple(it.id, "$path${component(it.displayName)}/", depth + 1)
+                }
+            }
         }
-        val limit = SkinResult.Error(SkinImportCode.LIMIT_EXCEEDED, "Selected folder exceeds $rowLimit provider rows")
-        val (files, directories) = list(tree) ?: return limit
-        val inputs = mutableListOf<SkinImportInput>()
-        val pngs = files.filter { isPng(it) }
-        // A skin folder's readme or preview files are not separate imports; a plain folder keeps every file.
-        val others = if (pngs.isEmpty()) files else files.filter { isArchive(it) }
-        others.forEach { inputs += SkinImportInput.ImmediateFolderFile(it.displayName, it.id, opener(it.id)) }
-        if (pngs.isNotEmpty()) inputs += packed(provider.name(tree), tree, pngs)
-        for (directory in directories) {
-            val (nested, _) = list(directory.id) ?: return limit
-            nested.filter { isArchive(it) }.forEach {
+        if (overflow) {
+            SkinResult.Error(SkinImportCode.LIMIT_EXCEEDED, "Selected folder exceeds $rowLimit provider rows")
+        } else {
+            val inputs = mutableListOf<SkinImportInput>()
+            // A skin folder's readme or preview files are not imports; a folder without PNGs keeps its own files.
+            (archives + rootOthers.takeIf { pngs.isEmpty() }.orEmpty()).forEach {
                 inputs += SkinImportInput.ImmediateFolderFile(it.displayName, it.id, opener(it.id))
             }
-            val nestedPngs = nested.filter { isPng(it) }
-            if (nestedPngs.isNotEmpty()) inputs += packed(directory.displayName, directory.id, nestedPngs)
+            if (pngs.isNotEmpty()) inputs += packed(provider.name(tree), tree, pngs)
+            SkinResult.Ok(inputs)
         }
-        SkinResult.Ok(inputs)
     } catch (error: Exception) {
         invalid(error)
     }
 
-    private fun packed(folderName: String?, folderId: String, pngs: List<SkinDocument>): SkinImportInput {
+    private fun component(name: String?): String {
+        val value = requireNotNull(name) { "Document name missing" }
+        require(value.isNotEmpty() && value != "." && value != ".." && value.none { it < ' ' || it == '/' || it == '\\' }) {
+            "Unsafe document name"
+        }
+        return value
+    }
+
+    private fun packed(folderName: String?, folderId: String, pngs: List<Pair<String, SkinDocument>>): SkinImportInput {
         val name = folderName.orEmpty().filter { it >= ' ' && it != '/' && it != '\\' }.trim()
             .takeIf { it.isNotEmpty() && it != "." && it != ".." } ?: "Skin"
-        val entries = pngs.map { row ->
-            val file = requireNotNull(row.displayName) { "PNG name missing" }
-            require(file.none { it < ' ' || it == '/' || it == '\\' }) { "Unsafe PNG name" }
-            "$name/$file" to opener(row.id)
-        }
+        val entries = pngs.map { (path, row) -> "$name/$path" to opener(row.id) }
         val opened = AtomicBoolean(false)
         return SkinImportInput.ImmediateFolderFile("$name.zip", folderId) {
             check(opened.compareAndSet(false, true)) { "Provider input was already opened" }
@@ -113,6 +129,11 @@ internal class SkinSafInputs(
     private fun isPng(row: SkinDocument) = row.displayName?.endsWith(".png", ignoreCase = true) == true
     private fun isArchive(row: SkinDocument) =
         row.displayName?.substringAfterLast('.', "")?.lowercase() in setOf("zip", "rar", "7z")
+
+    private companion object {
+        /** Deep enough for a parent folder of unpacked Silksong loader packs (plugins/Patchwork/Spritesheets). */
+        const val MAX_FOLDER_DEPTH = 6
+    }
 }
 
 /**

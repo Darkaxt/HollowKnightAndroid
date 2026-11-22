@@ -141,6 +141,19 @@ class SkinNormalizerTest {
     }
 
     @Test
+    fun `a packed folder of several skin folders prepares one skin per folder`() {
+        val png = { java.io.ByteArrayInputStream(TinyPngFixture.rgba()) }
+        val bytes = dev.silksong.launcher.skins.ui.PackedFolderStream(listOf(
+            "Lore picks/Crystal Knight/Knight.png" to png,
+            "Lore picks/Golden Knight/Knight.png" to png,
+            "Lore picks/Golden Knight/Charms/Charm_1.png" to png,
+        )).use { it.readBytes() }
+        val result = SkinNormalizer(catalog, decoder, fs).prepare(quarantined(bytes, "Lore picks.zip"))
+        val names = (result as SkinResult.Ok).value.map { (it as CandidatePreparationResult.Ready).candidate.name }
+        assertEquals(listOf("Crystal Knight", "Golden Knight"), names)
+    }
+
+    @Test
     fun `a Thunderstore manifest names a single loader-folder pack`() {
         val manifest = "{\n  \"name\": \"GhostOfPharloom_for_Customizer\",\n  \"version_number\": \"1.0.0\"\n}"
         val prepared = prepare(
