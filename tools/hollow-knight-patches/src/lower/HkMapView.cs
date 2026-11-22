@@ -25,7 +25,7 @@ namespace HollowKnightPatches.Lower
 {
     sealed class HkMapView
     {
-        public const float MinZoom = 0.5f;
+        public const float MinZoom = 0.25f; // one minimum for both games (#65; Silksong is canonical)
         public const float MaxZoom = 6f;
         /// <summary>One equal margin around the fitted area, in fractions of the half-height.</summary>
         const float Margin = 0.08f;
@@ -656,8 +656,9 @@ namespace HollowKnightPatches.Lower
         {
             Vector3 centre; float baseOrtho;
             FitFrame(out centre, out baseOrtho);
-            float maxX = Mathf.Max(0f, baseOrtho * _aspect * (1f - 1f / _zoom));
-            float maxY = Mathf.Max(0f, baseOrtho * (1f - 1f / _zoom));
+            // Silksong's pan rule (#65): half a frame of reach at zoom 1 and below, growing as it zooms in.
+            float reach = Mathf.Max(0.5f, 1f - 1f / Mathf.Max(_zoom, 1f));
+            float maxY = Mathf.Max(0f, baseOrtho) * reach, maxX = maxY * Mathf.Max(_aspect, 0f);
             _pan = new Vector2(Mathf.Clamp(_pan.x, -maxX, maxX), Mathf.Clamp(_pan.y, -maxY, maxY));
             float ortho = Mathf.Max(0.05f, baseOrtho / _zoom);
             var pos = new Vector3(centre.x + _pan.x, centre.y + _pan.y, _clone.transform.position.z - 100f);

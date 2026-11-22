@@ -44,7 +44,7 @@ public static class DsLoadoutPresets
     public static bool Exists(int preset)
     {
         if (!DsGameData.InGame || preset < 1 || preset > Count) return false;
-        try { return File.Exists(PathFor(PlayerData.instance.profileID, preset)); } catch { return false; }
+        try { return File.Exists(PathFor(GameManager.instance.profileID, preset)); } catch { return false; }
     }
 
     public static string Save(int preset)
@@ -70,7 +70,7 @@ public static class DsLoadoutPresets
             data.extraTools.Add(held);
             if (held.Length > 0) tools++;
         }
-        string path = PathFor(pd.profileID, preset);
+        string path = PathFor(GameManager.instance.profileID, preset);
         Directory.CreateDirectory(Path.GetDirectoryName(path));
         File.WriteAllText(path, JsonUtility.ToJson(data));
         return "Preset " + preset + " saved (" + tools + " tools)";
@@ -82,7 +82,7 @@ public static class DsLoadoutPresets
         if (reason != null) return reason;
         if (preset < 1 || preset > Count) return "No such preset";
         var pd = PlayerData.instance;
-        string path = PathFor(pd.profileID, preset);
+        string path = PathFor(GameManager.instance.profileID, preset);
         if (!File.Exists(path)) return "Preset " + preset + " is empty";
         Preset data = JsonUtility.FromJson<Preset>(File.ReadAllText(path));
         if (data == null || string.IsNullOrEmpty(data.crest)) return "Preset " + preset + " is unreadable";

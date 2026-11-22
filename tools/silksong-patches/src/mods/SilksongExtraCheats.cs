@@ -256,7 +256,7 @@ namespace DualSouls.Mods.Silksong
             HeroController hero = HeroController.UnsafeInstance;
             if (game == null || hero == null || game.playerData == null)
                 return TweakActionResult.Fail("Load a save before using " + id + ".");
-            string path = RecallPath(game.playerData.profileID, _recallSlot);
+            string path = RecallPath(game.profileID, _recallSlot);
             bool standing = !hero.cState.dead && hero.transitionState == HeroTransitionState.WAITING_TO_TRANSITION;
             if (id == "mark_recall")
             {

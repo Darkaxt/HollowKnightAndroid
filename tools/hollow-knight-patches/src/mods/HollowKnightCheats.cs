@@ -234,6 +234,14 @@ namespace DualSouls.Mods.HollowKnight
             data.infiniteAirJump = true;
         }
 
+        // Save copy-and-clean (see HollowKnightGameplayFeatures.PrepareSaveData): the only
+        // saved PlayerData value a cheat choice overlays is infiniteAirJump.
+        internal bool OwnsSaveValues(global::PlayerData live) { return _airJumpPlayer != null && ReferenceEquals(_airJumpPlayer, live); }
+        internal void CleanSaveValues(global::PlayerData live, global::PlayerData copy)
+        {
+            if (OwnsSaveValues(live)) copy.infiniteAirJump = _airJumpBaseline;
+        }
+
         void RestoreAirJump()
         {
             if (_airJumpPlayer != null) _airJumpPlayer.infiniteAirJump = _airJumpBaseline;
@@ -349,6 +357,8 @@ namespace DualSouls.Mods.HollowKnight
                     data.CountCharms();
                     return Text(granted + " charms added, " + data.charmsOwned + "/40 owned");
                 }
+                case "max_collectables":
+                    return Text(HollowKnightItemPicker.FillAll(data) + " collectables filled");
                 default:
                     return ToggleAbility(id, data);
             }

@@ -32,6 +32,12 @@ namespace DualSouls.Mods.HollowKnight
         bool _noVignette;
         SpriteRenderer _vignette;
 
+        bool _instantDialogue;
+        readonly System.Collections.Generic.List<global::DialogueBox> _typewriters =
+            new System.Collections.Generic.List<global::DialogueBox>();
+        string _dialogueScene;
+        float _nextDialogueScan;
+
         static global::HeroController _sparedHero;
         int _recallSlot = 1;
         string _arriveScene;
@@ -43,7 +49,7 @@ namespace DualSouls.Mods.HollowKnight
 
         public static bool IsChoice(string id) =>
             id == "noclip" || id == "no_dash_cooldown" || id == "no_hazard_damage" ||
-            id == "disable_vignette" || id == "recall_slot";
+            id == "disable_vignette" || id == "instant_dialogue" || id == "recall_slot";
 
         public static bool IsCommand(string id) =>
             id == "mark_recall" || id == "recall" || id == "unlock_extra_modes";
@@ -68,6 +74,10 @@ namespace DualSouls.Mods.HollowKnight
                     _noVignette = value == "on";
                     if (!_noVignette) RestoreVignette();
                     break;
+                case "instant_dialogue":
+                    _instantDialogue = value == "on";
+                    if (!_instantDialogue) RestoreTypewriters();
+                    break;
                 case "recall_slot":
                     int slot;
                     _recallSlot = int.TryParse(value, out slot) && slot >= 1 && slot <= 5 ? slot : 1;
@@ -82,6 +92,7 @@ namespace DualSouls.Mods.HollowKnight
             MaintainFlight();
             MaintainDashCooldown();
             MaintainVignette();
+            MaintainInstantDialogue();
         }
 
         public void RestoreAll()
@@ -95,6 +106,8 @@ namespace DualSouls.Mods.HollowKnight
             ReleaseSparedHit();
             _noVignette = false;
             RestoreVignette();
+            _instantDialogue = false;
+            RestoreTypewriters();
             _recallSlot = 1;
             _arriveScene = null;
         }
@@ -204,6 +217,37 @@ namespace DualSouls.Mods.HollowKnight
         {
             if (_vignette != null) _vignette.enabled = true;
             _vignette = null;
+        }
+
+        // INSTANT DIALOGUE (Silksong parity): the game's dialogue boxes print a whole page at
+        // once when their typewriter is off. They live with the HUD, so look again only when
+        // the scene changes, or every two seconds while none has been found.
+        void MaintainInstantDialogue()
+        {
+            if (!_instantDialogue) return;
+            global::GameManager game = global::GameManager.UnsafeInstance;
+            string scene = game != null ? game.sceneName : null;
+            bool due = _typewriters.Count == 0 ? UnityEngine.Time.unscaledTime >= _nextDialogueScan
+                                               : !string.Equals(scene, _dialogueScene, StringComparison.Ordinal);
+            if (!due) return;
+            _dialogueScene = scene;
+            _nextDialogueScan = UnityEngine.Time.unscaledTime + 2f;
+            _typewriters.RemoveAll(box => box == null);
+            foreach (global::DialogueBox box in UnityEngine.Object.FindObjectsOfType<global::DialogueBox>())
+            {
+                if (box == null || !box.useTypeWriter) continue;
+                box.useTypeWriter = false;
+                _typewriters.Add(box);
+            }
+        }
+
+        void RestoreTypewriters()
+        {
+            foreach (global::DialogueBox box in _typewriters)
+                if (box != null) box.useTypeWriter = true;
+            _typewriters.Clear();
+            _dialogueScene = null;
+            _nextDialogueScan = 0f;
         }
 
         internal static string Report()

@@ -542,6 +542,17 @@ internal static class Program
         Target(player, "SetBool", game.TypeSystem.Void, game.TypeSystem.String, game.TypeSystem.Boolean);
         Target(player, "UpdateGameMap", game.TypeSystem.Boolean);
         Target(gameManager, "SaveGame", game.TypeSystem.Void, game.TypeSystem.Int32, game.ImportReference(typeof(Action<bool>)));
+        var sceneData = Type("", "SceneData"); var saveData = Type("", "SaveGameData");
+        if (!saveData.Methods.Any(m => m.Name == ".ctor"))
+        {
+            var ctor = Fixture.Method(saveData, ".ctor", game.TypeSystem.Void, isStatic: false);
+            ctor.IsSpecialName = ctor.IsRuntimeSpecialName = true;
+            Fixture.Parameter(ctor, "playerData", player); Fixture.Parameter(ctor, "sceneData", sceneData);
+            var ctorIl = ctor.Body.GetILProcessor();
+            ctorIl.Emit(OpCodes.Ldarg_0);
+            ctorIl.Emit(OpCodes.Call, game.ImportReference(typeof(object).GetConstructor(System.Type.EmptyTypes)!));
+            ctorIl.Emit(OpCodes.Ret);
+        }
         var getter = Fixture.Method(player, "get_instance", player); getter.Body.GetILProcessor().Emit(OpCodes.Ldnull); getter.Body.GetILProcessor().Emit(OpCodes.Ret);
         fixture.Game.Write(Path.Combine(fixture.Staged, "Assembly-CSharp.dll"));
         var patchPath = Path.Combine(fixture.Staged, "HollowKnightPatches.dll");
@@ -565,7 +576,7 @@ internal static class Program
         Hook(hooks,"BeforeDeath");
         Hook(hooks,"BeforeAuthoritativeMapBoolSet",player,game.TypeSystem.String,game.TypeSystem.Boolean);
         Hook(hooks,"BeginAuthoritativeMapUpdate",player); Hook(hooks,"EndAuthoritativeMapUpdate",player);
-        Hook(hooks,"BeforeSaveGame");
+        Hook(hooks,"BeforeSaveGameData",new ByReferenceType(player));
         Hook(PatchType("HollowKnightOneHitDamagePatch"),"BeforeHit",health,new ByReferenceType(hit));
         patches.Write(patchPath);
     }
@@ -694,7 +705,7 @@ internal static class Program
         AssertCall("HeroController", "AddGeoQuietly", "BeforeAddGeo");
         AssertCall("PlayerData", "SetInt", "BeforeJournalSetInt");
         AssertCall("HeroController", "Die", "BeforeDeath");
-        AssertCall("GameManager", "SaveGame", "BeforeSaveGame");
+        AssertCall("SaveGameData", ".ctor", "BeforeSaveGameData");
 
         void AddHook(string name, params (string Name, TypeReference Type)[] parameters)
         {

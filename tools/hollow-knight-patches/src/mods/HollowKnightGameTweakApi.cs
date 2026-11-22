@@ -140,6 +140,7 @@ namespace DualSouls.Mods.HollowKnight
 #if UNITY_ANDROID && !UNITY_EDITOR
             HollowKnightGameplayFeatures.RestoreAll();
             HollowKnightGameplayFeatures.SetStateTransferPreparation(null);
+            HollowKnightGameplayFeatures.SetSaveCleaner(null, null);
 #endif
             global::HkStageHooks.ClearPresentationOverrides();
         }
@@ -346,7 +347,7 @@ namespace DualSouls.Mods.HollowKnight
         static bool IsCheatChoice(string id) =>
             id == "game_speed" || id == "infinite_air_jump" || id == "quick_attacks" || id == "hero_colour" || id == "scene_colour" || id == "picker_amount" || id == "boss_health_bars" ||
             id == "all_damage" || id == "health_regen" || id == "dash_invincibility" || id == "rebirth_in_scene" ||
-            id == "noclip" || id == "no_dash_cooldown" || id == "no_hazard_damage" || id == "disable_vignette" || id == "recall_slot";
+            id == "noclip" || id == "no_dash_cooldown" || id == "no_hazard_damage" || id == "disable_vignette" || id == "instant_dialogue" || id == "recall_slot";
 
         public void SetCheatChoice(string id, string value)
         {
@@ -556,6 +557,24 @@ namespace DualSouls.Mods.HollowKnight
         void EnsureStateTransferPreparation()
         {
             HollowKnightGameplayFeatures.SetStateTransferPreparation(PrepareForStateTransfer);
+            HollowKnightGameplayFeatures.SetSaveCleaner(OwnsSaveValues, CleanSaveValues);
+        }
+
+        // Saved PlayerData values this API overlays; see HollowKnightGameplayFeatures.PrepareSaveData.
+        // Run speed and the hero-only cheats never reach the save, so they are not listed.
+        bool OwnsSaveValues(global::PlayerData live)
+        {
+            return (_nailPlayer != null && ReferenceEquals(_nailPlayer, live)) ||
+                   (_damageInvincibilityCaptured && ReferenceEquals(_damagePlayer, live)) ||
+                   _cheats.OwnsSaveValues(live);
+        }
+
+        void CleanSaveValues(global::PlayerData live, global::PlayerData copy)
+        {
+            if (_nailPlayer != null && ReferenceEquals(_nailPlayer, live)) copy.nailDamage = _nailBaseline;
+            if (_damageInvincibilityCaptured && ReferenceEquals(_damagePlayer, live))
+                copy.isInvincible = _damageInvincibilityBaseline;
+            _cheats.CleanSaveValues(live, copy);
         }
 
         void PrepareForStateTransfer()
@@ -732,18 +751,14 @@ namespace DualSouls.Mods.HollowKnight
 #endif
         }
 
-        // Woven at the head of GameManager.SaveGame(int, Action<bool>): cheat-owned
-        // PlayerData values revert to their captured baselines before serialization,
-        // and the next gameplay tick re-captures and re-applies them (#18).
-        public static void BeforeSaveGame()
+        // #48 port of Silksong's copy-and-clean save: meant as the prefix of
+        // SaveGameData(PlayerData, SceneData), which GameManager.SaveGame builds and
+        // serializes. A row that owns saved values hands the save a cleaned copy of
+        // PlayerData; the live object, and so the running overlays, are never touched.
+        public static void BeforeSaveGameData(ref global::PlayerData playerData)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
-            try { HollowKnightGameplayFeatures.PrepareForSave(); }
-            catch (System.Exception error)
-            {
-                // A save must never fail because of a mod; log and let it proceed.
-                UnityEngine.Debug.LogError("Dual Souls: restoring cheat baselines before save failed: " + error);
-            }
+            HollowKnightGameplayFeatures.PrepareSaveData(ref playerData);
 #endif
         }
 

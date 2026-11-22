@@ -98,6 +98,7 @@ namespace DualSouls.Mods.HollowKnight
             Cheat("add_geo", TweakControlKind.Command, "ECONOMY", "ADD 1000 GEO", "Add 1000 Geo now.", "run", "run"),
             Row("lifeblood_flash", "lifeblood_flash", TweakControlKind.Choice, "PRESENTATION", "LIFEBLOOD FLASH", "Use the original flash, a softened flash, or no flash.", "vanilla", "vanilla", "soft", "off"),
             Cheat("disable_vignette", TweakControlKind.Choice, "PRESENTATION", "DISABLE VIGNETTE", "Hide the dark vignette drawn around the Knight, so room edges and dark areas are easier to see.", "off", "off", "on"),
+            Cheat("instant_dialogue", TweakControlKind.Choice, "PRESENTATION", "INSTANT DIALOGUE", "Show dialogue text immediately instead of printing it over time.", "off", "off", "on"),
 
             Cheat("infinite_air_jump", TweakControlKind.Choice, "PLAYER", "INFINITE AIR JUMP", "Jump again in mid-air as often as you like.", "off", "off", "on"),
             Cheat("noclip", TweakControlKind.Choice, "PLAYER", "NOCLIP FLIGHT", "Fly through walls in any direction with the movement input, taking no damage. Turning it off drops you where you are.", "off", "off", "on"),
@@ -119,6 +120,7 @@ namespace DualSouls.Mods.HollowKnight
             Cheat("unlock_stags", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL STAGS", "Permanently open every Stag Station on this save.", "run", "run"),
             Cheat("unlock_maps", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL MAPS", "Permanently add every area map to this save.", "run", "run"),
             Cheat("unlock_all_charms", TweakControlKind.Command, "UNLOCKS", "UNLOCK ALL CHARMS", "Permanently add all 40 charms. Fragile charms are repaired, Kingsoul is whole and Grimmchild starts at level 1.", "run", "run"),
+            Cheat("max_collectables", TweakControlKind.Command, "UNLOCKS", "FILL COLLECTABLES", "Add up to 99 of every countable item: relics, Simple Keys, Rancid Eggs, Pale Ore and Essence. Can affect quests.", "run", "run"),
             Cheat("unlock_extra_modes", TweakControlKind.Command, "UNLOCKS", "UNLOCK EXTRA MODES", "Unlock Steel Soul and Godseeker mode on the title screen, through the game's own records.", "run", "run"),
 
             Cheat("picker_amount", TweakControlKind.Choice, "ITEM PICKER", "PICKER AMOUNT", "How many the picker rows below add, take or set.", "1", "1", "5", "10", "50", "99"),

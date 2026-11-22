@@ -1419,11 +1419,19 @@ namespace DualSouls.Mods.HollowKnight
         }
 
         /// <summary>QA command access to the open Skins menu: <c>list</c>, <c>row N</c> (submit, like a tap),
-        /// <c>left N</c>/<c>right N</c> (cycle Mode/Sprites). Goes through the same model and native writer.</summary>
+        /// <c>left N</c>/<c>right N</c> (cycle Mode/Sprites), <c>close</c> (the open Mods or Skins menu, like Back).
+        /// Goes through the same model and native writer.</summary>
         internal static string SkinCommand(string verb, string argument)
         {
             HollowKnightNativeModsMenu current = _current;
             if (current == null || !current.BindingIsAlive()) return "error no Mods menu";
+            if (verb == "close")
+            {
+                if (!current._nativeOpen || current._transitioning)
+                    return "error cannot close; open=" + current._nativeOpen + " transitioning=" + current._transitioning;
+                current.Close();
+                return "ok closing";
+            }
             if (!current._nativeOpen || current._openRoute != NativeMenuRoute.Skins || current._skinMenu == null)
                 return "error Skins menu is not open";
             NativeSkinMenuModel model = current._skinMenu;

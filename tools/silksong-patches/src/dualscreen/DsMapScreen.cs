@@ -19,11 +19,9 @@
 // with a scan as a fallback, and a null degrades to a line of text rather than
 // to a blank panel.
 //
-// FULL MAP is not a button yet. The framing it needs already exists
-// (DsMapView.Frame.World) and is reachable with `map_frame=world` in the
-// DsConfig file, so the maths can be checked on the device before a control is
-// drawn for it. That ordering is deliberate: the button is five lines once the
-// framing is known to be right, and misleading once it is known to be wrong.
+// The action bar's FULL MAP / AREA MAP toggle switches between the two framings
+// (DsMapView.Frame.Area and Frame.World); `map_frame=world` in DsConfig picks
+// the starting one.
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System;
@@ -722,7 +720,7 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip,
     /// </summary>
     public string HeaderTitle
     {
-        get { return _state == State.Map ? _zoneName : null; }
+        get { return _state == State.Map && _view != null && _view.Mode == DsMapView.Frame.Area ? _zoneName : null; }
     }
 
     public void CollectActions(List<DsAction> into)

@@ -336,6 +336,22 @@ public sealed class SilksongTweakAdapterTests
     }
 
     [Fact]
+    public void TitleScreenStoresChoicesButRefusesGameplayCommands()
+    {
+        var api = new RecordingApi { HasLoadedSave = false };
+        var adapter = new SilksongTweakAdapter(api);
+
+        var command = adapter.Apply("save_to_slot", "run");
+        var route = adapter.Apply("bench_teleport", "open");
+
+        Assert.False(command.Success);
+        Assert.Contains("works only with a save loaded", command.Error, StringComparison.Ordinal);
+        Assert.False(route.Success);
+        Assert.Contains("works only with a save loaded", route.Error, StringComparison.Ordinal);
+        Assert.True(adapter.Apply("fast_transitions", "on").Success);
+    }
+
+    [Fact]
     public void ActionsFailClosedWhileTypedOwnersAreUnavailable()
     {
         var api = new RecordingApi { IsReady = false };
@@ -407,6 +423,7 @@ public sealed class SilksongTweakAdapterTests
     private sealed class RecordingApi : ISilksongTweakApi
     {
         public bool IsReady { get; set; } = true;
+        public bool HasLoadedSave { get; set; } = true;
         public int CaptureCount { get; private set; }
         public int RestoreAllCount { get; private set; }
         public int RestoreDamageCount { get; private set; }

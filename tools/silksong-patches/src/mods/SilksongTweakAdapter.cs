@@ -57,6 +57,7 @@ namespace DualSouls.Mods.Silksong
     public interface ISilksongTweakApi
     {
         bool IsReady { get; }
+        bool HasLoadedSave { get; }
         void CaptureBaseline();
         void RestoreBaseline();
         void OpenSkins();
@@ -291,6 +292,9 @@ namespace DualSouls.Mods.Silksong
             if (row == null) return TweakActionResult.Fail("Unknown Silksong tweak: " + id);
             if (!row.Allows(value)) return TweakActionResult.Fail("Unsupported value for " + id + ": " + value);
             if (!_api.IsReady) return TweakActionResult.Fail("Silksong gameplay owners are not ready for Mods actions.");
+            if ((row.ControlKind == TweakControlKind.Command || row.ControlKind == TweakControlKind.Route) &&
+                !_api.HasLoadedSave)
+                return TweakActionResult.Fail(row.Title + " works only with a save loaded.");
             long operationToken = row.ControlKind == TweakControlKind.Choice ||
                                   row.ControlKind == TweakControlKind.Route ||
                                   id == "load_from_slot"

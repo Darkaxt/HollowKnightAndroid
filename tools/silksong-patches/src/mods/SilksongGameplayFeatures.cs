@@ -149,7 +149,7 @@ namespace DualSouls.Mods.Silksong
                     if (others) saveCleaner?.Invoke(live, copy);
                     playerData = copy;
                 }
-                if (mine) WriteDroppedEquips(live.profileID, dropped);
+                if (mine) WriteDroppedEquips(Slot(), dropped);
             }
             catch (Exception error)
             {
@@ -244,8 +244,8 @@ namespace DualSouls.Mods.Silksong
         // With the row on, put back the tools a clean save took out of the crests (#48).
         static bool RestoreDroppedEquips(PlayerData player)
         {
-            string path = DroppedEquipsPath(player.profileID);
-            droppedRestoreReport = "profile=" + player.profileID + " scene=" + (GameManager.SilentInstance != null ? GameManager.SilentInstance.sceneName : "-");
+            string path = DroppedEquipsPath(Slot());
+            droppedRestoreReport = "profile=" + Slot() + " scene=" + (GameManager.SilentInstance != null ? GameManager.SilentInstance.sceneName : "-");
             if (!File.Exists(path)) { droppedRestoreReport += " no-file"; return false; }
             bool changed = false;
             foreach (string line in File.ReadAllLines(path))
@@ -299,7 +299,7 @@ namespace DualSouls.Mods.Silksong
                 owner = player;
                 toolSlotsTidy = false;
                 droppedEquipsRestored = false;
-                EnsureBenches(player.profileID);
+                EnsureBenches(Slot());
             }
 
             MaintainFastTransitions(game, fastTransitions);
@@ -332,6 +332,9 @@ namespace DualSouls.Mods.Silksong
             nextBossProbe = Time.unscaledTime + 2f;
             bossProbeFound = SceneHasBoss();
         }
+
+        // The picked save slot. PlayerData.profileID is 0 for a new game until its first save.
+        internal static int Slot() { GameManager game = GameManager.SilentInstance; return game != null ? game.profileID : 0; }
 
         static void MaintainDeathTally(GameManager game, PlayerData player)
         {
@@ -426,21 +429,21 @@ namespace DualSouls.Mods.Silksong
             GameManager game = RequireGame();
             HeroController hero = HeroController.instance;
             if (hero == null) throw new InvalidOperationException("Hornet is not ready for a save state.");
-            WriteStateSidecar(StatePath(slot, game.playerData.profileID), CaptureStateJson(game, hero));
+            WriteStateSidecar(StatePath(slot, game.profileID), CaptureStateJson(game, hero));
         }
 
         public static void LoadState(int slot, Action<string> completed = null)
         {
             ValidateSlot(slot);
             GameManager game = RequireGame();
-            LoadStateFile(StatePath(slot, game.playerData.profileID), completed);
+            LoadStateFile(StatePath(slot, game.profileID), completed);
         }
 
         public static void DeleteState(int slot)
         {
             ValidateSlot(slot);
             GameManager game = RequireGame();
-            string path = StatePath(slot, game.playerData.profileID);
+            string path = StatePath(slot, game.profileID);
             if (File.Exists(path)) File.Delete(path);
         }
 
@@ -448,7 +451,7 @@ namespace DualSouls.Mods.Silksong
         {
             ValidateSlot(slot);
             GameManager game = RequireGame();
-            return File.Exists(StatePath(slot, game.playerData.profileID));
+            return File.Exists(StatePath(slot, game.profileID));
         }
 
         static string CaptureStateJson(GameManager game, HeroController hero)
@@ -459,7 +462,7 @@ namespace DualSouls.Mods.Silksong
             string saveJson = SaveDataUtility.SerializeSaveData(new SaveGameData(game.playerData, game.sceneData));
             var envelope = new StateEnvelope
             {
-                profileId = game.playerData.profileID,
+                profileId = game.profileID,
                 scene = game.sceneName,
                 x = position.x,
                 y = position.y,
@@ -482,11 +485,11 @@ namespace DualSouls.Mods.Silksong
             if (envelope == null || envelope.version != 1 || string.IsNullOrEmpty(envelope.scene) || string.IsNullOrEmpty(envelope.saveJson))
                 throw new InvalidDataException("The selected save-state sidecar is incomplete.");
             GameManager game = RequireGame();
-            int profile = game.playerData.profileID;
+            int profile = game.profileID;
             if (envelope.profileId != profile)
                 throw new InvalidDataException("The selected save-state belongs to another profile.");
             SaveGameData save = SaveDataUtility.DeserializeSaveData<SaveGameData>(envelope.saveJson);
-            if (save == null || save.playerData == null || save.sceneData == null || save.playerData.profileID != profile)
+            if (save == null || save.playerData == null || save.sceneData == null || (save.playerData.profileID != profile && save.playerData.profileID != 0))
                 throw new InvalidDataException("The selected save-state payload is incomplete or belongs to another profile.");
             MethodInfo load = typeof(GameManager).GetMethod("SetLoadedGameData", BindingFlags.Instance | BindingFlags.NonPublic,
                 null, new[] { typeof(SaveGameData), typeof(int) }, null);
@@ -1078,10 +1081,10 @@ namespace DualSouls.Mods.Silksong
         static void MaintainBossRetry(GameManager game, PlayerData player, bool enabled)
         {
             if (!enabled) { ResetBossRuntime(); return; }
-            if (bossProfile != player.profileID)
+            if (bossProfile != Slot())
             {
                 ResetBossRuntime();
-                bossProfile = player.profileID;
+                bossProfile = Slot();
             }
             string scene = game.sceneName;
             if (scene != inspectedBossScene && Time.unscaledTime >= nextBossInspection)
@@ -1093,14 +1096,14 @@ namespace DualSouls.Mods.Silksong
                 if (hasBoss && hero != null && player.health > 0 && bossScene != scene)
                 {
                     bossScene = scene;
-                    WriteStateSidecar(BossStatePath(player.profileID), CaptureStateJson(game, hero));
+                    WriteStateSidecar(BossStatePath(Slot()), CaptureStateJson(game, hero));
                 }
             }
             if (bossScene == null) return;
             if (!bossDeathArmed && player.health <= 0 && scene == bossScene) bossDeathArmed = true;
             else if (bossDeathArmed && player.health > 0 && !game.IsInSceneTransition)
             {
-                bossDeathArmed = false; string path = BossStatePath(player.profileID); if (File.Exists(path)) LoadStateFile(path);
+                bossDeathArmed = false; string path = BossStatePath(Slot()); if (File.Exists(path)) LoadStateFile(path);
             }
         }
 
@@ -1138,9 +1141,9 @@ namespace DualSouls.Mods.Silksong
             if (!atBench || lastAtBench) { lastAtBench = atBench; return; }
             lastAtBench = true; if (string.IsNullOrEmpty(player.respawnScene) || string.IsNullOrEmpty(player.respawnMarkerName)) return;
             benches[player.respawnScene] = new BenchRecord { scene = player.respawnScene, marker = player.respawnMarkerName, type = player.respawnType };
-            var envelope = new BenchEnvelope { profileId = player.profileID };
+            var envelope = new BenchEnvelope { profileId = Slot() };
             foreach (BenchRecord record in benches.Values) { if (envelope.records.Count == MaximumBenches) break; envelope.records.Add(record); }
-            string path = BenchPath(player.profileID); Directory.CreateDirectory(Path.GetDirectoryName(path)); File.WriteAllText(path, JsonUtility.ToJson(envelope));
+            string path = BenchPath(Slot()); Directory.CreateDirectory(Path.GetDirectoryName(path)); File.WriteAllText(path, JsonUtility.ToJson(envelope));
         }
         public static List<BenchRecord> BenchDestinations()
         {
@@ -1148,7 +1151,7 @@ namespace DualSouls.Mods.Silksong
         }
         public static void WarpToBench(string scene)
         {
-            GameManager game = RequireGame(); EnsureBenches(game.playerData.profileID); BenchRecord record;
+            GameManager game = RequireGame(); EnsureBenches(game.profileID); BenchRecord record;
             if (string.IsNullOrEmpty(scene) || !benches.TryGetValue(scene, out record)) throw new InvalidOperationException("That bench has not been recorded for this profile.");
             game.playerData.SetBenchRespawn(record.marker, record.scene, record.type, true); game.ReadyForRespawn(false);
         }

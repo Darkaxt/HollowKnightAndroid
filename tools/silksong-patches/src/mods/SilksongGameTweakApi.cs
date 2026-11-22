@@ -53,7 +53,11 @@ namespace DualSouls.Mods.Silksong
         readonly Queue<TweakAdapterCompletion> _completedOperations =
             new Queue<TweakAdapterCompletion>();
 
-        public bool IsReady
+        // Ready from the title screen, like HK: choices are stored and apply on load;
+        // gameplay commands refuse on their own through HasLoadedSave.
+        public bool IsReady => true;
+
+        public bool HasLoadedSave
         {
             get
             {
@@ -334,8 +338,12 @@ namespace DualSouls.Mods.Silksong
             switch (id)
             {
                 case "run_speed":
+                {
+                    string mismatch = RunSpeedMismatch();
+                    if (mismatch != null) return TweakActionResult.Fail(mismatch);
                     return Choice(_runSpeedMultiplier == 2f ? "plus_100" : _runSpeedMultiplier == 1.5f ? "plus_50" :
                                   _runSpeedMultiplier == 1.25f ? "plus_25" : "vanilla");
+                }
                 case "fast_transitions": return OnOff(_fastTransitions);
                 case "auto_map": return OnOff(_autoMap);
                 case "innate_compass": return OnOff(_innateCompass);
@@ -429,6 +437,15 @@ namespace DualSouls.Mods.Silksong
             }
             hero.RUN_SPEED = _runSpeedBaseline * _runSpeedMultiplier;
             hero.WALK_SPEED = _walkSpeedBaseline * _runSpeedMultiplier;
+        }
+
+        string RunSpeedMismatch()
+        {
+            HeroController hero = HeroController.instance;
+            if (!PlayerData.HasInstance || hero == null || _runSpeedMultiplier == 1f) return null;
+            float wanted = _runSpeedBaseline * _runSpeedMultiplier;
+            if (ReferenceEquals(hero, _runHero) && Math.Abs(hero.RUN_SPEED - wanted) < 0.001f) return null;
+            return "Game run speed is " + hero.RUN_SPEED + ", expected " + wanted + ".";
         }
 
         void RestoreRunSpeedOwner()

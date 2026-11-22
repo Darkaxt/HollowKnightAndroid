@@ -1,8 +1,9 @@
 // [Q] QA COMMANDS for Silksong — the same app-owned channel as Hollow Knight's
 // (see DsCommandFile): adb drops dualsouls-cmd.txt, replies land in
 // dualsouls-cmd.out. `report` returns everything the per-candidate device
-// checklist reads in one call. There is deliberately no `save` here: a
-// reflection-chosen SaveGame overload could take a slot number.
+// checklist reads in one call. `save`, `load` and `quit-menu` bind one exact
+// public signature each and fail closed: a loosely chosen SaveGame overload
+// could take a slot number.
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System;
@@ -15,7 +16,7 @@ using UnityEngine;
 public partial class DualScreenV2
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, dash, perform on|off, travel <scene> <gate> | delivery <list|give <name>|hit|break|state> | crest [tools <type>|equip <slot> <tool>|unlock <tool>] | inv [fsm|next <pane>|send <event>|tools] | fsm find <text> | fsm show|send|set|goto <object>[#n]|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | sprites | assists | collect [checklist|why <scene prefix>]";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <id> | mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | mapsetup | die, hit <damage> [hp] [near] | hurt <n>, hazard, fly <x> <y>, dash, perform on|off, travel <scene> <gate> | delivery <list|give <name>|hit|break|state> | crest [tools <type>|equip <slot> <tool>|unlock <tool>] | inv [fsm|next <pane>|send <event>|tools] | fsm find <text> | fsm show|send|set|goto <object>[#n]|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | geo <amount> | shards <amount> | save | load <slot> | quit-menu | fonts | sprites [text] | assists | collect [checklist|why <scene prefix>]";
 
     static readonly string[] ReportPlayerFields =
         { "health", "maxHealth", "healthBlue", "silk", "silkMax", "geo", "ShellShards" };
@@ -421,7 +422,14 @@ public partial class DualScreenV2
             case "fsm": return CommandFsm(line);
             case "gates": return CommandGates(a);
             case "pdtests": return CommandPlayerDataTests(a);
+            case "geo": return CommandCurrency(a, gm, CurrencyType.Money);
+            case "shards": return CommandCurrency(a, gm, CurrencyType.Shard);
+            case "save": return CommandSave(gm);
+            case "load": return CommandLoad(a, gm);
+            case "quit-menu": return CommandQuitMenu(gm);
+            case "fonts": return DsTheme.Report();
             case "sprites":
+                if (a.Length > 1) return ListSprites(string.Join(" ", a, 1, a.Length - 1), 60);
                 var skinRuntime = SilksongSkinRuntime.Current;
                 return skinRuntime != null ? skinRuntime.DescribeCollections() : "error no skin runtime";
             default: return "error unknown command; " + CommandHelp;
@@ -609,6 +617,70 @@ public partial class DualScreenV2
             Visualization = GameManager.SceneLoadVisualizations.Default,
         });
         return "ok travelling to " + a[1] + " via " + a[2];
+    }
+
+    // geo/shards: rosaries or shell shards through the game's CurrencyManager, as HK's `geo`
+    // adds geo. The change is queued for the manager's next Update, so the balance shown is the old one.
+    static string CommandCurrency(string[] a, GameManager gm, CurrencyType type)
+    {
+        int amount;
+        if (a.Length < 2 || !int.TryParse(a[1], out amount) || amount <= 0) return "error " + a[0] + " <amount>";
+        if (gm == null) return "error no GameManager";
+        if (HeroController.SilentInstance == null) return "error no HeroController";
+        int had = CurrencyManager.GetCurrencyAmount(type);
+        SilksongCheats.AddCurrency(amount, type);
+        return "ok " + a[0] + " +" + amount + " queued (had " + had + ")";
+    }
+
+    static string _lastSaveResult = "-";
+
+    // save: GameManager.SaveGame(Action<bool>) into the current slot -- never an overload taking a slot.
+    static string CommandSave(GameManager gm)
+    {
+        if (gm == null) return "error no GameManager";
+        if (!gm.IsGameplayScene()) return "error not in a gameplay scene";
+        MethodInfo save = typeof(GameManager).GetMethod("SaveGame", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(Action<bool>) }, null);
+        if (save == null) return "error no GameManager.SaveGame(Action<bool>)";
+        string previous = _lastSaveResult;
+        _lastSaveResult = "pending";
+        save.Invoke(gm, new object[] { new Action<bool>(ok => _lastSaveResult = ok ? "saved" : "failed") });
+        return "ok slot=" + gm.profileID + " result=" + _lastSaveResult + " previous=" + previous;
+    }
+
+    // load: the profile menu's own GameManager.LoadGameFromUI(int); injected presses are unreliable there.
+    static string CommandLoad(string[] a, GameManager gm)
+    {
+        int slot;
+        if (a.Length < 2 || !int.TryParse(a[1], out slot) || slot < 1 || slot > 4) return "error load <1-4>";
+        if (gm == null || gm.GameState != GlobalEnums.GameState.MAIN_MENU) return "error not on the main menu";
+        MethodInfo load = typeof(GameManager).GetMethod("LoadGameFromUI", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(int) }, null);
+        if (load == null) return "error no GameManager.LoadGameFromUI(int)";
+        load.Invoke(gm, new object[] { slot });
+        return "ok loading slot " + slot;
+    }
+
+    // quit-menu: UIManager's own ReturnToMainMenu coroutine, as HK's pause-menu quit runs it.
+    static string CommandQuitMenu(GameManager gm)
+    {
+        UIManager ui = gm != null ? gm.ui : null;
+        if (ui == null) return "error no UIManager";
+        MethodInfo quit = typeof(UIManager).GetMethod("ReturnToMainMenu", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
+        if (quit == null || quit.ReturnType != typeof(System.Collections.IEnumerator)) return "error no UIManager.ReturnToMainMenu()";
+        ui.StartCoroutine((System.Collections.IEnumerator)quit.Invoke(ui, null));
+        return "ok";
+    }
+
+    // sprites <text>: resident sprite names containing the text, as HK's `sprites` lists them.
+    static string ListSprites(string part, int max)
+    {
+        var names = new System.Collections.Generic.SortedSet<string>();
+        foreach (var s in Resources.FindObjectsOfTypeAll<Sprite>())
+            if (s != null && s.name.IndexOf(part, StringComparison.OrdinalIgnoreCase) >= 0) names.Add(s.name);
+        var sb = new StringBuilder();
+        sb.Append(names.Count).Append(" match");
+        int n = 0;
+        foreach (var name in names) { if (n++ == max) { sb.Append(" ..."); break; } sb.Append(' ').Append(name); }
+        return sb.ToString();
     }
 
     static DualSouls.Mods.TweakController ModsController()

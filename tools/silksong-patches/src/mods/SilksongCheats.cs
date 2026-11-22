@@ -520,7 +520,7 @@ namespace DualSouls.Mods.Silksong
 
         static TweakActionResult Text(string value) => TweakActionResult.Ok(TweakReadback.Text(value));
 
-        static void AddCurrency(int amount, CurrencyType type)
+        internal static void AddCurrency(int amount, CurrencyType type)
         {
             // An explicit grant is exact: the Rosary multiplier applies to earned awards only.
             int multiplier = SilksongGameplayHooks.RosaryMultiplier;

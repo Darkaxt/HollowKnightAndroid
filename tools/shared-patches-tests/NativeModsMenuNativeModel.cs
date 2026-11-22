@@ -409,7 +409,8 @@ namespace NativeMenuFixture.PROFILE.Engine
         public static bool StateExists(int slot) => false;
         public static void Tick(params object[] flags) { }
         public static void RestorePlayerOwnedForStateTransfer() { }
-        public static void PrepareForSave() { }
+        public static void SetSaveCleaner(Func<PlayerData, bool> owns, Action<PlayerData, PlayerData> clean) { }
+        public static void PrepareSaveData(ref PlayerData playerData) { }
         public static void BeforeAuthoritativeMapBoolSet(PlayerData player, string name, bool value) { }
         public static void BeginAuthoritativeMapUpdate(PlayerData player) { }
         public static void EndAuthoritativeMapUpdate(PlayerData player) { }
@@ -420,6 +421,8 @@ namespace NativeMenuFixture.PROFILE.Engine
         public void Tick() { }
         public void RestoreAll() { }
         public void PrepareForStateTransfer() { }
+        public bool OwnsSaveValues(PlayerData live) => false;
+        public void CleanSaveValues(PlayerData live, PlayerData copy) { }
         public global::DualSouls.Mods.TweakActionResult Run(string id) =>
             global::DualSouls.Mods.TweakActionResult.Ok(global::DualSouls.Mods.TweakReadback.Text(id));
     }

@@ -10,8 +10,10 @@ using UnityEngine;
 public partial class HKDualScreen
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
-        "mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | dash | travel <scene> <gate> | save | load <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist] | mapdump\n";
+        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
+        "mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | hazard | fly <x> <y> | dash | travel <scene> <gate> | " +
+        "inv [fsm|send <event>] | fsm find <text> | fsm show|send|set|goto <object>[#n]|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | " +
+        "save | load <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist] | mapdump\n";
 
     // QA: one hero nail hit on the nearest live enemy through HealthManager.Hit, as a slash
     // would land. The optional hp first sets the target's health, e.g. above the boss threshold.
@@ -76,9 +78,9 @@ public partial class HKDualScreen
             case "mods": return HollowKnightNativeModsMenu.OpenForCommand(0);
             case "skins": return HollowKnightNativeModsMenu.OpenForCommand(1);
             case "skin":
-                if (a.Length < 2) return "error skin <list|row N|left N|right N>";
-                if (a[1] != "list" && (a.Length < 3 || (a[1] != "row" && a[1] != "left" && a[1] != "right")))
-                    return "error skin <list|row N|left N|right N>";
+                if (a.Length < 2 || (a[1] != "list" && a[1] != "close" &&
+                    (a.Length < 3 || (a[1] != "row" && a[1] != "left" && a[1] != "right"))))
+                    return "error skin <list|row N|left N|right N|close>";
                 return HollowKnightNativeModsMenu.SkinCommand(a[1], a.Length > 2 ? a[2] : "");
             case "tab":
                 if (a.Length < 2) return "error tab <id>";
@@ -188,6 +190,10 @@ public partial class HKDualScreen
             case "fonts": return DsTheme.Report();
             case "hudfit": return CommandHudFit();
             case "sprites": return a.Length < 2 ? "error sprites <text>" : HollowKnightPatches.Lower.HkSprites.List(a[1], 60);
+            case "inv": return CommandInventory(a, gm);
+            case "fsm": return CommandFsm(line);
+            case "gates": return CommandGates(a);
+            case "pdtests": return CommandPlayerDataTests(a);
             default: return "error unknown command; " + CommandHelp;
         }
     }

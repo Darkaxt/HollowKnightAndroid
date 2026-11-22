@@ -133,6 +133,9 @@ public class DsMapView
         // into a texture, but matching them costs nothing and reads clearly.
         _rooms = MakeCamera("DsMapRooms", CameraClearFlags.SolidColor, 90f);
         _decor = MakeCamera("DsMapDecor", CameraClearFlags.Depth, 91f);
+        // Off-screen cameras: keep the presentation's layer sweep away from them, as in HK.
+        DualSouls.DualScreen.DirectDisplayPresentation.AddPrivateCamera(_rooms);
+        DualSouls.DualScreen.DirectDisplayPresentation.AddPrivateCamera(_decor);
 
         SetVisible(false);
     }
@@ -237,6 +240,8 @@ public class DsMapView
     public void Destroy()
     {
         SetVisible(false);
+        if (_rooms != null) DualSouls.DualScreen.DirectDisplayPresentation.RemovePrivateCamera(_rooms);
+        if (_decor != null) DualSouls.DualScreen.DirectDisplayPresentation.RemovePrivateCamera(_decor);
         // The lifetime component releases the texture, so the rig is the only
         // thing to destroy and the two paths cannot disagree about who owns it.
         if (_rig != null) { UnityEngine.Object.Destroy(_rig); _rig = null; }

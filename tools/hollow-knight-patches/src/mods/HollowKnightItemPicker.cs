@@ -63,6 +63,26 @@ namespace DualSouls.Mods.HollowKnight
             return Text(item[0] + ": " + before + " to " + target);
         }
 
+        // FILL COLLECTABLES: up to 99 more of every countable item, within each item's own
+        // limit, as Silksong's row does with Collect(99). Charm Notches are progression,
+        // not a collectable, so they are left alone. Returns how many items changed.
+        public static int FillAll(global::PlayerData data)
+        {
+            int filled = 0;
+            foreach (object[] item in Items)
+            {
+                string field = (string)item[1];
+                if (field == "charmSlots") continue;
+                int limit = (int)item[3];
+                int before = data.GetInt(field);
+                if (before >= limit) continue;
+                data.SetInt(field, Math.Min(limit, before + 99));
+                if (item[2] != null) data.SetBool((string)item[2], true);
+                filled++;
+            }
+            return filled;
+        }
+
         static TweakActionResult Text(string value) => TweakActionResult.Ok(TweakReadback.Text(value));
     }
 }

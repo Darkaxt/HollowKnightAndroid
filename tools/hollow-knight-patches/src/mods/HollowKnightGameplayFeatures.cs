@@ -44,6 +44,10 @@ namespace DualSouls.Mods.HollowKnight
         static bool bossDeathArmed;
         static float nextBossInspection;
         static Action stateTransferPreparation;
+        // Save copy-and-clean (#48 port): the tweak API's own saved overlays.
+        static Func<PlayerData, bool> saveOwnership;
+        static Action<PlayerData, PlayerData> saveCleaner;
+        static MethodInfo memberwiseClone;
         // #38 death counter and the per-room boss probe it shares with #40.
         static DeathTally deathTally;
         static string bossProbeScene;
@@ -237,9 +241,91 @@ namespace DualSouls.Mods.HollowKnight
             stateTransferPreparation = prepare;
         }
 
-        public static void PrepareForSave()
+        public static void SetSaveCleaner(Func<PlayerData, bool> owns, Action<PlayerData, PlayerData> clean)
         {
-            stateTransferPreparation?.Invoke();
+            saveOwnership = owns;
+            saveCleaner = clean;
+        }
+
+        // #48 port: GameManager.SaveGame builds SaveGameData(playerData, sceneData) and
+        // serializes it. When a row owns saved PlayerData values, the save gets a shallow
+        // copy holding their baselines instead; the live object is never touched, so no
+        // overlay is reverted or re-applied around the save. Nothing owned: unchanged.
+        internal static void PrepareSaveData(ref PlayerData playerData)
+        {
+            PlayerData live = playerData;
+            if (live == null) return;
+            try
+            {
+                bool owned = ReferenceEquals(owner, live) &&
+                    (mapCaptured || compassOwned || magnetOwned || charmCostsApplied || notchCaptured || benchOwned);
+                Func<PlayerData, bool> owns = saveOwnership;
+                bool others = owns != null && owns(live);
+                if (!owned && !others) return;
+                if (memberwiseClone == null)
+                    memberwiseClone = typeof(object).GetMethod("MemberwiseClone", BindingFlags.Instance | BindingFlags.NonPublic);
+                var copy = (PlayerData)memberwiseClone.Invoke(live, null);
+                if (owned) CleanOwned(live, copy);
+                if (others) saveCleaner?.Invoke(live, copy);
+                playerData = copy;
+            }
+            catch (Exception error)
+            {
+                // A save must never fail because of a mod, nor keep an overlay: fall back
+                // to the #18 revert, which the next gameplay tick re-applies.
+                playerData = live;
+                Debug.LogWarning("[DualSouls] Hollow Knight save copy failed, reverting overlays instead: " + error);
+                try { stateTransferPreparation?.Invoke(); }
+                catch (Exception revert) { Debug.LogError("Dual Souls: restoring cheat baselines before save failed: " + revert); }
+            }
+        }
+
+        // The same values, in the same order, that RestorePlayerOwned puts back on the live
+        // object, written to the copy only. PlayerData.SetInt/SetBool write the singleton,
+        // not their receiver, so copy fields are set directly or by reflection; the
+        // reference-typed lists are replaced, never edited, because the copy shares them.
+        static void CleanOwned(PlayerData live, PlayerData copy)
+        {
+            if (mapCaptured)
+            {
+                copy.scenesMapped = new List<string>();
+                ApplyMapBaseline(copy);
+            }
+            bool charms = compassOwned || magnetOwned || charmCostsApplied || notchCaptured;
+            if (!charms) { if (benchOwned) copy.atBench = benchBaseline; return; }
+            if (compassOwned || magnetOwned)
+                copy.equippedCharms = live.equippedCharms != null ? new List<int>(live.equippedCharms) : new List<int>();
+            if (compassOwned) CleanInnateCharm(copy, 2, compassCostBaseline);
+            if (magnetOwned) CleanInnateCharm(copy, 1, magnetCostBaseline);
+            if (charmCostsApplied && charmCostBaseline != null)
+                for (int i = 1; i <= 40; i++) SetCopyField(copy, "charmCost_" + i, charmCostBaseline[i - 1]);
+            if (notchCaptured) copy.charmSlots = notchBaseline;
+            // RestorePlayerOwned ends with CalculateNotchesUsed on the restored costs.
+            int filled = 0;
+            if (copy.equippedCharms != null)
+                foreach (int charm in copy.equippedCharms)
+                {
+                    object cost = CopyField("charmCost_" + charm)?.GetValue(copy);
+                    if (cost is int value) filled += value;
+                }
+            SetCopyField(copy, "charmSlotsFilled", filled);
+            if (benchOwned) copy.atBench = benchBaseline;
+        }
+
+        static void CleanInnateCharm(PlayerData copy, int charm, int baselineCost)
+        {
+            copy.equippedCharms.Remove(charm);
+            SetCopyField(copy, "equippedCharm_" + charm, false);
+            SetCopyField(copy, "charmCost_" + charm, charmCostsApplied ? 0 : baselineCost);
+        }
+
+        static FieldInfo CopyField(string name) =>
+            typeof(PlayerData).GetField(name, BindingFlags.Instance | BindingFlags.Public);
+
+        static void SetCopyField(PlayerData copy, string name, object value)
+        {
+            FieldInfo field = CopyField(name);
+            if (field != null && field.FieldType == value.GetType()) field.SetValue(copy, value);
         }
 
         public static void RestorePlayerOwnedForStateTransfer()

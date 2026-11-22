@@ -189,7 +189,7 @@ namespace DualSouls.Mods.Silksong
             }
 
             NativeMenuBinding binding = _lifecycle.Current;
-            bool available = binding.Session.IsReady && binding.Ui.uiState == UIState.PAUSED;
+            bool available = binding.Session.IsReady && MenuStateAllowsMods(binding.Ui.uiState);
             if (binding.ModsEntryRoot.activeSelf != available)
                 binding.ModsEntryRoot.SetActive(available);
             if (binding.SkinsEntryRoot.activeSelf != available)
@@ -209,6 +209,13 @@ namespace DualSouls.Mods.Silksong
                 else
                     PaintSkins();
             }
+        }
+
+        // The Options screen is shared by the pause menu and the title screen; both host
+        // MODS and SKINS, as in HK. Gameplay commands refuse without a loaded save.
+        static bool MenuStateAllowsMods(UIState state)
+        {
+            return state == UIState.PAUSED || state == UIState.MAIN_MENU_HOME;
         }
 
         bool BindingIsAlive()
@@ -781,7 +788,7 @@ namespace DualSouls.Mods.Silksong
         {
             NativeMenuBinding binding = _lifecycle.Current;
             if (driver == null || generation != _bindingGeneration || !BindingIsAlive(binding) ||
-                !binding.Session.IsReady || binding.Ui.uiState != UIState.PAUSED ||
+                !binding.Session.IsReady || !MenuStateAllowsMods(binding.Ui.uiState) ||
                 !driver.gameObject.activeInHierarchy) return false;
             SilksongNativeModsEntryButton entry = driver as SilksongNativeModsEntryButton;
             if (entry != null) return !_nativeOpen &&
@@ -800,7 +807,7 @@ namespace DualSouls.Mods.Silksong
                 : binding?.SkinsEntryRoot;
             if (_nativeOpen || !BindingIsAlive(binding) || entry == null ||
                 !entry.activeInHierarchy || !binding.Session.IsReady ||
-                binding.Ui.uiState != UIState.PAUSED ||
+                !MenuStateAllowsMods(binding.Ui.uiState) ||
                 !_lifecycle.TryBegin(out SilksongNativeMenuTransition<NativeMenuBinding> transition))
                 return;
             _selectionBeforeOpen = EventSystem.current != null
@@ -888,7 +895,7 @@ namespace DualSouls.Mods.Silksong
                 yield return binding.Ui.HideMenu(binding.SkinsScreen);
             if (!TransitionStillCurrent(binding, transition)) yield break;
 
-            if (showOptions && binding.Ui.uiState == UIState.PAUSED)
+            if (showOptions && MenuStateAllowsMods(binding.Ui.uiState))
             {
                 yield return binding.Ui.ShowMenu(binding.OptionsScreen);
                 if (!TransitionStillCurrent(binding, transition)) yield break;
@@ -909,7 +916,7 @@ namespace DualSouls.Mods.Silksong
         {
             return TransitionStillCurrent(binding, transition) &&
                    binding.Session.IsReady &&
-                   binding.Ui.uiState == UIState.PAUSED;
+                   MenuStateAllowsMods(binding.Ui.uiState);
         }
 
         void CancelOpenTransition(
@@ -1332,7 +1339,7 @@ namespace DualSouls.Mods.Silksong
             SilksongNativeModsMenu current = _current;
             NativeMenuBinding binding = current != null ? current._lifecycle.Current : null;
             if (current == null || !current.BindingIsAlive(binding)) return "error Mods menu not bound";
-            if (binding.Ui.uiState != UIState.PAUSED) return "error not paused (uiState=" + binding.Ui.uiState + ")";
+            if (!MenuStateAllowsMods(binding.Ui.uiState)) return "error not paused or on the title screen (uiState=" + binding.Ui.uiState + ")";
             if (current._lifecycle.Transitioning) return "error menu transitioning";
             if (current._nativeOpen) return "error a Mods/Skins menu is already open";
             GameObject entry = route == 0 ? binding.ModsEntryRoot : binding.SkinsEntryRoot;

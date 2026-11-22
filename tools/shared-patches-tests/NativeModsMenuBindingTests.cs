@@ -246,6 +246,7 @@ public class MenuApiProxy : DispatchProxy
     protected override object Invoke(MethodInfo method, object[] args)
     {
         if (method.Name == "get_IsReady") return true;
+        if (method.Name == "get_HasLoadedSave") return true;
         if (method.Name == "Readback") return TweakActionResult.Ok(TweakReadback.Choice(Descriptors.Single(d => d.Id == (string)args[0]).DefaultValue));
         if (method.Name == "DrainCompletedOperations") return Array.Empty<TweakAdapterCompletion>();
         if (method.Name == "OpenBenchTeleport") S.SilksongNativeModsMenu.OpenBenchTeleportRoute((long)args[0]);

@@ -304,8 +304,9 @@ internal static class Builtin
         var journal = Exact(player, "SetInt", false, "System.Void", "System.String", "System.Int32");
         var setBool = Exact(player, "SetBool", false, "System.Void", "System.String", "System.Boolean");
         var map = Exact(player, "UpdateGameMap", false, "System.Boolean");
-        // Every save path funnels through this private overload before serializing PlayerData.
-        var save = Exact(gameManager, "SaveGame", false, "System.Void", "System.Int32", "System.Action`1<System.Boolean>");
+        // #48 (as Silksong): every save path builds SaveGameData(playerData, sceneData) before
+        // serializing it; the prefix may hand it a cleaned copy of PlayerData.
+        var save = Exact(Type(module, "SaveGameData"), ".ctor", false, "System.Void", "PlayerData", "SceneData");
         // The exact native SetBool implementation writes the singleton, not its receiver.
         var currentPlayer = Exact(player, "get_instance", true, "PlayerData");
         var beforeHit = Hook(oneHit, OneHitPatchMethod, "HealthManager", "HitInstance&");
@@ -316,7 +317,7 @@ internal static class Builtin
         var beforeBool = Hook(hooks, "BeforeAuthoritativeMapBoolSet", "PlayerData", "System.String", "System.Boolean");
         var beginMap = Hook(hooks, "BeginAuthoritativeMapUpdate", "PlayerData");
         var endMap = Hook(hooks, "EndAuthoritativeMapUpdate", "PlayerData");
-        var beforeSave = Hook(hooks, "BeforeSaveGame");
+        var beforeSave = Hook(hooks, "BeforeSaveGameData", "PlayerData&");
         var expected = new[]
         {
             (hit, beforeHit), (damage, beforeDamage), (geo, beforeGeo),
@@ -345,7 +346,7 @@ internal static class Builtin
             (journal, beforeJournal, new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldarg, journal.Parameters[0]), Instruction.Create(OpCodes.Ldarga, journal.Parameters[1]) }),
             (setBool, beforeBool, new[] { Instruction.Create(OpCodes.Call, currentPlayer), Instruction.Create(OpCodes.Ldarg, setBool.Parameters[0]), Instruction.Create(OpCodes.Ldarg, setBool.Parameters[1]) }),
             (map, beginMap, new[] { Instruction.Create(OpCodes.Ldarg_0) }),
-            (save, beforeSave, Array.Empty<Instruction>()),
+            (save, beforeSave, new[] { Instruction.Create(OpCodes.Ldarga, save.Parameters[0]) }),
         };
         bool LoadMatches(Instruction actual, Instruction required) => actual.OpCode == required.OpCode &&
             (actual.Operand is MethodReference called && required.Operand is MethodReference method
