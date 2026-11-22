@@ -139,12 +139,12 @@ namespace HollowKnightPatches.Lower
         }
 
         const float ListX = 20f;
-        const float ListW = 740f;
+        const float ListW = 780f;   // Silksong Tasks columns
         const float RowH = 84f;
         const float IconBox = 64f;
         const float CursorBleed = 20f;
-        const float DetailX = 800f;
-        const float DetailW = 420f;
+        const float DetailX = 840f;
+        const float DetailW = 380f;
         const float RefreshSeconds = 0.5f;
         const float FlingDecay = 6f;
 
@@ -313,7 +313,7 @@ namespace HollowKnightPatches.Lower
                 if (_mapName.Length == 0) _mapName = "Map";
                 _quillName = HkGuideSource.AnySheet("INV_NAME_QUILL");
                 if (_quillName.Length == 0) _quillName = "Quill";
-                if (_empty != null) _empty.text = HkGuideSource.AnySheet("PANE_MAP_KEY");
+                if (_empty != null) _empty.text = "No map pins bought";
             }
 
             _visible.Clear();

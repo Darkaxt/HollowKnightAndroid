@@ -34,7 +34,14 @@ namespace HollowKnightPatches.Lower
     public class HkCharmsScreen : IDsScreen, IDsActionBar
     {
         const int CharmCount = 40;
-        const float Gutter = 60f;
+        // Silksong's Crest columns (DsLoadoutScreen): what is worn on the left,
+        // the collection in a three-wide list, and the description on the right.
+        const float LeftX = 20f, LeftW = 470f;
+        const float ListX = 520f, ListW = 350f;
+        const float DetailX = 900f, DetailW = 320f;
+        const int ListColumns = 3;
+        const float EquipSize = 96f, EquipGap = 14f;
+        const int EquipPerRow = 4;
         const float PollSeconds = 0.5f;
         const int OvercharmAttempts = 5;
         const float ApplyCooldown = 0.35f;
@@ -237,6 +244,7 @@ namespace HollowKnightPatches.Lower
         TmpText _equippedLabel, _notchLabel, _costLabel, _status;
 
         float _rx, _rw, _eqTop, _eqAreaH, _notchY, _costY;
+        float _lx = LeftX, _lw = LeftW;
         Rect _actionPane;
         bool _built;
 
@@ -276,23 +284,21 @@ namespace HollowKnightPatches.Lower
         {
             EnsureFields();
             var layout = DsLayout.Current;
-            float w = layout.Width;
             float colH = layout.Body.height - DsTheme.Pad * 2f;
-            _rw = Mathf.Round(Mathf.Clamp(w * 0.34f, 320f, 460f));
-            float gridX = DsTheme.Pad;
-            float gridW = w - DsTheme.Pad * 2f - Gutter - _rw;
-            _rx = gridX + gridW + Gutter;
+            _rx = DetailX; _rw = DetailW;
 
-            DsWidgets.VRule(host, "split-detail", gridX + gridW + Gutter * 0.5f, DsTheme.Pad, colH);
+            DsWidgets.VRule(host, "split-list", (LeftX + LeftW + ListX) * 0.5f, DsTheme.Pad, colH);
+            DsWidgets.VRule(host, "split-detail", (ListX + ListW + DetailX) * 0.5f, DsTheme.Pad, colH);
 
-            // Right column, top: equipped row and notches.
-            float y = DsTheme.Pad;
-            _equippedLabel = DsWidgets.Label(host, "equipped-label", "Equipped", DsTheme.SmallSize,
-                                             DsTheme.InkDim, TmpAlign.Left);
-            if (_equippedLabel != null) DsWidgets.Place(_equippedLabel.rectTransform, _rx, y, _rw, 30f);
-            y += 34f;
+            // Left column: the equipped charms and the notches, where Silksong
+            // shows the crest and what is slotted into it.
+            float y = DsTheme.Pad + 14f;
+            _equippedLabel = DsWidgets.Label(host, "equipped-label", "Equipped", DsTheme.TitleSize,
+                                             DsTheme.Ink, TmpAlign.Center);
+            if (_equippedLabel != null) DsWidgets.Place(_equippedLabel.rectTransform, _lx, y, _lw, 52f);
+            y += 52f + 28f;
             _eqTop = y;
-            _eqAreaH = 136f;
+            _eqAreaH = EquipSize * 3f + EquipGap * 2f;
             for (int i = 0; i < EquipPool; i++)
             {
                 _eqIcons[i] = DsWidgets.Icon(host, "equipped" + i, null, Color.white);
@@ -300,19 +306,18 @@ namespace HollowKnightPatches.Lower
             }
             y += _eqAreaH + 10f;
 
-            _notchLabel = DsWidgets.Label(host, "notch-label", "", DsTheme.SmallSize, DsTheme.InkDim, TmpAlign.Left);
-            if (_notchLabel != null) DsWidgets.Place(_notchLabel.rectTransform, _rx, y, _rw, 30f);
-            y += 34f;
+            _notchLabel = DsWidgets.Label(host, "notch-label", "", DsTheme.SmallSize, DsTheme.InkDim, TmpAlign.Center);
+            if (_notchLabel != null) DsWidgets.Place(_notchLabel.rectTransform, _lx, y, _lw, 30f);
+            y += 38f;
             _notchY = y;
             for (int i = 0; i < NotchPool; i++)
             {
                 _notches[i] = DsWidgets.Circle(host, "notch" + i, NotchEmpty);
                 _notches[i].gameObject.SetActive(false);
             }
-            y += 30f + 16f;
 
-            DsWidgets.HRule(host, "detail-rule", _rx, y, _rw);
-            y += 16f;
+            // Right column: the description from the top, as on Silksong.
+            y = DsTheme.Pad;
 
             // Right column, bottom: cost pips, then the action band.
             float band = DsActionBar.PaneBand(1);
@@ -332,8 +337,9 @@ namespace HollowKnightPatches.Lower
             _actionPane = layout.InBody(new Rect(_rx, bottom, _rw, band));
 
             _grid.EmptyMessage = "No charms yet";
-            _grid.Build(host, 8, gridX, gridW,
-                        new Rect(_rx, y, _rw, Mathf.Max(80f, _costY - 40f - y)), false, 0f);
+            _grid.Build(host, ListColumns, ListX, ListW,
+                        new Rect(_rx, y, _rw, Mathf.Max(80f, _costY - 40f - y)), false,
+                        ListX - (LeftX + LeftW + ListX) * 0.5f);
             _built = true;
             Refresh(true);
         }
@@ -511,10 +517,12 @@ namespace HollowKnightPatches.Lower
             // Equipped row, in equip order. Wraps onto a second row, and shrinks
             // when even two rows would not hold them.
             int count = equipped != null ? Mathf.Min(equipped.Count, EquipPool) : 0;
-            const float gap = 8f;
-            int perRow = Mathf.Max(6, Mathf.CeilToInt(count / 2f));
-            float size = Mathf.Min(64f, (_rw - gap * (perRow - 1)) / perRow);
-            size = Mathf.Min(size, (_eqAreaH - gap) * 0.5f);
+            // Rows of four at Silksong's slot size, centred in the column; more
+            // than three rows (an overcharmed build) shrink to fit.
+            float gap = EquipGap;
+            int perRow = Mathf.Max(EquipPerRow, Mathf.CeilToInt(count / 3f));
+            float size = Mathf.Min(EquipSize, (_lw - gap * (perRow - 1)) / perRow);
+            int rows = Mathf.Max(1, Mathf.CeilToInt(count / (float)perRow));
             _eqShown = 0;
             for (int i = 0; i < EquipPool; i++)
             {
@@ -522,8 +530,9 @@ namespace HollowKnightPatches.Lower
                 if (i >= count) { DsWidgets.SetActive(img, false); continue; }
                 int n = equipped[i];
                 Sprite s = n >= 1 && n <= CharmCount ? IconFor(n, pd) : null;
-                float x = _rx + (i % perRow) * (size + gap);
-                float y = _eqTop + (i / perRow) * (size + gap);
+                int inRow = Mathf.Min(perRow, count - (i / perRow) * perRow);
+                float x = _lx + (_lw - inRow * size - (inRow - 1) * gap) * 0.5f + (i % perRow) * (size + gap);
+                float y = _eqTop + (_eqAreaH - rows * size - (rows - 1) * gap) * 0.5f + (i / perRow) * (size + gap);
                 DsWidgets.Place(img.rectTransform, x, y, size, size);
                 img.sprite = s;
                 img.color = s != null ? Color.white : DsTheme.Locked;
@@ -540,12 +549,13 @@ namespace HollowKnightPatches.Lower
             int slots = Mathf.Max(0, pd.charmSlots);
             int filled = Mathf.Max(0, pd.charmSlotsFilled);
             int dots = Mathf.Min(NotchPool, Mathf.Max(slots, filled));
-            float d = Mathf.Min(26f, (_rw - 6f * Mathf.Max(0, dots - 1)) / Mathf.Max(1, dots));
+            float d = Mathf.Min(30f, (_lw - 8f * Mathf.Max(0, dots - 1)) / Mathf.Max(1, dots));
+            float dotsX = _lx + (_lw - dots * d - Mathf.Max(0, dots - 1) * 8f) * 0.5f;
             for (int i = 0; i < NotchPool; i++)
             {
                 var c = _notches[i];
                 if (i >= dots) { DsWidgets.SetActive(c, false); continue; }
-                DsWidgets.Place(c.rectTransform, _rx + i * (d + 6f), _notchY, d, d);
+                DsWidgets.Place(c.rectTransform, dotsX + i * (d + 8f), _notchY, d, d);
                 c.color = i >= slots ? NotchOver : i < filled ? (pd.overcharmed ? NotchOver : DsTheme.Ink) : NotchEmpty;
                 DsWidgets.SetActive(c, true);
             }

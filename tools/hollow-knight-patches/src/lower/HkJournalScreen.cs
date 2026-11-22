@@ -342,7 +342,7 @@ namespace HollowKnightPatches.Lower
             if (_empty != null)
             {
                 DsWidgets.SetActive(_empty, _visible.Count == 0);
-                if (_visible.Count == 0) _empty.text = HkJournalSource.Text("INV_NAME_JOURNAL", "UI");
+                if (_visible.Count == 0) _empty.text = "No creatures recorded";
             }
 
             while (_cells.Count < _visible.Count) _cells.Add(MakeCell(_cells.Count));
