@@ -101,6 +101,11 @@ namespace HollowKnightPatches.Lower
             // The Dream Nail and Dreamgate carry no InvItemDisplay, so their art is the
             // renderer on the pane object itself (the grid drew its placeholder before).
             public static SpriteRenderer DreamNail, DreamGate;
+            // The counters' icons: the pane's own geo and essence art when it has them.
+            public static Sprite GeoIcon, EssenceIcon;
+            // "Heart Pieces" is a dark shell; its Set Pieces FSM switches on the child
+            // "Pieces <heartPieces>" that draws the shards (Pieces 4 when the mask is whole).
+            public static readonly Transform[] MaskPieces = new Transform[5];
 
             static readonly string[] Named =
             {
@@ -133,6 +138,8 @@ namespace HollowKnightPatches.Lower
                 ByBool.Clear(); ByName.Clear(); Vessel = null;
                 Fireball = Quake = Scream = Focus = HeartPieces = null;
                 DreamNail = DreamGate = null;
+                GeoIcon = EssenceIcon = null;
+                for (int i = 0; i < MaskPieces.Length; i++) MaskPieces[i] = null;
                 Version++;
             }
 
@@ -177,7 +184,24 @@ namespace HollowKnightPatches.Lower
                         case "Spell Focus": if (Focus == null) Focus = RendererOf(t); continue;
                         case "Heart Pieces": if (HeartPieces == null) HeartPieces = RendererOf(t); continue;
                     }
+                    if (n.StartsWith("Pieces ") && t.parent != null && t.parent.name == "Heart Pieces")
+                    {
+                        int k;
+                        if (int.TryParse(n.Substring(7), out k) && k >= 0 && k < MaskPieces.Length && MaskPieces[k] == null)
+                            MaskPieces[k] = t;
+                        continue;
+                    }
                     string lower = n.ToLowerInvariant();
+                    if (GeoIcon == null && lower.Contains("geo"))
+                    {
+                        var r = RendererOf(t);
+                        if (r != null && r.sprite != null) { GeoIcon = r.sprite; Debug.Log("[HkInventory] geo art: " + n + " " + r.sprite.name); }
+                    }
+                    if (EssenceIcon == null && (lower.Contains("essence") || lower.Contains("dream orb") || lower.Contains("dreamorb")))
+                    {
+                        var r = RendererOf(t);
+                        if (r != null && r.sprite != null) { EssenceIcon = r.sprite; Debug.Log("[HkInventory] essence art: " + n + " " + r.sprite.name); }
+                    }
                     if (lower.Contains("dream"))
                     {
                         bool gate = lower.Contains("gate");
@@ -206,6 +230,30 @@ namespace HollowKnightPatches.Lower
                 if (r != null && r.sprite != null) return r;
                 var c = t.GetComponentInChildren<SpriteRenderer>(true);
                 return c != null ? c : r;
+            }
+
+            /// <summary>The shards for this many pieces and where they sit on the shell (fractions, y down).</summary>
+            public static Sprite MaskOverlay(int pieces, out Rect frac)
+            {
+                frac = default(Rect);
+                try
+                {
+                    var shell = HeartPieces;
+                    var child = pieces >= 0 && pieces < MaskPieces.Length ? MaskPieces[pieces] : null;
+                    if (shell == null || shell.sprite == null || child == null) return null;
+                    var cr = child.GetComponent<SpriteRenderer>() ?? child.GetComponentInChildren<SpriteRenderer>(true);
+                    if (cr == null || cr.sprite == null) return null;
+                    // Both boxes in the shell's local space.
+                    Bounds sb = shell.sprite.bounds;
+                    Vector3 lp = shell.transform.InverseTransformPoint(cr.transform.TransformPoint(cr.sprite.bounds.min));
+                    Vector3 hp = shell.transform.InverseTransformPoint(cr.transform.TransformPoint(cr.sprite.bounds.max));
+                    Vector3 lo = Vector3.Min(lp, hp), hi = Vector3.Max(lp, hp);
+                    if (sb.size.x <= 0f || sb.size.y <= 0f) return null;
+                    frac = new Rect((lo.x - sb.min.x) / sb.size.x, (sb.max.y - hi.y) / sb.size.y,
+                                    (hi.x - lo.x) / sb.size.x, (hi.y - lo.y) / sb.size.y);
+                    return cr.sprite;
+                }
+                catch { return null; }
             }
 
             public static Sprite Live(SpriteRenderer r)
@@ -239,6 +287,20 @@ namespace HollowKnightPatches.Lower
         }
 
         static float _tabNextTry;
+        static Sprite _hudGeo;
+
+        static Sprite HudGeoSprite()
+        {
+            if (_hudGeo != null) return _hudGeo;
+            try
+            {
+                var go = GameObject.Find("Geo Sprite");
+                var r = go != null ? go.GetComponent<SpriteRenderer>() : null;
+                if (r != null && r.sprite != null) { _hudGeo = r.sprite; Debug.Log("[HkInventory] geo art from HUD: " + r.sprite.name); }
+            }
+            catch { }
+            return _hudGeo;
+        }
 
         /// <summary>The game's first nail sprite, or null until the inventory prefab is resident.</summary>
         public static Sprite TabArt()
@@ -471,6 +533,7 @@ namespace HollowKnightPatches.Lower
             int pieces = Mathf.Clamp(pd.heartPieces, 0, 3);
             _kit.Masks = Make("heartpieces", masksFull ? "HEARTPIECE_ALL" : "HEARTPIECE_" + pieces,
                 Art.Live(Art.HeartPieces), null, "Mask Shards");
+            _kit.MasksOverlay = Art.MaskOverlay(masksFull ? 4 : pieces, out _kit.MasksOverlayFrac);
 
             bool vesselsFull = pd.MPReserveMax >= pd.MPReserveCap;
             int frags = Mathf.Clamp(pd.vesselFragments, 0, 2);
@@ -484,12 +547,12 @@ namespace HollowKnightPatches.Lower
                 null, "Vessel Fragments", vesselsFull ? "SOULORBS_2" : "SOULORBS_NONE");
 
             // Counters, as Silksong's rosaries and shell shards: the figure is the description.
-            _kit.Geo = Make("geo", "GEO", Art.Name("Geo"), pd.geo.ToString(), "Geo");
+            _kit.Geo = Make("geo", "GEO", Art.GeoIcon ?? HkSprites.Find("InventoryCoin") ?? HudGeoSprite(), pd.geo.ToString(), "Geo");
             _kit.HasEssence = pd.hasDreamNail;
             _kit.Essence = new DsItem
             {
                 Key = "essence", Name = LocFirst("Essence", "INV_NAME_ESSENCE", "INV_NAME_DREAMORBS"),
-                Description = pd.dreamOrbs.ToString(), Icon = dn, Tint = Color.white, Badge = pd.dreamOrbs.ToString(),
+                Description = pd.dreamOrbs.ToString(), Icon = Art.EssenceIcon ?? HkSprites.Find("Dream_Orb_smaller0000") ?? dn, Tint = Color.white, Badge = pd.dreamOrbs.ToString(),
             };
 
             // Abilities, keys and consumables, in Build Equipment List's order

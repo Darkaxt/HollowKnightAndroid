@@ -28,13 +28,16 @@ namespace HollowKnightPatches.Lower
         {
             public DsItem Nail, Focus, Masks, Vessels, Geo, Essence;
             public bool HasEssence;
+            /// <summary>The shards drawn over the mask shell, and their box as fractions of it.</summary>
+            public Sprite MasksOverlay;
+            public Rect MasksOverlayFrac;
             public readonly List<DsItem> Ring = new List<DsItem>();
         }
 
         class Slot
         {
             public RectTransform Root;
-            public Image Image;
+            public Image Image, Overlay;
             public string Name, Desc;
             public Rect Art;   // drawn box inside Root
         }
@@ -115,6 +118,15 @@ namespace HollowKnightPatches.Lower
             _kit = kit;
             Draw(_nail, kit != null ? kit.Nail : default(DsItem));
             Draw(_mask, kit != null ? kit.Masks : default(DsItem));
+            if (kit != null && kit.MasksOverlay != null && _mask.Art.width > 0f)
+            {
+                var f = kit.MasksOverlayFrac;
+                var o = DsWidgets.Icon(_mask.Root, "pieces", kit.MasksOverlay, Color.white);
+                o.useSpriteMesh = true;
+                DsWidgets.Place(o.rectTransform, _mask.Art.x + f.x * _mask.Art.width, _mask.Art.y + f.y * _mask.Art.height,
+                                f.width * _mask.Art.width, f.height * _mask.Art.height);
+                _mask.Overlay = o;
+            }
             Draw(_vessel, kit != null ? kit.Vessels : default(DsItem));
             Draw(_core, kit != null ? kit.Focus : default(DsItem));
 
@@ -140,6 +152,7 @@ namespace HollowKnightPatches.Lower
         static void Draw(Slot slot, DsItem item)
         {
             if (slot.Image != null) { Object.Destroy(slot.Image.gameObject); slot.Image = null; }
+            if (slot.Overlay != null) { Object.Destroy(slot.Overlay.gameObject); slot.Overlay = null; }
             slot.Name = item.Name; slot.Desc = item.Description; slot.Art = default(Rect);
             if (item.Icon == null) return;
             float boxW = slot.Root.sizeDelta.x, boxH = slot.Root.sizeDelta.y;
@@ -160,6 +173,8 @@ namespace HollowKnightPatches.Lower
             if (icon != null)
             {
                 icon.sprite = item.Icon;
+                // Built before any art was known, so DsWidgets.Icon left it clear.
+                icon.color = Color.white;
                 icon.useSpriteMesh = true;
                 icon.preserveAspect = true;
                 icon.enabled = show && item.Icon != null;

@@ -93,7 +93,14 @@ public partial class HKDualScreen
     // between masks 1 and 2 (health_display "Health Number"), measured in the HUD camera frame.
     const float NativeHudMaskPixelPitch = 55f;
     Transform nativeHudMask1, nativeHudMask2;
-    float nativeHudPitch, nativeHudMaskY;
+    float nativeHudPitch, nativeHudMaskX, nativeHudMaskY;
+    // Where the HUD's top-left corner sits relative to mask 1, in mask pitches. The HUD is
+    // anchored there, as Silksong anchors on its first mask, instead of on the leftmost
+    // owner that happens to be drawn: while the HUD fades in only the orb's eyes may be
+    // visible (the vessel ends up clipped), and any stray owner shifts the whole HUD.
+    // Seeded from the Thor (HUD_frame's left edge 2.74 pitches left of mask 1, its top 0.83
+    // above it) and re-learned whenever the frame itself sets both edges.
+    float nativeHudAnchorLeft = 2.74f, nativeHudAnchorTop = 0.83f;
     // Panel pixels from the destination's top to the line beneath the mask row; 0 = unmeasured.
     float nativeHudRowSplit;
 
@@ -483,8 +490,15 @@ public partial class HKDualScreen
         {
             Vector3 first = inv * nativeHudMask1.position, second = inv * nativeHudMask2.position;
             float pitch = second.x - first.x;
-            if (NativeHudFinite(pitch) && pitch > .00001f && NativeHudFinite(first.y))
-            { nativeHudPitch = pitch; nativeHudMaskY = first.y; }
+            if (NativeHudFinite(pitch) && pitch > .00001f && NativeHudFinite(first.x) && NativeHudFinite(first.y))
+            {
+                nativeHudPitch = pitch; nativeHudMaskX = first.x; nativeHudMaskY = first.y;
+                if (NativeHudIsFrame(minX) && NativeHudIsFrame(maxY))
+                {
+                    nativeHudAnchorLeft = (first.x - lo.x) / pitch;
+                    nativeHudAnchorTop = (hi.y - first.y) / pitch;
+                }
+            }
         }
         LogNativeHudFit(minX, maxX, minY, maxY, dropped, halfW, halfH);
         return true;
@@ -501,6 +515,12 @@ public partial class HKDualScreen
         Debug.Log("[HKDS hudfit] fit=" + (size.x / (2f * halfW)).ToString("F2") + "x" + (size.y / (2f * halfH)).ToString("F2") +
             " of view, dropped=" + dropped + " left='" + NativeHudOwnerName(minX) + "' right='" + NativeHudOwnerName(maxX) +
             "' bottom='" + NativeHudOwnerName(minY) + "' top='" + NativeHudOwnerName(maxY) + "'");
+    }
+
+    bool NativeHudIsFrame(int i)
+    {
+        var t = i >= 0 && i < nativeHudOwnerCount && nativeHudOwners[i] != null ? nativeHudOwners[i].Transform : null;
+        return t != null && t.name == "HUD_frame";
     }
 
     string NativeHudOwnerName(int i)
@@ -601,7 +621,13 @@ public partial class HKDualScreen
             if (!NativeHudFinite(ortho) || ortho <= .00001f) { nativeHudFitReady = false; return; }
             var center = (nativeHudViewMin + nativeHudViewMax) * .5f;
             float cx, cy;
-            HollowKnightPatches.Lower.HkShellPolicy.HudAnchor(nativeHudViewMin.x, nativeHudViewMax.y,
+            float anchorX = nativeHudViewMin.x, anchorY = nativeHudViewMax.y;
+            if (nativeHudPitch > 0f)
+            {
+                anchorX = nativeHudMaskX - nativeHudAnchorLeft * nativeHudPitch;
+                anchorY = nativeHudMaskY + nativeHudAnchorTop * nativeHudPitch;
+            }
+            HollowKnightPatches.Lower.HkShellPolicy.HudAnchor(anchorX, anchorY,
                 ortho, ortho * aspect, out cx, out cy);
             // Silksong's hud_x / hud_y knobs: hundredths of a HUD unit, moving the camera.
             center.x = cx + DsConfig.Int("hud_x", 0) / 100f; center.y = cy + DsConfig.Int("hud_y", 0) / 100f;

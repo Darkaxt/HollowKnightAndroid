@@ -13,7 +13,7 @@ public partial class HKDualScreen
         "help | report | state | pause | mods | skins | skin <list|detail|row N|left N|right N|close> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
         "mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | hazard | fly <x> <y> | dash | travel <scene> <gate> | " +
         "inv [fsm|send <event>] | fsm find <text> | fsm show|send|set|goto <object>[#n]|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | " +
-        "save | load <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist | why <scene>] | mapsetup | mapdump\n";
+        "save | load <slot> | newgame <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist | why <scene>] | mapsetup | mapdump\n";
 
     // QA: one hero nail hit on the nearest live enemy through HealthManager.Hit, as a slash
     // would land. The optional hp first sets the target's health, e.g. above the boss threshold.
@@ -205,6 +205,17 @@ public partial class HKDualScreen
                 gm.LoadGameFromUI(slot);
                 return "ok loading slot " + slot;
             }
+            case "newgame":
+            {
+                // QA: a fresh Classic save in the given slot, through the game's own
+                // new-game path, so test saves need no menu navigation.
+                int slot;
+                if (a.Length < 2 || !int.TryParse(a[1], out slot) || slot < 1 || slot > 4) return "error newgame <1-4>";
+                if (gm == null || gm.gameState != GlobalEnums.GameState.MAIN_MENU) return "error not on the main menu";
+                gm.profileID = slot;
+                gm.StartNewGame(false, false);
+                return "ok new game in slot " + slot;
+            }
             case "quit-menu":
                 if (ui == null) return "error no UIManager";
                 ui.StartCoroutine(ui.ReturnToMainMenu());
@@ -368,7 +379,8 @@ public partial class HKDualScreen
         sb.Append("fitReady=").Append(nativeHudFitReady).Append(" bound=").Append(nativeHudBound)
           .Append(" owners=").Append(nativeHudOwnerCount).Append(" dest=").Append(d.x.ToString("F0")).Append(',').Append(d.y.ToString("F0"))
           .Append(' ').Append(d.width.ToString("F0")).Append('x').Append(d.height.ToString("F0"))
-          .Append(" view=").Append(nativeHudViewMin).Append("..").Append(nativeHudViewMax);
+          .Append(" view=").Append(nativeHudViewMin).Append("..").Append(nativeHudViewMax)
+          .Append(" anchor=").Append(nativeHudAnchorLeft.ToString("F2")).Append(",").Append(nativeHudAnchorTop.ToString("F2")).Append(" pitch=").Append(nativeHudPitch.ToString("F3"));
         var src = hudCameraStateSource;
         if (src != null) sb.Append(" srcOrtho=").Append(src.orthographicSize.ToString("F2")).Append(" srcAspect=").Append(src.aspect.ToString("F2"));
         for (int i = 0; i < nativeHudOwnerCount; i++)
