@@ -552,7 +552,7 @@ namespace HollowKnightPatches.Lower
             _kit.Essence = new DsItem
             {
                 Key = "essence", Name = LocFirst("Essence", "INV_NAME_ESSENCE", "INV_NAME_DREAMORBS"),
-                Description = pd.dreamOrbs.ToString(), Icon = Art.EssenceIcon ?? HkSprites.Find("Dream_Orb_smaller0000") ?? dn, Tint = Color.white, Badge = pd.dreamOrbs.ToString(),
+                Description = pd.dreamOrbs.ToString(), Icon = Art.EssenceIcon ?? HkSprites.Find("dream_essence_extra_get") ?? HkSprites.Find("Dream_Orb_smaller0000") ?? dn, Tint = Color.white, Badge = pd.dreamOrbs.ToString(),
             };
 
             // Abilities, keys and consumables, in Build Equipment List's order

@@ -480,7 +480,9 @@ namespace HollowKnightPatches.Lower
         {
             var equipped = pd.equippedCharms;
 
-            // Grid: all forty, in the game's collection order.
+            // Grid: the charms held, in the game's collection order. Silksong's
+            // tool grid lists only unlocked tools; HK's 2D collection board left
+            // blank holes once it was folded into three columns.
             _all.Items.Clear();
             for (int i = 0; i < CharmCount; i++)
             {
@@ -497,18 +499,6 @@ namespace HollowKnightPatches.Lower
                         Description = CharmText("CHARM_DESC_", n, suffix),
                         Icon = IconFor(n, pd),
                         Tint = on ? EquippedInGrid : Color.white,
-                    });
-                }
-                else
-                {
-                    _all.Items.Add(new DsItem
-                    {
-                        Key = _keys[n],
-                        Name = "",
-                        Description = "",
-                        Icon = _blank,
-                        Tint = Color.white,
-                        Dim = true,
                     });
                 }
             }

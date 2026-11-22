@@ -272,6 +272,11 @@ public class DsActionBar
             if (row.Label != null && row.Label.text != text) row.Label.text = text;
 
             Rect where;
+            // A pane plate has a fixed width, so a long label ("REST AT A BENCH")
+            // shrinks to fit it; header plates are sized to their text instead.
+            bool fit = hasPane && action.Place == DsActionPlace.Pane;
+            if (row.Label != null && row.Label.enableAutoSizing != fit) row.Label.enableAutoSizing = fit;
+
             if (hasPane && action.Place == DsActionPlace.Pane)
             {
                 where = new Rect(paneX, paneTop + paneSeen * (RowH + PaneGap), paneW, RowH);
@@ -364,7 +369,12 @@ public class DsActionBar
 
         var label = DsWidgets.Label(root, "t", "", DsTheme.RowSize, Color.black,
                                     TmpAlign.Center, display: true);
-        if (label != null) DsWidgets.Stretch(label.rectTransform, 4f);
+        if (label != null)
+        {
+            DsWidgets.Stretch(label.rectTransform, 4f);
+            label.fontSizeMax = DsTheme.RowSize;
+            label.fontSizeMin = DsTheme.RowSize * 0.6f;
+        }
 
         return new Row { Root = root, Plate = plate, Label = label };
     }

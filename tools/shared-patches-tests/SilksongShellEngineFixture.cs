@@ -149,7 +149,7 @@ public class RectTransform : Transform
         }
     }
 }
-public struct Scene{public bool Invalid;public bool IsValid()=>!Invalid;}
+public struct Scene{public bool Invalid;public string name;public bool IsValid()=>!Invalid;}
 public class GameObject : Object
 {
     public Scene scene;
@@ -271,7 +271,7 @@ public class RawImage:Component
         get{for(var p=transform;p!=null;p=p.parent){var c=p.GetComponent<Canvas>();if(c!=null)return c;}return null;}
     }
 }
-public class Sprite:Object{}
+public class Sprite:Object{public Rect rect;}
 public class RenderTexture:Object
 {
     public int width,height,Creates;bool created=true;
