@@ -207,6 +207,8 @@ class SkinNormalizer(
         val sourceNames = mutableMapOf<Int, String>()
         val payloadByPath = linkedMapOf<String, StagedPayload>()
         var payloadBytes = 0L
+        var firstDimensionFailure: String? = null
+        val skippedSources = mutableListOf<String>()
         fs.requireContained(archive.archive.file, stagingOwner)
         if (fs.identity(archive.archive.file) != archiveIdentity) {
             abort(SkinImportCode.ZIP_CORRUPT, "Archive identity changed before extraction")
@@ -231,12 +233,13 @@ class SkinNormalizer(
                 }
                 .firstOrNull()
             if (dimensionMismatch != null) {
+                // One malformed sheet (e.g. a 4100x4100 atlas) skips only that texture; the rest of the pack imports.
                 cleanupFile(temporary, stagingOwner)
                 val (target, dimensions) = dimensionMismatch
-                reject(
-                    SkinImportCode.PNG_INVALID,
-                    "Texture dimensions for $target must be ${dimensions.width}x${dimensions.height}",
-                )
+                firstDimensionFailure = firstDimensionFailure
+                    ?: "Texture dimensions for $target must be ${dimensions.width}x${dimensions.height}"
+                skippedSources += entry.rawName.toHex()
+                continue
             }
             val decoded = when (val result = decoder.decodeAndRelease(temporary, inspected)) {
                 is SkinResult.Error -> {
@@ -283,15 +286,18 @@ class SkinNormalizer(
         if (fs.identity(archive.archive.file) != archiveIdentity) {
             abort(SkinImportCode.ZIP_CORRUPT, "Archive identity changed during extraction")
         }
+        if (sourceNames.isEmpty()) reject(SkinImportCode.PNG_INVALID, firstDimensionFailure ?: "Candidate has no usable textures")
         val mappings = linkedMapOf<String, String>()
         catalog.paths.forEach { target ->
-            mapping.textures[target]?.let { source -> mappings[target] = sourceNames.getValue(source.centralIndex) }
+            mapping.textures[target]?.let { source -> sourceNames[source.centralIndex]?.let { mappings[target] = it } }
         }
         val payloads = payloadByPath.values.sortedWith { left, right ->
             SkinIdentity.unsignedUtf8Compare(left.relativePath, right.relativePath)
         }
         val contentSha256 = SkinIdentity.contentSha256(payloads)
-        val warnings = mapping.warnings + archiveWarnings
+        val skipped = skippedSources.toSet()
+        val warnings = mapping.warnings.filter { it.sourceRawPathHex !in skipped } +
+            skippedSources.map { SkinWarning("IGNORED_DIMENSION_MISMATCH", it) } + archiveWarnings
         val entryWarnings = warnings.count { it.sourceRawPathHex.isNotEmpty() }
         val archiveWarningCount = warnings.size - entryWarnings
         if (entryWarnings > 4096 || archiveWarningCount > 10) {
@@ -304,7 +310,7 @@ class SkinNormalizer(
             archiveName = canonicalArchiveName(quarantined.archiveName, quarantined.archiveSha256),
             candidateRawPathHex = rawPrefix.toHex(),
             layoutCode = layoutCode,
-            aliases = mapping.aliases,
+            aliases = mapping.aliases.filter { it.sourceRawPathHex !in skipped },
             warnings = warnings,
         )
         val receiptBytes = try {

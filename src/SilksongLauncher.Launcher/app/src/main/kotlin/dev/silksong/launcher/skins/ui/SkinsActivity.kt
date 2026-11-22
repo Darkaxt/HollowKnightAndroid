@@ -140,6 +140,7 @@ class SkinsActivity : Activity() {
             SkinNoticeKind.PREPARED -> R.string.skins_notice_prepared
             SkinNoticeKind.NO_FILES -> R.string.skins_notice_no_files
             SkinNoticeKind.IMPORT_COMPLETE -> R.string.skins_notice_import_complete
+            SkinNoticeKind.IMPORT_PARTIAL -> R.string.skins_notice_import_partial
             SkinNoticeKind.RECOVERED_OFF -> R.string.skins_notice_recovered
             SkinNoticeKind.MUTATION_UNAVAILABLE -> R.string.skins_notice_mutation_unavailable
             SkinNoticeKind.OPERATION_COMPLETE -> R.string.skins_notice_operation_complete

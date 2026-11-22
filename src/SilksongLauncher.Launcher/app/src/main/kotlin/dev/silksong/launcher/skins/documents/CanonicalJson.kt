@@ -27,7 +27,7 @@ object CanonicalJson {
     private val WARNING_CODES = listOf(
         "IGNORED_NESTED_ARCHIVE", "IGNORED_SWAP", "IGNORED_CINEMATICS", "IGNORED_REPLACE_AUDIO",
         "IGNORED_HP_BAR", "IGNORED_CONFIG_OR_TEXT", "IGNORED_ALTERNATE", "IGNORED_PATH_ENCODING",
-        "IGNORED_EXTRA_METADATA", "IGNORED_UNKNOWN",
+        "IGNORED_EXTRA_METADATA", "IGNORED_UNKNOWN", "IGNORED_DIMENSION_MISMATCH",
     )
 
     fun manifest(document: SkinManifestDocument): ByteArray = encodeManifest(document)

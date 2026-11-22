@@ -215,6 +215,29 @@ class SilksongSkinProfileTest {
         }
     }
 
+    @Test
+    fun silksongNormalizerSkipsOnlyTheMisdimensionedTextureOfAMixedPack() {
+        val (good, bad) = expected[0] to expected[1]
+        val profileRoot = temp.newFolder("mixed", "profiles", "silksong")
+        val store = SkinLibraryStore(SkinPaths(profileRoot), catalog = silksongCatalog())
+        val decoder = PngDecoder { _, info ->
+            SkinResult.Ok(DecodeResult(info.width, info.height, info.width.toLong() * info.height))
+        }
+        val goodDimensions = expectedDimensions.getValue(good)
+        val badDimensions = expectedDimensions.getValue(bad)
+        val archive = RawZipFixture.build(listOf(
+            RawZipFixture.Entry("Mixed/$good".toByteArray(), declaredRgba(goodDimensions.width, goodDimensions.height)),
+            RawZipFixture.Entry("Mixed/$bad".toByteArray(), declaredRgba(badDimensions.width + 4, badDimensions.height + 4)),
+        )).bytes
+
+        val prepared = SkinLibraryImporter(store, decoder)
+            .prepare(SkinImportInput.SelectedFile("mixed.zip") { archive.inputStream() })
+        assertTrue(prepared is SkinResult.Ok)
+        val candidate = (prepared as SkinResult.Ok).value.candidates.single()
+        assertEquals(candidate.toString(), SkinImportCode.OK, candidate.code)
+        assertTrue(candidate.candidateKey != null)
+    }
+
     private fun declaredRgba(width: Int, height: Int): ByteArray {
         val bytes = TinyPngFixture.rgba()
         fun writeU32(offset: Int, value: Int) {

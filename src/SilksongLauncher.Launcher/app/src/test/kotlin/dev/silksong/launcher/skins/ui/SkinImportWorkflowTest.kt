@@ -155,6 +155,19 @@ class SkinImportWorkflowTest {
         assertEquals(listOf(service.handle), workflow.handles())
     }
 
+    @Test fun `batch notice names every archive that installed nothing`() {
+        val ok = SkinImportSummary("1", SkinImportCode.OK, "local-a", "Committed", emptyList())
+        val rejected = SkinImportSummary("2", SkinImportCode.PNG_INVALID, null, "bad atlas", emptyList())
+        val notice = batchNotice(listOf(
+            SkinBatchOutcome("a.zip", listOf(ok, rejected)),
+            SkinBatchOutcome("b.zip", listOf(rejected)),
+            SkinBatchOutcome("c.zip", emptyList(), SkinResult.Error(SkinImportCode.ZIP_CORRUPT, "eocd")),
+        ))
+        assertEquals(SkinNoticeKind.IMPORT_PARTIAL, notice.kind)
+        assertEquals(listOf<Any>(1, "b.zip (PNG_INVALID · bad atlas); c.zip (ZIP_CORRUPT · eocd)"), notice.arguments)
+        assertEquals(SkinNotice(SkinNoticeKind.IMPORT_COMPLETE, listOf(1)), batchNotice(listOf(SkinBatchOutcome("a.zip", listOf(ok)))))
+    }
+
     private fun input() = SkinImportInput.SelectedFile("input") { ByteArrayInputStream(byteArrayOf(1)) }
     private fun prepared(service: Service) = SkinImportWorkflow(service).also { it.prepare(listOf(input())) }
     private fun target() = SkinReplaceTarget("local-target", "c".repeat(64), "d".repeat(64), "e".repeat(64))

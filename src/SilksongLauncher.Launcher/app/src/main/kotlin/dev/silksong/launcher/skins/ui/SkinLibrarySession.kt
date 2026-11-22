@@ -11,11 +11,23 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 internal enum class SkinNoticeKind {
-    CLEANUP_PENDING, PREPARATION_ACTIVE, PREPARING, PREPARED, NO_FILES, IMPORT_COMPLETE,
+    CLEANUP_PENDING, PREPARATION_ACTIVE, PREPARING, PREPARED, NO_FILES, IMPORT_COMPLETE, IMPORT_PARTIAL,
     RECOVERED_OFF, MUTATION_UNAVAILABLE, OPERATION_COMPLETE, PREPARATION_CANCELLED,
     PROFILE_CHANGED, ERROR,
 }
 internal data class SkinNotice(val kind: SkinNoticeKind, val arguments: List<Any> = emptyList())
+
+/** Folder batch summary: installed count, plus every archive that installed nothing and its first reason. */
+internal fun batchNotice(outcomes: List<SkinBatchOutcome>): SkinNotice {
+    val installed = outcomes.sumOf { source -> source.results.count { it.code == SkinImportCode.OK } }
+    val failed = outcomes.filter { source -> source.results.none { it.code == SkinImportCode.OK } }.map { source ->
+        val reason = source.error?.let { "${it.code} · ${it.detail}" }
+            ?: source.results.firstOrNull()?.let { "${it.code} · ${it.detail}" } ?: "no candidates"
+        "${source.displayName ?: "?"} ($reason)"
+    }
+    return if (failed.isEmpty()) SkinNotice(SkinNoticeKind.IMPORT_COMPLETE, listOf(installed))
+    else SkinNotice(SkinNoticeKind.IMPORT_PARTIAL, listOf(installed, failed.joinToString("; ")))
+}
 
 internal data class SkinScreenState(
     val library: SkinLibraryViewState? = null,
@@ -89,9 +101,7 @@ internal class SkinLibrarySession(
                             "${source.displayName}: " + (source.error?.let { "${it.code} · ${it.detail}" }
                                 ?: source.results.joinToString("; ", transform = ::importText))
                         },
-                        notice = result.value.firstNotNullOfOrNull { it.error }?.let {
-                            SkinNotice(SkinNoticeKind.ERROR, listOf(it.code.name, it.detail))
-                        } ?: SkinNotice(SkinNoticeKind.IMPORT_COMPLETE, listOf(result.value.sumOf { it.results.size })),
+                        notice = batchNotice(result.value),
                     )
                 }
                 readLibrary(preserveMessage = true)
