@@ -99,6 +99,7 @@ namespace DualSouls.Mods.HollowKnight
             Row("lifeblood_flash", "lifeblood_flash", TweakControlKind.Choice, "PRESENTATION", "LIFEBLOOD FLASH", "Use the original flash, a softened flash, or no flash.", "vanilla", "vanilla", "soft", "off"),
             Cheat("disable_vignette", TweakControlKind.Choice, "PRESENTATION", "DISABLE VIGNETTE", "Hide the dark vignette drawn around the Knight, so room edges and dark areas are easier to see.", "off", "off", "on"),
             Cheat("instant_dialogue", TweakControlKind.Choice, "PRESENTATION", "INSTANT DIALOGUE", "Show dialogue text immediately instead of printing it over time.", "off", "off", "on"),
+            Cheat("disable_world_rumble", TweakControlKind.Choice, "PRESENTATION", "DISABLE WORLD RUMBLE", "Prevent ambient world rumble effects.", "off", "off", "on"),
 
             Cheat("infinite_air_jump", TweakControlKind.Choice, "PLAYER", "INFINITE AIR JUMP", "Jump again in mid-air as often as you like.", "off", "off", "on"),
             Cheat("noclip", TweakControlKind.Choice, "PLAYER", "NOCLIP FLIGHT", "Fly through walls in any direction with the movement input, taking no damage. Turning it off drops you where you are.", "off", "off", "on"),

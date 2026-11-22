@@ -334,6 +334,16 @@ public partial class DualScreenV2
             case "mods": return SilksongNativeModsMenu.OpenForCommand(0);
             case "skins": return SilksongNativeModsMenu.OpenForCommand(1);
             case "skin":
+                if (a.Length > 1 && a[1] == "detail")
+                {
+                    var detailRuntime = DualSouls.Skins.Silksong.Runtime.SilksongSkinRuntime.Current;
+                    var last = detailRuntime != null ? detailRuntime.LastResult : null;
+                    var mods = DualSouls.Mods.Silksong.SilksongModsRuntime.Current;
+                    return "runtime=" + (last == null ? "none" : last.Status + ": " + last.Detail) +
+                        "\nreport=" + DualSouls.Skins.Runtime.SkinRuntimeDiagnostics.LastReport +
+                        "\nerror=" + DualSouls.Skins.Runtime.SkinRuntimeDiagnostics.LastError +
+                        "\nlibrary=" + (mods != null && mods.SkinLibrary != null ? mods.SkinLibrary.Describe() : "none");
+                }
                 if (a.Length < 2 || (a[1] != "list" && a[1] != "close" &&
                     (a.Length < 3 || (a[1] != "row" && a[1] != "left" && a[1] != "right"))))
                     return "error skin <list|row N|left N|right N|close>";

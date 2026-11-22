@@ -19,8 +19,8 @@ public sealed class HollowKnightTweakAdapterTests
         "geo_magnet", "keep_geo_on_death", "journal_one_kill", "geo_multiplier",
     };
 
-    static readonly string[] CheatIds = { "game_speed", "recall_slot", "mark_recall", "recall", "quick_attacks", "all_damage", "health_regen", "dash_invincibility", "no_hazard_damage", "boss_health_bars", "rebirth_in_scene", "add_geo", "disable_vignette", "instant_dialogue", "infinite_air_jump", "noclip", "no_dash_cooldown", "refill_health", "max_health_up", "max_health_down", "hero_colour", "scene_colour", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_crystal_heart", "ability_shade_cloak", "ability_ismas_tear", "ability_dream_nail", "unlock_stags", "unlock_maps", "unlock_all_charms", "max_collectables", "unlock_extra_modes", "picker_amount", "item_prev", "item_next", "item_add", "item_take", "item_set", "award_all_achievements", "reset_achievements", "achievement_prev", "achievement_next", "achievement_award", "achievement_popups" };
-    static readonly string[] CheatChoiceIds = { "hero_colour", "scene_colour", "picker_amount", "boss_health_bars", "game_speed", "quick_attacks", "all_damage", "health_regen", "dash_invincibility", "rebirth_in_scene", "infinite_air_jump", "recall_slot", "no_hazard_damage", "disable_vignette", "instant_dialogue", "noclip", "no_dash_cooldown" };
+    static readonly string[] CheatIds = { "game_speed", "recall_slot", "mark_recall", "recall", "quick_attacks", "all_damage", "health_regen", "dash_invincibility", "no_hazard_damage", "boss_health_bars", "rebirth_in_scene", "add_geo", "disable_vignette", "instant_dialogue", "disable_world_rumble", "infinite_air_jump", "noclip", "no_dash_cooldown", "refill_health", "max_health_up", "max_health_down", "hero_colour", "scene_colour", "ability_double_jump", "ability_dash", "ability_wall_jump", "ability_crystal_heart", "ability_shade_cloak", "ability_ismas_tear", "ability_dream_nail", "unlock_stags", "unlock_maps", "unlock_all_charms", "max_collectables", "unlock_extra_modes", "picker_amount", "item_prev", "item_next", "item_add", "item_take", "item_set", "award_all_achievements", "reset_achievements", "achievement_prev", "achievement_next", "achievement_award", "achievement_popups" };
+    static readonly string[] CheatChoiceIds = { "hero_colour", "scene_colour", "picker_amount", "boss_health_bars", "game_speed", "quick_attacks", "all_damage", "health_regen", "dash_invincibility", "rebirth_in_scene", "infinite_air_jump", "recall_slot", "no_hazard_damage", "disable_vignette", "instant_dialogue", "disable_world_rumble", "noclip", "no_dash_cooldown" };
 
     [Fact]
     public void CatalogStartsWithExactRequiredContractAndAppendsExtras()
@@ -823,6 +823,7 @@ public sealed class HollowKnightTweakAdapterTests
             ["no_hazard_damage"] = "off",
             ["disable_vignette"] = "off",
             ["instant_dialogue"] = "off",
+            ["disable_world_rumble"] = "off",
             ["noclip"] = "off",
             ["no_dash_cooldown"] = "off",
         };

@@ -281,7 +281,11 @@ namespace DualSouls.Skins.Runtime
             if (liveOnly)
             {
                 try { slots = discover(); }
-                catch (Exception error) { return WithRetirement(new SkinApplyResult(SkinApplyStatus.Failed, error.Message)); }
+                catch (Exception error)
+                {
+                    SkinRuntimeDiagnostics.Error("discover", error);
+                    return WithRetirement(new SkinApplyResult(SkinApplyStatus.Failed, error.Message));
+                }
                 live = new HashSet<string>(slots.Where(x => x.IsAlive()).Select(x => x.Target), StringComparer.OrdinalIgnoreCase);
             }
             bool Wanted(string target) => rules.Allows(pack.SpriteScope, target) && (live == null || live.Contains(target));
@@ -378,6 +382,7 @@ namespace DualSouls.Skins.Runtime
             }
             catch (Exception error)
             {
+                SkinRuntimeDiagnostics.Error("apply", error);
                 Retire(candidate.Values.Except(current.Values));
                 return WithRetirement(new SkinApplyResult(error is OperationCanceledException ? SkinApplyStatus.Cancelled :
                     error is InvalidDataException || error is OverflowException ? SkinApplyStatus.Rejected : SkinApplyStatus.Failed,
@@ -467,6 +472,7 @@ namespace DualSouls.Skins.Runtime
             }
             catch (Exception error)
             {
+                SkinRuntimeDiagnostics.Error("change", error);
                 var failures = new List<string>();
                 for (int i = undo.Count - 1; i >= 0; i--)
                 {

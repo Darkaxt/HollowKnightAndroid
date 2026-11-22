@@ -38,6 +38,9 @@ namespace DualSouls.Mods.HollowKnight
         string _dialogueScene;
         float _nextDialogueScan;
 
+        bool _noWorldRumble;
+        PlayMakerFSM _shakeFsm;
+
         static global::HeroController _sparedHero;
         int _recallSlot = 1;
         string _arriveScene;
@@ -49,7 +52,8 @@ namespace DualSouls.Mods.HollowKnight
 
         public static bool IsChoice(string id) =>
             id == "noclip" || id == "no_dash_cooldown" || id == "no_hazard_damage" ||
-            id == "disable_vignette" || id == "instant_dialogue" || id == "recall_slot";
+            id == "disable_vignette" || id == "instant_dialogue" || id == "disable_world_rumble" ||
+            id == "recall_slot";
 
         public static bool IsCommand(string id) =>
             id == "mark_recall" || id == "recall" || id == "unlock_extra_modes";
@@ -78,6 +82,10 @@ namespace DualSouls.Mods.HollowKnight
                     _instantDialogue = value == "on";
                     if (!_instantDialogue) RestoreTypewriters();
                     break;
+                case "disable_world_rumble":
+                    _noWorldRumble = value == "on";
+                    if (!_noWorldRumble) _shakeFsm = null;
+                    break;
                 case "recall_slot":
                     int slot;
                     _recallSlot = int.TryParse(value, out slot) && slot >= 1 && slot <= 5 ? slot : 1;
@@ -93,6 +101,7 @@ namespace DualSouls.Mods.HollowKnight
             MaintainDashCooldown();
             MaintainVignette();
             MaintainInstantDialogue();
+            MaintainWorldRumble();
         }
 
         public void RestoreAll()
@@ -108,6 +117,8 @@ namespace DualSouls.Mods.HollowKnight
             RestoreVignette();
             _instantDialogue = false;
             RestoreTypewriters();
+            _noWorldRumble = false;
+            _shakeFsm = null;
             _recallSlot = 1;
             _arriveScene = null;
         }
@@ -239,6 +250,24 @@ namespace DualSouls.Mods.HollowKnight
                 box.useTypeWriter = false;
                 _typewriters.Add(box);
             }
+        }
+
+        // DISABLE WORLD RUMBLE (Silksong parity): ambient rumbles are the camera-shake FSM's
+        // Rumbling Small/Med/Big/Huge states, each left by its own StopRumble event. The
+        // hero's focus and fall rumbles are player feedback and stay. Nothing is captured,
+        // so turning it off only stops cancelling new rumbles.
+        void MaintainWorldRumble()
+        {
+            if (!_noWorldRumble) return;
+            if (_shakeFsm == null)
+            {
+                global::GameCameras cameras = global::GameManager.UnsafeInstance != null ? global::GameCameras.instance : null;
+                _shakeFsm = cameras != null ? cameras.cameraShakeFSM : null;
+                if (_shakeFsm == null) return;
+            }
+            string state = _shakeFsm.ActiveStateName;
+            if (state == "RumblingSmall" || state == "RumblingMed" || state == "RumblingBig" || state == "RumblingHuge")
+                _shakeFsm.SendEvent("StopRumble");
         }
 
         void RestoreTypewriters()

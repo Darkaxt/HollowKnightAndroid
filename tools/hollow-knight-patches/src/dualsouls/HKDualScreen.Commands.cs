@@ -10,7 +10,7 @@ using UnityEngine;
 public partial class HKDualScreen
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
+        "help | report | state | pause | mods | skins | skin <list|detail|row N|left N|right N|close> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
         "mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | hazard | fly <x> <y> | dash | travel <scene> <gate> | " +
         "inv [fsm|send <event>] | fsm find <text> | fsm show|send|set|goto <object>[#n]|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | " +
         "save | load <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist | why <scene>] | mapsetup | mapdump\n";
@@ -92,6 +92,14 @@ public partial class HKDualScreen
             case "mods": return HollowKnightNativeModsMenu.OpenForCommand(0);
             case "skins": return HollowKnightNativeModsMenu.OpenForCommand(1);
             case "skin":
+                if (a.Length > 1 && a[1] == "detail")
+                {
+                    var skinRuntime = DualSouls.Skins.HollowKnight.Runtime.HollowKnightSkinRuntime.Current;
+                    var last = skinRuntime != null ? skinRuntime.LastResult : null;
+                    return "runtime=" + (last == null ? "none" : last.Status + ": " + last.Detail) +
+                        "\nreport=" + DualSouls.Skins.Runtime.SkinRuntimeDiagnostics.LastReport +
+                        "\nerror=" + DualSouls.Skins.Runtime.SkinRuntimeDiagnostics.LastError;
+                }
                 if (a.Length < 2 || (a[1] != "list" && a[1] != "close" &&
                     (a.Length < 3 || (a[1] != "row" && a[1] != "left" && a[1] != "right"))))
                     return "error skin <list|row N|left N|right N|close>";

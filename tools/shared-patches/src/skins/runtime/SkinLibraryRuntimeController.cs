@@ -93,6 +93,7 @@ namespace DualSouls.Skins.Runtime
             }
             catch (Exception error)
             {
+                SkinRuntimeDiagnostics.Error("controller", error);
                 Publish(request, "Failed", error.Message);
             }
         }
@@ -165,6 +166,7 @@ namespace DualSouls.Skins.Runtime
 
         void Publish(SkinLibraryRequest request, string status, string detail)
         {
+            SkinRuntimeDiagnostics.Report(status, detail);
             try { report(new SkinLibraryObservation { ConfigSha256 = request?.ConfigSha256, ActivePackId = activeId,
                 SaveSlot = request?.SaveSlot ?? SkinSaveIdentity.Unbound,
                 RotationRun = request?.RotationRun, PendingOccurrence = request?.PendingOccurrence ?? 0,
