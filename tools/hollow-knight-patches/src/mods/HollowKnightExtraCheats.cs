@@ -39,6 +39,7 @@ namespace DualSouls.Mods.HollowKnight
         float _nextDialogueScan;
 
         bool _noWorldRumble;
+        static readonly string[] AmbientRumbles = { "RumblingSmall", "RumblingMed", "RumblingBig", "RumblingHuge" };
         PlayMakerFSM _shakeFsm;
 
         static global::HeroController _sparedHero;
@@ -253,9 +254,11 @@ namespace DualSouls.Mods.HollowKnight
         }
 
         // DISABLE WORLD RUMBLE (Silksong parity): ambient rumbles are the camera-shake FSM's
-        // Rumbling Small/Med/Big/Huge states, each left by its own StopRumble event. The
-        // hero's focus and fall rumbles are player feedback and stay. Nothing is captured,
-        // so turning it off only stops cancelling new rumbles.
+        // Rumbling Small/Med/Big/Huge states. A rumble source raises the state's bool of the
+        // same name and the state holds while that bool is true (verified on device: a bare
+        // StopRumble does not leave it). Clearing the bools ends and blocks them. The hero's
+        // focus and fall rumbles are player feedback and stay. Nothing is captured, so turning
+        // it off only stops clearing new rumbles.
         void MaintainWorldRumble()
         {
             if (!_noWorldRumble) return;
@@ -265,8 +268,15 @@ namespace DualSouls.Mods.HollowKnight
                 _shakeFsm = cameras != null ? cameras.cameraShakeFSM : null;
                 if (_shakeFsm == null) return;
             }
-            string state = _shakeFsm.ActiveStateName;
-            if (state == "RumblingSmall" || state == "RumblingMed" || state == "RumblingBig" || state == "RumblingHuge")
+            bool cleared = false;
+            foreach (string name in AmbientRumbles)
+            {
+                HutongGames.PlayMaker.FsmBool flag = _shakeFsm.FsmVariables.GetFsmBool(name);
+                if (flag == null || !flag.Value) continue;
+                flag.Value = false;
+                cleared = true;
+            }
+            if (cleared && System.Array.IndexOf(AmbientRumbles, _shakeFsm.ActiveStateName) >= 0)
                 _shakeFsm.SendEvent("StopRumble");
         }
 
