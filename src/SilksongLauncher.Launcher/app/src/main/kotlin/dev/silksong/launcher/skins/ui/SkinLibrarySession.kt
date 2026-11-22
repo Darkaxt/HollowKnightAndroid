@@ -129,6 +129,7 @@ internal class SkinLibrarySession(
 
     fun importAll() = submit {
         if (!admitUi(services.imports.available)) return@submit
+        val names = workflow.handles().flatMap { it.candidates }.associate { it.rawPrefixHex to it.name }
         when (val result = workflow.importAll()) {
             is SkinResult.Error -> report(result)
             is SkinResult.Ok -> state = state.copy(
@@ -138,7 +139,9 @@ internal class SkinLibrarySession(
                 },
                 notice = result.value.firstNotNullOfOrNull { it.error }?.let {
                     SkinNotice(SkinNoticeKind.ERROR, listOf(it.code.name, it.detail))
-                } ?: SkinNotice(SkinNoticeKind.IMPORT_COMPLETE, listOf(result.value.sumOf { it.results.size })),
+                } ?: batchNotice(result.value.flatMap { outcome -> outcome.results.map { summary ->
+                    SkinBatchOutcome(names[summary.rawPrefixHex] ?: "Unnamed candidate", listOf(summary))
+                } }),
             )
         }
         readLibrary(preserveMessage = true)
