@@ -140,11 +140,11 @@ public partial class HKDualScreen
         shellRoot.offsetMin = Vector2.zero; shellRoot.offsetMax = Vector2.zero;
         shellRoot.pivot = new Vector2(0f, 1f);
         shell = new DsShell(shellRoot);
-        shell.Register(new HkInventoryScreen(), HkInventoryScreen.TabArt);
-        shell.Register(new HkCharmsScreen(), HkCharmsScreen.TabArt);
-        shell.Register(new HkGuideScreen(), HkGuideScreen.TabArt);
-        shell.Register(new HkJournalScreen(), HkJournalScreen.TabArt);
-        shell.Register(new HkMapScreen(), HkMapScreen.TabArt);
+        shell.Register(new HkInventoryScreen(), HkTabGlyph.Of(HkInventoryScreen.TabArt));
+        shell.Register(new HkCharmsScreen(), HkTabGlyph.Of(HkCharmsScreen.TabArt));
+        shell.Register(new HkGuideScreen(), HkTabGlyph.Of(HkGuideScreen.TabArt));
+        shell.Register(new HkJournalScreen(), HkTabGlyph.Of(HkJournalScreen.TabArt));
+        shell.Register(new HkMapScreen(), HkTabGlyph.Of(HkMapScreen.TabArt));
         shell.Finish(preferredId ?? DsConfig.Str("screen", "map"));
         shellShown = false;
         shell.SetVisible(false);
