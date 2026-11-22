@@ -55,6 +55,61 @@ keeps its own art, text and rules.
   </tr>
 </table>
 
+#### Every lower-screen page
+
+Hollow Knight, from a new save with the Mods unlocks applied:
+
+<table>
+  <tr>
+    <th>Inventory</th>
+    <th>Charms</th>
+    <th>Guide</th>
+    <th>Journal</th>
+    <th>Map</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/hk-page-inventory.webp" alt="Hollow Knight lower screen: Inventory page" /></td>
+    <td><img src="docs/screenshots/hk-page-charms.webp" alt="Hollow Knight lower screen: Charms page" /></td>
+    <td><img src="docs/screenshots/hk-page-guide.webp" alt="Hollow Knight lower screen: Guide page" /></td>
+    <td><img src="docs/screenshots/hk-page-journal.webp" alt="Hollow Knight lower screen: Journal page" /></td>
+    <td><img src="docs/screenshots/hk-page-map.webp" alt="Hollow Knight lower screen: Map page" /></td>
+  </tr>
+</table>
+
+Silksong:
+
+<table>
+  <tr>
+    <th>Inventory</th>
+    <th>Crest and Tools</th>
+    <th>Tasks</th>
+    <th>Journal</th>
+    <th>Map</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/ss-page-inventory.webp" alt="Silksong lower screen: Inventory page" /></td>
+    <td><img src="docs/screenshots/ss-page-crest.webp" alt="Silksong lower screen: Crest and Tools page" /></td>
+    <td><img src="docs/screenshots/ss-page-tasks.webp" alt="Silksong lower screen: Tasks page" /></td>
+    <td><img src="docs/screenshots/ss-page-journal.webp" alt="Silksong lower screen: Journal page" /></td>
+    <td><img src="docs/screenshots/ss-page-map.webp" alt="Silksong lower screen: Map page" /></td>
+  </tr>
+</table>
+
+#### Paused
+
+The pause menu stays on the upper screen; the lower screen drops the HUD and pages and shows the logo.
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/hk-pause.webp" alt="Hollow Knight pause menu on the upper screen" /></td>
+    <td width="40%"><img src="docs/screenshots/hk-pause-lower.webp" alt="Hollow Knight lower screen while paused: logo only" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/ss-pause.webp" alt="Silksong pause menu on the upper screen" /></td>
+    <td width="40%"><img src="docs/screenshots/ss-pause-lower.webp" alt="Silksong lower screen while paused: logo only" /></td>
+  </tr>
+</table>
+
 ### Built-in Mods
 
 Every game has a full Mods menu at **Pause → Options → Mods** (also on the
@@ -97,6 +152,21 @@ archive in the launcher's **Skins** screen, then choose them in the game at
   character only.
 - Each save slot remembers its own skin. Hero colour can also change randomly on
   death.
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/launcher-skins.webp" alt="The launcher Skins screen: in-game settings summary and installed skins" /></td>
+    <td><img src="docs/screenshots/hk-skins-menu.webp" alt="Hollow Knight in-game Skins menu with five imported packs, Angel Knight enabled" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/hk-skinned.webp" alt="Hollow Knight with the Angel Knight skin applied" /></td>
+    <td><img src="docs/screenshots/ss-skins-menu.webp" alt="Silksong in-game Skins menu with three imported packs, Hollow Hornet Knight enabled" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/ss-skinned.webp" alt="Silksong with the Hollow Hornet Knight skin applied" /></td>
+    <td></td>
+  </tr>
+</table>
 
 ### Plugins (beta)
 
