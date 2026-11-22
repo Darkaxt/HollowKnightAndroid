@@ -6,7 +6,7 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import java.io.InputStream
 
-/** Worker-only SAF transport. No persistent grant, recursive query, MIME filtering, or copying. */
+/** Worker-only SAF transport. No persistent grant, MIME filtering, or copying; callers bound any listing depth. */
 internal class AndroidSkinDocumentProvider(private val resolver: ContentResolver) : SkinDocumentProvider {
     override fun file(document: String): SkinDocument {
         val uri = contentUri(document)
@@ -23,12 +23,21 @@ internal class AndroidSkinDocumentProvider(private val resolver: ContentResolver
 
     override fun children(tree: String): SkinDocumentCursor {
         val uri = contentUri(tree)
-        val children = DocumentsContract.buildChildDocumentsUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri))
+        // A tree URI lists its root; a document-in-tree URI (a listed subfolder) lists that folder.
+        val parent = if (uri.pathSegments.size >= 4 && uri.pathSegments[2] == "document") DocumentsContract.getDocumentId(uri)
+            else DocumentsContract.getTreeDocumentId(uri)
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(uri, parent)
         val cursor = query(children)
         return object : SkinDocumentCursor {
             override fun next(): SkinDocument? = if (cursor.moveToNext()) row(cursor, uri, true) else null
             override fun close() = cursor.close()
         }
+    }
+
+    override fun name(tree: String): String? {
+        val uri = contentUri(tree)
+        val root = DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri))
+        return query(root).use { cursor -> if (cursor.moveToNext()) cursor.getString(1) else null }
     }
 
     override fun open(document: String): InputStream = requireNotNull(resolver.openInputStream(contentUri(document))) {

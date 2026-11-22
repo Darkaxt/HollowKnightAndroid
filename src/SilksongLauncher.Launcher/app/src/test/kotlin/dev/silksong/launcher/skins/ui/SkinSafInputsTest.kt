@@ -24,7 +24,7 @@ class SkinSafInputsTest {
         ))
         val inputs = (SkinSafInputs(provider).folder("tree") as SkinResult.Ok).value
         assertEquals(listOf("archive.rar", "not-a-zip.txt"), inputs.map { it.displayName })
-        assertEquals(1, provider.listings)
+        assertEquals(2, provider.listings)
         assertEquals(0, provider.opens)
         inputs.forEach { it.openOnce().close() }
         assertEquals(2, provider.opens)
@@ -37,6 +37,58 @@ class SkinSafInputsTest {
         assertTrue(SkinSafInputs(provider).folder("tree") is SkinResult.Error)
         assertEquals(0, provider.opens)
         assertEquals(1, provider.closes)
+    }
+
+    @Test fun `loose PNGs become one ZIP named after their folder, readme files are skipped`() {
+        val provider = Provider(listOf(
+            SkinDocument("k", "Knight.png", SkinDocumentKind.FILE),
+            SkinDocument("r", "readme.txt", SkinDocumentKind.FILE),
+            SkinDocument("s", "Sprint.PNG", SkinDocumentKind.FILE),
+        )).apply { treeName = "Crystal Knight" }
+        val inputs = (SkinSafInputs(provider).folder("tree") as SkinResult.Ok).value
+        assertEquals(listOf("Crystal Knight.zip"), inputs.map { it.displayName })
+        assertEquals(0, provider.opens)
+        val zip = java.util.zip.ZipInputStream(inputs.single().openOnce())
+        val names = generateSequence { zip.nextEntry }.map { it.name to zip.readBytes().toList() }.toList()
+        assertEquals(listOf("Crystal Knight/Knight.png" to listOf<Byte>(1), "Crystal Knight/Sprint.PNG" to listOf<Byte>(1)), names)
+        assertEquals(2, provider.opens)
+        assertThrows(IllegalStateException::class.java) { inputs.single().openOnce() }
+    }
+
+    @Test fun `subfolders are listed once for archives and loose PNGs only`() {
+        val provider = object : Provider(emptyList()) {
+            override fun rowsFor(tree: String) = when (tree) {
+                "tree" -> listOf(
+                    SkinDocument("d1", "Angel Knight", SkinDocumentKind.DIRECTORY),
+                    SkinDocument("d2", "Golden Knight", SkinDocumentKind.DIRECTORY),
+                )
+                "d1" -> listOf(
+                    SkinDocument("d1/a", "Angel.zip", SkinDocumentKind.FILE),
+                    SkinDocument("d1/n", "notes.txt", SkinDocumentKind.FILE),
+                    SkinDocument("d1/deeper", "deeper", SkinDocumentKind.DIRECTORY),
+                )
+                "d2" -> listOf(SkinDocument("d2/k", "Knight.png", SkinDocumentKind.FILE))
+                else -> error("listed too deep: $tree")
+            }
+        }
+        val inputs = (SkinSafInputs(provider).folder("tree") as SkinResult.Ok).value
+        assertEquals(listOf("Angel.zip", "Golden Knight.zip"), inputs.map { it.displayName })
+        assertEquals(3, provider.listings)
+    }
+
+    @Test fun `subfolder rows share the folder row budget`() {
+        val provider = object : Provider(emptyList()) {
+            override fun rowsFor(tree: String) =
+                if (tree == "tree") listOf(SkinDocument("d", "sub", SkinDocumentKind.DIRECTORY))
+                else List(4) { SkinDocument("$tree/$it", "$it.zip", SkinDocumentKind.FILE) }
+        }
+        assertEquals(SkinImportCode.LIMIT_EXCEEDED, (SkinSafInputs(provider, 4).folder("tree") as SkinResult.Error).code)
+    }
+
+    @Test fun `unsafe loose PNG names fail closed`() {
+        val provider = Provider(listOf(SkinDocument("k", "a\u0000b.png", SkinDocumentKind.FILE)))
+        assertTrue(SkinSafInputs(provider).folder("tree") is SkinResult.Error)
+        assertEquals(0, provider.opens)
     }
 
     @Test fun `virtual or unknown rows fail closed and folder is never recursively listed`() {
@@ -64,11 +116,15 @@ class SkinSafInputsTest {
         assertEquals(1, provider.closes)
     }
 
-    private class Provider(val documents: List<SkinDocument>) : SkinDocumentProvider {
+    private open class Provider(val documents: List<SkinDocument>) : SkinDocumentProvider {
         var rows = 0; var opens = 0; var closes = 0; var listings = 0; var failRead = false
+        var treeName: String? = "folder"
+        open fun rowsFor(tree: String) = if (tree == "tree") documents else emptyList()
         override fun file(document: String) = documents.single()
+        override fun name(tree: String) = treeName
         override fun children(tree: String): SkinDocumentCursor {
             listings++
+            val documents = rowsFor(tree)
             var index = 0
             return object : SkinDocumentCursor {
                 override fun next(): SkinDocument? {
