@@ -1,0 +1,500 @@
+collection	bundle	materials	textures	page	texture	width	height	format	shared
+	tk2dcollections_assets_areadocks.bundle	0	0	-1	?	0	0	-1	
+Ability Get Thread Cln	tk2dcollections_assets_silkshared.bundle	1	1	0	atlas0	1024	2048	25	
+Abyss Bounce Pod Cln	tk2dcollections_assets_areaabyss.bundle	1	1	0	atlas0	1024	1024	25	
+Abyss Crawler Large Cln	tk2dcollections_assets_areaabyss.bundle	1	1	0	atlas0	1024	2048	25	
+Abyss Grab Tendrils Cln	tk2dcollections_assets_areacradle.bundle	1	1	0	atlas0	1024	2048	25	
+Abyss Mass Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	2048	2048	25	
+Abyss Tendrils Cln	tk2dcollections_assets_areaabyss.bundle	1	1	0	atlas0	1024	2048	25	
+Abyss Walker Cln	tk2dcollections_assets_areaabyss.bundle	1	1	0	atlas0	512	1024	25	
+Ant Chest Cln	tk2dcollections_assets_areaant.bundle	1	1	0	atlas0	512	1024	25	
+Ant Merchant Cln	tk2dcollections_assets_areaant.bundle	1	1	0	atlas0	1024	2048	25	
+Ant Trap Cln	tk2dcollections_assets_areaant.bundle	1	1	0	atlas0	1024	2048	25	
+Arborium Keeper Cln	tk2dcollections_assets_areaarborium.bundle	1	1	0	atlas0	2048	2048	25	
+Architect Cln	tk2dcollections_assets_areaunderstore.bundle	1	1	0	atlas0	2048	2048	25	
+Area Title Cln	hud_assets_all.bundle	1	1	0	atlas0	8	8	25	
+Aspid Collector Cln	tk2dcollections_assets_areamoss.bundle	3	3	0	atlas0	512	512	25	
+Aspid Collector Cln	tk2dcollections_assets_areamoss.bundle	3	3	1	atlas1	512	512	25	
+Aspid Collector Cln	tk2dcollections_assets_areamoss.bundle	3	3	2	atlas2	256	512	25	
+Aspid Hatchling Cln	tk2dcollections_assets_areadust.bundle	1	1	0	atlas0	512	512	25	
+Aspid Hopper Cln	tk2dcollections_assets_areaclover.bundle	1	1	0	atlas0	1024	1024	25	
+Aspid Sac Cln	tk2dcollections_assets_areamoss.bundle	1	1	0	atlas0	512	512	25	
+Bagpipers Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	1024	2048	25	
+Ballow Diving Bell Cln	tk2dcollections_assets_areadocks.bundle	1	1	0	atlas0	1024	2048	25	
+Battle Gate Slab Cln	tk2dcollections_assets_areaslab.bundle	1	1	0	atlas0	512	512	25	
+Bell Beast Child Cln	tk2dcollections_assets_areabellway.bundle	1	1	0	atlas0	1024	2048	25	
+Bell Fly Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	2048	2048	25	
+Bell Gate Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	2048	2048	25	
+Bell Goomba Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	1024	2048	25	
+Bell Goomba Silver Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	1024	2048	25	
+Bell Hermit Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	1024	2048	25	
+Bell Wall Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	1024	1024	25	
+Belltown Greeter Act3 Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	1024	1024	25	
+Belltown Greeter Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	1024	2048	25	
+Belltown House Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	1024	1024	25	
+Belltown Shop Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	1024	1024	25	
+Bellway Pilgrim Cln	tk2dcollections_assets_areabellwayareabone.bundle	1	1	0	atlas0	1024	2048	25	
+Black Water Cln	tk2danimations_assets_shared.bundle	1	1	0	atlas0	256	512	25	
+Blade Spider Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	1024	2048	25	
+Blade Spider Hang Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	1024	1024	25	
+Bloat Roach Cln	tk2dcollections_assets_areaswamp.bundle	1	1	0	atlas0	2048	2048	25	
+Bloom Puncher Cln	tk2dcollections_assets_areashellwood.bundle	1	1	0	atlas0	1024	1024	25	
+Bloom Shooter Cln	tk2dcollections_assets_areashellwood.bundle	1	1	0	atlas0	1024	1024	25	
+Blue Assistant Cln	tk2dcollections_assets_areacrawl.bundle	1	1	0	atlas0	1024	2048	25	
+Blue Scientist Cln	tk2dcollections_assets_areacrawl.bundle	1	1	0	atlas0	2048	2048	25	
+Blue Scientist Sit Cln	tk2dcollections_assets_areacrawl.bundle	1	1	0	atlas0	2048	2048	25	
+Bone Beast Child Call Cln	herocollections_assets_shared.bundle	1	1	0	atlas0	1024	2048	25	
+Bone Beast Cln	tk2dcollections_assets_areabellway.bundle	3	3	0	atlas0	2048	2048	25	
+Bone Beast Cln	tk2dcollections_assets_areabellway.bundle	3	3	1	atlas1	2048	2048	25	
+Bone Beast Cln	tk2dcollections_assets_areabellway.bundle	3	3	2	atlas2	1024	1024	25	
+Bone Beast NPC Cln	tk2dcollections_assets_areabellway.bundle	3	3	0	atlas0	2048	2048	25	
+Bone Beast NPC Cln	tk2dcollections_assets_areabellway.bundle	3	3	1	atlas1	2048	2048	25	
+Bone Beast NPC Cln	tk2dcollections_assets_areabellway.bundle	3	3	2	atlas2	1024	1024	25	
+Bone Chest Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	512	512	25	
+Bone Chest Moss Cln	tk2dcollections_assets_areatutorial.bundle	1	1	0	atlas0	512	512	25	
+Bone Circler Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	1024	1024	25	
+Bone Circler Vicious Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	2048	2048	25	
+Bone Crawler Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	1024	1024	25	
+Bone Flyer Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	512	1024	25	
+Bone Flyer Giant Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	2048	2048	25	
+Bone Goomba Bounce Fly Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	512	1024	25	
+Bone Goomba Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	512	1024	25	
+Bone Goomba Large Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	1024	2048	25	
+Bone Hopper Cln	tk2dcollections_assets_areawilds.bundle	1	1	0	atlas0	1024	1024	25	
+Bone Hopper Giant Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	2048	4096	25	
+Bone Hunter Buzzer Cln	tk2dcollections_assets_areaant.bundle	1	1	0	atlas0	1024	1024	25	
+Bone Hunter Chief Cln	tk2dcollections_assets_areaant.bundle	1	1	0	atlas0	4096	4096	25	
+Bone Hunter Child Cln	tk2dcollections_assets_areaant.bundle	1	1	0	atlas0	1024	2048	25	
+Bone Hunter Cln	tk2dcollections_assets_areaant.bundle	2	2	0	atlas0	2048	2048	25	
+Bone Hunter Cln	tk2dcollections_assets_areaant.bundle	2	2	1	atlas1	2048	2048	25	
+Bone Hunter Fly Cln	tk2dcollections_assets_areaant.bundle	1	1	0	atlas0	2048	2048	25	
+Bone Hunter Throw Cln	tk2dcollections_assets_areaant.bundle	1	1	0	atlas0	4096	4096	25	
+Bone Hunter Tiny Cln	tk2dcollections_assets_areaant.bundle	1	1	0	atlas0	512	1024	25	
+Bone Hunter Trapper Barb Cln	tk2dcollections_assets_areaant.bundle	1	1	0	atlas0	1024	2048	25	
+Bone Hunter Trapper Cln	tk2dcollections_assets_areaant.bundle	1	1	0	atlas0	4096	4096	25	
+Bone Lever Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	1024	2048	25	
+Bone Roller Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	512	1024	25	
+Bone Spitter Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	1024	1024	25	
+Bone Thumper Cln	tk2dcollections_assets_areatutorial.bundle	1	1	0	atlas0	2048	4096	25	
+Bone Worm BlueBlood Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	1024	2048	25	
+Bone Worm BlueTurret Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	1024	2048	25	
+Bone Worm Cln	tk2dcollections_assets_areacrawl.bundle	1	1	0	atlas0	1024	1024	25	
+Bonechurch Shopkeep Cln	tk2dcollections_assets_areamoss.bundle	1	1	0	atlas0	1024	1024	4	
+Bonetown BG Pilgrims Cln	tk2dcollections_assets_pilgrimslower.bundle	1	1	0	atlas0	2048	2048	4	
+Bonetown Resident Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	1024	1024	4	
+Bounce Bells	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	512	512	25	
+Caravan Lech Cln	tk2dcollections_assets_fleacaravan.bundle	1	1	0	atlas0	1024	2048	25	
+Caravan Steed Cln	tk2dcollections_assets_fleacaravan.bundle	1	1	0	atlas0	1024	2048	25	
+Caravan Troupe Flea Cln	tk2dcollections_assets_fleacaravan.bundle	1	1	0	atlas0	2048	2048	25	
+Caravan Troupe Hunter Cln	tk2dcollections_assets_fleacaravan.bundle	1	1	0	atlas0	2048	2048	25	
+Caravan Troupe Leader Cln	tk2dcollections_assets_fleacaravan.bundle	1	1	0	atlas0	1024	1024	25	
+Caravan Troupe Member Cln	tk2dcollections_assets_fleacaravan.bundle	1	1	0	atlas0	1024	2048	25	
+Centipede Trap Cln	tk2dcollections_assets_areacradle.bundle	1	1	0	atlas0	1024	2048	25	
+Charm Effects Cln	tk2dcollections_assets_shared.bundle	1	1	0	atlas0	512	512	25	
+Chest	tk2dcollections_assets_shared.bundle	1	1	0	atlas0	1024	1024	25	
+Churchkeeper Cln	tk2dcollections_assets_areatutorial.bundle	1	1	0	atlas0	2048	2048	4	
+Citadel Bat Cln	tk2dcollections_assets_areasongareaunderstore.bundle	1	1	0	atlas0	1024	2048	25	
+Citadel Bat Large Cln	tk2dcollections_assets_areaarborium.bundle	1	1	0	atlas0	2048	2048	25	
+City Merchant Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	2048	2048	25	
+City Shard Chest Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	512	1024	25	
+Clockwork Dancers Cln	tk2dcollections_assets_areacloverareacog.bundle	1	1	0	atlas0	4096	4096	25	
+Clover Dancers Cln	tk2dcollections_assets_areaclover.bundle	3	1	0	atlas0	2048	4096	25	
+Clover Dancers Cln	tk2dcollections_assets_areaclover.bundle	3	1	1	atlas0	2048	4096	25	
+Clover Dancers Cln	tk2dcollections_assets_areaclover.bundle	3	1	2	?	0	0	-1	
+Cloverstag Cln	tk2dcollections_assets_areaclover.bundle	1	1	0	atlas0	1024	2048	25	
+Cloverstag White Cln	tk2dcollections_assets_areaclover.bundle	1	1	0	atlas0	2048	4096	25	
+Coin Rocks	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	512	1024	25	
+Compass Icon Cln	hud_assets_all.bundle	1	1	0	atlas0	128	256	25	
+Conductor Cln	tk2dcollections_assets_areaward.bundle	1	1	0	atlas0	2048	4096	25	
+Coral Big Jellyfish Cln	tk2dcollections_assets_areacoralareamemory.bundle	1	1	0	atlas0	2048	2048	25	
+Coral Brawler Cln	tk2dcollections_assets_areacoralareamemory.bundle	3	3	0	atlas0	2048	2048	25	
+Coral Brawler Cln	tk2dcollections_assets_areacoralareamemory.bundle	3	3	1	atlas1	2048	2048	25	
+Coral Brawler Cln	tk2dcollections_assets_areacoralareamemory.bundle	3	3	2	atlas2	1024	1024	25	
+Coral Bubble Brute	tk2dcollections_assets_areacoralareamemory.bundle	1	1	0	atlas0	2048	2048	25	
+Coral Conch Driller Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	1024	2048	25	
+Coral Conch Driller Giant Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	2048	4096	25	
+Coral Conch Shooter Cln	tk2dcollections_assets_areacoral.bundle	2	1	0	atlas0	1024	1024	25	shared
+Coral Conch Shooter Cln	tk2dcollections_assets_areacoral.bundle	2	1	1	atlas0	1024	1024	25	shared
+Coral Conch Shooter Heavy Cln	tk2dcollections_assets_areacoral.bundle	2	1	0	atlas0	1024	2048	25	shared
+Coral Conch Shooter Heavy Cln	tk2dcollections_assets_areacoral.bundle	2	1	1	atlas0	1024	2048	25	shared
+Coral Conch Stabber Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	1024	1024	25	
+Coral Crust Wall Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	1024	2048	25	
+Coral Flyer Cln	tk2dcollections_assets_areacoralareamemory.bundle	1	1	0	atlas0	2048	2048	25	
+Coral Flyer Throw Cln	tk2dcollections_assets_areacoralareamemory.bundle	1	1	0	atlas0	2048	2048	25	
+Coral Goomba Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	512	1024	25	
+Coral Goomba Large Cln	tk2dcollections_assets_areaarborium.bundle	1	1	0	atlas0	2048	2048	25	
+Coral Hunter Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	2048	2048	25	
+Coral Judge Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	2048	4096	25	
+Coral King Cln	tk2dcollections_assets_areacoralareamemory.bundle	1	1	0	atlas0	4096	4096	25	
+Coral Spike Goomba Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	1024	2048	25	
+Coral Swimmers Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	1024	1024	25	
+Coral Tendril Cln	tk2dcollections_assets_areacoral.bundle	2	1	0	atlas0	1024	1024	25	shared
+Coral Tendril Cln	tk2dcollections_assets_areacoral.bundle	2	1	1	atlas0	1024	1024	25	shared
+Coral Warrior Cln	tk2dcollections_assets_areacoralareamemory.bundle	1	1	0	atlas0	2048	4096	25	
+Coral Warrior Grey Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	4096	4096	25	
+Courier Short Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	1024	2048	25	
+Courier Tall Cln	tk2dcollections_assets_areadust.bundle	1	1	0	atlas0	1024	2048	25	
+Couriers Packless Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	1024	2048	25	
+Cradle Challenge Pea Cln	tk2dcollections_assets_areacradle.bundle	1	1	0	atlas0	256	512	25	
+Crawfather Cln	tk2dcollections_assets_areagreymoor.bundle	2	2	0	atlas0	4096	4096	25	
+Crawfather Cln	tk2dcollections_assets_areagreymoor.bundle	2	2	1	atlas1	2048	2048	25	
+Crest Get Cln	tk2dcollections_assets_crestshrine.bundle	1	1	0	atlas0	1024	2048	25	
+Crow Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	1024	1024	25	
+Crowman Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	2048	4096	25	
+Crowman Dagger Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	1024	2048	25	
+Crowman Dagger Juror Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	2048	2048	25	
+Crowman Juror Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	2048	4096	25	
+Crowman Juror Tiny Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	1024	1024	25	
+Crypt Worm Cln	tk2dcollections_assets_areacrawl.bundle	1	1	0	atlas0	1024	1024	25	
+Crystal Drifter Cln	tk2dcollections_assets_shared.bundle	1	1	0	atlas0	1024	2048	25	
+Crystal Drifter Giant Cln	tk2dcollections_assets_areapeak.bundle	1	1	0	atlas0	2048	2048	25	
+Debris	globalpoolprefabs_assets_all.bundle	1	1	0	atlas0	128	256	25	
+Dialogue Cln	hud_assets_all.bundle	1	1	0	atlas0	512	1024	25	
+Dice Game Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	2048	2048	25	
+Dock Bomber Cln	tk2dcollections_assets_areadocks.bundle	1	1	0	atlas0	2048	2048	25	
+Dock Charger Cln	tk2dcollections_assets_areadocks.bundle	1	1	0	atlas0	2048	2048	25	
+Dock Flyer Cln	tk2dcollections_assets_areadocks.bundle	1	1	0	atlas0	1024	2048	25	
+Dock Guard Cln	tk2dcollections_assets_areadocks.bundle	1	1	0	atlas0	2048	4096	25	
+Dock Guard Thrower	tk2dcollections_assets_areadocks.bundle	1	1	0	atlas0	2048	4096	25	
+Dock Worker Cln	tk2dcollections_assets_areadocks.bundle	1	1	0	atlas0	2048	2048	25	
+Docks Alarm Cln	tk2dcollections_assets_areadocks.bundle	1	1	0	atlas0	512	512	25	
+Doctor Fly Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	1024	1024	25	
+Dragonfly Large Cln	tk2dcollections_assets_areaclover.bundle	1	1	0	atlas0	2048	2048	25	
+Dust Effects	globalpoolprefabs_assets_all.bundle	1	1	0	atlas0	512	1024	25	
+Dust Traders Cln	tk2dcollections_assets_areadust.bundle	1	1	0	atlas0	1024	2048	25	
+Dust Trap Cln	tk2dcollections_assets_areadustmaze.bundle	1	1	0	atlas0	1024	1024	25	
+Dustroach Cln	tk2dcollections_assets_areadust.bundle	1	1	0	atlas0	2048	2048	25	
+Dustroach Pollywog Cln	tk2danimations_assets_areaswamp.bundle	1	1	0	atlas0	1024	1024	25	
+Enclave Pilgrims Cln	tk2dcollections_assets_areaenclave.bundle	2	2	0	atlas0	2048	2048	25	
+Enclave Pilgrims Cln	tk2dcollections_assets_areaenclave.bundle	2	2	1	atlas1	1024	2048	25	
+EnemyHitEffects	sharedeffects_assets_all.bundle	1	1	0	atlas0	2048	4096	25	
+Farmer Catcher Cln	tk2dcollections_assets_areagreymoor.bundle	2	2	0	atlas0	2048	2048	25	
+Farmer Catcher Cln	tk2dcollections_assets_areagreymoor.bundle	2	2	1	atlas1	1024	1024	25	
+Farmer Centipede Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	4096	4096	25	
+Farmer Scissors Cln	tk2dcollections_assets_areagreymoor.bundle	2	1	0	atlas0	2048	4096	25	shared
+Farmer Scissors Cln	tk2dcollections_assets_areagreymoor.bundle	2	1	1	atlas0	2048	4096	25	shared
+Farmer Wisp Cln	tk2dcollections_assets_areawisp.bundle	1	1	0	atlas0	2048	4096	25	
+Fields Flock Flyer Cln	tk2dcollections_assets_areawilds.bundle	1	1	0	atlas0	512	1024	25	
+Fields Flyer Cln	tk2dcollections_assets_areawilds.bundle	1	1	0	atlas0	512	1024	25	
+Fields Goomba Cln	tk2dcollections_assets_areawilds.bundle	1	1	0	atlas0	512	1024	25	
+First Weaver Cln	tk2dcollections_assets_areaslab.bundle	2	2	0	atlas0	4096	4096	25	
+First Weaver Cln	tk2dcollections_assets_areaslab.bundle	2	2	1	atlas1	2048	2048	25	
+Fixer Pilgrim Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	1024	2048	4	
+Flea Games Cln	tk2dcollections_assets_fleacaravan.bundle	1	1	0	atlas0	4096	4096	25	
+Flower Boss Cln	tk2dcollections_assets_areashellwood.bundle	2	2	0	atlas0	4096	4096	25	
+Flower Boss Cln	tk2dcollections_assets_areashellwood.bundle	2	2	1	atlas1	2048	4096	25	
+Flower Drifter Cln	tk2dcollections_assets_areashellwood.bundle	1	1	0	atlas0	1024	1024	25	
+Forge Daughter Cln	tk2dcollections_assets_areadocks.bundle	1	1	0	atlas0	2048	4096	25	
+Garmond Black Threaded Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	2048	4096	25	
+Garmond Cln	tk2dcollections_assets_garmond.bundle	1	1	0	atlas0	2048	4096	25	
+Garmond NPC Cln	tk2dcollections_assets_garmond.bundle	1	1	0	atlas0	1024	2048	25	
+Generic Pilgrims Cln	tk2dcollections_assets_pilgrimslower.bundle	1	1	0	atlas0	2048	2048	25	
+Geo	tk2dcollections_assets_shared.bundle	3	1	0	atlas0	512	512	25	shared
+Geo	tk2dcollections_assets_shared.bundle	3	1	1	atlas0	512	512	25	shared
+Geo	tk2dcollections_assets_shared.bundle	3	1	2	atlas0	512	512	25	shared
+Geo_Rock_Deep_Outskirts	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	512	1024	25	
+Giant Centipede Cln	tk2dcollections_assets_giantcentipede.bundle	1	1	0	atlas0	4096	4096	25	
+Giant Flea Cln	tk2dcollections_assets_fleacaravan.bundle	2	2	0	atlas0	2048	2048	25	
+Giant Flea Cln	tk2dcollections_assets_fleacaravan.bundle	2	2	1	atlas1	1024	1024	25	
+Gilly Cln	tk2dcollections_assets_areawilds.bundle	2	1	0	atlas0	1024	1024	25	shared
+Gilly Cln	tk2dcollections_assets_areawilds.bundle	2	1	1	atlas0	1024	1024	25	shared
+Gloom Beast Cln	tk2dcollections_assets_areaabyss.bundle	1	1	0	atlas0	4096	4096	25	
+Gnat Fly Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	1024	1024	25	
+Gnat Giant Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	2048	2048	25	
+Grass Goomba Cln	tk2dcollections_assets_areaclover.bundle	1	1	0	atlas0	1024	1024	25	
+Grasshopper Child Cln	tk2dcollections_assets_areaclover.bundle	1	1	0	atlas0	1024	2048	25	
+Grasshopper Fly Cln	tk2dcollections_assets_areaclover.bundle	1	1	0	atlas0	2048	4096	25	
+Grasshopper Slasher Cln	tk2dcollections_assets_areaclover.bundle	2	2	0	atlas0	2048	2048	25	
+Grasshopper Slasher Cln	tk2dcollections_assets_areaclover.bundle	2	2	1	atlas1	1024	2048	25	
+Great Gourmand Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	2048	4096	25	
+Green Prince Kneel Cln	tk2dcollections_assets_areaclover.bundle	1	1	0	atlas0	1024	1024	25	
+Green Prince Sit Cln	tk2dcollections_assets_areaclover.bundle	1	1	0	atlas0	1024	2048	25	
+Green Prince Stand Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	1024	2048	25	
+Grove Pilgrim Fly Cln	tk2dcollections_assets_areadust.bundle	1	1	0	atlas0	1024	1024	25	
+Grub Farmer Cln	tk2dcollections_assets_areadust.bundle	1	1	0	atlas0	2048	2048	25	
+Grub Farmer Mimic Cln	tk2dcollections_assets_areadust.bundle	1	1	0	atlas0	1024	1024	25	
+HH Bartender Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	1024	2048	25	
+HH Patron Left Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	512	1024	25	
+HH Patron Right Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	1024	1024	25	
+HUD Cln	hud_assets_all.bundle	2	1	0	atlas0	4096	4096	25	shared
+HUD Cln	hud_assets_all.bundle	2	1	1	atlas0	4096	4096	25	shared
+HUD Extras Cln	hud_assets_all.bundle	1	1	0	atlas0	512	1024	25	
+HUD Frame Steel Soul Cln	tk2dcollections_assets_ui.bundle	1	1	0	atlas0	2048	4096	25	
+Hanging Dummies Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	512	1024	25	
+Harpoon Ring Ant Cln	tk2dcollections_assets_areaant.bundle	1	1	0	atlas0	256	512	25	
+Harpoon Ring Citadel Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	512	1024	25	
+Harpoon Ring Pinstress Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	256	512	25	
+Harpoon_Ring_Steamstress Cln	tk2dcollections_assets_areawilds.bundle	1	1	0	atlas0	512	512	25	
+Health Bugs	tk2dcollections_assets_lifeblood.bundle	1	1	0	atlas0	2048	2048	25	
+Heart Piece UI Cln	heartpieceupgrade_assets_all.bundle	2	2	0	atlas0	2048	2048	25	
+Heart Piece UI Cln	heartpieceupgrade_assets_all.bundle	2	2	1	atlas1	512	512	25	
+Hollow Shade Cln	blackthread_assets_all.bundle	1	1	0	atlas0	2048	2048	25	
+Hornet Boss Cln	tk2dcollections_assets_laceboss.bundle	1	1	0	atlas0	4096	4096	25	
+Hornet Cln	herocollections_assets_shared.bundle	1	1	0	atlas0	2048	2048	25	
+Hornet Cloakless Cln	herocollections_assets_crestcloakless.bundle	1	1	0	atlas0	2048	4096	25	
+Hornet CrestWeapon Dagger Cln	herocollections_assets_crestwanderer.bundle	1	1	0	atlas0	2048	2048	25	
+Hornet CrestWeapon Drill Lance Cln	herocollections_assets_crestarchitect.bundle	1	1	0	atlas0	2048	2048	25	
+Hornet CrestWeapon Scythe	herocollections_assets_crestreaper.bundle	2	1	0	atlas0	2048	4096	25	shared
+Hornet CrestWeapon Scythe	herocollections_assets_crestreaper.bundle	2	1	1	atlas0	2048	4096	25	shared
+Hornet CrestWeapon Shaman Cln	herocollections_assets_crestshaman.bundle	2	1	0	atlas0	2048	2048	25	shared
+Hornet CrestWeapon Shaman Cln	herocollections_assets_crestshaman.bundle	2	1	1	atlas0	2048	2048	25	shared
+Hornet CrestWeapon Warrior Cln	herocollections_assets_crestbeast.bundle	1	1	0	atlas0	2048	4096	25	
+Hornet CrestWeapon Whip Cln	herocollections_assets_crestwitch.bundle	1	1	0	atlas0	1024	2048	25	
+Hornet Dragonfly Cln	tk2dcollections_assets_areaclover.bundle	1	1	0	atlas0	512	1024	25	
+Hornet Heart Grab Cln	tk2dcollections_assets_areamemory.bundle	1	1	0	atlas0	1024	2048	25	
+Hornet Revenge Crystal Cln	tk2dcollections_assets_shared.bundle	1	1	0	atlas0	512	1024	25	
+Hornet Strung Up Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	1024	1024	25	
+Hornet_Needolin_Windy	herocollections_assets_shared.bundle	1	1	0	atlas0	1024	2048	25	
+Hunter Fan Inside Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	1024	1024	25	
+Hunter Fan Outside Cln	tk2dcollections_assets_hunterfan.bundle	1	1	0	atlas0	2048	2048	25	
+Hunter Queen Cln	tk2dcollections_assets_areaantareamemory.bundle	2	2	0	atlas0	4096	4096	25	
+Hunter Queen Cln	tk2dcollections_assets_areaantareamemory.bundle	2	2	1	atlas1	2048	4096	25	
+Huntress Cln	tk2dcollections_assets_areaswamp.bundle	1	1	0	atlas0	4096	4096	25	
+Huntress Runt Cln	tk2dcollections_assets_areaswamp.bundle	1	1	0	atlas0	1024	2048	25	
+Judge Child Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	1024	1024	25	
+Knight	herocollections_assets_shared.bundle	4	4	0	atlas0	4096	4096	25	
+Knight	herocollections_assets_shared.bundle	4	4	1	atlas1	4096	4096	25	
+Knight	herocollections_assets_shared.bundle	4	4	2	atlas2	4096	4096	25	
+Knight	herocollections_assets_shared.bundle	4	4	3	atlas3	4096	4096	25	
+Knight Hatchling Cln	herocollections_assets_tools.bundle	1	1	0	atlas0	1024	1024	25	
+Knight Slash Cln	herocollections_assets_shared.bundle	2	1	0	atlas0	512	1024	25	shared
+Knight Slash Cln	herocollections_assets_shared.bundle	2	1	1	atlas0	512	1024	25	shared
+Lace Cln	tk2dcollections_assets_laceboss.bundle	1	1	0	atlas0	4096	4096	25	
+Lady Bug Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	1024	2048	25	
+Last Conductor NPC Cln	tk2dcollections_assets_areahang.bundle	1	1	0	atlas0	1024	2048	25	
+Last Judge Cln	tk2dcollections_assets_areacoral.bundle	2	2	0	atlas0	4096	4096	25	
+Last Judge Cln	tk2dcollections_assets_areacoral.bundle	2	2	1	atlas1	2048	2048	25	
+Librarian Cln	tk2dcollections_assets_arealibrary.bundle	1	1	0	atlas0	2048	4096	25	
+Lightbearer Cln	tk2dcollections_assets_arealibrary.bundle	1	1	0	atlas0	2048	2048	25	
+Lilypad Fly Cln	tk2dcollections_assets_areaclover.bundle	1	1	0	atlas0	512	1024	25	
+Lilypad Plat Cln	tk2dcollections_assets_areaclover.bundle	1	1	0	atlas0	1024	2048	25	
+Lost Lace Cln	tk2dcollections_assets_laceboss.bundle	2	2	0	atlas0	4096	4096	25	
+Lost Lace Cln	tk2dcollections_assets_laceboss.bundle	2	2	1	atlas1	1024	2048	25	
+Mapper Cln	tk2dcollections_assets_mapper.bundle	1	1	0	atlas0	4096	4096	25	
+Mapper Sit Cln	tk2dcollections_assets_mapper.bundle	1	1	0	atlas0	1024	2048	25	
+Memory Spider Cln	tk2dcollections_assets_areamemoryareaslab.bundle	1	1	0	atlas0	512	1024	25	
+Memory Weaver Cln	tk2dcollections_assets_areacoralareamemory.bundle	1	1	0	atlas0	2048	2048	25	
+Mite Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	1024	1024	25	
+Mite Heavy Cln	tk2dcollections_assets_areaunderstore.bundle	2	1	0	atlas0	1024	1024	25	shared
+Mite Heavy Cln	tk2dcollections_assets_areaunderstore.bundle	2	1	1	atlas0	1024	1024	25	shared
+Mite Trap Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	1024	1024	25	
+Moss Creep Cln	tk2dcollections_assets_areamoss.bundle	1	1	0	atlas0	1024	2048	25	
+Moss Vine Cln	tk2dcollections_assets_areatutorial.bundle	1	1	0	atlas0	1024	2048	25	
+MossBone Crawler Cln	tk2dcollections_assets_areatutorial.bundle	1	1	0	atlas0	512	1024	25	
+MossBone Crawler Fat Cln	tk2dcollections_assets_areaarborium.bundle	1	1	0	atlas0	2048	2048	25	
+MossBone Fly Cln	tk2dcollections_assets_areatutorial.bundle	1	1	0	atlas0	1024	1024	25	
+Mossbone Mother Cln	tk2dcollections_assets_areatutorial.bundle	1	1	0	atlas0	1024	2048	25	
+Mottled Ant Child Cln	tk2dcollections_assets_areawilds.bundle	1	1	0	atlas0	1024	1024	25	
+Mr Mushroom Cln	tk2dcollections_assets_mrmushroom.bundle	1	1	0	atlas0	2048	4096	25	
+Nuu Window Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	256	512	25	
+Peak Mask Maker Cln	tk2dcollections_assets_areapeak.bundle	1	1	0	atlas0	2048	4096	25	
+Phantom Cln	tk2dcollections_assets_areaorgan.bundle	3	3	0	atlas0	2048	2048	25	
+Phantom Cln	tk2dcollections_assets_areaorgan.bundle	3	3	1	atlas1	2048	2048	25	
+Phantom Cln	tk2dcollections_assets_areaorgan.bundle	3	3	2	atlas2	1024	2048	25	
+Pilgrim 02 Song Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	2048	2048	25	
+Pilgrim 03 Song Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	1024	1024	25	
+Pilgrim 03 Understore Cln	tk2dcollections_assets_areaunderstore.bundle	1	1	0	atlas0	1024	2048	25	
+Pilgrim BellThrower Cln	tk2dcollections_assets_areasong.bundle	2	1	0	atlas0	1024	1024	25	shared
+Pilgrim BellThrower Cln	tk2dcollections_assets_areasong.bundle	2	1	1	atlas0	1024	1024	25	shared
+Pilgrim Bellthrower Fly Cln	tk2dcollections_assets_pilgrimslower.bundle	1	1	0	atlas0	1024	2048	25	
+Pilgrim Bouncer Cln	tk2dcollections_assets_pilgrimslower.bundle	1	1	0	atlas0	1024	1024	25	
+Pilgrim Chest Cln	tk2dcollections_assets_pilgrimslower.bundle	1	1	0	atlas0	512	1024	25	
+Pilgrim Fisher Cln	tk2dcollections_assets_areashellwood.bundle	1	1	0	atlas0	1024	2048	25	
+Pilgrim Fisher Enemy Cln	tk2dcollections_assets_areashellwood.bundle	1	1	0	atlas0	1024	2048	25	
+Pilgrim Fisher NPC Cln	tk2dcollections_assets_areashellwood.bundle	1	1	0	atlas0	1024	2048	25	
+Pilgrim Hiker Cln	tk2dcollections_assets_pilgrimslower.bundle	1	1	0	atlas0	1024	2048	25	
+Pilgrim Moss Spitter Cln	tk2dcollections_assets_areamoss.bundle	2	2	0	atlas0	1024	1024	25	
+Pilgrim Moss Spitter Cln	tk2dcollections_assets_areamoss.bundle	2	2	1	atlas1	256	256	25	
+Pilgrim Song Stomper Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	1024	2048	25	
+Pilgrim Staff Understore Cln	tk2dcollections_assets_areaunderstore.bundle	2	2	0	atlas0	2048	2048	25	
+Pilgrim Staff Understore Cln	tk2dcollections_assets_areaunderstore.bundle	2	2	1	atlas1	256	512	25	
+Pilgrim StaffWielder Cln	tk2dcollections_assets_pilgrimslower.bundle	1	1	0	atlas0	2048	2048	25	
+Pilgrim Stomper NPC Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	1024	1024	25	
+Pilgrim Trap Cln	tk2dcollections_assets_pilgrimslower.bundle	1	1	0	atlas0	512	512	25	
+Pilgrim_01 Cln	tk2dcollections_assets_pilgrimslower.bundle	1	1	0	atlas0	1024	1024	25	
+Pilgrim_01 Song Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	1024	1024	25	
+Pilgrim_02 Cln	tk2dcollections_assets_pilgrimslower.bundle	1	1	0	atlas0	1024	2048	25	
+Pilgrim_03 Cln	tk2dcollections_assets_pilgrimslower.bundle	1	1	0	atlas0	1024	1024	25	
+Pilgrim_04 Cln	tk2dcollections_assets_pilgrimslower.bundle	1	1	0	atlas0	1024	1024	25	
+Pilgrim_04 Song Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	1024	1024	25	
+Pilgrim_05 Cln	tk2dcollections_assets_pilgrimslower.bundle	1	1	0	atlas0	1024	2048	25	
+Pilgrims Rest Shop Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	1024	1024	25	
+Pin Pilgrim Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	512	1024	25	
+Pinstress Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	4096	8192	25	
+Pinstress Interior Ground Sit Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	2048	2048	25	
+Pinstress Interior NPC Cln	tk2dcollections_assets_areapeak.bundle	1	1	0	atlas0	2048	2048	25	
+Pinstress Interior Sit NPC Cln	tk2dcollections_assets_areapeak.bundle	1	1	0	atlas0	1024	2048	25	
+Plinney Inside Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	1024	1024	25	
+Plinney Outside Cln	tk2dcollections_assets_areamoss.bundle	1	1	0	atlas0	1024	2048	25	
+Poke Swimmer Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	512	1024	25	
+Pond Skater Cln	tk2dcollections_assets_areashellwood.bundle	1	1	0	atlas0	1024	1024	25	
+Projectiles	tk2dcollections_assets_areaboneareawilds.bundle	1	1	0	atlas0	512	1024	25	
+Prompts Cln	hud_assets_all.bundle	1	1	0	atlas0	2048	2048	25	
+Propellor Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	512	512	25	
+Raptured Citadel Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	512	1024	25	
+Relic Dealer Cln	tk2dcollections_assets_areabell.bundle	1	1	0	atlas0	2048	2048	25	
+Rhino Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	2048	4096	25	
+Roachfeeder Short Cln	tk2dcollections_assets_areadust.bundle	2	1	0	atlas0	1024	2048	25	
+Roachfeeder Short Cln	tk2dcollections_assets_areadust.bundle	2	1	1	?	0	0	-1	
+Roachfeeder Tall Cln	tk2dcollections_assets_areadust.bundle	1	1	0	atlas0	1024	2048	25	
+Roachkeeper Chef Cln	tk2dcollections_assets_areadust.bundle	1	1	0	atlas0	2048	4096	25	
+Roachkeeper Chef Tiny Cln	tk2dcollections_assets_areadust.bundle	1	1	0	atlas0	2048	2048	25	
+Roachkeeper Cln	tk2dcollections_assets_areadust.bundle	1	1	0	atlas0	4096	4096	25	
+Rock Roller Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	1024	2048	25	
+Roof Crab Cln	tk2dcollections_assets_areaclover.bundle	1	1	0	atlas0	2048	2048	25	
+Rosary Pilgrim Cln	tk2dcollections_assets_pilgrimslower.bundle	1	1	0	atlas0	2048	4096	25	
+Rosary Thief Cln	thief_assets_all.bundle	1	1	0	atlas0	2048	2048	25	
+Ruins Lift Cln	tk2dcollections_assets_areamemoryareatutorial.bundle	1	1	0	atlas0	512	1024	25	
+Scholar Cln	tk2dcollections_assets_arealibrary.bundle	1	1	0	atlas0	4096	4096	25	
+Scrollkeeper Cln	tk2dcollections_assets_arealibrary.bundle	1	1	0	atlas0	4096	4096	25	
+Seamstress Cln	tk2dcollections_assets_areawilds.bundle	1	1	0	atlas0	2048	2048	25	
+Seth Cln	tk2dcollections_assets_areashellwood.bundle	1	1	0	atlas0	4096	4096	25	
+Seth NPC Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	1024	1024	25	
+Seth Stand NPC Cln	tk2dcollections_assets_areagreymoor.bundle	1	1	0	atlas0	1024	2048	25	
+Shakra Rest Cln	tk2dcollections_assets_mapper.bundle	1	1	0	atlas0	1024	1024	25	
+Shell Fossil Mimic Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	1024	1024	25	
+Shellwood Bounce Bloom Cln	tk2dcollections_assets_areashellwood.bundle	1	1	0	atlas0	256	512	25	
+Shellwood Goomba Cln	tk2dcollections_assets_areashellwood.bundle	2	1	0	atlas0	1024	2048	25	shared
+Shellwood Goomba Cln	tk2dcollections_assets_areashellwood.bundle	2	1	1	atlas0	1024	2048	25	shared
+Shellwood Vine Cln	tk2dcollections_assets_areashellwood.bundle	1	1	0	atlas0	1024	1024	25	
+Shellwood Wasp Cln	tk2dcollections_assets_areashellwood.bundle	1	1	0	atlas0	512	1024	25	
+Sherma Caretaker Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	1024	2048	25	
+Sherma Cln	tk2dcollections_assets_sherma.bundle	1	1	0	atlas0	2048	2048	25	
+Shield Dockworker Cln	tk2dcollections_assets_areadocks.bundle	1	1	0	atlas0	1024	2048	25	
+Silk Boss Arm Cln	tk2dcollections_assets_areacradle.bundle	1	1	0	atlas0	512	1024	25	
+Silk Boss Cln	tk2dcollections_assets_areacradle.bundle	3	3	0	atlas0	4096	4096	25	
+Silk Boss Cln	tk2dcollections_assets_areacradle.bundle	3	3	1	atlas1	4096	4096	25	
+Silk Boss Cln	tk2dcollections_assets_areacradle.bundle	3	3	2	atlas2	4096	4096	25	
+Silk Boss DeathEmbrace Cln	tk2dcollections_assets_areacradle.bundle	1	1	0	atlas0	2048	2048	25	
+Silk Heart Cln	tk2dcollections_assets_silkshared.bundle	1	1	0	atlas0	512	1024	25	
+Silk Possession Cln	tk2dcollections_assets_silkshared.bundle	1	1	0	atlas0	1024	2048	25	
+Skull King Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	2048	4096	25	
+Slab Cloak Scene Cln	tk2dcollections_assets_areaslab.bundle	1	1	0	atlas0	2048	4096	25	
+Slab Fly Broodmother Cln	tk2dcollections_assets_areaslab.bundle	1	1	0	atlas0	4096	4096	25	
+Slab Fly Large Cage Cln	tk2dcollections_assets_areaslab.bundle	1	1	0	atlas0	2048	4096	25	
+Slab Fly Large Cln	tk2dcollections_assets_areaslab.bundle	1	1	0	atlas0	2048	4096	25	
+Slab Fly Large Dead Cln	tk2dcollections_assets_areaslab.bundle	1	1	0	atlas0	512	1024	25	
+Slab Fly Mid Cln	tk2dcollections_assets_areaslab.bundle	1	1	0	atlas0	2048	2048	25	
+Slab Fly Small Cln	tk2dcollections_assets_areaslab.bundle	1	1	0	atlas0	512	1024	25	
+Slab Fly Small Fresh Cln	tk2dcollections_assets_areaslab.bundle	1	1	0	atlas0	512	1024	25	
+Slab Fly Vomit Cln	tk2dcollections_assets_areaslab.bundle	1	1	0	atlas0	1024	2048	25	
+Slab Prisoner Cln	tk2dcollections_assets_areaslab.bundle	1	1	0	atlas0	2048	2048	25	
+Slab Prisoner Cln	tk2dcollections_assets_areaslab.bundle	1	1	0	atlas0	2048	4096	25	
+Slab Prisoner Fly Cln	tk2dcollections_assets_areaslab.bundle	1	1	0	atlas0	1024	2048	25	
+Small Crab Cln	tk2dcollections_assets_areacrawl.bundle	1	1	0	atlas0	512	1024	25	
+Snail Shamans Cln	tk2dcollections_assets_areatutorial.bundle	3	3	0	atlas0	2048	2048	25	
+Snail Shamans Cln	tk2dcollections_assets_areatutorial.bundle	3	3	1	atlas1	2048	2048	25	
+Snail Shamans Cln	tk2dcollections_assets_areatutorial.bundle	3	3	2	atlas2	1024	2048	25	
+Song Administrator Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	2048	4096	25	
+Song Automaton 01 Cln	tk2dcollections_assets_areacog.bundle	1	1	0	atlas0	1024	1024	25	
+Song Automaton 02 Cln	tk2dcollections_assets_areacog.bundle	1	1	0	atlas0	1024	1024	25	
+Song Automaton Ball	tk2dcollections_assets_areacog.bundle	1	1	0	atlas0	2048	2048	25	
+Song Automaton Fly Cln	tk2dcollections_assets_areacog.bundle	1	1	0	atlas0	1024	1024	25	
+Song Automaton Fly Spike Cln	tk2dcollections_assets_areacog.bundle	1	1	0	atlas0	1024	2048	25	
+Song Automaton Goomba Cln	tk2dcollections_assets_areacog.bundle	1	1	0	atlas0	1024	1024	25	
+Song Automaton Shield Cln	tk2dcollections_assets_areacog.bundle	1	1	0	atlas0	2048	4096	25	
+Song Automaton Tiny Cln	tk2dcollections_assets_areahang.bundle	1	1	0	atlas0	512	1024	25	
+Song Creeper Cln	tk2dcollections_assets_areaward.bundle	1	1	0	atlas0	4096	4096	25	
+Song Golem Cln	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	2048	4096	25	
+Song Handmaiden Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	4096	4096	25	
+Song Heavy Sentry Cln	tk2dcollections_assets_areahang.bundle	1	1	0	atlas0	4096	4096	25	
+Song Knight Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	4096	8192	25	
+Song Lever Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	512	1024	25	
+Song Maestro New Cln	tk2dcollections_assets_areahang.bundle	1	1	0	atlas0	2048	2048	25	
+Song Pilgrim 01 Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	2048	2048	25	
+Song Pilgrim 02 Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	2048	2048	25	
+Song Pilgrim 03 Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	2048	4096	25	
+Song Pilgrim Maestro Cln	tk2dcollections_assets_areahang.bundle	1	1	0	atlas0	1024	2048	25	
+Song Reed Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	2048	2048	25	
+Song Reed Grand Cln	tk2dcollections_assets_areasong.bundle	1	1	0	atlas0	4096	4096	25	
+Song Scholar Apprentice Cln	tk2dcollections_assets_arealibrary.bundle	1	1	0	atlas0	1024	2048	25	
+Song Threaded Husk Cln	tk2dcollections_assets_areaward.bundle	1	1	0	atlas0	2048	2048	25	
+Song Threaded Husk Spin Cln	tk2dcollections_assets_areaward.bundle	1	1	0	atlas0	1024	2048	25	
+Spell Effects	sharedeffects_assets_all.bundle	1	1	0	atlas0	1024	2048	25	
+Spell Effects 2	sharedeffects_assets_all.bundle	1	1	0	atlas0	2048	2048	25	
+Spell Effects Neutral	sharedeffects_assets_all.bundle	1	1	0	atlas0	2048	2048	25	
+Spike Swimmer Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	1024	1024	25	
+Spiked Lazy Flyer Cln	tk2dcollections_assets_areacradle.bundle	2	1	0	atlas0	1024	1024	25	shared
+Spiked Lazy Flyer Cln	tk2dcollections_assets_areacradle.bundle	2	1	1	atlas0	1024	1024	25	shared
+Spine Floater Cln	tk2dcollections_assets_areawilds.bundle	1	1	0	atlas0	512	1024	25	
+Spinner Cln	tk2dcollections_assets_areabell.bundle	2	2	0	atlas0	4096	4096	25	
+Spinner Cln	tk2dcollections_assets_areabell.bundle	2	2	1	atlas1	1024	2048	25	
+Sprintmaster Bounce Pod Cln	tk2dcollections_assets_areaaqueduct.bundle	1	1	0	atlas0	256	256	25	
+Sprintmaster Cln	tk2dcollections_assets_areaaqueduct.bundle	1	1	0	atlas0	2048	4096	25	
+Sprintmaster Companion Cln	tk2dcollections_assets_areaaqueduct.bundle	1	1	0	atlas0	1024	2048	25	
+SpriteCollection 11	tk2dcollections_assets_areaweaver.bundle	1	1	0	atlas0	1024	2048	25	
+SpriteCollection 9	tk2dcollections_assets_areashellwood.bundle	2	2	0	atlas0	4096	4096	25	
+SpriteCollection 9	tk2dcollections_assets_areashellwood.bundle	2	2	1	atlas1	2048	2048	25	
+Steel Sentinel Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	2048	2048	25	
+Steel Servant	tk2dcollections_assets_areabone.bundle	1	1	0	atlas0	1024	2048	25	
+Stick Insect Charger Cln	tk2dcollections_assets_areashellwood.bundle	2	1	0	atlas0	2048	2048	25	
+Stick Insect Charger Cln	tk2dcollections_assets_areashellwood.bundle	2	1	1	?	0	0	-1	
+Stick Insect Cln	tk2dcollections_assets_areashellwood.bundle	2	1	0	atlas0	1024	2048	25	shared
+Stick Insect Cln	tk2dcollections_assets_areashellwood.bundle	2	1	1	atlas0	1024	2048	25	shared
+Stick Insect Flyer Cln	tk2dcollections_assets_areashellwood.bundle	2	1	0	atlas0	2048	2048	25	shared
+Stick Insect Flyer Cln	tk2dcollections_assets_areashellwood.bundle	2	1	1	atlas0	2048	2048	25	shared
+Strum String Cln	tk2dcollections_assets_silkshared.bundle	1	1	0	atlas0	512	1024	25	
+Surface Scuttler Cln	tk2dcollections_assets_areasurface.bundle	1	1	0	atlas0	1024	1024	25	
+Swamp Barnacle Cln	tk2dcollections_assets_areaswamp.bundle	1	1	0	atlas0	2048	2048	25	
+Swamp Bomb Mosquito	tk2dcollections_assets_areaswamp.bundle	1	1	0	atlas0	1024	1024	25	
+Swamp Bounce Pod Cln	tk2dcollections_assets_areaswamp.bundle	1	1	0	atlas0	1024	1024	25	
+Swamp Drifter Cln	tk2dcollections_assets_areaswamp.bundle	1	1	0	atlas0	1024	1024	25	
+Swamp Ductsucker Cln	tk2dcollections_assets_areaswamp.bundle	1	1	0	atlas0	4096	4096	25	
+Swamp Goomba Cln	tk2dcollections_assets_areaswamp.bundle	1	1	0	atlas0	512	1024	25	
+Swamp Mosquito Cln	tk2dcollections_assets_areaswamp.bundle	1	1	0	atlas0	1024	2048	25	
+Swamp Muckman	tk2dcollections_assets_areaswamp.bundle	1	1	0	atlas0	2048	2048	25	
+Swamp Muckman Tall Cln	tk2dcollections_assets_areaswamp.bundle	1	1	0	atlas0	2048	2048	25	
+Swamp Shaman Cln	tk2dcollections_assets_areaswamp.bundle	1	1	0	atlas0	4096	4096	25	
+Swamp Shaman Fireball Cln	tk2dcollections_assets_areaswamp.bundle	1	1	0	atlas0	512	1024	25	
+Swamp Trap Cln	tk2dcollections_assets_areaswamp.bundle	1	1	0	atlas0	512	512	25	
+Switches and gates	sharedeffects_assets_all.bundle	1	1	0	atlas0	2048	2048	25	
+Tar Slug Cln	tk2dcollections_assets_areadocks.bundle	1	1	0	atlas0	1024	1024	25	
+Tar Slug Huge Cln	tk2dcollections_assets_areadocks.bundle	1	1	0	atlas0	1024	2048	25	
+Terrain	tk2dcollections_assets_shared.bundle	1	1	0	atlas0	128	128	25	
+Thick Silk Vine Cln	tk2dcollections_assets_silkshared.bundle	3	3	0	atlas0	1024	1024	25	
+Thick Silk Vine Cln	tk2dcollections_assets_silkshared.bundle	3	3	1	atlas1	1024	1024	25	
+Thick Silk Vine Cln	tk2dcollections_assets_silkshared.bundle	3	3	2	atlas2	512	1024	25	
+Thief Cln	thief_assets_all.bundle	2	1	0	atlas0	1024	2048	25	shared
+Thief Cln	thief_assets_all.bundle	2	1	1	atlas0	1024	2048	25	shared
+Tiny Brood Mother Cln	tk2dcollections_assets_areaslab.bundle	1	1	0	atlas0	512	1024	25	
+Tiny Dragonfly Cln	tk2dcollections_assets_areaclover.bundle	1	1	0	atlas0	128	256	25	
+Tiny Moss Fly Cln	tk2dcollections_assets_areatutorial.bundle	1	1	0	atlas0	256	256	25	
+Tools Cln	herocollections_assets_shared.bundle	3	1	0	atlas0	4096	4096	25	shared
+Tools Cln	herocollections_assets_shared.bundle	3	1	1	atlas0	4096	4096	25	shared
+Tools Cln	herocollections_assets_shared.bundle	3	1	2	atlas0	4096	4096	25	shared
+Tormented Trobbio Cln	tk2dcollections_assets_trobbio.bundle	3	3	0	atlas0	2048	2048	25	
+Tormented Trobbio Cln	tk2dcollections_assets_trobbio.bundle	3	3	1	atlas1	2048	2048	25	
+Tormented Trobbio Cln	tk2dcollections_assets_trobbio.bundle	3	3	2	atlas2	1024	1024	25	
+Trobbio Bomb Cln	tk2dcollections_assets_trobbio.bundle	1	1	0	atlas0	1024	1024	25	
+Trobbio Cln	tk2dcollections_assets_trobbio.bundle	1	1	0	atlas0	4096	4096	25	
+Trobbio TrapdoorWatch Cln	tk2dcollections_assets_arealibrary.bundle	1	1	0	atlas0	1024	1024	25	
+UI Journal Cln	tk2dcollections_assets_ui.bundle	1	1	0	atlas0	512	1024	25	
+UI_inventory_animated	tk2dcollections_assets_ui.bundle	1	1	0	atlas0	2048	2048	25	
+UI_shops_animated	shopui_assets_all.bundle	1	1	0	atlas0	1024	1024	25	
+Understore Automaton Cln	tk2dcollections_assets_areaunderstore.bundle	1	1	0	atlas0	1024	2048	25	
+Understore Heavy Cln	tk2dcollections_assets_areaunderstore.bundle	1	1	0	atlas0	4096	4096	25	
+Understore Large Worker Cln	tk2dcollections_assets_areaunderstore.bundle	1	1	0	atlas0	2048	4096	25	
+Understore Mite Giant Cln	tk2dcollections_assets_areaunderstore.bundle	2	1	0	atlas0	2048	2048	25	shared
+Understore Mite Giant Cln	tk2dcollections_assets_areaunderstore.bundle	2	1	1	atlas0	2048	2048	25	shared
+Understore Poker Cln	tk2dcollections_assets_areaunderstore.bundle	1	1	0	atlas0	2048	2048	25	
+Understore Small Cln	tk2dcollections_assets_areaunderstore.bundle	1	1	0	atlas0	2048	2048	25	
+Understore Thrower Cln	tk2dcollections_assets_areaunderstore.bundle	1	1	0	atlas0	2048	2048	25	
+Updraft Flier Cln	tk2dcollections_assets_areapeak.bundle	1	1	0	atlas0	512	1024	25	
+Vampire Gnat Cln	tk2dcollections_assets_vampiregnat.bundle	1	1	0	atlas0	4096	4096	25	
+Vespa Boss Cln	tk2dcollections_assets_areamemory.bundle	1	1	0	atlas0	2048	4096	25	
+WaterDrip	tk2dcollections_assets_water.bundle	1	1	0	atlas0	128	256	25	
+Water_effects	tk2dcollections_assets_shared.bundle	1	1	0	atlas0	512	1024	25	
+Weaver Servitor Cln	tk2dcollections_assets_areaweaver.bundle	1	1	0	atlas0	512	512	25	
+Weaver Servitor Large Cln	tk2dcollections_assets_areaweaver.bundle	2	1	0	atlas0	1024	2048	25	
+Weaver Servitor Large Cln	tk2dcollections_assets_areaweaver.bundle	2	1	1	?	0	0	-1	
+Weaver WebShot Scene Cln	tk2dcollections_assets_areapeak.bundle	1	1	0	atlas0	512	512	25	
+White Palace Fly	tk2dcollections_assets_areaant.bundle	1	1	0	atlas0	512	1024	25	
+White Wave Lone	sharedeffects_assets_all.bundle	1	1	0	atlas0	128	256	25	
+Wisp Bounce Pod Cln	tk2dcollections_assets_areawisp.bundle	1	1	0	atlas0	256	512	25	
+Wisp Fireball Cln	tk2dcollections_assets_shared.bundle	1	1	0	atlas0	512	1024	25	
+Witch Cluster Vine Cln	tk2dcollections_assets_areashellwood.bundle	1	1	0	atlas0	512	1024	25	
+Wood Witch Cln	tk2dcollections_assets_areashellwood.bundle	2	2	0	atlas0	2048	2048	25	
+Wood Witch Cln	tk2dcollections_assets_areashellwood.bundle	2	2	1	atlas1	512	512	25	
+Wraith Cln	tk2dcollections_assets_areadustmaze.bundle	1	1	0	atlas0	2048	2048	25	
+Zap Nest Cln	tk2dcollections_assets_areacoral.bundle	1	1	0	atlas0	1024	1024	25	
+Zaza Lone Cln	tk2dcollections_assets_garmond.bundle	1	1	0	atlas0	1024	1024	25	

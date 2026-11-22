@@ -6,17 +6,20 @@ namespace DualSouls.Skins.HollowKnight.Runtime
     public static class HollowKnightSkinPolicy
     {
         public static readonly SkinRuntimeRules RuntimeRules = new SkinRuntimeRules(
-            "hollow-knight", 205, HollowKnightSkinTargets.IsSupported, Allows);
+            "hollow-knight", 205, HollowKnightSkinTargets.IsSupported, Allows,
+            // Memory-budget priority: the player first, then the HUD, then world and menu art.
+            target => HollowKnightSkinTargets.TryGetFamily(target, out var family) ? (int)family : int.MaxValue);
 
         public static bool Allows(string spriteScope, string target)
         {
             if (!HollowKnightSkinTargets.TryGetFamily(target, out var family)) return false;
             switch (spriteScope)
             {
-                case SkinSpriteScopes.All: return true;
+                // CHARACTER_WORLD is a retired fourth mode; stored documents keep it and read as EVERYTHING (#63).
+                case SkinSpriteScopes.All:
+                case SkinSpriteScopes.CharacterWorld: return true;
                 case SkinSpriteScopes.Character: return family == HollowKnightSkinFamily.Character;
                 case SkinSpriteScopes.CharacterHud: return family == HollowKnightSkinFamily.Character || family == HollowKnightSkinFamily.Hud;
-                case SkinSpriteScopes.CharacterWorld: return family == HollowKnightSkinFamily.Character || family == HollowKnightSkinFamily.World;
                 default: return false;
             }
         }

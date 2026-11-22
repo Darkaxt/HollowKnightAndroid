@@ -82,7 +82,7 @@ class SkinLibraryImporterTest {
         val before = store.quota.usage().required().profileBytes
         File(store.paths.root,"retained-orphan").writeBytes(ByteArray(65537))
         assertTrue(store.quota.usage().required().profileBytes >= before + 65537)
-        val reserved = store.quota.reserve(dev.silksong.launcher.skins.quota.SkinQuotaRequest.profile(700L*1024*1024)).required()
+        val reserved = store.quota.reserve(dev.silksong.launcher.skins.quota.SkinQuotaRequest.profile(dev.silksong.launcher.skins.quota.SkinQuotaLimits.PROFILE_BYTES - 700L*1024*1024)).required()
         try {
             var opens = 0
             val result = SkinLibraryImporter(store,decoder).prepare(SkinImportInput.SelectedFile("bounded.zip") { opens++; input().openOnce() })

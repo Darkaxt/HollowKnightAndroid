@@ -4,6 +4,7 @@ import dev.silksong.launcher.skins.catalog.CatalogPathSet
 import dev.silksong.launcher.skins.catalog.CatalogSuffixAuthority
 import dev.silksong.launcher.skins.contracts.SkinAlias
 import dev.silksong.launcher.skins.contracts.SkinImportCode
+import dev.silksong.launcher.skins.contracts.SkinLimits
 import dev.silksong.launcher.skins.contracts.SkinResult
 import dev.silksong.launcher.skins.contracts.SkinWarning
 import java.net.URI
@@ -312,8 +313,8 @@ object CanonicalJson {
     private fun validateObject(document: SkinObjectDocument) {
         require(document.schemaVersion == 1)
         require(SHA256.matches(document.treeSha256) && SHA256.matches(document.contentSha256) && SHA256.matches(document.manifestSha256))
-        require(document.fileCount == document.files.size && document.fileCount in 1..207)
-        require(document.payloadBytes in 0..268435456)
+        require(document.fileCount == document.files.size && document.fileCount in 1..SkinLimits.V1.regularFiles)
+        require(document.payloadBytes in 0..SkinLimits.V1.payloadBytes)
         require(document.files.map { it.path }.distinct().size == document.files.size)
         require(document.files.map { asciiFold(it.path) }.distinct().size == document.files.size)
         require(document.files == document.files.sortedWith { a, b -> SkinIdentity.unsignedUtf8Compare(a.path, b.path) })

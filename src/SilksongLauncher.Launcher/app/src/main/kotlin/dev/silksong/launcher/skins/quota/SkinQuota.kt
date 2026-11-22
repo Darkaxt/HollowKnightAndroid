@@ -41,7 +41,8 @@ internal data class SkinQuotaLimits(
     }
 
     companion object {
-        const val PROFILE_BYTES = 1024L * 1024 * 1024
+        // A whole curated library plus one in-flight import (~1 GiB of quarantine + extraction), #63.
+        const val PROFILE_BYTES = 8L * 1024 * 1024 * 1024
         const val SESSION_BYTES = 96L * 1024 * 1024
         const val FALLBACK_BLOCK_BYTES = 4096L
         const val LIFECYCLE_MARGIN_BYTES =

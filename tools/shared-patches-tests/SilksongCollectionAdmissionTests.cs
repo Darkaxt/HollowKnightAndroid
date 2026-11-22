@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using DualSouls.Skins.Runtime;
 using DualSouls.Skins.Silksong.Runtime;
 using Xunit;
@@ -12,20 +13,31 @@ public sealed class SilksongCollectionAdmissionTests
     {
         var shared = new object();
         var target = Find("Hornet CrestWeapon Scythe");
+        SilksongMaterialPage Page(object texture, int w, int h, string name = "atlas0") => new SilksongMaterialPage(texture, name, w, h);
         Assert.Null(SilksongCollectionAdmission.Validate(target, "Hornet CrestWeapon Scythe", new[] {
-            new SilksongMaterialPage(shared, 2048, 4096), new SilksongMaterialPage(shared, 2048, 4096)
+            Page(shared, 2048, 4096), Page(shared, 2048, 4096)
         }));
         Assert.Contains("collection name", SilksongCollectionAdmission.Validate(target, "Scythe", new[] {
-            new SilksongMaterialPage(shared, 2048, 4096), new SilksongMaterialPage(shared, 2048, 4096)
+            Page(shared, 2048, 4096), Page(shared, 2048, 4096)
         }));
         Assert.Contains("material/page count", SilksongCollectionAdmission.Validate(target, target.CollectionName, new[] {
-            new SilksongMaterialPage(shared, 2048, 4096)
+            Page(shared, 2048, 4096)
         }));
         Assert.Contains("dimensions", SilksongCollectionAdmission.Validate(target, target.CollectionName, new[] {
-            new SilksongMaterialPage(shared, 2048, 2048), new SilksongMaterialPage(shared, 2048, 2048)
+            Page(shared, 2048, 2048), Page(shared, 2048, 2048)
         }));
         Assert.Contains("shared original", SilksongCollectionAdmission.Validate(target, target.CollectionName, new[] {
-            new SilksongMaterialPage(new object(), 2048, 4096), new SilksongMaterialPage(new object(), 2048, 4096)
+            Page(new object(), 2048, 4096), Page(new object(), 2048, 4096)
+        }));
+        Assert.Contains("No material page draws", SilksongCollectionAdmission.Validate(target, target.CollectionName, new[] {
+            Page(shared, 2048, 4096, "atlas1"), Page(shared, 2048, 4096, "atlas1")
+        }));
+
+        // Pages of other textures may have any size: only the target texture's pages are checked.
+        var knight = SilksongSkinTargets.All.Single(x => x.CanonicalPath == "Assets/Collections/Knight Data/atlas2.png");
+        Assert.Null(SilksongCollectionAdmission.Validate(knight, "Knight", new[] {
+            Page(new object(), 4096, 4096, "atlas0"), Page(new object(), 256, 512, "atlas1"),
+            Page(shared, 4096, 4096, "atlas2"), Page(new object(), 4096, 4096, "atlas3")
         }));
     }
 

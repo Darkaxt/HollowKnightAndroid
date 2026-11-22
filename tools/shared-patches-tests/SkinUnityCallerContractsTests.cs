@@ -50,7 +50,7 @@ public sealed class SkinUnityCallerContractsTests
         rig.Collection.material = null;
         rig.Collection.materials = rig.Collection.materialInsts = Array.Empty<Material>();
         Assert.Equal(SkinApplyStatus.AwaitingTargets, rig.Apply(rig.Pack("A")).Status);
-        Assert.Equal(1, ImageConversion.Decodes);
+        Assert.Equal(0, ImageConversion.Decodes); // live-only (#63): no live slot, nothing decoded
         Assert.Same(rig.Vanilla, rig.Material.mainTexture);
         UObject.FlushDestroy();
         rig.Collection.material = rig.Material;
@@ -209,7 +209,7 @@ public sealed class SkinUnityCallerContractsTests
         using var rig = new Rig(false);
         rig.Collection.transform.SetParent(new GameObject("HkMapRig").transform);
         Assert.Equal(SkinApplyStatus.AwaitingTargets, rig.Apply(rig.Pack("A")).Status);
-        Assert.Equal(1, ImageConversion.Decodes);
+        Assert.Equal(0, ImageConversion.Decodes); // live-only (#63)
         Assert.Same(rig.Vanilla, rig.Material.mainTexture);
     }
 
@@ -234,7 +234,7 @@ public sealed class SkinUnityCallerContractsTests
         var result = rig.Apply(rig.Pack("A"));
         Assert.Equal(SkinApplyStatus.AwaitingTargets, result.Status);
         Assert.Contains("material and materialInsts", result.Detail);
-        Assert.Equal(1, ImageConversion.Decodes);
+        Assert.Equal(0, ImageConversion.Decodes); // live-only (#63)
         Assert.Same(rig.Vanilla, rig.Material.mainTexture);
     }
 
@@ -278,6 +278,7 @@ public sealed class SkinUnityCallerContractsTests
         public Material Material;
         public Texture2D Vanilla;
         public tk2dSpriteCollectionData Collection;
+        public string TextureName;
         public Rig(bool ss)
         {
             this.ss = ss;
@@ -290,7 +291,7 @@ public sealed class SkinUnityCallerContractsTests
             GameManager.instance = new GameManager();
             target = ss ? SilksongSkinTargets.All.First(x => !x.IsHud).CanonicalPath : "Knight.png";
             var spec = ss ? SilksongSkinTargets.All.First(x => x.CanonicalPath == target) : null;
-            width = spec?.Width ?? 8; height = spec?.Height ?? 8;
+            width = spec?.Width ?? 8; height = spec?.Height ?? 8; TextureName = spec?.TextureName ?? "vanilla";
             BindHero(); BindHud();
             if (ss) silk = new SkinUnitySs.SilksongSkinRuntime(); else { hk = new SkinUnityHk.HollowKnightSkinRuntime(); hk.Tick(); }
         }
@@ -300,7 +301,7 @@ public sealed class SkinUnityCallerContractsTests
             go.Add<MeshRenderer>();
             Collection = go.Add<tk2dSpriteCollectionData>();
             Collection.spriteCollectionName = ss ? SilksongSkinTargets.All.First(x => !x.IsHud).CollectionName : "Knight";
-            Vanilla = new Texture2D(width, height, TextureFormat.RGBA32, false) { name = "vanilla" };
+            Vanilla = new Texture2D(width, height, TextureFormat.RGBA32, false) { name = TextureName };
             Material = new Material { mainTexture = Vanilla };
             Collection.material = Material; Collection.materials = Collection.materialInsts = new[] { Material };
             go.Add<tk2dSprite>().Collection = Collection;

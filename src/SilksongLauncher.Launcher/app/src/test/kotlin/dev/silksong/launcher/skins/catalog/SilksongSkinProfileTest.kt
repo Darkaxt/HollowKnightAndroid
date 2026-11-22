@@ -72,9 +72,12 @@ class SilksongSkinProfileTest {
         assertEquals(205, hk.pathCount)
         assertEquals("silksong", ss.profileId)
         assertEquals("1.0.29980", ss.gameVersion)
-        assertEquals(16, ss.pathCount)
-        assertEquals(expected, ss.paths)
-        assertEquals(expectedDimensions, ss.textureDimensions)
+        // The census catalog (#63): the sixteen owner-bound targets first, then every other collection atlas.
+        assertEquals(466, ss.pathCount)
+        assertEquals(expected, ss.paths.take(16))
+        assertEquals(expectedDimensions, ss.textureDimensions.filterKeys { it in expected })
+        assertEquals(ss.paths.toSet(), ss.textureDimensions.keys)
+        assertEquals(SkinTextureDimensions(4096, 4096), ss.textureDimensions.getValue("Assets/Collections/Tools Cln Data/atlas0.png"))
         assertTrue(hk.textureDimensions.isEmpty())
         assertNotEquals(hk.assetName, ss.assetName)
         assertNotEquals(hk.catalogId, ss.catalogId)
@@ -83,7 +86,7 @@ class SilksongSkinProfileTest {
 
     @Test
     fun silksongCatalogRequiresExactPinnedBytesAndCannotBecomeHollowKnightAuthority() {
-        val bytes = (expected.joinToString("\n") + "\n").toByteArray(Charsets.UTF_8)
+        val bytes = (SkinCatalogProfiles.Silksong.paths.joinToString("\n") + "\n").toByteArray(Charsets.UTF_8)
         val loaded = SkinCatalogPaths.load(
             SkinCatalogProfiles.require(GameProfiles.require("silksong")),
             ByteArrayInputStream(bytes),
@@ -94,7 +97,8 @@ class SilksongSkinProfileTest {
             is SkinResult.Error -> error(loaded.detail)
         }
         assertEquals("silksong", catalog.profile.profileId)
-        assertEquals(expected, catalog.paths)
+        assertEquals(SkinCatalogProfiles.Silksong.paths, catalog.paths)
+        assertEquals(expected, catalog.paths.take(16))
         assertFalse(runCatching { CatalogPathSet.requirePinned("hollow-knight") }.getOrNull() === catalog)
     }
 
@@ -227,7 +231,7 @@ class SilksongSkinProfileTest {
     }
 
     private fun silksongCatalog(): CatalogPathSet {
-        val bytes = (expected.joinToString("\n") + "\n").toByteArray(Charsets.UTF_8)
+        val bytes = (SkinCatalogProfiles.Silksong.paths.joinToString("\n") + "\n").toByteArray(Charsets.UTF_8)
         return when (val loaded = SkinCatalogPaths.load(SkinCatalogProfiles.Silksong, ByteArrayInputStream(bytes))) {
             is SkinResult.Ok -> loaded.value
             is SkinResult.Error -> error(loaded.detail)

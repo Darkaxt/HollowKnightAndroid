@@ -44,45 +44,12 @@ class SkinCatalogProfile internal constructor(
 }
 
 object SkinCatalogProfiles {
-    private val silksongPaths = listOf(
-        "Assets/Collections/Hornet Cln Data/atlas0.png",
-        "Assets/Collections/Hornet Cloakless Cln Data/atlas0.png",
-        "Assets/Collections/Hornet CrestWeapon Dagger Cln Data/atlas0.png",
-        "Assets/Collections/Hornet CrestWeapon Drill Lance Cln Data/atlas0.png",
-        "Assets/Collections/Hornet CrestWeapon Scythe Data/atlas0.png",
-        "Assets/Collections/Hornet CrestWeapon Shaman Cln Data/atlas0.png",
-        "Assets/Collections/Hornet CrestWeapon Warrior Cln Data/atlas0.png",
-        "Assets/Collections/Hornet CrestWeapon Whip Cln Data/atlas0.png",
-        "Assets/Collections/Hornet_Needolin_Windy Data/atlas0.png",
-        "Assets/Collections/HUD Cln Data/atlas0.png",
-        "Assets/Collections/HUD Extras Cln Data/atlas0.png",
-        "Assets/Collections/Knight Data/atlas0.png",
-        "Assets/Collections/Knight Data/atlas1.png",
-        "Assets/Collections/Knight Data/atlas2.png",
-        "Assets/Collections/Knight Data/atlas3.png",
-        "Assets/Collections/Bone Beast Child Call Cln Data/atlas0.png",
-    )
+    // Generated from the 1.0.29980 depot census (tools/skin-census, #63): every tk2d collection atlas.
+    private val silksongPaths = SilksongCatalogData.ROWS.map { it.first }
 
-    private val silksongDimensions = listOf(
-        2048 to 2048,
-        2048 to 4096,
-        2048 to 2048,
-        2048 to 2048,
-        2048 to 4096,
-        2048 to 2048,
-        2048 to 4096,
-        1024 to 2048,
-        1024 to 2048,
-        4096 to 4096,
-        512 to 1024,
-        4096 to 4096,
-        4096 to 4096,
-        4096 to 4096,
-        4096 to 4096,
-        1024 to 2048,
-    ).mapIndexed { index, (width, height) ->
-        silksongPaths[index] to SkinTextureDimensions(width, height)
-    }.toMap()
+    private val silksongDimensions = SilksongCatalogData.ROWS.associate { (path, width, height) ->
+        path to SkinTextureDimensions(width, height)
+    }
 
     val HollowKnight = SkinCatalogProfile(
         HollowKnightProfile.id,
@@ -103,7 +70,7 @@ object SkinCatalogProfiles {
         SilksongCatalogPaths.SHA256,
         silksongPaths,
         silksongDimensions,
-        expectedPathCount = 16,
+        expectedPathCount = SilksongCatalogData.PATH_COUNT,
         legacyMigrationAllowed = false,
     )
 
@@ -122,8 +89,11 @@ object SkinCatalogProfiles {
 
 object SilksongCatalogPaths {
     const val ASSET_NAME = "silksong-skin-catalog-v1.txt"
-    const val CATALOG_ID = "silksong-1.0.29980-character-hud-16"
-    /** Earlier catalogs whose paths are a strict prefix of this one; their packs stay valid (#34). */
-    val COMPATIBLE_CATALOG_IDS = setOf("silksong-1.0.29980-character-hud-11")
-    const val SHA256 = "58de03fbd85d238437f1bde03b4045269b789190934d53555077ea82b74b76a1"
+    const val CATALOG_ID = SilksongCatalogData.CATALOG_ID
+    /** Earlier catalogs whose paths are a strict prefix of this one; their packs stay valid (#34, #63). */
+    val COMPATIBLE_CATALOG_IDS = setOf(
+        "silksong-1.0.29980-character-hud-11",
+        "silksong-1.0.29980-character-hud-16",
+    )
+    const val SHA256 = SilksongCatalogData.SHA256
 }

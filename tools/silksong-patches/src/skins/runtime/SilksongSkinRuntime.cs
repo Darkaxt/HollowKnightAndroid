@@ -79,6 +79,7 @@ namespace DualSouls.Skins.Silksong.Runtime
         GameManager ownerManager;
         SilksongCollectionOwnerStamp collectionOwnerStamp;
         SkinPack requested;
+        int lastLiveTargets;
         bool disposed;
 
         public static SilksongSkinRuntime Current { get; private set; }
@@ -107,9 +108,10 @@ namespace DualSouls.Skins.Silksong.Runtime
                   .Append('\n');
             Describe(sb, "hero", CaptureCharacterCollections());
             Describe(sb, "hud", CaptureHudCollections());
-            foreach (var target in SilksongSkinTargets.All)
-                sb.Append("target ").Append(target.CollectionName).Append(" pages=").Append(target.MaterialCount)
-                  .Append(' ').Append(target.Width).Append('x').Append(target.Height).Append(target.IsHud ? " hud" : "").Append('\n');
+            foreach (var family in SilksongSkinTargets.All.GroupBy(x => x.Family))
+                sb.Append("targets ").Append(family.Key).Append('=').Append(family.Count()).Append('\n');
+            sb.Append("catalog ").Append(SilksongSkinTargets.CatalogId).Append(" loaded collections=")
+              .Append(LoadedCollections().Count).Append(" live targets=").Append(lastLiveTargets).Append('\n');
             return sb.ToString();
         }
 
@@ -145,7 +147,7 @@ namespace DualSouls.Skins.Silksong.Runtime
             // Accounting charges 8 B/px; atlases are uploaded non-readable, so resident cost is about half.
             // The Knight collection alone is four 4096 pages, which a 512 MiB budget could never admit (#34).
             session = new SkinRuntimeSession(decoder, Discover, 1536L * 1024 * 1024,
-                SilksongSkinTargets.RuntimeRules);
+                SilksongSkinTargets.RuntimeRules, liveOnly: true);
             SceneManager.sceneLoaded += SceneChanged;
             SceneManager.sceneUnloaded += SceneUnloaded;
             Current = this;
@@ -191,7 +193,8 @@ namespace DualSouls.Skins.Silksong.Runtime
             var slots = new List<SkinSlot>();
             var requestedTargets = requested == null ? Array.Empty<string>() : requested.Textures.Keys;
 
-            foreach (var target in SilksongSkinTargets.All)
+            var bound = new HashSet<object>(ReferenceComparer.Instance);
+            foreach (var target in SilksongSkinTargets.All.Take(SilksongSkinTargets.OwnerBoundCount))
             {
                 if (target.IsHud ? hudOwners == null : heroOwners == null)
                 {
@@ -223,9 +226,53 @@ namespace DualSouls.Skins.Silksong.Runtime
                 omissions.AddRange(plan.Omissions);
                 if (!plan.Bindings.TryGetValue(target.CanonicalPath, out var admitted)) continue;
                 foreach (var instance in admitted)
-                    slots.AddRange(slotByCollection[instance.CollectionIdentity]);
+                    AddSlots(slots, bound, slotByCollection[instance.CollectionIdentity]);
             }
+            DiscoverLoaded(slots, bound);
+            lastLiveTargets = slots.Select(x => x.Target).Distinct().Count();
             return slots;
+        }
+
+        /// <summary>Every other catalog target: any loaded collection the pack and its scope ask for. Collections
+        /// that are not loaded are skipped silently (they are bound when a scene loads them); only a loaded
+        /// collection whose layout differs from the census is reported.</summary>
+        void DiscoverLoaded(List<SkinSlot> slots, HashSet<object> bound)
+        {
+            // The requested pack, and the applied one while a successor is still pending; the session filters
+            // the result by the pack it is actually applying.
+            var packs = new[] { requested, session.CurrentPack }.Where(x => x != null).Distinct().ToArray();
+            if (!packs.Any(pack => pack.Textures.Keys.Any(path => SilksongSkinTargets.TryGetByPath(path, out var t) &&
+                !t.OwnerBound && SilksongSkinTargets.Allows(pack.SpriteScope, path)))) return;
+            foreach (var collection in LoadedCollections())
+            {
+                foreach (var target in SilksongSkinTargets.ForCollection(collection.spriteCollectionName))
+                {
+                    if (target.OwnerBound || !packs.Any(pack => pack.Textures.ContainsKey(target.CanonicalPath) &&
+                        SilksongSkinTargets.Allows(pack.SpriteScope, target.CanonicalPath))) continue;
+                    if (TryAdmit(target, collection, out var bindings, out var failure)) AddSlots(slots, bound, bindings);
+                    else omissions.Add(target.CanonicalPath + " (" + failure + ")");
+                }
+            }
+        }
+
+        static List<tk2dSpriteCollectionData> LoadedCollections()
+        {
+            var result = new List<tk2dSpriteCollectionData>();
+            var seen = new HashSet<object>(ReferenceComparer.Instance);
+            foreach (var data in Resources.FindObjectsOfTypeAll<tk2dSpriteCollectionData>())
+            {
+                var instance = data == null ? null : data.inst;
+                if (instance != null && seen.Add(instance)) result.Add(instance);
+            }
+            return result;
+        }
+
+        /// <summary>A material is written by one target only: the first (owner-bound) binding wins, so two
+        /// collections sharing a material can never make conflicting writes to the same slot.</summary>
+        static void AddSlots(List<SkinSlot> slots, HashSet<object> bound, List<SkinSlot> bindings)
+        {
+            foreach (var slot in bindings)
+                if (bound.Add(slot.Owner)) slots.Add(slot);
         }
 
         List<OwnedCollection> CaptureCharacterCollections()
@@ -283,14 +330,25 @@ namespace DualSouls.Skins.Silksong.Runtime
             public int GetHashCode(object value) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(value);
         }
 
+        /// <summary>A skinned page keeps the census name of the page it replaces, so a pack switch or a rebind
+        /// after owner loss still admits it by texture name (#63).</summary>
+        const string SkinPagePrefix = "SSSKIN:";
+
+        static string PageName(Texture texture)
+        {
+            var name = texture.name;
+            return name != null && name.StartsWith(SkinPagePrefix, StringComparison.Ordinal) ? name.Substring(SkinPagePrefix.Length) : name;
+        }
+
         bool TryAdmit(SilksongSkinTarget target, tk2dSpriteCollectionData collection,
             out List<SkinSlot> bindings, out string failure)
         {
             bindings = new List<SkinSlot>();
             var materials = collection.materials;
             var pages = materials == null ? null : materials.Select(material => material == null || material.mainTexture == null
-                ? new SilksongMaterialPage(null, 0, 0)
-                : new SilksongMaterialPage(material.mainTexture, material.mainTexture.width, material.mainTexture.height)).ToList();
+                ? new SilksongMaterialPage(null, null, 0, 0)
+                : new SilksongMaterialPage(material.mainTexture, PageName(material.mainTexture), material.mainTexture.width,
+                    material.mainTexture.height)).ToList();
             failure = SilksongCollectionAdmission.Validate(target, collection.spriteCollectionName, pages);
             if (failure != null) return false;
             if (collection.materialInsts == null || collection.materialInsts.Length != target.MaterialCount)
@@ -301,12 +359,12 @@ namespace DualSouls.Skins.Silksong.Runtime
             // Bind exactly the materials that draw this page's original texture. On Thor the primary `material`
             // was never page zero's material for any live collection (sprites QA, #34), so a fixed
             // "primary is page zero" rule refused every target; bind it only when it really draws this page.
-            var original = pages[target.Page].OriginalTexture;
+            var original = SilksongCollectionAdmission.Original(target, pages);
             var all = materials.Concat(collection.materialInsts).Concat(new[] { collection.material })
                 .Where(material => material != null && ReferenceEquals(material.mainTexture, original)).Distinct().ToList();
             // Renderers draw materialInsts: binding a page whose instance diverged would report Applied while
             // nothing visible changes.
-            var instances = target.RequiresSharedOriginal ? collection.materialInsts : new[] { collection.materialInsts[target.Page] };
+            var instances = collection.materialInsts.Where((_, i) => ReferenceEquals(materials[i].mainTexture, original));
             if (instances.Any(material => material == null || !ReferenceEquals(material.mainTexture, original)))
             {
                 failure = "material and materialInsts do not share the admitted original texture";
@@ -322,7 +380,9 @@ namespace DualSouls.Skins.Silksong.Runtime
                     (skin, _) => {
                         if (skin.Width != target.Width || skin.Height != target.Height)
                             throw new InvalidOperationException("Skin atlas dimensions do not match " + target.CanonicalPath);
-                        return RequireLive<Texture2D>(skin.Value);
+                        var texture = RequireLive<Texture2D>(skin.Value);
+                        texture.name = SkinPagePrefix + target.TextureName;
+                        return texture;
                     }));
             }
             return true;

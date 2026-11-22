@@ -87,9 +87,11 @@ namespace DualSouls.Skins
     public sealed class NativeSkinMenuModel
     {
         static readonly string[] Modes = { "OFF", "ON", "ROTATE" };
-        // Player-only is the default; HUD and world art are opt-in, EVERYTHING also covers menu pages.
-        static readonly string[] ScopeValues = { "CHARACTER", "CHARACTER_HUD", "CHARACTER_WORLD", "ALL" };
-        static readonly string[] ScopeLabels = { "PLAYER ONLY", "PLAYER + HUD", "PLAYER + WORLD", "EVERYTHING" };
+        // Three modes in both games (#63): player only (default), player + HUD, and everything (player, HUD,
+        // world art and menu pages). Stored CHARACTER_WORLD documents from older builds read as EVERYTHING.
+        static readonly string[] ScopeValues = { "CHARACTER", "CHARACTER_HUD", "ALL" };
+        static readonly string[] ScopeLabels = { "PLAYER ONLY", "PLAYER + HUD", "EVERYTHING" };
+        static string CanonicalScope(string value) => value == "CHARACTER_WORLD" ? "ALL" : value;
 
         NativeSkinMenuSnapshot snapshot;
         IReadOnlyList<NativeSkinMenuRow> rows;
@@ -184,7 +186,7 @@ namespace DualSouls.Skins
 
         public NativeSkinMutation CycleSprites(int delta) =>
             new NativeSkinMutation(NativeSkinMutationKind.SetSpriteScope,
-                Cycle(ScopeValues, snapshot.SpriteScope, delta));
+                Cycle(ScopeValues, CanonicalScope(snapshot.SpriteScope), delta));
 
         public NativeSkinMutation ConfirmSelected()
         {
@@ -253,7 +255,7 @@ namespace DualSouls.Skins
 
         static string ScopeLabel(string value)
         {
-            int index = Array.IndexOf(ScopeValues, value);
+            int index = Array.IndexOf(ScopeValues, CanonicalScope(value));
             return index >= 0 ? ScopeLabels[index] : value;
         }
 

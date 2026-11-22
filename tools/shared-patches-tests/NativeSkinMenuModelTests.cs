@@ -17,7 +17,7 @@ public sealed class NativeSkinMenuModelTests
             new NativeSkinPackDescriptor("silk", "Silk Red", "B")), 5);
 
         Assert.Equal(new[] { "OFF", "ON", "ROTATE" }, NativeSkinMenuModel.ModeChoices);
-        Assert.Equal(new[] { "PLAYER ONLY", "PLAYER + HUD", "PLAYER + WORLD", "EVERYTHING" }, NativeSkinMenuModel.SpriteChoices);
+        Assert.Equal(new[] { "PLAYER ONLY", "PLAYER + HUD", "EVERYTHING" }, NativeSkinMenuModel.SpriteChoices);
         Assert.Equal(
             new[] { "MODE", "SPRITES", "Moss Knight", "Silk Red", "BACK" },
             model.Rows.Select(row => row.Label));
@@ -56,10 +56,14 @@ public sealed class NativeSkinMenuModelTests
         model.Replace(Snapshot("ROTATE", "CHARACTER", null, Array.Empty<string>()));
         Assert.Equal("CHARACTER_HUD", model.CycleSprites(1).Value);
         model.Replace(Snapshot("ROTATE", "CHARACTER_HUD", null, Array.Empty<string>()));
-        Assert.Equal("CHARACTER_WORLD", model.CycleSprites(1).Value);
-        model.Replace(Snapshot("ROTATE", "CHARACTER_WORLD", null, Array.Empty<string>()));
         Assert.Equal("ALL", model.CycleSprites(1).Value);
+        model.Replace(Snapshot("ROTATE", "ALL", null, Array.Empty<string>()));
+        Assert.Equal("CHARACTER", model.CycleSprites(1).Value);
         Assert.Equal("CHARACTER_HUD", model.CycleSprites(-1).Value);
+        // A stored retired CHARACTER_WORLD scope shows and cycles as EVERYTHING (#63).
+        model.Replace(Snapshot("ROTATE", "CHARACTER_WORLD", null, Array.Empty<string>()));
+        Assert.Equal("EVERYTHING", model.Rows.Single(row => row.Label == "SPRITES").Value);
+        Assert.Equal("CHARACTER", model.CycleSprites(1).Value);
     }
 
     [Fact]

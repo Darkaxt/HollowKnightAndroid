@@ -593,8 +593,8 @@ class SkinQuarantineTest {
         val value = SkinLimits.V1
         assertEquals(
             listOf<Long>(
-                268435456, 4096, 512, 512, 16, 536870912, 100, 128, 64, 205,
-                207, 512, 64, 1024, 16777216, 4194304, 268435456, 8192, 33554432,
+                536870912, 4096, 512, 512, 16, 536870912, 100, 128, 64, 512,
+                514, 512, 64, 1024, 67108864, 4194304, 536870912, 8192, 33554432,
             ),
             listOf(
                 value.quarantineBytes, value.entries.toLong(), value.directories.toLong(),

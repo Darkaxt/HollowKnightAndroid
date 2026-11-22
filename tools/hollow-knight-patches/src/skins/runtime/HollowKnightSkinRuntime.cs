@@ -41,8 +41,9 @@ namespace DualSouls.Skins.HollowKnight.Runtime
         public HollowKnightSkinRuntime()
         {
             if (Current != null) throw new InvalidOperationException("Only one skin runtime may own game visuals.");
+            // Live-only decode, the same as Silksong (#63): only targets loaded in the current scene are decoded.
             session = new SkinRuntimeSession(decoder, Discover, 512L * 1024 * 1024,
-                HollowKnightSkinPolicy.RuntimeRules);
+                HollowKnightSkinPolicy.RuntimeRules, liveOnly: true);
             refreshSchedule = new SkinRuntimeRefreshSchedule(CacheDeathTargets,
                 () => RefreshAllowed == null || RefreshAllowed(), () => Publish(session.Refresh()));
             UnityEngine.SceneManagement.SceneManager.sceneLoaded += SceneLoaded;

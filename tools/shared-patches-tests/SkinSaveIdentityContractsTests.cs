@@ -267,7 +267,7 @@ public sealed class SkinSaveIdentityContractsTests
                 Invalidate(); Tick(2);
                 Assert.Equal("Restored", outcome.Status); Assert.Null(session.CurrentPack);
                 for (int index = 0; index < original.Length; index++) Assert.Same(original[index], visible[index]);
-                if (profile == "silksong") Assert.Equal(16, original.Length); // exact SS1.0.29980 canonical vanilla targets (#34 adds Knight pages)
+                if (profile == "silksong") Assert.Equal(SilksongSkinTargets.All.Count, original.Length); // full 1.0.29980 census catalog (#63)
                 var resultDefault = Outcome();
                 activeSave = 1;
                 request = SkinLibraryTransport.Decode(fixture.GetProperty("otherSaveDefault").GetRawText(), rules);

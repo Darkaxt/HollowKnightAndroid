@@ -24,6 +24,14 @@ namespace DualSouls.Skins.Runtime
             this.isSupported = isSupported ?? throw new ArgumentNullException(nameof(isSupported));
             this.allows = allows ?? throw new ArgumentNullException(nameof(allows));
         }
+        readonly Func<string, int> order;
+        /// <summary>Budget priority: lower first (catalog order puts the player's own pages first).</summary>
+        public int Order(string target) => order == null ? 0 : order(target);
+        public SkinRuntimeRules(string profileId, int mappingLimit, Func<string, bool> isSupported,
+            Func<string, string, bool> allows, Func<string, int> order) : this(profileId, mappingLimit, isSupported, allows)
+        {
+            this.order = order;
+        }
         public bool IsSupported(string target) => isSupported(target);
         public bool Allows(string spriteScope, string target) => isSupported(target) && allows(spriteScope, target);
     }
@@ -62,7 +70,8 @@ namespace DualSouls.Skins.Runtime
                     throw new ArgumentException("Expected normalized target and payload paths.");
                 copy.Add(pair.Key, pair.Value);
             }
-            if (copy.Count == 0 || copy.Count > 205) throw new ArgumentException("Pack mapping count is invalid.");
+            // The launched profile's SkinRuntimeRules.MappingLimit is the real bound (HK 205, Silksong 466).
+            if (copy.Count == 0 || copy.Count > 4096) throw new ArgumentException("Pack mapping count is invalid.");
             Textures = new ReadOnlyDictionary<string, string>(copy);
         }
         static bool SafeRelative(string path) => !string.IsNullOrEmpty(path) && !Path.IsPathRooted(path) &&
@@ -197,6 +206,7 @@ namespace DualSouls.Skins.Runtime
         readonly Func<IReadOnlyList<SkinSlot>> discover;
         readonly SkinRuntimeRules rules;
         readonly long memoryLimit;
+        readonly bool liveOnly;
         Dictionary<string, SkinTexture> current = new Dictionary<string, SkinTexture>(StringComparer.OrdinalIgnoreCase);
         Dictionary<SkinSlot, object> originals = new Dictionary<SkinSlot, object>();
         readonly List<SkinTexture> retired = new List<SkinTexture>();
@@ -211,9 +221,17 @@ namespace DualSouls.Skins.Runtime
         public bool TeardownComplete => disposed;
         public string LastError { get; private set; } = "";
         public long AccountedBytes => checked(AllTextures().Sum(x => x.AccountedBytes) + scratchBytes);
+        /// <summary>Targets the last apply or refresh skipped because the memory budget was full.</summary>
+        public IReadOnlyList<string> BudgetSkipped { get; private set; } = Array.Empty<string>();
+
+        /// <param name="liveOnly">Decode only the targets that discovery currently finds alive, and on every
+        /// refresh decode newly live ones and release ones no longer live. A full pack can be far larger than
+        /// the memory budget (every Silksong page is about 7.9 GiB decoded, #63); when the live set still does
+        /// not fit, the targets that fit are applied in catalog order and the rest are reported, not failed.</param>
         public SkinRuntimeSession(ISkinTextureDecoder decoder, Func<IReadOnlyList<SkinSlot>> discover,
-            long memoryLimit, SkinRuntimeRules rules)
+            long memoryLimit, SkinRuntimeRules rules, bool liveOnly = false)
         {
+            this.liveOnly = liveOnly;
             this.decoder = decoder ?? throw new ArgumentNullException(nameof(decoder));
             this.discover = discover ?? throw new ArgumentNullException(nameof(discover));
             this.rules = rules ?? throw new ArgumentNullException(nameof(rules));
@@ -253,6 +271,21 @@ namespace DualSouls.Skins.Runtime
                     "Prior skin resources are still retiring; successor allocation is deferred.",
                     previousVisualsRestored: CurrentPack == null));
             if (ReferenceEquals(pack, CurrentPack) && pack.SpriteScope == spriteScope) return Refresh();
+            return Apply(pack, cancellation);
+        }
+
+        SkinApplyResult Apply(SkinPack pack, CancellationToken cancellation)
+        {
+            IReadOnlyList<SkinSlot> slots = null;
+            HashSet<string> live = null;
+            if (liveOnly)
+            {
+                try { slots = discover(); }
+                catch (Exception error) { return WithRetirement(new SkinApplyResult(SkinApplyStatus.Failed, error.Message)); }
+                live = new HashSet<string>(slots.Where(x => x.IsAlive()).Select(x => x.Target), StringComparer.OrdinalIgnoreCase);
+            }
+            bool Wanted(string target) => rules.Allows(pack.SpriteScope, target) && (live == null || live.Contains(target));
+            var skipped = new List<string>();
             var unsupported = pack.Textures.Keys.Where(x => !rules.IsSupported(x)).ToList();
             var candidate = new Dictionary<string, SkinTexture>(StringComparer.OrdinalIgnoreCase);
             if (SameContent(pack, CurrentPack))
@@ -261,7 +294,7 @@ namespace DualSouls.Skins.Runtime
                 foreach (var pair in current)
                     if (CurrentPack.Textures.TryGetValue(pair.Key, out var payload) && !reusable.ContainsKey(payload))
                         reusable.Add(payload, pair.Value);
-                foreach (var pair in pack.Textures.Where(x => rules.Allows(pack.SpriteScope, x.Key)))
+                foreach (var pair in pack.Textures.Where(x => Wanted(x.Key)))
                     if (reusable.TryGetValue(pair.Value, out var texture)) candidate.Add(pair.Key, texture);
             }
             try
@@ -269,18 +302,32 @@ namespace DualSouls.Skins.Runtime
                 cancellation.ThrowIfCancellationRequested();
                 var files = new Dictionary<string, PngFile>(StringComparer.Ordinal);
                 long candidatePeak = 0;
-                foreach (var pair in pack.Textures.Where(x => rules.Allows(pack.SpriteScope, x.Key)))
+                // Live-only budget. Refreshing the same pack counts only what stays resident after the commit
+                // (reused textures, backups, scratch): textures that left the scene are destroyed at the end of
+                // this frame, and the 8 B/px accounting is about twice the non-readable resident size, so the
+                // brief overlap is covered. Switching packs keeps the restore-then-wait path for its peak.
+                bool same = SameContent(pack, CurrentPack), overflow = false;
+                long resident = !liveOnly ? 0 : same ? checked(candidate.Values.Distinct().Sum(x => x.AccountedBytes) +
+                    held.Concat(auxiliary).Distinct().Sum(x => x.AccountedBytes) + scratchBytes) : AccountedBytes;
+                foreach (var pair in pack.Textures.Where(x => Wanted(x.Key)).OrderBy(x => rules.Order(x.Key)))
                 {
                     cancellation.ThrowIfCancellationRequested();
                     if (candidate.ContainsKey(pair.Key)) continue;
                     string path = Path.Combine(pack.Root, pair.Value);
                     if (files.ContainsKey(path)) continue;
                     var file = Inspect(path);
-                    candidatePeak = checked(candidatePeak + file.Length + (long)file.Width * file.Height * 8);
+                    long cost = checked(file.Length + (long)file.Width * file.Height * 8);
+                    if (liveOnly && checked(resident + candidatePeak + cost) > memoryLimit)
+                    {
+                        if (!same && CurrentPack != null) { overflow = true; break; }
+                        skipped.Add(pair.Key);
+                        continue;
+                    }
+                    candidatePeak = checked(candidatePeak + cost);
                     if (candidatePeak > memoryLimit) throw new InvalidDataException("Owned decoded/encoded memory admission exceeded.");
                     files.Add(path, file);
                 }
-                if (CurrentPack != null && checked(AccountedBytes + candidatePeak) > memoryLimit)
+                if (overflow || !liveOnly && CurrentPack != null && checked(AccountedBytes + candidatePeak) > memoryLimit)
                 {
                     var restoration = TryRestore();
                     if (restoration.Status != SkinApplyStatus.Restored && restoration.Status != SkinApplyStatus.Unchanged)
@@ -291,11 +338,12 @@ namespace DualSouls.Skins.Runtime
                 }
                 encodedAdmission = files.Values.Sum(x => x.Length);
                 var decoded = new Dictionary<string, SkinTexture>(StringComparer.Ordinal);
-                foreach (var pair in pack.Textures.Where(x => rules.Allows(pack.SpriteScope, x.Key)))
+                foreach (var pair in pack.Textures.Where(x => Wanted(x.Key)))
                 {
                     cancellation.ThrowIfCancellationRequested();
                     if (candidate.ContainsKey(pair.Key)) continue;
                     string path = Path.Combine(pack.Root, pair.Value);
+                    if (!files.ContainsKey(path)) continue; // skipped by the live memory budget
                     if (!decoded.TryGetValue(path, out var texture))
                     {
                         var info = files[path];
@@ -311,7 +359,12 @@ namespace DualSouls.Skins.Runtime
                     else candidate.Add(pair.Key, texture);
                     cancellation.ThrowIfCancellationRequested();
                 }
-                var result = Change(candidate, false, cancellation, unsupported, pack.SpriteScope);
+                BudgetSkipped = skipped.AsReadOnly();
+                var result = Change(candidate, false, cancellation, unsupported, pack.SpriteScope, slots);
+                if (skipped.Count > 0)
+                    result = new SkinApplyResult(result.Status, (result.Detail ?? "") + " Memory budget full; not applied: " +
+                        skipped.Count + " target(s) (" + string.Join("; ", skipped.Take(8)) + (skipped.Count > 8 ? "; ..." : "") + ").",
+                        result.UnsupportedTargets, result.PreviousVisualsRestored);
                 if (result.Status == SkinApplyStatus.Applied || result.Status == SkinApplyStatus.Unchanged ||
                     result.Status == SkinApplyStatus.AwaitingTargets && CurrentPack != null)
                 {
@@ -338,6 +391,9 @@ namespace DualSouls.Skins.Runtime
             Reap();
             if (disposed || blocked) return new SkinApplyResult(SkinApplyStatus.Blocked);
             if (CurrentPack == null) return WithRetirement(new SkinApplyResult(SkinApplyStatus.Unchanged));
+            // Live-only: rerun the apply with the current pack so newly loaded targets are decoded and targets
+            // that left the scene are released; textures still live are reused, not decoded again.
+            if (liveOnly) return Apply(CurrentPack, default);
             return WithRetirement(Change(current.Where(x => rules.Allows(spriteScope, x.Key)).ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase),
                 false, default, CurrentPack.Textures.Keys.Where(x => !rules.IsSupported(x)), spriteScope));
         }
@@ -356,13 +412,14 @@ namespace DualSouls.Skins.Runtime
         }
 
         SkinApplyResult Change(IReadOnlyDictionary<string, SkinTexture> desired, bool restoring,
-            CancellationToken cancellation, IEnumerable<string> unsupported, string requestedScope)
+            CancellationToken cancellation, IEnumerable<string> unsupported, string requestedScope,
+            IReadOnlyList<SkinSlot> discovered = null)
         {
             var undo = new List<(SkinSlot Slot, object Value)>();
             var nextOriginals = originals.Where(x => x.Key.IsAlive()).ToDictionary(x => x.Key, x => x.Value);
             try
             {
-                var slots = discover();
+                var slots = discovered ?? discover();
                 unsupported = (unsupported ?? Array.Empty<string>()).Concat(slots.Where(x => x.Target.StartsWith("unsupported:", StringComparison.Ordinal)).Select(x => x.Target)).Distinct().ToList();
                 if (slots.Count > 4096) throw new InvalidDataException("Live target bound exceeded.");
                 var writes = new Dictionary<SkinSlot, object>();

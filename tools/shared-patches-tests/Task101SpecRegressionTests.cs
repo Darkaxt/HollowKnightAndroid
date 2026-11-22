@@ -35,7 +35,7 @@ public sealed class Task101SpecRegressionTests
         var supplied = SilksongSkinTargets.All[0];
         var invalid = SilksongSkinTargets.All[1];
         var plan = SilksongCollectionPlan.Build(
-            SilksongSkinTargets.All,
+            SilksongSkinTargets.All.Take(SilksongSkinTargets.OwnerBoundCount),
             new[] { supplied.CanonicalPath, invalid.CanonicalPath },
             new[] {
                 new SilksongCollectionInstance(supplied.CollectionName, new object(), new object(), null),
@@ -46,7 +46,7 @@ public sealed class Task101SpecRegressionTests
         Assert.Single(plan.Bindings[supplied.CanonicalPath]);
         Assert.False(plan.Bindings.ContainsKey(invalid.CanonicalPath));
         Assert.Contains(plan.Omissions, x => x == invalid.CanonicalPath + " (wrong dimensions)");
-        foreach (var missing in SilksongSkinTargets.All.Skip(2))
+        foreach (var missing in SilksongSkinTargets.All.Take(SilksongSkinTargets.OwnerBoundCount).Skip(2))
             Assert.Contains(plan.Omissions, x => x == missing.CanonicalPath + " (pack texture missing)");
         Assert.Equal(15, plan.Omissions.Count);
     }
