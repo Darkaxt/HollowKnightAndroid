@@ -88,6 +88,14 @@ public partial class HKDualScreen
     Vector3 nativeHudSourcePosition;
     bool nativeHudReduced;
     float nativeHudWidth, nativeHudHeight;
+    // Silksong's fixed scale (DsHudFrame.MaskPixelPitch): one mask pitch is 55 header layout
+    // units, whatever the mask count or the soul orb is doing. The pitch is the live distance
+    // between masks 1 and 2 (health_display "Health Number"), measured in the HUD camera frame.
+    const float NativeHudMaskPixelPitch = 55f;
+    Transform nativeHudMask1, nativeHudMask2;
+    float nativeHudPitch, nativeHudMaskY;
+    // Panel pixels from the destination's top to the line beneath the mask row; 0 = unmeasured.
+    float nativeHudRowSplit;
 
     void ResetNativeHudView()
     {
@@ -104,6 +112,7 @@ public partial class HKDualScreen
         }
         nativeHudOwnerCount = nativeHudNodeCount = 0;
         nativeHudBound = nativeHudFitReady = false; nativeHudBindRetry.Reset();
+        nativeHudMask1 = nativeHudMask2 = null; nativeHudPitch = nativeHudRowSplit = 0f;
     }
 
     void PrepareNativeHudView(bool blocked)
@@ -176,6 +185,7 @@ public partial class HKDualScreen
         for (int i = 0; i < nativeHudAnimationCount; i++) nativeHudAnimations[i] = null;
         nativeHudAnimationCount = 0;
         nativeHudOwnerCount = nativeHudNodeCount = 0; nativeHudHide = null;
+        nativeHudMask1 = nativeHudMask2 = null;
         nativeHudStructureDirty = false;
         int ancestors = 0;
         for (var p = nativeHudRoot; p != null; p = p.parent)
@@ -194,6 +204,7 @@ public partial class HKDualScreen
             if (watch == null) watch = t.gameObject.AddComponent<NativeHudChildrenWatch>();
             watch.Owner = this;
             nativeHudNodes[n] = new NativeHudNode { Transform = t, Watch = watch };
+            if (nativeHudMask1 == null || nativeHudMask2 == null) NativeHudNoteMask(t);
             for (int j = 0; j < t.childCount; j++)
             {
                 if (nativeHudNodeCount == NativeHudNodeLimit) return false;
@@ -245,6 +256,21 @@ public partial class HKDualScreen
         nativeHudSkinStamp = HkStageHooks.SkinStamp;
         nativeHudBound = true; nativeHudBindRetry.Resolved();
         return true;
+    }
+
+    // Bind-time only: masks 1 and 2 by their own health_display number, as Silksong finds them.
+    void NativeHudNoteMask(Transform t)
+    {
+        var fsms = t.GetComponents<PlayMakerFSM>();
+        for (int i = 0; i < fsms.Length; i++)
+        {
+            var f = fsms[i];
+            if (f == null || f.FsmName != "health_display" || f.FsmVariables == null) continue;
+            var number = f.FsmVariables.FindFsmInt("Health Number");
+            if (number == null) continue;
+            if (number.Value == 1) nativeHudMask1 = t;
+            else if (number.Value == 2) nativeHudMask2 = t;
+        }
     }
 
     static bool NativeHudAnimatorAdvanced(NativeHudOwner owner)
@@ -452,6 +478,14 @@ public partial class HKDualScreen
         }
         if (!have || !NativeHudFinite(lo.x) || !NativeHudFinite(hi.y)) return false;
         nativeHudViewMin = lo; nativeHudViewMax = hi;
+        nativeHudPitch = 0f;
+        if (nativeHudMask1 != null && nativeHudMask2 != null && nativeHudMask1.gameObject.activeInHierarchy)
+        {
+            Vector3 first = inv * nativeHudMask1.position, second = inv * nativeHudMask2.position;
+            float pitch = second.x - first.x;
+            if (NativeHudFinite(pitch) && pitch > .00001f && NativeHudFinite(first.y))
+            { nativeHudPitch = pitch; nativeHudMaskY = first.y; }
+        }
         LogNativeHudFit(minX, maxX, minY, maxY, dropped, halfW, halfH);
         return true;
     }
@@ -484,6 +518,24 @@ public partial class HKDualScreen
         changed = !NativeHudSameRect(d, nativeHudDestination) || nativeHudWidth != BOTTOM_W || nativeHudHeight != BOTTOM_H;
         nativeHudDestination = d; nativeHudWidth = BOTTOM_W; nativeHudHeight = BOTTOM_H;
         return d.width > 0f && d.height > 0f;
+    }
+
+    // Silksong's hud_zoom percentage (50-200); anything outside that range keeps 100.
+    static float NativeHudZoom
+    {
+        get { int zoom = DsConfig.Int("hud_zoom", 100); return zoom < 50 || zoom > 200 ? 1f : zoom / 100f; }
+    }
+
+    // The band beneath the live mask row, in header layout units, or empty while the HUD
+    // is not fitted and drawn (Silksong's DsHudView.TitleSpace).
+    Rect NativeHudTitleSpace()
+    {
+        var band = shellHudBandLayout;
+        if (!nativeHudFitReady || nativeHudRowSplit <= 1f || hudCam2 == null || hudCam2.cullingMask == 0 ||
+            !shellHudDestinationValid || nativeHudDestination.height <= 0f || band.height <= 0f)
+            return new Rect(0f, 0f, 0f, 0f);
+        float split = nativeHudRowSplit * band.height / nativeHudDestination.height;
+        return new Rect(band.x, band.y + split, band.width, Mathf.Max(0f, band.height - split));
     }
 
     void BeforeNativeHudCamera(Camera camera)
@@ -535,13 +587,29 @@ public partial class HKDualScreen
         {
             var d = nativeHudDestination; float aspect = d.width / d.height;
             var size = nativeHudViewMax - nativeHudViewMin;
+            // The whole-extent fit is only the ceiling (never crop, as Silksong caps by its
+            // layout bounds); the scale itself is Silksong's fixed pixels per mask, so the HUD
+            // keeps its size as masks and soul change. hud_zoom scales about the top-left anchor.
             float ortho = Mathf.Max(size.y * .5f, size.x * .5f / aspect) * 1.001f;
+            float panelPerLayout = shellHudBandLayout.height > 0f ? d.height / shellHudBandLayout.height : 0f;
+            if (nativeHudPitch > 0f && panelPerLayout > 0f)
+            {
+                float maskPixels = NativeHudMaskPixelPitch * shellHudUiScale * panelPerLayout;
+                ortho = Mathf.Max(ortho, d.height * nativeHudPitch / (2f * maskPixels));
+            }
+            ortho /= NativeHudZoom;
             if (!NativeHudFinite(ortho) || ortho <= .00001f) { nativeHudFitReady = false; return; }
             var center = (nativeHudViewMin + nativeHudViewMax) * .5f;
             float cx, cy;
             HollowKnightPatches.Lower.HkShellPolicy.HudAnchor(nativeHudViewMin.x, nativeHudViewMax.y,
                 ortho, ortho * aspect, out cx, out cy);
-            center.x = cx; center.y = cy;
+            // Silksong's hud_x / hud_y knobs: hundredths of a HUD unit, moving the camera.
+            center.x = cx + DsConfig.Int("hud_x", 0) / 100f; center.y = cy + DsConfig.Int("hud_y", 0) / 100f;
+            // The title row starts below the live mask row (Silksong: between masks and silk).
+            nativeHudRowSplit = 0f;
+            if (nativeHudPitch > 0f)
+                nativeHudRowSplit = Mathf.Clamp((center.y + ortho - (nativeHudMaskY - nativeHudPitch * .6f)) * d.height / (2f * ortho),
+                    0f, d.height);
             center.z = (Quaternion.Inverse(rotation) * hudCameraStateSource.transform.position).z;
             camera.rect = new Rect(d.x / BOTTOM_W, 1 - (d.y + d.height) / BOTTOM_H, d.width / BOTTOM_W, d.height / BOTTOM_H);
             camera.aspect = aspect; camera.orthographic = true; camera.orthographicSize = ortho;

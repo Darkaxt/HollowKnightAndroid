@@ -121,4 +121,14 @@ public sealed class HkShellPolicyTests
             out _, out _, out float narrow, out _));
         Assert.Equal(10f, narrow, 3);
     }
+
+    [Fact]
+    public void Hud_band_with_silksong_geometry_matches_its_capture_rect()
+    {
+        // Silksong's DsHudView: pad 6, width min(header - 2 pad, 74%), height header - pad.
+        Assert.True(HkShellPolicy.HudBand(1240f, 1080f, 1240f, 240f, 1240f, 1080f, 6f, 0.74f, 1f,
+            out float x, out float y, out float w, out float h));
+        Assert.Equal(6f, x); Assert.Equal(6f, y);
+        Assert.Equal(1240f * 0.74f, w, 3); Assert.Equal(234f, h, 3);
+    }
 }

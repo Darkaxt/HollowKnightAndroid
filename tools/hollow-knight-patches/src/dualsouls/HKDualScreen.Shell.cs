@@ -57,6 +57,14 @@ public partial class HKDualScreen
         if (inGame) { shellIdleSince = -1f; shellEverInGame = true; }
         else if (shellIdleSince < 0f) shellIdleSince = Time.unscaledTime;
 
+        // As Silksong: a scene unload retires page/HUD ownership until the next scene is entered.
+        BindShellTransitions(gm);
+        bool transitioning = shellTransitionPending;
+        try { transitioning |= gm != null && gm.IsInSceneTransition; } catch { }
+        if (transitioning && !shellTransitioning) CancelShellTouch();
+        shellTransitioning = transitioning;
+        shell.SetTransitioning(transitioning);
+
         // Pause shows the title card (logo) and hides the HUD; HK's open inventory is not a pause.
         if (paused && !shell.Paused) CancelShellTouch();
         shell.SetPaused(paused);
@@ -69,9 +77,48 @@ public partial class HKDualScreen
         shell.SetVisible(show);
         if (attrCam != null) attrCam.cullingMask = show ? 1 << ATTR_LAYER : 0;
 
-        if (show && !shell.Paused) FeedShellTouch();
+        if (show && !shell.Paused && !transitioning) FeedShellTouch();
         shell.Tick(Time.unscaledDeltaTime);
     }
+
+    // GameManager.UnloadingLevel precedes transition, direct and quit-to-menu unloads; the
+    // shell is told at once rather than on this end-of-frame tick. OnFinishedEnteringScene
+    // only rearms it; IsInSceneTransition still holds it while the load is in flight.
+    GameManager shellTransitionOwner;
+    bool shellTransitionPending, shellTransitioning;
+
+    void BindShellTransitions(GameManager gm)
+    {
+        if (ReferenceEquals(gm, shellTransitionOwner)) return;
+        if (!ReferenceEquals(shellTransitionOwner, null))
+        {
+            try
+            {
+                shellTransitionOwner.UnloadingLevel -= OnShellUnloadingLevel;
+                shellTransitionOwner.OnFinishedEnteringScene -= OnShellFinishedEnteringScene;
+            }
+            catch (Exception e) { WarnOnce("shell transition unbind", e); }
+        }
+        shellTransitionOwner = gm;
+        shellTransitionPending = false;
+        if (gm == null) return;
+        gm.UnloadingLevel += OnShellUnloadingLevel;
+        gm.OnFinishedEnteringScene += OnShellFinishedEnteringScene;
+        try { shellTransitionPending = gm.IsInSceneTransition; } catch { }
+    }
+
+    void OnShellUnloadingLevel()
+    {
+        shellTransitionPending = true;
+        if (shell == null) return;
+        if (!shellTransitioning) CancelShellTouch();
+        shellTransitioning = true;
+        shell.SetTransitioning(true);
+    }
+
+    void OnShellFinishedEnteringScene() { shellTransitionPending = false; }
+
+    void OnDestroy() { BindShellTransitions(null); }
 
     bool EnsureShell()
     {
@@ -99,7 +146,7 @@ public partial class HKDualScreen
         shell.Register(new HkGuideScreen(), HkGuideScreen.TabArt);
         shell.Register(new HkJournalScreen(), HkJournalScreen.TabArt);
         shell.Register(new HkMapScreen(), HkMapScreen.TabArt);
-        shell.Finish(preferredId ?? "map");
+        shell.Finish(preferredId ?? DsConfig.Str("screen", "map"));
         shellShown = false;
         shell.SetVisible(false);
     }
@@ -209,18 +256,28 @@ public partial class HKDualScreen
         shellTouch.Cancel();
     }
 
-    // The header's free band below the HUD hosts the page title.
+    // Silksong's DsHudView geometry: the HUD's own tight inset from the header's top-left
+    // (hud_pad_px), 74% of the header's width and its full height below that inset. The
+    // band beneath the live mask row hosts the page title (NativeHudTitleSpace).
     void SetShellHudBand(float headerW, float headerH)
     {
         Vector2 layout = DsFrame.LayoutSize;
+        float pad = ShellHudPad;
         float x, y, w, hgt;
         shellHudDestinationValid = HkShellPolicy.HudBand(layout.x, layout.y, headerW, headerH,
-            BOTTOM_W, BOTTOM_H, DsTheme.Pad, HudBandWidth, HudBandHeight, out x, out y, out w, out hgt);
-        if (shellHudDestinationValid) shellHudDestination = new Rect(x, y, w, hgt);
+            BOTTOM_W, BOTTOM_H, pad, HudBandWidth, HudBandHeight, out x, out y, out w, out hgt);
+        if (!shellHudDestinationValid) return;
+        shellHudDestination = new Rect(x, y, w, hgt);
+        shellHudBandLayout = new Rect(pad, pad, w * layout.x / BOTTOM_W, hgt * layout.y / BOTTOM_H);
+        shellHudUiScale = headerH / DsLayout.HudHeight;
     }
 
     // The right of the header belongs to the page's action column.
-    const float HudBandWidth = 0.62f, HudBandHeight = 0.62f;
+    const float HudBandWidth = 0.74f, HudBandHeight = 1f;
+    static float ShellHudPad { get { return Mathf.Clamp(DsConfig.Int("hud_pad_px", 6), 0, 60); } }
+    // The same band in header layout units, and the header's layout scale (Silksong's uiScale).
+    Rect shellHudBandLayout;
+    float shellHudUiScale = 1f;
 
     Sprite ShellTitleLogo() { return titleLogoSprite; }
 
@@ -274,7 +331,7 @@ public partial class HKDualScreen
         public IDsHeaderHud CreateHud(RectTransform header, float width, float height)
         {
             _owner.SetShellHudBand(width, height);
-            return new HkHeaderHud(_owner, width, height);
+            return new HkHeaderHud(_owner);
         }
     }
 
@@ -282,23 +339,16 @@ public partial class HKDualScreen
     sealed class HkHeaderHud : IDsHeaderHud
     {
         readonly HKDualScreen _owner;
-        readonly float _width, _height;
         bool _stopped;
 
-        public HkHeaderHud(HKDualScreen owner, float width, float height)
-        { _owner = owner; _width = width; _height = height; }
+        public HkHeaderHud(HKDualScreen owner) { _owner = owner; }
 
         public void SetVisible(bool visible) { if (!_stopped) _owner.shellHudWanted = visible; }
 
         public void Stop() { _stopped = true; _owner.shellHudWanted = false; }
 
-        public Rect TitleSpace
-        {
-            get
-            {
-                float hudBottom = DsTheme.Pad + _height * HudBandHeight - DsTheme.Pad;
-                return new Rect(0f, hudBottom, _width, Mathf.Max(0f, _height - hudBottom));
-            }
-        }
+        // Measured from the live mask row, as Silksong measures from its own; empty
+        // while the HUD is not fitted and drawn.
+        public Rect TitleSpace { get { return _owner.NativeHudTitleSpace(); } }
     }
 }

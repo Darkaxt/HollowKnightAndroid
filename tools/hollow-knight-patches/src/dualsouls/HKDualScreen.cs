@@ -526,7 +526,9 @@ public partial class HKDualScreen : MonoBehaviour
         PushInputSettings();      // M : config -> HKControllerService / HKInputDebug
 
         bool paused = false;
-        try { paused = gm.IsGamePaused(); } catch { }
+        // As Silksong: pause-owned Options/Mods/Skins menus keep UIState.PAUSED even where
+        // the manager's own pause flag does not cover them.
+        try { paused = gm.IsGamePaused() || (gm.ui != null && gm.ui.uiState == GlobalEnums.UIState.PAUSED); } catch { }
 
         bool invOpen = PollInventoryToggle(gc, paused);   // M : invBtn toggle + is-inventory-open
         GameInventoryOpen = invOpen;                      // B8: HKTweaks charms-anywhere gates its atBench force on this

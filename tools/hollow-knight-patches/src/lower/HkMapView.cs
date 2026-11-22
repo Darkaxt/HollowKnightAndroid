@@ -589,6 +589,27 @@ namespace HollowKnightPatches.Lower
             catch (Exception e) { Debug.LogWarning("[HkMap] pins: " + e.Message); }
         }
 
+        /// <summary>#47 QA: why each spot in scenes starting with <paramref name="prefix"/> is or is not pinned.</summary>
+        public string WhyReport(string prefix)
+        {
+            var t = HkCollectibles.Table;
+            if (t == null) return "error no table";
+            var sb = new System.Text.StringBuilder();
+            int n = 0;
+            foreach (var s in t.Spots)
+            {
+                if (!s.Scene.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                bool got;
+                try { got = HkCollectibles.Collected(s); } catch { got = false; }
+                sb.Append('\n').Append(s.Scene).Append(' ').Append(s.Kind).Append(" pin=")
+                  .Append(_pins != null ? (_pins.ReasonOf(s) ?? "-") : "no-pins")
+                  .Append(" room=").Append(_pinIndex != null ? _pinIndex.Why(s.Scene) : "no-map")
+                  .Append(" collected=").Append(got).Append(" key=").Append(s.Key);
+                n++;
+            }
+            return "why " + prefix + " spots=" + n + " pins=" + PinsShown + sb;
+        }
+
         /// <summary>Pins currently showing (QA).</summary>
         public int PinsShown { get { return _pins != null ? _pins.Shown : 0; } }
 

@@ -65,8 +65,11 @@ public class DsTitleCard
         }
         else
         {
-            rt.anchorMin = new Vector2(0.15f, 0.30f);
-            rt.anchorMax = new Vector2(0.85f, 0.78f);
+            // Game art carries no panel margins, so it is fitted into the box the panel
+            // logo's own ink occupies (docs/Bottom_Screen_Logo.webp: 1023x690 at 109,159 of
+            // 1240x1080): the same size and the same place a little above the middle.
+            rt.anchorMin = new Vector2(0.088f, 0.214f);
+            rt.anchorMax = new Vector2(0.913f, 0.853f);
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
         }

@@ -128,6 +128,17 @@ namespace HollowKnightPatches.Lower
                 return _areas.TryGetValue(scene, out a) ? a : null;
             }
 
+            /// <summary>#47 QA: why a room does or does not take pins.</summary>
+            public string Why(string scene)
+            {
+                Transform t;
+                if (!_rooms.TryGetValue(scene, out t) || t == null) return "missing";
+                var sr = t.GetComponent<SpriteRenderer>();
+                if (sr == null || sr.sprite == null) return "no-sprite";
+                if (!t.gameObject.activeInHierarchy) return "inactive(" + (t.gameObject.activeSelf ? "parent" : "self") + ")";
+                return "drawn";
+            }
+
             public CollectiblePins.Room? RoomOf(string scene)
             {
                 Transform t;

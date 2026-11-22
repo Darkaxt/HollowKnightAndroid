@@ -13,7 +13,7 @@ public partial class HKDualScreen
         "help | report | state | pause | mods | skins | skin <list|row N|left N|right N|close> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
         "mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | hazard | fly <x> <y> | dash | travel <scene> <gate> | " +
         "inv [fsm|send <event>] | fsm find <text> | fsm show|send|set|goto <object>[#n]|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | " +
-        "save | load <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist] | mapdump\n";
+        "save | load <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist | why <scene>] | mapsetup | mapdump\n";
 
     // QA: one hero nail hit on the nearest live enemy through HealthManager.Hit, as a slash
     // would land. The optional hp first sets the target's health, e.g. above the boss threshold.
@@ -64,9 +64,23 @@ public partial class HKDualScreen
             case "collect":
                 // #37: what the checklist shows and how many pins are on the map; "checklist" toggles the panel.
                 if (a.Length > 1 && a[1] == "checklist") HollowKnightPatches.Lower.HkMapScreen.RequestChecklistToggle = true;
+                // #47: "collect why <scene prefix>" says why each spot there is or is not pinned.
+                if (a.Length > 2 && a[1] == "why")
+                    return HollowKnightPatches.Lower.HkMapView.Last != null
+                        ? HollowKnightPatches.Lower.HkMapView.Last.WhyReport(a[2]) : "error no map view";
                 return "collect " + HollowKnightPatches.Lower.HkMapScreen.ChecklistReport() +
                        " pins=" + HollowKnightPatches.Lower.HkMapView.LastPinsShown;
             case "state": return CommandState(gm, ui);
+            case "mapsetup":
+            {
+                // The game's own room-state pass (what opening its map runs). QA after pdset on a disposable save.
+                var mapObject = gm != null ? gm.gameMap : null;
+                var gameMap = mapObject != null ? mapObject.GetComponent<GameMap>() : null;
+                if (gameMap == null) return "error no GameMap";
+                gameMap.SetupMap(false);
+                var pd = PlayerData.instance;
+                return "ok SetupMap mapAllRooms=" + (pd != null && pd.mapAllRooms) + " hasQuill=" + (pd != null && pd.hasQuill);
+            }
             case "mapdump":
                 return (HollowKnightPatches.Lower.HkMapView.Last != null ? HollowKnightPatches.Lower.HkMapView.Last.Dump() : "error no map view") +
                        "\n" + (HollowKnightPatches.Lower.HkMapScreen.Last != null ? HollowKnightPatches.Lower.HkMapScreen.Last.RawDump() : "no map page");
