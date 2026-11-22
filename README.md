@@ -42,7 +42,9 @@ keeps its own art, text and rules.
 - **Silksong:** Inventory, Crest and Tools, Tasks, Journal and Map.
 - Maps support pan, pinch and slider zoom, markers, and switching between the
   current area and the whole world.
-- Pausing hides the gameplay HUD and pages and shows the game's logo.
+- On the title screen and while paused, the lower screen hides the HUD and
+  pages and shows the game's title logo. Both games use matching SteamGridDB
+  logos in the same style.
 
 <table>
   <tr>
@@ -97,7 +99,7 @@ Silksong:
 
 #### Paused
 
-The pause menu stays on the upper screen; the lower screen drops the HUD and pages and shows the logo.
+The pause menu stays on the upper screen; the lower screen drops the HUD and pages and shows the game's title logo.
 
 <table>
   <tr>
@@ -310,7 +312,8 @@ build-time BepInEx work form the foundation of this unified project. Nexus mods
 were used as behaviour references only; the built-in Mods are this project's
 own code.
 
-The launcher artwork (grids, heroes, logos and game icons) is preserved in
+The launcher artwork (grids, heroes, logos and game icons) and the lower-screen
+title logos come from SteamGridDB and are credited in
 [`docs/ui-source/steamgriddb`](docs/ui-source/steamgriddb/ATTRIBUTION.md).
 Generative image tools are not used for project artwork.
 
