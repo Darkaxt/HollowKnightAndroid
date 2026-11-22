@@ -34,7 +34,6 @@ public partial class HKDualScreen
     Rect shellHudDestination;
     bool shellHudDestinationValid;
     bool shellHudWanted;
-    Sprite titleLogoSprite;
 
     /// <summary>The per-frame lower-screen policy, after the HUD and popup routing for this frame.</summary>
     void ShellTick(GameManager gm, bool paused, bool companionOn, bool hudFaded, bool popupAny)
@@ -279,7 +278,9 @@ public partial class HKDualScreen
     Rect shellHudBandLayout;
     float shellHudUiScale = 1f;
 
-    Sprite ShellTitleLogo() { return titleLogoSprite; }
+    // The title card's logo: the user-selected SteamGridDB Hollow Knight logo, embedded,
+    // the same source and style as Silksong's (docs/ui-source/steamgriddb).
+    Sprite ShellTitleLogo() { return HkTitleLogoArt.Sprite; }
 
     DsCursorArt shellCursor;
     float shellCursorRetry;

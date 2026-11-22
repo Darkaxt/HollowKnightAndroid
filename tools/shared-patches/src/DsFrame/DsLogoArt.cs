@@ -21,30 +21,36 @@ public static class DsLogoArt
     {
         get
         {
-            if (_tried) return _sprite;
-            _tried = true;
-            try
-            {
-                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false) { name = "DsLogo" };
-                if (!tex.LoadImage(Convert.FromBase64String(Png), true))
-                {
-                    UnityEngine.Object.Destroy(tex);
-                    Debug.LogWarning("[DsLogoArt] PNG did not decode");
-                    return null;
-                }
-                tex.wrapMode = TextureWrapMode.Clamp;
-                tex.filterMode = FilterMode.Bilinear;
-                tex.hideFlags = HideFlags.HideAndDontSave;
-                _sprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height),
-                                        new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
-                _sprite.name = "DsLogo";
-                _sprite.hideFlags = HideFlags.HideAndDontSave;
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning("[DsLogoArt] failed: " + e.Message);
-            }
+            if (!_tried) { _tried = true; _sprite = FromPng(Png, "DsLogo"); }
             return _sprite;
+        }
+    }
+
+    /// <summary>A sprite from embedded PNG base64; null (with a warning) if it will not decode.</summary>
+    public static Sprite FromPng(string base64, string name)
+    {
+        try
+        {
+            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false) { name = name };
+            if (!tex.LoadImage(Convert.FromBase64String(base64), true))
+            {
+                UnityEngine.Object.Destroy(tex);
+                Debug.LogWarning("[DsLogoArt] " + name + " PNG did not decode");
+                return null;
+            }
+            tex.wrapMode = TextureWrapMode.Clamp;
+            tex.filterMode = FilterMode.Bilinear;
+            tex.hideFlags = HideFlags.HideAndDontSave;
+            var sprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height),
+                                       new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+            sprite.name = name;
+            sprite.hideFlags = HideFlags.HideAndDontSave;
+            return sprite;
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning("[DsLogoArt] " + name + " failed: " + e.Message);
+            return null;
         }
     }
 }

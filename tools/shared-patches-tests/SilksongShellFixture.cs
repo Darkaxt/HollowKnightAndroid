@@ -109,6 +109,7 @@ public static partial class DsTheme
     public static readonly Sprite White=new(){name="white"},Disc=new(){name="disc"},Rounded=new(){name="rounded"},EdgeFade=new(){name="edge-fade"};
 }
 public static class DsLogoArt{public static readonly Sprite Sprite=new(){name="existing-logo"};}
+public static class SsTitleLogoArt{public static readonly Sprite Sprite=new(){name="ss-title-logo"};}
 public static class DsRuleArt{public static readonly Sprite Horizontal=new(),Vertical=new();}
 public static class DsSliderArt{public static readonly Sprite Track=new(),Thumb=new();}
 public static class DsTrashArt{public static readonly Sprite Sprite=new();}

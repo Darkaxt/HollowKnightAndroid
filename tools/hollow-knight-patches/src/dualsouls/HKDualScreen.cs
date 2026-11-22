@@ -32,7 +32,6 @@ using UnityEngine;
 public partial class HKDualScreen : MonoBehaviour
 {
 
-    bool logoNeedsBake;            // title art wasn't loaded yet at boot -> retry the bake periodically
 
     HKLayout cfg = new HKLayout();
 
@@ -463,7 +462,6 @@ public partial class HKDualScreen : MonoBehaviour
         if (directDisplayShuttingDown) yield break;
         LoadConfig(true);
         SetupBottomCameras();
-        SetupLogo();
         // One-shot GPU capability report (asset-pipeline planning: can this device use the PC's DXT/BC textures
         // directly, or must the OBB stay ASTC?). One log line at boot, debug-independent.
         try
@@ -590,7 +588,6 @@ public partial class HKDualScreen : MonoBehaviour
         }
 
         ShellTick(gm, paused, companionOn, hudFadedInGameplay, popupAny);
-        LogoTick();      // M : title logo bake/retry for the shell's title card
     }
 
     // [M] Push virtual-controller / glyph settings to the input bridge (it owns the on-screen touch overlay).
@@ -761,13 +758,6 @@ public partial class HKDualScreen : MonoBehaviour
         catch (Exception e) { WarnOnce("tilemap fix", e); }
     }
 
-    // [M] The shell's title card shows HK's own title art (vheart_title), which only loads once the menu scene is
-    // up, so a boot-time bake can miss it: retry ~once a second until it succeeds (SetupLogo caches the bake).
-    void LogoTick()
-    {
-        if (titleLogoSprite == null && logoNeedsBake && (Time.frameCount % 60) == 0) { logoNeedsBake = false; SetupLogo(); }
-    }
-
     // Opening attribution: recentre the (freely animating) "Credits" onto promptCam's view axis via its
     // combined renderer bounds (promptCam draws tutLayer, where ScanNode now parks it; FrameHudCams zooms
     // the camera by creditScale while it draws). Do NOT force localScale — HK fades it in from scale 0, so
@@ -876,25 +866,6 @@ public partial class HKDualScreen : MonoBehaviour
             }
         tex.SetPixels32(px); tex.Apply();
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
-    }
-
-    void SetupLogo()
-    {
-        try
-        {
-            // cache -> else bake from HK's own title art (vheart_title), which is loaded at the title screen
-            var tex = LoadCompanionTex("hklogo");
-            if (tex == null)
-            {
-                var src = FindLoadedTexture("vheart_title", "vheart_title");
-                if (src != null) { tex = BakeRegion(src, new Rect(0f, 0f, 1f, 1f)); if (tex != null) CacheCompanionTex("hklogo", tex); }
-                Dbg($"HKDS logo bake src={(src != null ? src.name : "none")} ok={(tex != null)}");
-            }
-            if (tex == null) { logoNeedsBake = true; return; }   // title art not loaded yet — retry later
-            titleLogoSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
-            Dbg($"HKDS logo {tex.width}x{tex.height} loaded");
-        }
-        catch (Exception e) { Debug.Log($"HKDS logo error {e.Message}"); }
     }
 
     // ==== Main-screen Focus-cluster lift ==================================================================

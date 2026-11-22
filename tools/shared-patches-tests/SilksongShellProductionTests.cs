@@ -55,7 +55,7 @@ public partial class SilksongShellProductionTests
         foreach(var path in new[]{"body","hud-header","tabs","actions"})
             Assert.False(Child(live.Root,path).gameObject.activeInHierarchy,$"Gameplay role '{path}' remained visible during pause");
         Assert.True(Child(live.Root,"title-card/logo").gameObject.activeInHierarchy);
-        Assert.Same(DsLogoArt.Sprite,Child(live.Root,"title-card/logo").GetComponent<Image>().sprite);
+        Assert.Same(SsTitleLogoArt.Sprite,Child(live.Root,"title-card/logo").GetComponent<Image>().sprite);
         var hud=Field<DsHudView>(live.Shell,"_hud");Assert.False(Field<bool>(hud,"_wanted"));
         var view=Field<DsMapView>(Page(live.Shell,4),"_view");Assert.False(Field<bool>(view,"_visible"));
         Call(hud,"LateUpdate");Call(view,"LateTick");
