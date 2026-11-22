@@ -130,6 +130,47 @@ class SkinNormalizerTest {
     }
 
     @Test
+    fun `a Thunderstore manifest names a single loader-folder pack`() {
+        val manifest = "{\n  \"name\": \"GhostOfPharloom_for_Customizer\",\n  \"version_number\": \"1.0.0\"\n}"
+        val prepared = prepare(
+            listOf(
+                RawZipFixture.Entry("manifest.json".toByteArray(), manifest.toByteArray()),
+                RawZipFixture.Entry("plugins/Customizer/Knight.png".toByteArray(), TinyPngFixture.rgba()),
+            ),
+        ).single() as CandidatePreparationResult.Ready
+        assertEquals("GhostOfPharloom for Customizer", prepared.candidate.name)
+    }
+
+    @Test
+    fun `an untrusted or oversized manifest name keeps the folder name`() {
+        for (manifest in listOf(
+            "{\"name\": \"../evil\\u202e\"}",
+            "{\"name\": \"\"}",
+            "{\"name\": \"Big\"}" + " ".repeat(70000),
+        )) {
+            val prepared = prepare(
+                listOf(
+                    RawZipFixture.Entry("manifest.json".toByteArray(), manifest.toByteArray()),
+                    RawZipFixture.Entry("Pack/Knight.png".toByteArray(), TinyPngFixture.rgba()),
+                ),
+            ).single() as CandidatePreparationResult.Ready
+            assertEquals("Pack", prepared.candidate.name)
+        }
+    }
+
+    @Test
+    fun `a manifest does not rename packs in a multi-skin archive`() {
+        val results = prepare(
+            listOf(
+                RawZipFixture.Entry("manifest.json".toByteArray(), "{\"name\": \"Bundle\"}".toByteArray()),
+                RawZipFixture.Entry("Outer/A/Knight.png".toByteArray(), TinyPngFixture.rgba()),
+                RawZipFixture.Entry("Outer/B/Knight.png".toByteArray(), TinyPngFixture.rgba()),
+            ),
+        )
+        assertEquals(listOf("A", "B"), results.map { (it as CandidatePreparationResult.Ready).candidate.name })
+    }
+
+    @Test
     fun `undecodable legacy folder names fall back to the archive name`() {
         // GBK bytes without the UTF-8 flag: not decodable as a name.
         val legacy = byteArrayOf(0xC4.toByte(), 0xE3.toByte(), 0xBA.toByte(), 0xC3.toByte())

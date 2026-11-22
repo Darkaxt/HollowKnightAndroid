@@ -121,6 +121,9 @@ class SkinNormalizer(
         ownRoot(stagingRoot)
         createDirectory(stagingRoot, stagingOwner)
         val mapper = SkinCatalogMapper(catalog, limits)
+        // #62: a single-skin Thunderstore package is named after its package, not a loader folder
+        // ("Customizer", "Spritesheets") or an author's internal folder name.
+        val packageName = if (candidates.candidates.size == 1) packageName(authorized, archiveIdentity) else null
         val results = mutableListOf<CandidatePreparationResult>()
         for ((index, candidate) in candidates.candidates.withIndex()) {
             val key = try {
@@ -157,6 +160,7 @@ class SkinNormalizer(
                         key,
                         mapped.value,
                         candidates.warnings.takeIf { index == 0 }.orEmpty(),
+                        packageName,
                         candidateRoot,
                         stagingOwner,
                     )
@@ -195,6 +199,7 @@ class SkinNormalizer(
         candidateKey: String,
         mapping: CatalogMapping,
         archiveWarnings: List<SkinWarning>,
+        packageName: String?,
         stagingRoot: File,
         stagingOwner: File,
     ): SkinResult<PreparedSkinCandidate> = try {
@@ -324,7 +329,7 @@ class SkinNormalizer(
                 candidateKey,
                 rawPrefix.copyOf(),
                 layoutCode,
-                candidateName(rawPrefix, candidateFlags, candidateKey, quarantined.archiveName),
+                packageName ?: candidateName(rawPrefix, candidateFlags, candidateKey, quarantined.archiveName),
                 contentSha256,
                 receiptBytes,
                 SkinIdentity.sha256(receiptBytes),
@@ -463,6 +468,41 @@ class SkinNormalizer(
             leaf.toString(Charsets.US_ASCII)
         } else null
         return if (candidate != null && validName(candidate)) candidate else fallbackName(candidateKey, archiveName)
+    }
+
+    /**
+     * The `name` of a Thunderstore root manifest.json, read as untrusted data: a bounded entry,
+     * only [A-Za-z0-9_] accepted (Thunderstore's own rule), underscores shown as spaces. Any
+     * problem just means no package name; the folder name is used as before.
+     */
+    private fun packageName(archive: AuthorizedZip, archiveIdentity: SkinNodeIdentity): String? {
+        if (archive.archive.format != SkinArchiveFormat.ZIP) return null
+        val entry = archive.archive.entries.firstOrNull {
+            !it.directory && it.rawName.contentEquals(PACKAGE_MANIFEST) && it.uncompressedSize in 1..PACKAGE_MANIFEST_BYTES
+        } ?: return null
+        if (entry.method != 0 && entry.method != 8) return null
+        return try {
+            val bytes = fs.openSeekableNoFollow(archive.archive.file).use { zip ->
+                if (zip.size() != archiveIdentity.size) return null
+                val slice: InputStream = SliceInputStream(zip, entry.dataOffset, entry.compressedSize)
+                val source = if (entry.method == 8) InflaterInputStream(slice, Inflater(true)) else slice
+                source.use { input ->
+                    val buffer = ByteArray(PACKAGE_MANIFEST_BYTES.toInt() + 1)
+                    var count = 0
+                    while (count < buffer.size) {
+                        val read = input.read(buffer, count, buffer.size - count)
+                        if (read < 0) break
+                        count += read
+                    }
+                    if (count > PACKAGE_MANIFEST_BYTES) return null
+                    buffer.copyOf(count)
+                }
+            }
+            PACKAGE_NAME.find(String(bytes, Charsets.UTF_8))?.groupValues?.get(1)
+                ?.replace('_', ' ')?.trim()?.takeIf { validName(it) }
+        } catch (error: Exception) {
+            null
+        }
     }
 
     private fun canonicalArchiveName(name: String, archiveSha256: String): String {
@@ -629,6 +669,9 @@ class SkinNormalizer(
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it.toInt() and 0xff) }
 
     private companion object {
+        val PACKAGE_MANIFEST = "manifest.json".toByteArray(Charsets.US_ASCII)
+        const val PACKAGE_MANIFEST_BYTES = 65536L
+        val PACKAGE_NAME = Regex("\"name\"\\s*:\\s*\"([A-Za-z0-9_]{1,80})\"")
         val BIDI_CONTROLS = setOf('؜', '‎', '‏', '‪', '‫', '‬', '‭', '‮', '⁦', '⁧', '⁨', '⁩')
         val MAPPING_REJECTION_CODES = setOf(SkinImportCode.TARGET_COLLISION, SkinImportCode.LIMIT_EXCEEDED)
         val PNG_REJECTION_CODES = setOf(SkinImportCode.PNG_INVALID, SkinImportCode.LIMIT_EXCEEDED)
