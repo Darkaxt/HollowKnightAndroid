@@ -4,8 +4,10 @@
 // The old lower screen deep-cloned the game's "Inv" pane and then fought the
 // clone's FSMs to keep it populated; when one donor was missing the pane stayed
 // parked and drew nothing. This page reads the same PlayerData fields the
-// game's FSMs read, in the game's own order, and draws them in the shared frame's
-// icon grid with a description column -- the Silksong Inventory layout.
+// game's FSMs read, in the game's own order, and draws them in Silksong's three
+// columns: the Knight (HkKnightPanel: nail, mask and vessel pieces, spells round
+// Focus, geo and essence), a three-wide grid of equipment and items, and the
+// description.
 //
 // Art still comes from the game: the inventory prefab's own components carry
 // every sprite as a serialized field (InvNailSprite.level1-5,
@@ -96,6 +98,9 @@ namespace HollowKnightPatches.Lower
             // Renderers whose sprite the game's FSMs change with progress (spell
             // level, heart pieces). Read on every poll; no allocation.
             public static SpriteRenderer Fireball, Quake, Scream, Focus, HeartPieces;
+            // The Dream Nail and Dreamgate carry no InvItemDisplay, so their art is the
+            // renderer on the pane object itself (the grid drew its placeholder before).
+            public static SpriteRenderer DreamNail, DreamGate;
 
             static readonly string[] Named =
             {
@@ -127,6 +132,7 @@ namespace HollowKnightPatches.Lower
                 for (int i = 0; i < Nail.Length; i++) Nail[i] = null;
                 ByBool.Clear(); ByName.Clear(); Vessel = null;
                 Fireball = Quake = Scream = Focus = HeartPieces = null;
+                DreamNail = DreamGate = null;
                 Version++;
             }
 
@@ -171,6 +177,17 @@ namespace HollowKnightPatches.Lower
                         case "Spell Focus": if (Focus == null) Focus = RendererOf(t); continue;
                         case "Heart Pieces": if (HeartPieces == null) HeartPieces = RendererOf(t); continue;
                     }
+                    string lower = n.ToLowerInvariant();
+                    if (lower.Contains("dream"))
+                    {
+                        bool gate = lower.Contains("gate");
+                        var r = RendererOf(t);
+                        if (r != null && r.sprite != null)
+                        {
+                            if (gate && DreamGate == null) { DreamGate = r; Debug.Log("[HkInventory] dreamgate art: " + n + " " + r.sprite.name); }
+                            else if (!gate && DreamNail == null) { DreamNail = r; Debug.Log("[HkInventory] dream nail art: " + n + " " + r.sprite.name); }
+                        }
+                    }
                     if (Array.IndexOf(Named, n) < 0 || ByName.ContainsKey(n)) continue;
                     Sprite s = null;
                     var disp = t.GetComponent<InvItemDisplay>();
@@ -204,6 +221,7 @@ namespace HollowKnightPatches.Lower
                 h = h * 31 + Id(Live(Scream));
                 h = h * 31 + Id(Live(Focus));
                 h = h * 31 + Id(Live(HeartPieces));
+                h = h * 31 + Id(Live(DreamNail));
                 return h;
             }
 
@@ -235,13 +253,17 @@ namespace HollowKnightPatches.Lower
 
         // ── Layout ──────────────────────────────────────────────────────────
 
-        const float Gutter = 60f;
+        // Silksong's columns (DsInventoryScreen), so the two pages line up.
+        const float LeftX = 20f, LeftW = 420f;
+        const float GridX = 470f, GridW = 400f;
+        const float DetailX = 900f, DetailW = 320f;
         const float PollSeconds = 0.5f;
 
         readonly DsIconGrid _grid = new DsIconGrid();
+        readonly HkKnightPanel _knight = new HkKnightPanel();
+        HkKnightPanel.Kit _kit = new HkKnightPanel.Kit();
         readonly List<DsSection> _sections = new List<DsSection>(4);
-        readonly DsSection _secKnight = new DsSection(null, DsTheme.InkDim);
-        readonly DsSection _secEquip = new DsSection(" ", DsTheme.InkDim);
+        readonly DsSection _secEquip = new DsSection(null, DsTheme.InkDim);
         readonly DsSection _secItems = new DsSection(" ", DsTheme.InkDim);
         float _nextPoll;
         int _signature = int.MinValue;
@@ -253,27 +275,30 @@ namespace HollowKnightPatches.Lower
 
         public HkInventoryScreen()
         {
-            _sections.Add(_secKnight);
             _sections.Add(_secEquip);
             _sections.Add(_secItems);
         }
 
         public void Build(RectTransform host)
         {
-            var layout = DsLayout.Current;
-            float w = layout.Width;
-            float colH = layout.Body.height - DsTheme.Pad * 2f;
-            float detailW = Mathf.Round(Mathf.Clamp(w * 0.30f, 280f, 420f));
-            float gridX = DsTheme.Pad;
-            float gridW = w - DsTheme.Pad * 2f - Gutter - detailW;
-            float detailX = gridX + gridW + Gutter;
+            float colH = DsLayout.Current.Body.height - DsTheme.Pad * 2f;
 
-            DsWidgets.VRule(host, "split-detail", gridX + gridW + Gutter * 0.5f, DsTheme.Pad, colH);
+            _knight.Build(host, LeftX, DsTheme.Pad, LeftW, colH);
+            DsWidgets.VRule(host, "split-items", (LeftX + LeftW + GridX) * 0.5f, DsTheme.Pad, colH);
+            DsWidgets.VRule(host, "split-detail", (GridX + GridW + DetailX) * 0.5f, DsTheme.Pad, colH);
+
+            // One description column and one cursor for both halves, as on Silksong.
+            _knight.OnSelect = (name, desc, layoutRect) =>
+            {
+                _grid.ShowDetail(name, desc);
+                float bodyY = DsLayout.Current.Body.y;
+                _grid.SetExternalTarget(new Rect(layoutRect.x, layoutRect.y - bodyY, layoutRect.width, layoutRect.height),
+                                        DsFrame.SelectionCursor().GlowColor, name);
+            };
 
             _grid.EmptyMessage = "Nothing collected yet";
-            int columns = Mathf.Clamp(Mathf.RoundToInt(gridW / 150f), 3, 6);
-            _grid.Build(host, columns, gridX, gridW,
-                        new Rect(detailX, DsTheme.Pad, detailW, colH), false, 0f);
+            _grid.Build(host, 3, GridX, GridW, new Rect(DetailX, DsTheme.Pad, DetailW, colH), false,
+                        GridX - (LeftX + LeftW + GridX) * 0.5f);
             _built = true;
             Refresh(true);
         }
@@ -299,7 +324,9 @@ namespace HollowKnightPatches.Lower
 
         public void OnGesture(DsGesture g)
         {
-            if (_built) _grid.OnGesture(g);
+            if (!_built) return;
+            if (g.Type == DsGestureType.Tap && _knight.OnTap(DsFrame.ToLayout(g.Position))) return;
+            _grid.OnGesture(g);
         }
 
         // ── Data ────────────────────────────────────────────────────────────
@@ -312,8 +339,9 @@ namespace HollowKnightPatches.Lower
                 {
                     _signature = 0;
                     _grid.EmptyMessage = "No game loaded";
-                    _secKnight.Items.Clear(); _secEquip.Items.Clear(); _secItems.Items.Clear();
+                    _secEquip.Items.Clear(); _secItems.Items.Clear();
                     _grid.SetSections(_sections);
+                    _knight.Set(null);
                 }
                 return;
             }
@@ -330,10 +358,12 @@ namespace HollowKnightPatches.Lower
 
             _grid.EmptyMessage = "Nothing collected yet";
             CheckLanguage();
-            _secKnight.Items.Clear(); _secEquip.Items.Clear(); _secItems.Items.Clear();
+            _secEquip.Items.Clear(); _secItems.Items.Clear();
+            _kit = new HkKnightPanel.Kit();
             try { Collect(pd); }
             catch (Exception e) { Debug.LogWarning("[HkInventory] collect: " + e.Message); }
             _grid.SetSections(_sections);
+            _knight.Set(_kit);
         }
 
         static int B(bool b) { return b ? 1 : 0; }
@@ -378,11 +408,17 @@ namespace HollowKnightPatches.Lower
         void Add(DsSection sec, string key, string suffix, Sprite icon, string badge = null,
                  string fallbackName = null, string suffixAlt = null)
         {
+            sec.Items.Add(Make(key, suffix, icon, badge, fallbackName, suffixAlt));
+        }
+
+        static DsItem Make(string key, string suffix, Sprite icon, string badge = null,
+                           string fallbackName = null, string suffixAlt = null)
+        {
             string name = LocFirst(null, "INV_NAME_" + suffix, suffixAlt != null ? "INV_NAME_" + suffixAlt : null);
             string desc = Loc("INV_DESC_" + suffix);
             if (desc.Length == 0 && suffixAlt != null) desc = Loc("INV_DESC_" + suffixAlt);
             if (name.Length == 0) name = fallbackName ?? key;
-            sec.Items.Add(new DsItem
+            return new DsItem
             {
                 Key = key,
                 Name = name,
@@ -390,49 +426,51 @@ namespace HollowKnightPatches.Lower
                 Icon = icon,
                 Tint = Color.white,
                 Badge = badge,
-            });
+            };
         }
 
         static string Count(int n) { return n > 0 ? n.ToString() : null; }
 
         void Collect(PlayerData pd)
         {
-            // Nail, spells, nail arts and the Dream Nail: the Knight's own kit.
+            // The Knight's own kit goes to the character column: the nail, Focus
+            // with the spells, nail arts and Dream Nail round it, the mask and
+            // vessel pieces, geo and essence.
             int up = Mathf.Clamp(pd.nailSmithUpgrades, 0, 4);
-            Add(_secKnight, "nail", "NAIL" + (up + 1), Art.Nail[up] ?? Art.Nail[0], null, "Nail");
-
-            Add(_secKnight, "focus", "SPELL_FOCUS", Art.Live(Art.Focus), null, "Focus");
+            _kit.Nail = Make("nail", "NAIL" + (up + 1), Art.Nail[up] ?? Art.Nail[0], null, "Nail");
+            _kit.Focus = Make("focus", "SPELL_FOCUS", Art.Live(Art.Focus), null, "Focus");
+            var ring = _kit.Ring;
             if (pd.fireballLevel > 0)
-                Add(_secKnight, "fireball", pd.fireballLevel >= 2 ? "SPELL_FIREBALL2" : "SPELL_FIREBALL1",
+                ring.Add(Make("fireball", pd.fireballLevel >= 2 ? "SPELL_FIREBALL2" : "SPELL_FIREBALL1",
                     Art.Live(Art.Fireball), null, pd.fireballLevel >= 2 ? "Shade Soul" : "Vengeful Spirit",
-                    pd.fireballLevel >= 2 ? "SPELL_FIREBALL1" : null);
+                    pd.fireballLevel >= 2 ? "SPELL_FIREBALL1" : null));
             if (pd.quakeLevel > 0)
-                Add(_secKnight, "quake", pd.quakeLevel >= 2 ? "SPELL_QUAKE2" : "SPELL_QUAKE1",
+                ring.Add(Make("quake", pd.quakeLevel >= 2 ? "SPELL_QUAKE2" : "SPELL_QUAKE1",
                     Art.Live(Art.Quake), null, pd.quakeLevel >= 2 ? "Descending Dark" : "Desolate Dive",
-                    pd.quakeLevel >= 2 ? "SPELL_QUAKE1" : null);
+                    pd.quakeLevel >= 2 ? "SPELL_QUAKE1" : null));
             if (pd.screamLevel > 0)
-                Add(_secKnight, "scream", pd.screamLevel >= 2 ? "SPELL_SCREAM2" : "SPELL_SCREAM1",
+                ring.Add(Make("scream", pd.screamLevel >= 2 ? "SPELL_SCREAM2" : "SPELL_SCREAM1",
                     Art.Live(Art.Scream), null, pd.screamLevel >= 2 ? "Abyss Shriek" : "Howling Wraiths",
-                    pd.screamLevel >= 2 ? "SPELL_SCREAM1" : null);
+                    pd.screamLevel >= 2 ? "SPELL_SCREAM1" : null));
+            if (pd.hasCyclone) ring.Add(Make("art_cyclone", "ART_CYCLONE", Art.Bool("hasCyclone"), null, "Cyclone Slash"));
+            if (pd.hasDashSlash) ring.Add(Make("art_dash", "ART_DASH", Art.Bool("hasDashSlash"), null, "Dash Slash"));
+            if (pd.hasUpwardSlash) ring.Add(Make("art_upper", "ART_UPPER", Art.Bool("hasUpwardSlash"), null, "Great Slash"));
 
-            if (pd.hasCyclone) Add(_secKnight, "art_cyclone", "ART_CYCLONE", Art.Bool("hasCyclone"), null, "Cyclone Slash");
-            if (pd.hasDashSlash) Add(_secKnight, "art_dash", "ART_DASH", Art.Bool("hasDashSlash"), null, "Dash Slash");
-            if (pd.hasUpwardSlash) Add(_secKnight, "art_upper", "ART_UPPER", Art.Bool("hasUpwardSlash"), null, "Great Slash");
-
+            Sprite dn = null;
             if (pd.hasDreamNail)
             {
-                Sprite dn = pd.dreamNailUpgraded ? Art.Bool("dreamNailUpgraded") : null;
-                if (dn == null) dn = Art.Bool("hasDreamNail") ?? Art.Bool("dreamNail");
-                Add(_secKnight, "dreamnail", pd.dreamNailUpgraded ? "DREAMNAIL_B" : "DREAMNAIL_A", dn,
-                    Count(pd.dreamOrbs), "Dream Nail", pd.dreamNailUpgraded ? "DREAMNAIL_A" : null);
+                dn = pd.dreamNailUpgraded ? Art.Bool("dreamNailUpgraded") : null;
+                if (dn == null) dn = Art.Bool("hasDreamNail") ?? Art.Bool("dreamNail") ?? Art.Live(Art.DreamNail);
+                ring.Add(Make("dreamnail", pd.dreamNailUpgraded ? "DREAMNAIL_B" : "DREAMNAIL_A", dn,
+                    null, "Dream Nail", pd.dreamNailUpgraded ? "DREAMNAIL_A" : null));
             }
-            if (pd.hasDreamGate) Add(_secKnight, "dreamgate", "DREAMGATE", Art.Bool("hasDreamGate"), null, "Dreamgate");
 
             // Mask shards and vessel fragments: always shown, as the game does.
+            // Their art already shows how many pieces are held.
             bool masksFull = pd.maxHealthBase >= pd.maxHealthCap;
             int pieces = Mathf.Clamp(pd.heartPieces, 0, 3);
-            Add(_secKnight, "heartpieces", masksFull ? "HEARTPIECE_ALL" : "HEARTPIECE_" + pieces,
-                Art.Live(Art.HeartPieces), masksFull ? null : pieces + "/4", "Mask Shards");
+            _kit.Masks = Make("heartpieces", masksFull ? "HEARTPIECE_ALL" : "HEARTPIECE_" + pieces,
+                Art.Live(Art.HeartPieces), null, "Mask Shards");
 
             bool vesselsFull = pd.MPReserveMax >= pd.MPReserveCap;
             int frags = Mathf.Clamp(pd.vesselFragments, 0, 2);
@@ -442,8 +480,17 @@ namespace HollowKnightPatches.Lower
                    : frags == 2 ? Art.Vessel.doublePieceSprite
                    : frags == 1 ? Art.Vessel.singlePieceSprite
                    : Art.Vessel.backboardSprite;
-            Add(_secKnight, "vessels", vesselsFull ? "SOULORBS_ALL" : "SOULORBS_" + frags, vs,
-                vesselsFull ? null : frags + "/3", "Vessel Fragments", vesselsFull ? "SOULORBS_2" : "SOULORBS_NONE");
+            _kit.Vessels = Make("vessels", vesselsFull ? "SOULORBS_ALL" : "SOULORBS_" + frags, vs,
+                null, "Vessel Fragments", vesselsFull ? "SOULORBS_2" : "SOULORBS_NONE");
+
+            // Counters, as Silksong's rosaries and shell shards: the figure is the description.
+            _kit.Geo = Make("geo", "GEO", Art.Name("Geo"), pd.geo.ToString(), "Geo");
+            _kit.HasEssence = pd.hasDreamNail;
+            _kit.Essence = new DsItem
+            {
+                Key = "essence", Name = LocFirst("Essence", "INV_NAME_ESSENCE", "INV_NAME_DREAMORBS"),
+                Description = pd.dreamOrbs.ToString(), Icon = dn, Tint = Color.white, Badge = pd.dreamOrbs.ToString(),
+            };
 
             // Abilities, keys and consumables, in Build Equipment List's order
             // with its gates (old HKDualScreen.Bottom.Inventory EQUIP_ORDER).
@@ -471,6 +518,7 @@ namespace HollowKnightPatches.Lower
                 Add(_secEquip, "flower", pd.xunFlowerBroken ? "FLOWER_BROKEN" : "FLOWER", Art.Name("Xun Flower"),
                     null, "Delicate Flower", "FLOWER");
             if (pd.hasGodfinder) Add(_secEquip, "godfinder", "GODFINDER", Art.Name("Godfinder"), null, "God Tuner");
+            if (pd.hasDreamGate) Add(_secEquip, "dreamgate", "DREAMGATE", Art.Bool("hasDreamGate") ?? Art.Live(Art.DreamGate), null, "Dreamgate");
 
             if (pd.simpleKeys > 0) Add(_secItems, "simplekey", "SIMPLEKEY", Art.Name("Simple Key"), Count(pd.simpleKeys), "Simple Key");
             if (pd.ore > 0) Add(_secItems, "ore", "ORE", Art.Name("Ore"), Count(pd.ore), "Pale Ore");
@@ -482,7 +530,6 @@ namespace HollowKnightPatches.Lower
             if (pd.trinket3 > 0 || pd.foundTrinket3) Add(_secItems, "trinket3", "TRINKET3", Art.Name("Trinket3"), pd.trinket3.ToString(), "King's Idol");
             if (pd.trinket4 > 0 || pd.foundTrinket4) Add(_secItems, "trinket4", "TRINKET4", Art.Name("Trinket4"), pd.trinket4.ToString(), "Arcane Egg");
 
-            Add(_secItems, "geo", "GEO", Art.Name("Geo"), pd.geo.ToString(), "Geo");
         }
     }
 }
