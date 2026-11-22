@@ -76,7 +76,26 @@ internal class SkinLibrarySession(
         }
         when (inputs) {
             is SkinResult.Error -> report(inputs)
-            is SkinResult.Ok -> when (val result = workflow.prepare(inputs.value) { completed, total ->
+            // A folder of several archives imports one archive at a time (bounded staging), then reports every source.
+            is SkinResult.Ok -> if (folder && inputs.value.size > 1) {
+                when (val result = workflow.importEach(inputs.value) { completed, total ->
+                    state = state.copy(message = "Importing $completed / $total",
+                        notice = SkinNotice(SkinNoticeKind.PREPARING, listOf(completed, total)))
+                    emit()
+                }) {
+                    is SkinResult.Error -> report(result)
+                    is SkinResult.Ok -> state = state.copy(
+                        message = result.value.joinToString("\n") { source ->
+                            "${source.displayName}: " + (source.error?.let { "${it.code} · ${it.detail}" }
+                                ?: source.results.joinToString("; ", transform = ::importText))
+                        },
+                        notice = result.value.firstNotNullOfOrNull { it.error }?.let {
+                            SkinNotice(SkinNoticeKind.ERROR, listOf(it.code.name, it.detail))
+                        } ?: SkinNotice(SkinNoticeKind.IMPORT_COMPLETE, listOf(result.value.sumOf { it.results.size })),
+                    )
+                }
+                readLibrary(preserveMessage = true)
+            } else when (val result = workflow.prepare(inputs.value) { completed, total ->
                 state = state.copy(message = "Preparing $completed / $total",
                     notice = SkinNotice(SkinNoticeKind.PREPARING, listOf(completed, total)))
                 emit()

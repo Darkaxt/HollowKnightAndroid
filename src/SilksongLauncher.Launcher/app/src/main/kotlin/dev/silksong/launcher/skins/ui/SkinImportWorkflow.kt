@@ -15,6 +15,11 @@ internal data class SkinImportOutcome(
     val results: List<SkinImportSummary>,
     val error: SkinResult.Error? = null,
 )
+internal data class SkinBatchOutcome(
+    val displayName: String?,
+    val results: List<SkinImportSummary>,
+    val error: SkinResult.Error? = null,
+)
 internal class SkinReplaceConfirmation internal constructor(val request: SkinReplaceRequest)
 
 /**
@@ -53,6 +58,45 @@ internal class SkinImportWorkflow(private val service: SkinImportService) {
             return if (cleanup is SkinResult.Error) cleanup else blocked("Preparation cancelled; owned handles released")
         }
         return SkinResult.Ok(results)
+    }
+
+    /**
+     * Folder batches: prepare, commit and clean one archive at a time, so a whole library never stages at once
+     * (the importer keeps at most three live preparations). Stops at the first uncertain commit; that handle stays
+     * owned for an explicit cancel.
+     */
+    @Synchronized fun importEach(
+        inputs: List<SkinImportInput>,
+        progress: (completed: Int, total: Int) -> Unit = { _, _ -> },
+    ): SkinResult<List<SkinBatchOutcome>> {
+        if (!service.available) return unavailable()
+        if (owned.isNotEmpty() || cancelRequested.get()) return blocked("This preparation owner is not empty or was cancelled")
+        if (inputs.size > SkinLimits.V1.providerRows) return SkinResult.Error(SkinImportCode.LIMIT_EXCEEDED, "Too many inputs")
+        val outcomes = mutableListOf<SkinBatchOutcome>()
+        progress(0, inputs.size)
+        for ((index, input) in inputs.withIndex()) {
+            if (cancelRequested.get()) break
+            outcomes += when (val prepared = service.prepare(input)) {
+                is SkinResult.Error -> SkinBatchOutcome(input.displayName, emptyList(), prepared)
+                is SkinResult.Ok -> {
+                    val handleId = prepared.value.handleId
+                    owned[handleId] = prepared.value
+                    val attempt = service.importAttempt(handleId)
+                    if (attempt.disposition == SkinHandleDisposition.CLEANED) forget(handleId) else uncertain += handleId
+                    when (val result = attempt.result) {
+                        is SkinResult.Error -> SkinBatchOutcome(input.displayName, emptyList(), result)
+                        is SkinResult.Ok -> SkinBatchOutcome(input.displayName, result.value)
+                    }
+                }
+            }
+            progress(index + 1, inputs.size)
+            if (uncertain.isNotEmpty()) break
+        }
+        if (cancelRequested.get()) {
+            val cleanup = cancel()
+            if (cleanup is SkinResult.Error) return cleanup
+        }
+        return SkinResult.Ok(outcomes)
     }
 
     @Synchronized fun importAll(): SkinResult<List<SkinImportOutcome>> {

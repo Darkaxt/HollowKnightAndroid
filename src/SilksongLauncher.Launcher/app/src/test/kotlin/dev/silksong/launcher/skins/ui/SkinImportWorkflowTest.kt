@@ -121,6 +121,40 @@ class SkinImportWorkflowTest {
         assertEquals(1, workflow.handles().size)
     }
 
+    @Test fun `folder batch imports a whole library one archive at a time under the live preparation cap`() {
+        val service = Service()
+        var live = 0
+        val capped = object : SkinImportService by service {
+            override fun prepare(input: SkinImportInput): SkinResult<SkinPreparationHandle> {
+                check(live < 3) { "Cancel existing preparations before importing another archive" }
+                live++
+                return SkinResult.Ok(SkinPreparationHandle(UUID.randomUUID(), service.handle.candidates)).also { input.openOnce().close() }
+            }
+            override fun importAttempt(handleId: UUID): SkinImportAttempt<List<SkinImportSummary>> {
+                live--
+                return SkinImportAttempt(service.commitImport(handleId))
+            }
+        }
+        val workflow = SkinImportWorkflow(capped)
+        val inputs = (0 until 14).map { SkinImportInput.SelectedFile("pack$it.zip") { ByteArrayInputStream(byteArrayOf(1)) } }
+        val progress = mutableListOf<Int>()
+        val outcomes = (workflow.importEach(inputs) { done, _ -> progress += done } as SkinResult.Ok).value
+        assertEquals(inputs.map { it.displayName }, outcomes.map { it.displayName })
+        assertTrue(outcomes.all { it.error == null && it.results.first().code == SkinImportCode.OK })
+        assertEquals((0..14).toList(), progress)
+        assertEquals(0, live)
+        assertTrue(workflow.handles().isEmpty())
+    }
+
+    @Test fun `folder batch stops at an uncertain commit and keeps that handle for cancel`() {
+        val service = Service().apply { commitFailure = SkinResult.Error(SkinImportCode.INDETERMINATE, "unknown") }
+        val workflow = SkinImportWorkflow(service)
+        val outcomes = (workflow.importEach(listOf(input(), input(), input())) as SkinResult.Ok).value
+        assertEquals(1, outcomes.size)
+        assertEquals(SkinImportCode.INDETERMINATE, outcomes.single().error!!.code)
+        assertEquals(listOf(service.handle), workflow.handles())
+    }
+
     private fun input() = SkinImportInput.SelectedFile("input") { ByteArrayInputStream(byteArrayOf(1)) }
     private fun prepared(service: Service) = SkinImportWorkflow(service).also { it.prepare(listOf(input())) }
     private fun target() = SkinReplaceTarget("local-target", "c".repeat(64), "d".repeat(64), "e".repeat(64))
