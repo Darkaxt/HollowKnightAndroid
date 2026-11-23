@@ -1,8 +1,9 @@
 // HkCollectibles — #37 collectible pins and the completion checklist for Hollow Knight.
 //
 // The table (HkCollectibleData) is generated from the game's own scenes by
-// tools/collectibles. Pins hang on the rooms of HkMapView's private map clone,
-// so they appear exactly where the player has mapped and nowhere else.
+// tools/collectibles. Pins hang on the rooms of HkMapView's private map clone
+// and (#69) on the game's own map, so they appear exactly where the player has
+// mapped and nowhere else.
 //
 // Scene-bool pickups (grubs, mask shards, vessel fragments) are written to
 // SceneData when the player leaves the room, so their pin goes then; charms
@@ -116,6 +117,7 @@ namespace HollowKnightPatches.Lower
                 {
                     var t = all[i];
                     if (t == area.transform || _rooms.ContainsKey(t.name)) continue;
+                    if (t.name.StartsWith(PinPrefix, StringComparison.Ordinal)) continue;   // our own pins
                     if (t.GetComponent<SpriteRenderer>() == null) continue;
                     _rooms[t.name] = t;
                     _areas[t.name] = label;
@@ -152,6 +154,47 @@ namespace HollowKnightPatches.Lower
                     Shown = t.gameObject.activeInHierarchy,
                 };
             }
+        }
+
+        /// <summary>Name prefix of every CollectiblePins object.</summary>
+        public const string PinPrefix = "DsPin ";
+
+        // ── #69 pins on the game's own map ──────────────────────────────────
+
+        static CollectiblePins _livePins;
+        static MapIndex _liveIndex;
+        static float _nextLive;
+
+        /// <summary>Pins shown on the game's own map at the last refresh.</summary>
+        public static int LivePinsShown { get { return _livePins != null ? _livePins.Shown : 0; } }
+
+        /// <summary>Keep pins on the game's own map current, as Silksong does; cheap, once a second.</summary>
+        public static void TickLivePins()
+        {
+            var t = Table;
+            if (t == null) return;
+            var gm = GameManager.UnsafeInstance;
+            var go = gm != null ? gm.gameMap : null;
+            var map = go != null ? go.GetComponent<GameMap>() : null;
+            if (map == null) return;
+            bool rebound = _liveIndex == null || _liveIndex.Root != map.gameObject;
+            if (!rebound && Time.unscaledTime < _nextLive) return;
+            _nextLive = Time.unscaledTime + 1f;
+            try
+            {
+                if (_livePins == null) _livePins = new CollectiblePins(t);
+                if (rebound)
+                {
+                    _livePins.Clear();          // the old map, and its pins, went with the save
+                    _liveIndex = new MapIndex(map);
+                }
+                int sortLayer = 0, sortOrder = 0;
+                var cr = map.compassIcon != null ? map.compassIcon.GetComponentInChildren<SpriteRenderer>(true) : null;
+                if (cr != null) { sortLayer = cr.sortingLayerID; sortOrder = cr.sortingOrder; }
+                _livePins.Refresh(_liveIndex.RoomOf, Collected, map.transform, PinSize,
+                                  map.transform.position.z - 0.5f, map.gameObject.layer, sortLayer, sortOrder);
+            }
+            catch (Exception e) { Debug.LogWarning("[HkCollect] live pins: " + e.Message); _nextLive = Time.unscaledTime + 10f; }
         }
 
         // ── checklist ───────────────────────────────────────────────────────

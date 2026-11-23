@@ -190,6 +190,7 @@ public partial class DualScreenV2 : MonoBehaviour
         PollCommands();      // QA command file (adb-reachable), also before routing is ready
         if (_releaseState == null || !_releaseState.CanRoute) return;
         BindGameManager();
+        SsNativeLoadoutPresets.Tick();   // #69: preset selector in the game's own Tools pane
         // Native pause/menu scalars reconcile missed callbacks and replacements
         // before any companion input can be admitted. Gameplay stays true paused.
         OnGamePauseChanged(NativeGamePaused());

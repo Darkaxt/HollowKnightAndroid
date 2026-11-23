@@ -98,24 +98,6 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
     /// <summary>The shared grid, so the tool list and its detail pane are one thing.</summary>
     DsIconGrid Grid => _grid;
 
-    // #56 loadout presets, in the header: which preset, SAVE and LOAD. The status
-    // line under the crest says what a SAVE or LOAD did, or why it was refused.
-    int _preset = 1;
-    bool _presetSaved, _presetStale = true;
-    TmpText _presetStatus;
-    float _presetStatusUntil;
-
-    Action _cyclePreset, _savePreset, _loadPreset;
-    string _presetLabel = "PRESET 1";
-    void RefreshPresetLabel() { _presetLabel = "PRESET " + _preset; }
-
-    void PresetStatus(string text)
-    {
-        if (_presetStatus == null) return;
-        _presetStatus.text = text ?? "";
-        _presetStatusUntil = Time.unscaledTime + 2.5f;
-    }
-
     public string Id => "loadout";
     public string Title => "CREST";
     public bool Available => DsGameData.InGame;
@@ -142,10 +124,6 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
                                      DsTheme.Ink, TmpAlign.Center);
         if (_crestName != null) DsWidgets.Place(_crestName.rectTransform, 0f, 14f, LeftW, 52f);
 
-        _presetStatus = DsWidgets.Label(_crestBox, "preset-status", "", DsTheme.SmallSize,
-                                        DsTheme.Accent, TmpAlign.Center);
-        if (_presetStatus != null) DsWidgets.Place(_presetStatus.rectTransform, 0f, _crestH - 44f, LeftW, 34f);
-
         _crestImage = DsWidgets.Icon(_crestBox, "crest-art", null, Color.white);
         DsWidgets.Place(_crestImage.rectTransform, LeftW * 0.5f - 110f, 90f, 220f, 220f);
 
@@ -169,7 +147,7 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
         Refresh(force: true);
     }
 
-    public void OnShow() { _presetStale = true; Refresh(force: true); }
+    public void OnShow() { Refresh(force: true); }
     public void OnHide() { ShowCrestPicker(false); _tween.Cancel(); }
 
     public void Tick(float dt)
@@ -187,11 +165,6 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
         }
         _grid.Tick();
         _tween.Tick(dt);
-        if (_presetStatusUntil > 0f && Time.unscaledTime >= _presetStatusUntil)
-        {
-            _presetStatusUntil = 0f;
-            if (_presetStatus != null) _presetStatus.text = "";
-        }
     }
 
     // ── data ────────────────────────────────────────────────────────────────
@@ -1269,21 +1242,6 @@ public class DsLoadoutScreen : IDsScreen, IDsActionBar
     /// </summary>
     public void CollectActions(List<DsAction> into)
     {
-        if (DsGameData.InGame && !_choosingCrest)
-        {
-            if (_presetStale) { _presetStale = false; _presetSaved = DsLoadoutPresets.Exists(_preset); }
-            // Built once: this runs every frame and must not allocate.
-            if (_cyclePreset == null)
-            {
-                _cyclePreset = () => { _preset = _preset % DsLoadoutPresets.Count + 1; _presetSaved = DsLoadoutPresets.Exists(_preset); RefreshPresetLabel(); };
-                _savePreset = () => { PresetStatus(DsLoadoutPresets.Save(_preset)); _presetSaved = DsLoadoutPresets.Exists(_preset); };
-                _loadPreset = () => { PresetStatus(DsLoadoutPresets.Load(_preset)); _socketTool = null; Refresh(force: true); };
-                RefreshPresetLabel();
-            }
-            into.Add(new DsAction(_presetLabel, _cyclePreset));
-            into.Add(new DsAction("SAVE", _savePreset));
-            into.Add(new DsAction("LOAD", _presetSaved ? _loadPreset : null, !_presetSaved));
-        }
         // While choosing, the only things to offer are a way out and a way to
         // take what is under the arrows. Equipping a TOOL into a crest you are
         // in the middle of replacing is not a useful thing to be able to do.

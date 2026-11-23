@@ -13,7 +13,7 @@ public partial class HKDualScreen
         "help | report | state | pause | mods | skins | skin <list|detail|row N|left N|right N|close> | tab <inventory|charms|guide|journal|map> | tabart [dump|set <lo> <hi> <minKept>] | companion <0|1|config> | " +
         "mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | hazard | fly <x> <y> | dash | travel <scene> <gate> | " +
         "inv [fsm|send <event>] | fsm find <text> | fsm show|send|set|goto <object>[#n]|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | " +
-        "save | load <slot> | newgame <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist | why <scene>] | mapsetup | mapdump\n";
+        "save | load <slot> | newgame <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [why <scene>] | mapsetup | mapdump\n";
 
     // QA: one hero nail hit on the nearest live enemy through HealthManager.Hit, as a slash
     // would land. The optional hp first sets the target's health, e.g. above the boss threshold.
@@ -62,14 +62,14 @@ public partial class HKDualScreen
             case "help": return CommandHelp;
             case "report": return CommandReport(gm, ui);
             case "collect":
-                // #37: what the checklist shows and how many pins are on the map; "checklist" toggles the panel.
-                if (a.Length > 1 && a[1] == "checklist") HollowKnightPatches.Lower.HkMapScreen.RequestChecklistToggle = true;
+                // #37: found/total per collectible kind and how many pins are on the map.
                 // #47: "collect why <scene prefix>" says why each spot there is or is not pinned.
                 if (a.Length > 2 && a[1] == "why")
                     return HollowKnightPatches.Lower.HkMapView.Last != null
                         ? HollowKnightPatches.Lower.HkMapView.Last.WhyReport(a[2]) : "error no map view";
                 return "collect " + HollowKnightPatches.Lower.HkMapScreen.ChecklistReport() +
-                       " pins=" + HollowKnightPatches.Lower.HkMapView.LastPinsShown;
+                       " pins=" + HollowKnightPatches.Lower.HkMapView.LastPinsShown +
+                       " livepins=" + HollowKnightPatches.Lower.HkCollectibles.LivePinsShown;
             case "state": return CommandState(gm, ui);
             case "mapsetup":
             {
@@ -116,11 +116,13 @@ public partial class HKDualScreen
             case "mods-list": return CommandModsList();
             case "preset":
             {
+                // #69: "preset" alone reports the Charms-pane selector; "pos x y" moves it, "step +1|-1" switches.
+                if (a.Length == 1 || a[1] == "pos" || a[1] == "step") return HollowKnightPatches.Lower.HkNativeCharmPresets.Command(a);
                 int n;
-                if (a.Length < 3 || !int.TryParse(a[2], out n)) return "error preset <save|load> N";
+                if (a.Length < 3 || !int.TryParse(a[2], out n)) return "error preset [pos x y | step N | save N | load N]";
                 if (a[1] == "save") return "ok " + HollowKnightPatches.Lower.HkCharmPresets.Save(n);
                 if (a[1] == "load") return "ok " + HollowKnightPatches.Lower.HkCharmPresets.Load(n);
-                return "error preset <save|load> N";
+                return "error preset [pos x y | step N | save N | load N]";
             }
             case "assists": return HollowKnightGameplayFeatures.DeathReport() + "\n" + HollowKnightCheats.AssistReport();
             case "mod":

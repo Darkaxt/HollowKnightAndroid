@@ -1,7 +1,7 @@
-// HkCharmPresets -- #56 loadout presets for the Charms pane (behaviour reference:
-// Nexus mod HK130 CharmPresets; no mod code). A preset is the list of equipped
-// charm numbers, stored per save profile next to the game's own saves. Loading
-// equips through the same path the pane's EQUIP button uses, under its rules.
+// HkCharmPresets -- #56 loadout presets: the list of equipped charm numbers,
+// stored per save profile next to the game's own saves, plus which preset is
+// active. #69 moved the controls into the game's own Charms pane
+// (HkNativeCharmPresets); `preset save|load N` stays as a QA command.
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System;
@@ -40,6 +40,61 @@ namespace HollowKnightPatches.Lower
             return null;
         }
 
+        static int _activeSlot = -1, _active = 1;
+
+        /// <summary>The preset the selector shows, per save slot (1 when never set).</summary>
+        public static int Active
+        {
+            get
+            {
+                var pd = PlayerData.instance;
+                if (pd == null) return 1;
+                int slot = Slot(pd);
+                if (slot != _activeSlot)
+                {
+                    _activeSlot = slot;
+                    _active = 1;
+                    try
+                    {
+                        int n;
+                        string path = ActivePath(slot);
+                        if (File.Exists(path) && int.TryParse(File.ReadAllText(path).Trim(), out n) && n >= 1 && n <= Count) _active = n;
+                    }
+                    catch { }
+                }
+                return _active;
+            }
+        }
+
+        static string ActivePath(int profile) =>
+            Path.Combine(Application.persistentDataPath, "dualsouls-loadout-presets", "hollow-knight",
+                         "profile-" + profile, "active.txt");
+
+        /// <summary>
+        /// #69, from the Charms pane, after the pane's own bench and binding checks:
+        /// keep the current charms in the active preset, then equip <paramref name="to"/>.
+        /// A preset never used before starts as a copy of the current charms.
+        /// </summary>
+        public static string SwitchTo(int to)
+        {
+            var pd = PlayerData.instance;
+            if (!DsFrame.InGame || pd == null || pd.equippedCharms == null) return "Load a save first";
+            if (to < 1 || to > Count) return "No such preset";
+            Save(Active);
+            int slot = Slot(pd);
+            _activeSlot = slot;
+            _active = to;
+            try
+            {
+                string path = ActivePath(slot);
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                File.WriteAllText(path, to.ToString());
+            }
+            catch (Exception e) { Debug.LogWarning("[HkCharms] active preset not saved: " + e.Message); }
+            if (!Exists(to)) return Save(to);
+            return Load(to, true);
+        }
+
         public static bool Exists(int preset)
         {
             var pd = PlayerData.instance;
@@ -57,14 +112,16 @@ namespace HollowKnightPatches.Lower
             return "Preset " + preset + " saved (" + pd.equippedCharms.Count + " charms)";
         }
 
-        public static string Load(int preset)
+        public static string Load(int preset) { return Load(preset, false); }
+
+        static string Load(int preset, bool inPane)
         {
             var pd = PlayerData.instance;
             var gm = GameManager.UnsafeInstance;
             var hero = HeroController.UnsafeInstance;
             if (!DsFrame.InGame || pd == null || gm == null || hero == null || pd.equippedCharms == null) return "Load a save first";
             if (!ReferenceEquals(gm.playerData, pd)) return "Unavailable";
-            string reason = BlockReason(pd);
+            string reason = inPane ? null : BlockReason(pd);
             if (reason != null) return reason;
             if (preset < 1 || preset > Count) return "No such preset";
             string path = PathFor(Slot(pd), preset);
@@ -108,6 +165,7 @@ namespace HollowKnightPatches.Lower
                 try { hero.CharmUpdate(); } catch (Exception e) { Debug.LogWarning("[HkCharms] CharmUpdate: " + e.Message); }
                 try { PlayMakerFSM.BroadcastEvent("CHARM INDICATOR CHECK"); } catch { }
                 try { PlayMakerFSM.BroadcastEvent("UPDATE BLUE HEALTH"); } catch { }
+                if (!pd.atBench) try { PlayMakerFSM.BroadcastEvent("CHARM EQUIP CHECK"); } catch { }
             }
             return "Preset " + preset + " loaded" + (skipped > 0 ? ", " + skipped + " skipped" : "");
         }

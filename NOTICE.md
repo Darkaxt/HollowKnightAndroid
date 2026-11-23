@@ -85,6 +85,13 @@ A copy of the Apache License 2.0 is at
 
   The reference supplies no separate source-code copyright notice. No game
   assets, generated test skins, folder picker, or tweak controls are copied.
+* **HollowKnight.CharmPreset** and **HollowKnight.Osmi** — Copyright (c) 2022
+  Clazex. The charm-preset selector inside Hollow Knight's own Charms pane
+  (`tools/hollow-knight-patches/src/lower/HkNativeCharmPresets.cs`) adapts their
+  PlayMaker wiring and charm-pane refresh
+  (<https://github.com/Clazex/HollowKnight.CharmPreset>,
+  <https://github.com/Clazex/HollowKnight.Osmi>). Their licence is the MIT
+  licence reproduced in this project's `LICENSE`.
 
 ### BSD family
 

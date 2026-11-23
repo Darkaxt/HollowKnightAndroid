@@ -1,4 +1,4 @@
-// DsLoadoutPresets -- #56 loadout presets for the Loadout pane (behaviour
+// DsLoadoutPresets -- #56/#69 loadout presets for the game's own Tools pane (behaviour
 // reference: Nexus mod HK130 CharmPresets; no mod code). A preset is the crest,
 // the tool in each of its slots and the tools in the extra slots, stored per
 // save profile. Loading equips through the game's own ToolItemManager paths.
@@ -39,6 +39,61 @@ public static class DsLoadoutPresets
         }
         catch { return "Unavailable"; }
         return null;
+    }
+
+    static int _activeProfile = -1, _active = 1;
+
+    /// <summary>#69: the preset the Tools-pane selector shows, per save profile (1 when never set).</summary>
+    public static int Active
+    {
+        get
+        {
+            if (!DsGameData.InGame) return 1;
+            int profile = GameManager.instance.profileID;
+            if (profile != _activeProfile)
+            {
+                _activeProfile = profile;
+                _active = 1;
+                try
+                {
+                    int n;
+                    string path = ActivePath(profile);
+                    if (File.Exists(path) && int.TryParse(File.ReadAllText(path).Trim(), out n) && n >= 1 && n <= Count) _active = n;
+                }
+                catch { }
+            }
+            return _active;
+        }
+    }
+
+    static string ActivePath(int profile) =>
+        Path.Combine(Application.persistentDataPath, "dualsouls-loadout-presets", "silksong",
+                     "profile-" + profile, "active.txt");
+
+    /// <summary>
+    /// #69, from the game's own Tools pane: keep the current loadout in the active
+    /// preset, then equip <paramref name="to"/>. A preset never used before starts
+    /// as a copy of the current loadout. Refused away from a bench, as the game's
+    /// own crest change is.
+    /// </summary>
+    public static string SwitchTo(int to)
+    {
+        string reason = BlockReason();
+        if (reason != null) return reason;
+        if (to < 1 || to > Count) return "No such preset";
+        Save(Active);
+        int profile = GameManager.instance.profileID;
+        _activeProfile = profile;
+        _active = to;
+        try
+        {
+            string path = ActivePath(profile);
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            File.WriteAllText(path, to.ToString());
+        }
+        catch (Exception e) { Debug.LogWarning("[DualScreen] active preset not saved: " + e.Message); }
+        if (!Exists(to)) return Save(to);
+        return Load(to);
     }
 
     public static bool Exists(int preset)

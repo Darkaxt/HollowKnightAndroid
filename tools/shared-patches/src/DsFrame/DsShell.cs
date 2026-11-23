@@ -972,7 +972,7 @@ public partial class DsShell
         // words, which read as a gap between the title and the divider rather
         // than as a title above one.
         var where = new Rect(0f, space.y, _w, Mathf.Max(10f, space.height - TitleBottomGap));
-        // A second stacked header button (CHECKLIST over FULL MAP) sits on the
+        // A second stacked header button (e.g. RESET under FULL MAP) sits on the
         // title's row: keep the title centred but clear of it, shrinking a long
         // name to fit rather than running under the button.
         float buttons = _actions.HeaderLeftIn(where.y, where.yMax);

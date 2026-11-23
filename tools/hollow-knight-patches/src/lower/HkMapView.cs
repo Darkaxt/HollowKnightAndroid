@@ -354,6 +354,10 @@ namespace HollowKnightPatches.Lower
 
             _clone = UnityEngine.Object.Instantiate(src, _rig.transform);
             _clone.name = "HkMapClone";
+            // #69: the live map's own pins came along with the copy; the clone grows its own.
+            foreach (var pt in _clone.GetComponentsInChildren<Transform>(true))
+                if (pt != null && pt.name.StartsWith(HkCollectibles.PinPrefix, StringComparison.Ordinal))
+                    UnityEngine.Object.DestroyImmediate(pt.gameObject);
             _source = src;
             _map = _clone.GetComponent<GameMap>();
             _clone.transform.localPosition = Vector3.zero;

@@ -113,15 +113,14 @@ public static class SsTitleLogoArt{public static readonly Sprite Sprite=new(){na
 public static class DsRuleArt{public static readonly Sprite Horizontal=new(),Vertical=new();}
 public static class DsSliderArt{public static readonly Sprite Track=new(),Thumb=new();}
 public static class DsTrashArt{public static readonly Sprite Sprite=new();}
-// #37 the checklist panel and collectible data are engine/game-data seams; no table means no CHECKLIST action.
-public sealed class DsChecklistPanel
+// #69 the native Tools-pane preset selector is a game-pane seam.
+public static class SsNativeLoadoutPresets
 {
-    public DsChecklistPanel(RectTransform parent, Rect bounds){}
-    public bool Visible{get;private set;}
-    public void SetVisible(bool on){Visible=on;}
-    public void Show(System.Collections.Generic.List<DualSouls.Mods.ChecklistArea> areas, DualSouls.Mods.ChecklistArea totals,
-                     System.Collections.Generic.IList<System.Collections.Generic.KeyValuePair<string,string>> kinds){}
+    public static void Tick() {}
+    public static string Command(string[] a)=>"preset built=False";
 }
+
+// #37 collectible data is an engine/game-data seam.
 public static class SsCollectibles
 {
     public static readonly System.Collections.Generic.KeyValuePair<string,string>[] Kinds=new System.Collections.Generic.KeyValuePair<string,string>[0];

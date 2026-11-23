@@ -79,15 +79,12 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip,
     MapZone _zone = MapZone.NONE;
     float _nextSymbolHunt;
     float _nextHeader;
-    readonly Action _toggleMode, _enterMarkers, _exitMarkers, _resetView, _toggleChecklist;
+    readonly Action _toggleMode, _enterMarkers, _exitMarkers, _resetView;
 
-    // #37 the completion checklist over the map.
-    DsChecklistPanel _checklist;
-    float _nextChecklist;
 
     public DsMapScreen()
     {
-        _toggleMode = ToggleMode; _resetView = ResetView; _toggleChecklist = ToggleChecklist;
+        _toggleMode = ToggleMode; _resetView = ResetView;
         _enterMarkers = () => SetMarkerMode(true);
         _exitMarkers = () => SetMarkerMode(false);
     }
@@ -178,8 +175,6 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip,
 
         BuildSlider(w, h);
 
-        _checklist = new DsChecklistPanel(host, new Rect(x, y, w, h));
-
         Apply(State.Idle, force: true);
     }
 
@@ -218,7 +213,6 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip,
         _markerMode = false;
         _sliderGesture = false;
         if (_slider != null) _slider.Release();
-        if (_checklist != null) _checklist.SetVisible(false);
         // Stop rendering the moment the tab goes away. The content is left
         // enabled deliberately: "zones active, display off" is the state the
         // game itself sits in between maps, so there is nothing to restore and
@@ -275,38 +269,9 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip,
         Apply(want, force: false);
         RefreshText();
         PaintSlider();
-        TickChecklist();
     }
 
-    // ── #37 checklist ───────────────────────────────────────────────────────
-
-    /// <summary>QA: toggle the checklist on the next tick of the map page.</summary>
-    public static bool RequestChecklistToggle;
-
-    public bool ChecklistVisible { get { return _checklist != null && _checklist.Visible; } }
-
-    void ToggleChecklist()
-    {
-        if (_checklist == null) return;
-        bool on = !_checklist.Visible;
-        if (on) _markerMode = false;
-        _checklist.SetVisible(on);
-        _nextChecklist = 0f;
-    }
-
-    void TickChecklist()
-    {
-        if (RequestChecklistToggle) { RequestChecklistToggle = false; ToggleChecklist(); }
-        if (_checklist == null || !_checklist.Visible) return;
-        if (!DsGameData.InGame) { _checklist.SetVisible(false); return; }
-        if (Time.unscaledTime < _nextChecklist) return;
-        _nextChecklist = Time.unscaledTime + 0.5f;
-        DualSouls.Mods.ChecklistArea totals;
-        var areas = SsCollectibles.Checklist(out totals);
-        _checklist.Show(areas, totals, SsCollectibles.Kinds);
-    }
-
-    /// <summary>QA: "found/total" per kind, from the same data the panel shows.</summary>
+    /// <summary>QA (#37): "found/total" per collectible kind.</summary>
     public static string ChecklistReport()
     {
         DualSouls.Mods.ChecklistArea totals;
@@ -341,7 +306,7 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip,
         // switches the cameras off without changing the state, so a state-gated
         // SetVisible would leave them off for good once the player tabbed away
         // from the map and back -- an empty panel with nothing in the log.
-        if (_view != null) _view.SetVisible(s == State.Map && !ChecklistVisible);
+        if (_view != null) _view.SetVisible(s == State.Map);
 
         if (!force && s == _state && _stateApplied) return;
         _state = s;
@@ -519,7 +484,7 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip,
 
     public void OnGesture(DsGesture g)
     {
-        if (_view == null || ChecklistVisible) return;
+        if (_view == null) return;
 
         Vector2 p = DsPresentation.ToLayout(g.Position);
 
@@ -729,13 +694,6 @@ public class DsMapScreen : IDsScreen, IDsActionBar, IDsHeaderTitle, IDsTabStrip,
         // the buttons were drawn under before: a map to reframe, or at least a
         // map somewhere to go back to.
         if (_view == null) return;
-        if (ChecklistVisible)
-        {
-            into.Add(new DsAction("MAP", _toggleChecklist));
-            return;
-        }
-        if (DsGameData.InGame && SsCollectibles.Table != null && !_markerMode)
-            into.Add(new DsAction("CHECKLIST", _toggleChecklist));
         if (!_buttonsShown) return;
 
         if (_markerMode)

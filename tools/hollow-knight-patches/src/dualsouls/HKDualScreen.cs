@@ -530,6 +530,8 @@ public partial class HKDualScreen : MonoBehaviour
 
         bool invOpen = PollInventoryToggle(gc, paused);   // M : invBtn toggle + is-inventory-open
         GameInventoryOpen = invOpen;                      // B8: HKTweaks charms-anywhere gates its atBench force on this
+        HollowKnightPatches.Lower.HkNativeCharmPresets.Tick(gc);   // #69: preset selector in the game's own Charms pane
+        HollowKnightPatches.Lower.HkCollectibles.TickLivePins();   // #69: collectible pins on the game's own map
         PollCompanionCombo();                             // M : L3+R3 runtime companion toggle
         bool dsOn = ApplyDualScreenToggle();              // B1: dual-screen master + camera enables (BEFORE companionOn)
         // Display loss, pause teardown, or a product toggle has already run

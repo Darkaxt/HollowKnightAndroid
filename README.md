@@ -139,8 +139,15 @@ can all be reset at once. The groups are:
   achievement pop-ups, an item picker, and an extra-mode unlock (Steel Soul,
   plus Godseeker in Hollow Knight).
 
-Loadout presets (three per save) are on the Hollow Knight Charms page and the
-Silksong Loadout page.
+Loadout presets (three per save) live in each game's own Start-menu
+inventory: a selector under the equipped charms in the Hollow Knight Charms
+pane, and a Preset button beside Change Crest in the Silksong Tools pane.
+Switching keeps the current loadout in the preset you leave, and follows the
+game's own bench rule (or EQUIP ANYWHERE).
+
+Collectible pins (grubs, mask shards, vessel fragments, charms, roots, and the
+Silksong equivalents) appear on the game's own map and on the lower-screen map,
+only in rooms the player has mapped.
 
 <p align="center">
   <img src="docs/screenshots/mods.webp" alt="The in-game Mods menu, World group, paused over Hollow Knight" width="900" />

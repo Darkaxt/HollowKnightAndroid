@@ -53,11 +53,7 @@ namespace HollowKnightPatches.Lower
         string _toast;
         float _toastUntil;
 
-        // #37 the completion checklist over the map.
-        DsChecklistPanel _checklist;
-        float _nextChecklist;
-
-        readonly Action _toggleMode, _enterMarkers, _exitMarkers, _resetView, _toggleChecklist;
+        readonly Action _toggleMode, _enterMarkers, _exitMarkers, _resetView;
 
         public HkMapScreen()
         {
@@ -66,7 +62,6 @@ namespace HollowKnightPatches.Lower
             _resetView = ResetView;
             _enterMarkers = () => SetMarkerMode(true);
             _exitMarkers = () => SetMarkerMode(false);
-            _toggleChecklist = ToggleChecklist;
         }
 
         public string Id { get { return "map"; } }
@@ -130,8 +125,6 @@ namespace HollowKnightPatches.Lower
                 _sliderThumb.preserveAspect = false;
             }
 
-            _checklist = new DsChecklistPanel(host, new Rect(x, y, w, h));
-
             Apply(State.Idle, true);
             PaintSlider();
         }
@@ -152,7 +145,6 @@ namespace HollowKnightPatches.Lower
             _sliderGesture = false;
             if (_slider != null) _slider.Release();
             _benchArmed = null;
-            if (_checklist != null) _checklist.SetVisible(false);
             if (_view != null) _view.Hide();
             if (_raw != null) _raw.texture = null;
         }
@@ -184,38 +176,9 @@ namespace HollowKnightPatches.Lower
             if (_state != State.Map && _markerMode) _markerMode = false;
             RefreshHeader();
             PaintSlider();
-            TickChecklist();
         }
 
-        // ── #37 checklist ───────────────────────────────────────────────────
-
-        /// <summary>QA: toggle the checklist on the next tick of the map page.</summary>
-        public static bool RequestChecklistToggle;
-
-        public bool ChecklistVisible { get { return _checklist != null && _checklist.Visible; } }
-
-        void ToggleChecklist()
-        {
-            if (_checklist == null) return;
-            bool on = !_checklist.Visible;
-            if (on) _markerMode = false;
-            _checklist.SetVisible(on);
-            _nextChecklist = 0f;
-        }
-
-        void TickChecklist()
-        {
-            if (RequestChecklistToggle) { RequestChecklistToggle = false; ToggleChecklist(); }
-            if (_checklist == null || !_checklist.Visible) return;
-            if (!DsFrame.InGame) { _checklist.SetVisible(false); return; }
-            if (Time.unscaledTime < _nextChecklist) return;
-            _nextChecklist = Time.unscaledTime + 0.5f;
-            ChecklistArea totals;
-            var areas = HkCollectibles.Checklist(_view != null ? _view.Map : null, out totals);
-            _checklist.Show(areas, totals, HkCollectibles.Kinds);
-        }
-
-        /// <summary>QA: "found/total" per kind, from the same data the panel shows.</summary>
+        /// <summary>QA (#37): "found/total" per collectible kind.</summary>
         public static string ChecklistReport()
         {
             ChecklistArea totals;
@@ -239,8 +202,7 @@ namespace HollowKnightPatches.Lower
             return "raw active=" + _raw.gameObject.activeInHierarchy + " enabled=" + _raw.enabled +
                    " tex=" + (_raw.texture == null ? "null" : _raw.texture == (_view != null ? _view.Texture : null) ? "view" : "other") +
                    " color=" + _raw.color + " size=" + rt.rect.size + " state=" + _state +
-                   " panel=" + (_mapPanel != null && _mapPanel.gameObject.activeInHierarchy) +
-                   " checklist=" + ChecklistVisible;
+                   " panel=" + (_mapPanel != null && _mapPanel.gameObject.activeInHierarchy);
         }
 
         void Apply(State s, bool force)
@@ -373,13 +335,6 @@ namespace HollowKnightPatches.Lower
         public void CollectActions(List<DsAction> into)
         {
             if (_view == null) return;
-            if (_checklist != null && _checklist.Visible)
-            {
-                into.Add(new DsAction("MAP", _toggleChecklist));
-                return;
-            }
-            if (DsFrame.InGame && HkCollectibles.Table != null && !_markerMode)
-                into.Add(new DsAction("CHECKLIST", _toggleChecklist));
             if (!_buttonsShown) return;
             if (_markerMode)
             {
@@ -471,7 +426,7 @@ namespace HollowKnightPatches.Lower
 
         public void OnGesture(DsGesture g)
         {
-            if (_view == null || _state != State.Map || ChecklistVisible) return;
+            if (_view == null || _state != State.Map) return;
             Vector2 p = DsFrame.ToLayout(g.Position);
             bool inMap = _mapRect.Contains(p);
 
