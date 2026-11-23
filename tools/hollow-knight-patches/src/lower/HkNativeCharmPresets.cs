@@ -60,7 +60,9 @@ namespace HollowKnightPatches.Lower
             group.layer = pane.layer;   // whatever the HudCamera draws the pane on
             // Sort with the pane's own sprites (its FadeGroup), one above them.
             int sortLayer = 0, sortOrder = 0;
-            if (fade != null && fade.spriteRenderers != null)
+            var template = Reference(pane);   // the pane's own sprite: its material and sorting
+            if (template != null) { sortLayer = template.sortingLayerID; sortOrder = template.sortingOrder + 1; }
+            else if (fade != null && fade.spriteRenderers != null)
                 foreach (var r in fade.spriteRenderers)
                     if (r != null) { sortLayer = r.sortingLayerID; sortOrder = Math.Max(sortOrder, r.sortingOrder + 1); }
             // Pane-local: the pane may be parked off screen while it is built.
@@ -78,6 +80,7 @@ namespace HollowKnightPatches.Lower
                 var sr = go.GetComponent<SpriteRenderer>();
                 sr.sprite = sprites[i];
                 sr.color = new Color(1f, 1f, 1f, 0f);
+                if (template != null) sr.sharedMaterial = template.sharedMaterial;
                 sr.sortingLayerID = sortLayer;
                 sr.sortingOrder = sortOrder;
                 sr.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
@@ -176,6 +179,20 @@ namespace HollowKnightPatches.Lower
                 if (!int.TryParse(a[2], out s)) return "error preset step <+1|-1>";
                 Step(s);
             }
+            if (a.Length >= 2 && a[1] == "why" && _pane != null)
+            {
+                var sb = new System.Text.StringBuilder();
+                int act = HkCharmPresets.Active - 1;
+                Describe(sb, "icon", act >= 0 && act < _icons.Length ? _icons[act] : null);
+                Describe(sb, "ref", Reference(_pane));
+                foreach (var cam in Camera.allCameras)
+                {
+                    sb.Append("\ncam ").Append(cam.name).Append(" mask=").Append(cam.cullingMask.ToString("X")).Append(" depth=").Append(cam.depth)
+                      .Append(" pos=").Append(cam.transform.position.ToString("F2")).Append(" ortho=").Append(cam.orthographic).Append(" size=").Append(cam.orthographicSize.ToString("F2"));
+                    if (_group != null) sb.Append(" vp=").Append(cam.WorldToViewportPoint(_group.transform.position).ToString("F2"));
+                }
+                return sb.ToString();
+            }
             if (a.Length >= 2 && a[1] == "tree" && _pane != null)
             {
                 var sb = new System.Text.StringBuilder("pane " + _pane.transform.position.ToString("F2"));
@@ -217,6 +234,30 @@ namespace HollowKnightPatches.Lower
                 if (sr == null || Mathf.Approximately(sr.color.a, alpha)) continue;
                 var c = sr.color; c.a = alpha; sr.color = c;
             }
+        }
+
+        /// <summary>A visible sprite of the pane itself: the first active one among the collected charms.</summary>
+        static SpriteRenderer Reference(GameObject pane)
+        {
+            var root = pane.transform.Find("Collected Charms");
+            if (root == null) return null;
+            foreach (var r in root.GetComponentsInChildren<SpriteRenderer>(false))
+                if (r.sprite != null && r.enabled) return r;
+            return null;
+        }
+
+        static void Describe(System.Text.StringBuilder sb, string label, SpriteRenderer r)
+        {
+            sb.Append('\n').Append(label);
+            if (r == null) { sb.Append(" none"); return; }
+            var sp = r.sprite;
+            sb.Append(' ').Append(r.name).Append(" on=").Append(r.gameObject.activeInHierarchy).Append(" en=").Append(r.enabled)
+              .Append(" L").Append(r.gameObject.layer).Append(" s").Append(r.sortingLayerName).Append('/').Append(r.sortingOrder)
+              .Append(" c=").Append(r.color.ToString("F2"))
+              .Append(" mat=").Append(r.sharedMaterial != null ? r.sharedMaterial.name + "|" + (r.sharedMaterial.shader != null ? r.sharedMaterial.shader.name : "-") : "null")
+              .Append(" sprite=").Append(sp != null ? sp.name + "|" + (sp.texture != null ? sp.texture.name + " " + sp.texture.width + "x" + sp.texture.height : "notex") + " rect=" + sp.rect.ToString("F0") + " ppu=" + sp.pixelsPerUnit.ToString("F0") : "null")
+              .Append(" bounds=").Append(r.bounds.center.ToString("F2")).Append('+').Append(r.bounds.size.ToString("F2"))
+              .Append(" scale=").Append(r.transform.lossyScale.ToString("F2"));
         }
 
         static void ShowActive()

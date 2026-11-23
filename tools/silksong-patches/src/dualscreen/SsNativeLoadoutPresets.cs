@@ -10,7 +10,7 @@
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System;
 using System.Reflection;
-using TMPro;
+using TMP_Text = TMProOld.TMP_Text;   // Silksong ships Team Cherry's TMProOld
 using UnityEngine;
 
 public static class SsNativeLoadoutPresets
@@ -31,6 +31,7 @@ public static class SsNativeLoadoutPresets
     static TMP_Text[] _labels = new TMP_Text[0];
     static float _next;
     static int _shown = -1;
+    static bool _beside;            // the game's own Change Crest button is shown: sit beside it, else in its place
     static string _last = "";
     static Vector2 _offset = new Vector2(6.5f, 0f);   // from the Change Crest prompt, pane-local; QA "preset pos"
 
@@ -42,6 +43,8 @@ public static class SsNativeLoadoutPresets
         {
             if (!_root.gameObject.activeSelf) _root.gameObject.SetActive(true);
             if (!_btn.gameObject.activeSelf) _btn.gameObject.SetActive(true);
+            bool beside = _orig != null && _orig.gameObject.activeInHierarchy;
+            if (beside != _beside) { _beside = beside; Place(); }
             ShowActive(false);
             return;
         }
@@ -92,8 +95,12 @@ public static class SsNativeLoadoutPresets
             _src = src; _root = go.transform;
             var lt = labelPath != null ? go.transform.Find(labelPath) : null;
             var one = lt != null ? lt.GetComponent<TMP_Text>() : null;
-            _labels = one != null ? new[] { one } : go.GetComponentsInChildren<TMP_Text>(true);
+            if (one == null)   // not the button prompt's glyph text: the one under "Text"
+                foreach (var t in go.GetComponentsInChildren<TMP_Text>(true))
+                    if (t.name == "Text" || (t.transform.parent != null && t.transform.parent.name == "Text")) { one = t; break; }
+            _labels = one != null ? new[] { one } : new TMP_Text[0];
             _mgr = m; _orig = orig; _btn = btn;
+            _beside = orig.gameObject.activeInHierarchy;
             Place();
             go.SetActive(true);
             ShowActive(true);
@@ -105,7 +112,8 @@ public static class SsNativeLoadoutPresets
     {
         if (_root == null || _src == null) return;
         var p = _src.localPosition;
-        _root.localPosition = new Vector3(p.x + _offset.x, p.y + _offset.y, p.z);
+        var o = _beside ? _offset : Vector2.zero;
+        _root.localPosition = new Vector3(p.x + o.x, p.y + o.y, p.z);
     }
 
     static string PathFrom(Transform root, Transform t)
