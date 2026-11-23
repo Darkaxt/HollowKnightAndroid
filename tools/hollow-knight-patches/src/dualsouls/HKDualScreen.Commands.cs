@@ -10,7 +10,7 @@ using UnityEngine;
 public partial class HKDualScreen
 {
     const string CommandHelp =
-        "help | report | state | pause | mods | skins | skin <list|detail|row N|left N|right N|close> | tab <inventory|charms|guide|journal|map> | companion <0|1|config> | " +
+        "help | report | state | pause | mods | skins | skin <list|detail|row N|left N|right N|close> | tab <inventory|charms|guide|journal|map> | tabart [dump|set <lo> <hi> <minKept>] | companion <0|1|config> | " +
         "mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | hazard | fly <x> <y> | dash | travel <scene> <gate> | " +
         "inv [fsm|send <event>] | fsm find <text> | fsm show|send|set|goto <object>[#n]|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | " +
         "save | load <slot> | newgame <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [checklist | why <scene>] | mapsetup | mapdump\n";
@@ -104,6 +104,7 @@ public partial class HKDualScreen
                     (a.Length < 3 || (a[1] != "row" && a[1] != "left" && a[1] != "right"))))
                     return "error skin <list|row N|left N|right N|close>";
                 return HollowKnightNativeModsMenu.SkinCommand(a[1], a.Length > 2 ? a[2] : "");
+            case "tabart": return HollowKnightPatches.Lower.HkTabGlyph.Command(a);
             case "tab":
                 if (a.Length < 2) return "error tab <id>";
                 if (shell == null) return "error no shell";
