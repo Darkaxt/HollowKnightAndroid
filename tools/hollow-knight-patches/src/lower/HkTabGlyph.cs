@@ -4,9 +4,9 @@
 // Knight has no such set, so its tabs borrow item art (nail, charm, quill...).
 // The shared bar only tints icons (white when selected, dim otherwise), and a
 // tint cannot turn colour into white. This makes a monochrome copy once per
-// source sprite: alpha is kept, colour becomes a light grey ramp of the
-// original brightness, so interior detail survives as shading and the shared
-// tint then behaves exactly as it does on Silksong's glyphs.
+// source sprite: the shape becomes white and its darker interior details
+// become see-through cut-outs, so the shared tint then behaves exactly as it
+// does on Silksong's glyphs.
 //
 // Game textures are not CPU-readable, so the sprite's region is copied through
 // a RenderTexture. Any failure falls back to the original sprite.
@@ -19,8 +19,10 @@ namespace HollowKnightPatches.Lower
 {
     static class HkTabGlyph
     {
-        // Darkest shade the ramp maps to; 1 is plain white.
-        const float Floor = 0.62f;
+        // Normalised brightness below CutLow is cut out, above CutHigh is solid.
+        const float CutLow = 0.30f, CutHigh = 0.50f;
+        // Keep the shape solid if cutting would leave less than this share.
+        const float MinKept = 0.45f;
 
         static readonly Dictionary<Sprite, Sprite> Made = new Dictionary<Sprite, Sprite>();
 
@@ -63,21 +65,31 @@ namespace HollowKnightPatches.Lower
                 tex.ReadPixels(new Rect(0, 0, w, h), 0, 0, false);
 
                 var px = tex.GetPixels32();
-                float lo = 1f, hi = 0f;
+                // Brightness range of the visible pixels, ignoring the outer 5%
+                // at each end so a few highlights or outlines don't set it.
+                var lum = new List<float>(px.Length);
                 for (int i = 0; i < px.Length; i++)
-                {
-                    if (px[i].a < 32) continue;
-                    float l = Luma(px[i]);
-                    if (l < lo) lo = l;
-                    if (l > hi) hi = l;
-                }
+                    if (px[i].a >= 32) lum.Add(Luma(px[i]));
+                if (lum.Count == 0) return null;
+                lum.Sort();
+                float lo = lum[lum.Count / 20], hi = lum[lum.Count - 1 - lum.Count / 20];
                 float span = hi - lo > 0.05f ? hi - lo : 1f;
+
+                // White shape; the darker parts of the art become see-through,
+                // like the cut-outs in Silksong's glyphs. If that would erase
+                // most of the shape, keep it solid instead.
+                var alpha = new byte[px.Length];
+                int kept = 0;
                 for (int i = 0; i < px.Length; i++)
                 {
                     float t = Mathf.Clamp01((Luma(px[i]) - lo) / span);
-                    byte v = (byte)Mathf.RoundToInt(255f * Mathf.Lerp(Floor, 1f, t));
-                    px[i] = new Color32(v, v, v, px[i].a);
+                    float a = px[i].a * Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(CutLow, CutHigh, t));
+                    alpha[i] = (byte)Mathf.RoundToInt(a);
+                    if (px[i].a >= 32 && alpha[i] >= 128) kept++;
                 }
+                bool cut = kept >= lum.Count * MinKept;
+                for (int i = 0; i < px.Length; i++)
+                    px[i] = new Color32(255, 255, 255, cut ? alpha[i] : px[i].a);
                 tex.SetPixels32(px);
                 tex.Apply(false, true);
 
