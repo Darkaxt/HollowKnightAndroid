@@ -22,15 +22,17 @@ public static class SsNativeLoadoutPresets
     static readonly FieldInfo FiChange = typeof(InventoryItemToolManager).GetField("changeCrestButton", Priv);
     static readonly FieldInfo FiCrestList = typeof(InventoryItemToolManager).GetField("crestList", Priv);
     static readonly FieldInfo FiPrompt = typeof(InventoryItemSelectableButtonEvent).GetField("interactionDisplayText", Priv);
+    static readonly FieldInfo FiChangeText = typeof(InventoryItemToolManager).GetField("changeCrestButtonText", Priv);
     static readonly MethodInfo MiSetup = typeof(InventoryToolCrestList).GetMethod("Setup", Priv);
 
     static InventoryItemToolManager _mgr;
     static InventoryItemSelectableButtonEvent _orig, _btn;
+    static Transform _src, _root;   // what was cloned (the button, or its prompt when the button has no visuals) and our copy
     static TMP_Text[] _labels = new TMP_Text[0];
     static float _next;
     static int _shown = -1;
     static string _last = "";
-    static Vector2 _offset = new Vector2(3.2f, 0f);   // from the Change Crest button, pane-local; QA "preset pos"
+    static Vector2 _offset = new Vector2(6.5f, 0f);   // from the Change Crest prompt, pane-local; QA "preset pos"
 
     public static bool Built { get { return _btn != null; } }
 
@@ -38,6 +40,7 @@ public static class SsNativeLoadoutPresets
     {
         if (_btn != null)
         {
+            if (!_root.gameObject.activeSelf) _root.gameObject.SetActive(true);
             if (!_btn.gameObject.activeSelf) _btn.gameObject.SetActive(true);
             ShowActive(false);
             return;
@@ -59,24 +62,38 @@ public static class SsNativeLoadoutPresets
             var orig = FiChange.GetValue(m) as InventoryItemSelectableButtonEvent;
             if (orig == null) continue;
 
-            var go = UnityEngine.Object.Instantiate(orig.gameObject, orig.transform.parent);
+            // The button itself is only a selectable; its icon and text sit on its parent prompt.
+            Transform src = orig.transform;
+            if (src.GetComponentsInChildren<Renderer>(true).Length == 0 && src.GetComponentsInChildren<TMP_Text>(true).Length == 0 && src.parent != null)
+                src = src.parent;
+            string labelPath = null;
+            var changeText = FiChangeText != null ? FiChangeText.GetValue(m) as Component : null;
+            if (changeText != null && changeText.transform.IsChildOf(src)) labelPath = PathFrom(src, changeText.transform);
+            string btnPath = PathFrom(src, orig.transform);
+
+            var go = UnityEngine.Object.Instantiate(src.gameObject, src.parent);
             go.name = "DualSouls Preset";
-            var btn = go.GetComponent<InventoryItemSelectableButtonEvent>();
+            var bt = btnPath.Length == 0 ? go.transform : go.transform.Find(btnPath);
+            var btn = bt != null ? bt.GetComponent<InventoryItemSelectableButtonEvent>() : null;
             if (btn == null) { UnityEngine.Object.Destroy(go); return; }
             // The game's own localised text would overwrite ours: ours is plain.
             foreach (var t in go.GetComponentsInChildren<SetTextMeshProGameText>(true)) UnityEngine.Object.DestroyImmediate(t);
             if (FiPrompt != null) FiPrompt.SetValue(btn, null);
             btn.ButtonActivated = Activate;
 
-            // Beside the original: left goes back to it, right to whatever it led to.
+            // Beside the original: left goes back to it, right to whatever it led to. When the
+            // original is hidden (one crest), the game forwards moves onto it to its Right: us.
             if (btn.Selectables != null && orig.Selectables != null && orig.Selectables.Length > Right)
             {
                 btn.Selectables[Left] = orig;
                 btn.Selectables[Right] = orig.Selectables[Right];
                 orig.Selectables[Right] = btn;
             }
+            _src = src; _root = go.transform;
+            var lt = labelPath != null ? go.transform.Find(labelPath) : null;
+            var one = lt != null ? lt.GetComponent<TMP_Text>() : null;
+            _labels = one != null ? new[] { one } : go.GetComponentsInChildren<TMP_Text>(true);
             _mgr = m; _orig = orig; _btn = btn;
-            _labels = go.GetComponentsInChildren<TMP_Text>(true);
             Place();
             go.SetActive(true);
             ShowActive(true);
@@ -86,9 +103,27 @@ public static class SsNativeLoadoutPresets
 
     static void Place()
     {
-        if (_btn == null || _orig == null) return;
-        var p = _orig.transform.localPosition;
-        _btn.transform.localPosition = new Vector3(p.x + _offset.x, p.y + _offset.y, p.z);
+        if (_root == null || _src == null) return;
+        var p = _src.localPosition;
+        _root.localPosition = new Vector3(p.x + _offset.x, p.y + _offset.y, p.z);
+    }
+
+    static string PathFrom(Transform root, Transform t)
+    {
+        string path = "";
+        for (var c = t; c != null && c != root; c = c.parent) path = path.Length == 0 ? c.name : c.name + "/" + path;
+        return path;
+    }
+
+    static void Tree(System.Text.StringBuilder sb, Transform t, int depth)
+    {
+        sb.Append("\n").Append(' ', depth * 2).Append(t.name).Append(' ').Append(t.localPosition.ToString("F2"))
+          .Append(t.gameObject.activeSelf ? "" : " off");
+        var tmp = t.GetComponent<TMP_Text>();
+        if (tmp != null) sb.Append(" text=\"").Append(tmp.text).Append('"');
+        if (t.GetComponent<SpriteRenderer>() != null) sb.Append(" sprite");
+        if (t.GetComponent<InventoryItemSelectable>() != null) sb.Append(" selectable");
+        if (depth < 3) foreach (Transform c in t) Tree(sb, c, depth + 1);
     }
 
     static void ShowActive(bool force)
@@ -131,7 +166,7 @@ public static class SsNativeLoadoutPresets
         catch (Exception e) { Debug.LogWarning("[DualScreen] preset pane refresh: " + e.Message); }
     }
 
-    /// <summary>QA: "preset", "preset pos x y", "preset step N".</summary>
+    /// <summary>QA: "preset", "preset pos x y", "preset step N", "preset tree".</summary>
     public static string Command(string[] a)
     {
         if (a.Length >= 4 && a[1] == "pos")
@@ -150,14 +185,21 @@ public static class SsNativeLoadoutPresets
             Step(d);
         }
         if (_btn == null) return "preset built=False active=" + DsLoadoutPresets.Active;
-        var lp = _btn.transform.localPosition;
-        var op = _orig != null ? _orig.transform.localPosition : Vector3.zero;
+        if (a.Length >= 2 && a[1] == "tree")
+        {
+            var sb = new System.Text.StringBuilder("tree of " + (_src != null && _src.parent != null ? _src.parent.name : "-"));
+            if (_src != null && _src.parent != null) Tree(sb, _src.parent, 0);
+            return sb.ToString();
+        }
+        var lp = _root.localPosition;
+        var op = _src != null ? _src.localPosition : Vector3.zero;
         return "preset built=True active=" + DsLoadoutPresets.Active + " last=\"" + _last + "\"" +
                " offset=" + _offset.x.ToString("0.00") + "," + _offset.y.ToString("0.00") +
                " local=" + lp.x.ToString("0.00") + "," + lp.y.ToString("0.00") +
                " orig=" + op.x.ToString("0.00") + "," + op.y.ToString("0.00") +
-               " parent=" + (_btn.transform.parent != null ? _btn.transform.parent.name : "-") +
-               " shown=" + _btn.gameObject.activeInHierarchy + " labels=" + _labels.Length;
+               " src=" + (_src != null ? _src.name : "-") + " parent=" + (_root.parent != null ? _root.parent.name : "-") +
+               " shown=" + _btn.gameObject.activeInHierarchy + " origShown=" + (_orig != null && _orig.gameObject.activeInHierarchy) +
+               " labels=" + _labels.Length;
     }
 }
 #endif

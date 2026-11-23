@@ -117,7 +117,7 @@ public partial class HKDualScreen
             case "preset":
             {
                 // #69: "preset" alone reports the Charms-pane selector; "pos x y" moves it, "step +1|-1" switches.
-                if (a.Length == 1 || a[1] == "pos" || a[1] == "step") return HollowKnightPatches.Lower.HkNativeCharmPresets.Command(a);
+                if (a.Length == 1 || a[1] == "pos" || a[1] == "step" || a[1] == "tree") return HollowKnightPatches.Lower.HkNativeCharmPresets.Command(a);
                 int n;
                 if (a.Length < 3 || !int.TryParse(a[2], out n)) return "error preset [pos x y | step N | save N | load N]";
                 if (a[1] == "save") return "ok " + HollowKnightPatches.Lower.HkCharmPresets.Save(n);

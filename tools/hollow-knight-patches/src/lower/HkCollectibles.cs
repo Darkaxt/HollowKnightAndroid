@@ -164,6 +164,7 @@ namespace HollowKnightPatches.Lower
         static CollectiblePins _livePins;
         static MapIndex _liveIndex;
         static float _nextLive;
+        static int _liveLayer, _liveOrder;
 
         /// <summary>Pins shown on the game's own map at the last refresh.</summary>
         public static int LivePinsShown { get { return _livePins != null ? _livePins.Shown : 0; } }
@@ -187,12 +188,17 @@ namespace HollowKnightPatches.Lower
                 {
                     _livePins.Clear();          // the old map, and its pins, went with the save
                     _liveIndex = new MapIndex(map);
+                    // Above every room fill of the game's own map (its compass sits below them).
+                    _liveLayer = 0; _liveOrder = int.MinValue;
+                    foreach (var sr in map.GetComponentsInChildren<SpriteRenderer>(true))
+                    {
+                        if (sr.name.StartsWith(PinPrefix, StringComparison.Ordinal)) continue;
+                        if (sr.sortingOrder >= _liveOrder) { _liveOrder = sr.sortingOrder; _liveLayer = sr.sortingLayerID; }
+                    }
+                    _liveOrder = _liveOrder == int.MinValue ? 0 : _liveOrder + 1;
                 }
-                int sortLayer = 0, sortOrder = 0;
-                var cr = map.compassIcon != null ? map.compassIcon.GetComponentInChildren<SpriteRenderer>(true) : null;
-                if (cr != null) { sortLayer = cr.sortingLayerID; sortOrder = cr.sortingOrder; }
                 _livePins.Refresh(_liveIndex.RoomOf, Collected, map.transform, PinSize,
-                                  map.transform.position.z - 0.5f, map.gameObject.layer, sortLayer, sortOrder);
+                                  map.transform.position.z - 0.5f, map.gameObject.layer, _liveLayer, _liveOrder);
             }
             catch (Exception e) { Debug.LogWarning("[HkCollect] live pins: " + e.Message); _nextLive = Time.unscaledTime + 10f; }
         }

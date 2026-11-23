@@ -354,7 +354,7 @@ public partial class DualScreenV2
             case "mods-list": return CommandModsList();
             case "preset":
             {
-                if (a.Length == 1 || a[1] == "pos" || a[1] == "step") return SsNativeLoadoutPresets.Command(a);
+                if (a.Length == 1 || a[1] == "pos" || a[1] == "step" || a[1] == "tree") return SsNativeLoadoutPresets.Command(a);
                 int n;
                 if (a.Length < 3 || !int.TryParse(a[2], out n)) return "error preset [pos x y | step N | save N | load N]";
                 if (a[1] == "save") return "ok " + DsLoadoutPresets.Save(n);

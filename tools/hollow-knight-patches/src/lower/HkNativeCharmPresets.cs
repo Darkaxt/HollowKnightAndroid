@@ -57,7 +57,12 @@ namespace HollowKnightPatches.Lower
 
             var group = new GameObject(GroupName, typeof(BoxCollider2D), typeof(ConstrainPosition));
             group.transform.SetParent(pane.transform, false);
-            group.layer = 5; // UI
+            group.layer = pane.layer;   // whatever the HudCamera draws the pane on
+            // Sort with the pane's own sprites (its FadeGroup), one above them.
+            int sortLayer = 0, sortOrder = 0;
+            if (fade != null && fade.spriteRenderers != null)
+                foreach (var r in fade.spriteRenderers)
+                    if (r != null) { sortLayer = r.sortingLayerID; sortOrder = Math.Max(sortOrder, r.sortingOrder + 1); }
             // Pane-local: the pane may be parked off screen while it is built.
             group.transform.localPosition = Position;
             group.GetComponent<BoxCollider2D>().size = new Vector2(1.3f, 1.3f);
@@ -69,11 +74,12 @@ namespace HollowKnightPatches.Lower
             {
                 var go = new GameObject("Preset " + (i + 1), typeof(SpriteRenderer));
                 go.transform.SetParent(group.transform, false);
-                go.layer = 5;
+                go.layer = pane.layer;
                 var sr = go.GetComponent<SpriteRenderer>();
                 sr.sprite = sprites[i];
                 sr.color = new Color(1f, 1f, 1f, 0f);
-                sr.sortingLayerName = "HUD";
+                sr.sortingLayerID = sortLayer;
+                sr.sortingOrder = sortOrder;
                 sr.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
                 sr.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
                 if (fade != null)
@@ -174,7 +180,11 @@ namespace HollowKnightPatches.Lower
             {
                 var sb = new System.Text.StringBuilder("pane " + _pane.transform.position.ToString("F2"));
                 foreach (Transform c in _pane.transform)
-                    sb.Append("\n ").Append(c.name).Append(' ').Append(c.localPosition.ToString("F2")).Append(c.gameObject.activeSelf ? "" : " off");
+                {
+                    var r = c.GetComponent<Renderer>();
+                    sb.Append("\n ").Append(c.name).Append(' ').Append(c.localPosition.ToString("F2")).Append(" L").Append(c.gameObject.layer)
+                      .Append(r != null ? " s" + r.sortingLayerName + "/" + r.sortingOrder : "").Append(c.gameObject.activeSelf ? "" : " off");
+                }
                 return sb.ToString();
             }
             string icons = "";
