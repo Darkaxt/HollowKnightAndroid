@@ -24,7 +24,6 @@ public static class SsNativeLoadoutPresets
     static readonly FieldInfo FiPrompt = typeof(InventoryItemSelectableButtonEvent).GetField("interactionDisplayText", Priv);
     static readonly FieldInfo FiChangeText = typeof(InventoryItemToolManager).GetField("changeCrestButtonText", Priv);
     static readonly MethodInfo MiSetup = typeof(InventoryToolCrestList).GetMethod("Setup", Priv);
-    static readonly FieldInfo FiSetTextOn = typeof(SetTextMeshProGameText).GetField("setTextOn", Priv);
 
     static InventoryItemToolManager _mgr;
     static InventoryItemSelectableButtonEvent _orig, _btn;
@@ -34,7 +33,6 @@ public static class SsNativeLoadoutPresets
     static int _shown = -1;
     static bool _beside;            // the game's own Change Crest button is shown: sit beside it, else in its place
     static string _last = "";
-    static string _fontFrom = "-";
     static Vector2 _offset = new Vector2(6.5f, 0f);   // from the Change Crest prompt, pane-local; QA "preset pos"
 
     public static bool Built { get { return _btn != null; } }
@@ -101,19 +99,17 @@ public static class SsNativeLoadoutPresets
                 foreach (var t in go.GetComponentsInChildren<TMP_Text>(true))
                     if (t.name == "Text" || (t.transform.parent != null && t.transform.parent.name == "Text")) { one = t; break; }
             _labels = one != null ? new[] { one } : new TMP_Text[0];
-            // The game's own Change Crest label carries the pane's font; the clone may not.
-            var gameLabel = changeText != null && FiSetTextOn != null ? FiSetTextOn.GetValue(changeText) as TMP_Text : null;
-            if (gameLabel == null && changeText != null) gameLabel = changeText.GetComponent<TMP_Text>();
-            _fontFrom = gameLabel != null && gameLabel.font != null ? gameLabel.font.name : "-";
-            if (one != null && gameLabel != null && gameLabel != one && gameLabel.font != null)
-            {
-                one.font = gameLabel.font;
-                one.fontSharedMaterial = gameLabel.fontSharedMaterial;
-            }
-            // The cloned key glyph shows Change Crest's own action; ours is the menu's confirm.
+            // The clone keeps Change Crest's own key glyph, but ours is pressed with the menu's
+            // confirm like any other item: hide the glyph and let the label take its place.
             foreach (var icon in go.GetComponentsInChildren<ActionButtonIcon>(true))
-                if (Enum.IsDefined(typeof(GlobalEnums.HeroActionButton), "MENU_SUBMIT"))
-                    icon.SetAction((GlobalEnums.HeroActionButton)Enum.Parse(typeof(GlobalEnums.HeroActionButton), "MENU_SUBMIT"));
+            {
+                if (one != null && one.transform.parent == icon.transform.parent)
+                {
+                    var lp = one.transform.localPosition;
+                    one.transform.localPosition = new Vector3(icon.transform.localPosition.x, lp.y, lp.z);
+                }
+                icon.gameObject.SetActive(false);
+            }
             _mgr = m; _orig = orig; _btn = btn;
             _beside = orig.gameObject.activeInHierarchy;
             Place();
@@ -223,7 +219,7 @@ public static class SsNativeLoadoutPresets
                " src=" + (_src != null ? _src.name : "-") + " parent=" + (_root.parent != null ? _root.parent.name : "-") +
                " shown=" + _btn.gameObject.activeInHierarchy + " origShown=" + (_orig != null && _orig.gameObject.activeInHierarchy) +
                " labels=" + _labels.Length +
-               " font=" + (_labels.Length > 0 && _labels[0] != null && _labels[0].font != null ? _labels[0].font.name : "-") + " gameFont=" + _fontFrom;
+               " font=" + (_labels.Length > 0 && _labels[0] != null && _labels[0].font != null ? _labels[0].font.name : "-");
     }
 }
 #endif
