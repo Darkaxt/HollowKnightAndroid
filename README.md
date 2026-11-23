@@ -40,6 +40,9 @@ keeps its own art, text and rules.
 - **Hollow Knight:** Inventory, Charms (equip and unequip on the lower screen),
   Guide, Journal and Map.
 - **Silksong:** Inventory, Crest and Tools, Tasks, Journal and Map.
+- The page tabs along the bottom are white glyphs in both games. Silksong
+  uses its own inventory tab icons; Hollow Knight has none, so its tabs use
+  white versions of its item art (nail, charm, map pin, hunter's mark, quill).
 - Maps support pan, pinch and slider zoom, markers, and switching between the
   current area and the whole world.
 - On the title screen and while paused, the lower screen hides the HUD and

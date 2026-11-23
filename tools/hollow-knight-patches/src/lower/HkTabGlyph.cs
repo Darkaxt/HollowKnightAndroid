@@ -26,9 +26,10 @@ namespace HollowKnightPatches.Lower
     static class HkTabGlyph
     {
         // Normalised brightness below CutLow is cut out, above CutHigh is solid.
-        static float CutLow = 0.30f, CutHigh = 0.50f;
+        // Tuned on the Thor against the five real tab sprites (#68).
+        static float CutLow = 0.10f, CutHigh = 0.25f;
         // Keep the shape solid if cutting would leave less than this share.
-        static float MinKept = 0.45f;
+        static float MinKept = 0.25f;
 
         static readonly Dictionary<Sprite, Sprite> Made = new Dictionary<Sprite, Sprite>();
 
