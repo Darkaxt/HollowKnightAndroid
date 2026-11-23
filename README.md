@@ -142,13 +142,24 @@ can all be reset at once. The groups are:
 Loadout presets (three per save) live in each game's own Start-menu
 inventory: a selector beside the notches in the Hollow Knight Charms pane,
 drawn with the game's own art, and a Preset button beside Change Crest (or in
-its place, with one crest) in the Silksong Tools pane.
+its place, with one crest, pressed with Change Crest's own key) in the Silksong
+Tools pane.
 Switching keeps the current loadout in the preset you leave, and follows the
 game's own bench rule (or EQUIP ANYWHERE).
 
 Collectible pins (grubs, mask shards, vessel fragments, charms, roots, and the
 Silksong equivalents) appear on the game's own map and on the lower-screen map,
 only in rooms the player has mapped.
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/hk-presets.webp" alt="Hollow Knight Charms pane with the preset selector beside the notches" /></td>
+    <td><img src="docs/screenshots/ss-presets.webp" alt="Silksong Tools pane with the Preset button in Change Crest's place" /></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/screenshots/hk-pins.webp" alt="Hollow Knight quick map of Forgotten Crossroads with collectible pins" /></td>
+  </tr>
+</table>
 
 <p align="center">
   <img src="docs/screenshots/mods.webp" alt="The in-game Mods menu, World group, paused over Hollow Knight" width="900" />
