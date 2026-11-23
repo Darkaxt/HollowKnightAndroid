@@ -27,6 +27,7 @@ namespace HollowKnightPatches.Lower
         static Vector3 Position = new Vector3(0.6f, 1.4f, -3.33f);
 
         static GameObject _pane, _group;
+        static FadeGroup _fade;
         static readonly SpriteRenderer[] _icons = new SpriteRenderer[HkCharmPresets.Count];
         static float _nextCheck;
         static string _error;
@@ -34,6 +35,7 @@ namespace HollowKnightPatches.Lower
         /// <summary>Called every frame; builds once per Charms pane instance.</summary>
         public static void Tick(GameCameras gc)
         {
+            if (_group != null) SyncAlpha();
             if (Time.unscaledTime < _nextCheck) return;
             _nextCheck = Time.unscaledTime + 1f;
             if (gc == null || !DsFrame.InGame) return;
@@ -56,11 +58,12 @@ namespace HollowKnightPatches.Lower
             var group = new GameObject(GroupName, typeof(BoxCollider2D), typeof(ConstrainPosition));
             group.transform.SetParent(pane.transform, false);
             group.layer = 5; // UI
-            group.transform.position = Position;
+            // Pane-local: the pane may be parked off screen while it is built.
+            group.transform.localPosition = Position;
             group.GetComponent<BoxCollider2D>().size = new Vector2(1.3f, 1.3f);
             // As CharmPreset: the group's Y is sometimes shifted after entering a save.
             var cp = group.GetComponent<ConstrainPosition>();
-            cp.constrainY = true; cp.yMin = Position.y; cp.yMax = Position.y;
+            cp.constrainY = false;
 
             for (int i = 0; i < _icons.Length; i++)
             {
@@ -123,6 +126,7 @@ namespace HollowKnightPatches.Lower
             AddSwitch(fsm, idle, benchReminder, boundReminder, benchTest, boundTest, sound, "DS Preset Next", +1, "UI RIGHT", "UI CONFIRM");
 
             _pane = pane;
+            _fade = fade;
             _group = group;
             ShowActive();
         }
@@ -158,12 +162,7 @@ namespace HollowKnightPatches.Lower
                 if (!float.TryParse(a[2], NumberStyles.Float, CultureInfo.InvariantCulture, out x) ||
                     !float.TryParse(a[3], NumberStyles.Float, CultureInfo.InvariantCulture, out y)) return "error preset pos <x> <y>";
                 Position = new Vector3(x, y, Position.z);
-                if (_group != null)
-                {
-                    _group.transform.position = Position;
-                    var cp = _group.GetComponent<ConstrainPosition>();
-                    if (cp != null) { cp.yMin = y; cp.yMax = y; }
-                }
+                if (_group != null) _group.transform.localPosition = Position;
             }
             if (a.Length >= 3 && a[1] == "step")
             {
@@ -171,9 +170,43 @@ namespace HollowKnightPatches.Lower
                 if (!int.TryParse(a[2], out s)) return "error preset step <+1|-1>";
                 Step(s);
             }
+            if (a.Length >= 2 && a[1] == "tree" && _pane != null)
+            {
+                var sb = new System.Text.StringBuilder("pane " + _pane.transform.position.ToString("F2"));
+                foreach (Transform c in _pane.transform)
+                    sb.Append("\n ").Append(c.name).Append(' ').Append(c.localPosition.ToString("F2")).Append(c.gameObject.activeSelf ? "" : " off");
+                return sb.ToString();
+            }
+            string icons = "";
+            for (int i = 0; i < _icons.Length; i++)
+                if (_icons[i] != null)
+                    icons += " i" + (i + 1) + "=" + (_icons[i].gameObject.activeInHierarchy ? "on" : "off") + "/a" + _icons[i].color.a.ToString("F2") +
+                             (_icons[i].sprite != null ? "" : "/nosprite");
             return "native built=" + (_group != null) + " active=" + HkCharmPresets.Active +
-                   " pos=" + (_group != null ? _group.transform.position.ToString("F2") : Position.ToString("F2")) +
+                   " local=" + Position.ToString("F2") +
+                   " world=" + (_group != null ? _group.transform.position.ToString("F2") : "-") +
+                   " pane=" + (_pane != null ? _pane.transform.position.ToString("F2") : "-") + icons +
                    (_error != null ? " error=" + _error : "");
+        }
+
+        /// <summary>
+        /// Follow the pane's own fade: the first renderer of its FadeGroup that is not ours.
+        /// (A renderer appended to the group after it cached its list stays at alpha 0.)
+        /// </summary>
+        static void SyncAlpha()
+        {
+            if (_fade == null || _fade.spriteRenderers == null) return;
+            SpriteRenderer reference = null;
+            foreach (var r in _fade.spriteRenderers)
+                if (r != null && Array.IndexOf(_icons, r) < 0) { reference = r; break; }
+            if (reference == null) return;
+            float alpha = reference.color.a;
+            for (int i = 0; i < _icons.Length; i++)
+            {
+                var sr = _icons[i];
+                if (sr == null || Mathf.Approximately(sr.color.a, alpha)) continue;
+                var c = sr.color; c.a = alpha; sr.color = c;
+            }
         }
 
         static void ShowActive()

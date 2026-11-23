@@ -11,7 +11,7 @@ public partial class HKDualScreen
 {
     const string CommandHelp =
         "help | report | state | pause | mods | skins | skin <list|detail|row N|left N|right N|close> | tab <inventory|charms|guide|journal|map> | tabart [dump|set <lo> <hi> <minKept>] | companion <0|1|config> | " +
-        "mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | hazard | fly <x> <y> | dash | travel <scene> <gate> | " +
+        "mods-list | mod <id> <value> | pd <field>... | pdset <bool|int|enum field> <value> | pdlist <list field> <value>... | charm give <id>... | geo <amount> | die | hit <damage> [hp] [near] | hurt <n> | hazard | fly <x> <y> | dash | travel <scene> <gate> | " +
         "inv [fsm|send <event>] | fsm find <text> | fsm show|send|set|goto <object>[#n]|<fsm>|<arg>[|<value>] | gates <scene> | pdtests <scene> [text] | " +
         "save | load <slot> | newgame <slot> | quit-menu | fonts | hudfit | sprites <text> | assists | collect [why <scene>] | mapsetup | mapdump\n";
 
@@ -138,6 +138,20 @@ public partial class HKDualScreen
             case "pdset":
                 if (a.Length != 3) return "error pdset <bool|int|enum field> <value>";
                 return SaveSlotGuard(gm) ?? DsQaReport.SetBool(PlayerData.instance, a[1], a[2]);
+            case "pdlist":
+            {
+                // QA: add scene names to a PlayerData string list (e.g. scenesMapped) on a disposable save.
+                if (a.Length < 3) return "error pdlist <list field> <value>...";
+                string guard = SaveSlotGuard(gm);
+                if (guard != null) return guard;
+                var pd = PlayerData.instance;
+                var f = pd != null ? typeof(PlayerData).GetField(a[1], BindingFlags.Public | BindingFlags.Instance) : null;
+                var list = f != null ? f.GetValue(pd) as System.Collections.Generic.List<string> : null;
+                if (list == null) return "error no string list " + a[1];
+                int added = 0;
+                for (int i = 2; i < a.Length; i++) if (!list.Contains(a[i])) { list.Add(a[i]); added++; }
+                return "ok " + a[1] + " added=" + added + " count=" + list.Count;
+            }
             case "charm": return SaveSlotGuard(gm) ?? CommandCharm(a);
             case "geo":
             {
