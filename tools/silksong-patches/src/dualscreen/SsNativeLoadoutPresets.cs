@@ -42,6 +42,7 @@ public static class SsNativeLoadoutPresets
     static InventoryPaneInput _paneInput;
     static bool _superHeld;
     static int _navRefs;
+    static int _supers, _activations;
 
     public static bool Built { get { return _btn != null; } }
 
@@ -168,7 +169,7 @@ public static class SsNativeLoadoutPresets
             super = gm != null && gm.inputHandler != null &&
                     Platform.Current.GetMenuAction(gm.inputHandler.inputActions) == Platform.MenuActions.Super;
         }
-        if (super && !_superHeld) Activate();
+        if (super && !_superHeld) { _supers++; Activate(); }
         _superHeld = super;
     }
 
@@ -203,6 +204,7 @@ public static class SsNativeLoadoutPresets
 
     static void Activate()
     {
+        _activations++;
         var m = _mgr;
         if (m == null || m.EquipState != InventoryItemToolManager.EquipStates.None) return;
         // The pane's own rule and message: bench (or EQUIP ANYWHERE), not cursed.
@@ -271,6 +273,11 @@ public static class SsNativeLoadoutPresets
                " shown=" + _btn.gameObject.activeInHierarchy + " origShown=" + (_orig != null && _orig.gameObject.activeInHierarchy) +
                " labels=" + _labels.Length + " glyphs=" + _glyphs.Length + " navRefs=" + _navRefs +
                " selected=" + (_mgr != null && _mgr.CurrentSelected == _btn) +
+               " poll=beside:" + _beside + ",blocked:" + (_mgr != null && _mgr.IsActionsBlocked) +
+               ",pane:" + (_pane != null ? _pane.name + "/" + _pane.IsPaneActive : "null") +
+               ",input:" + (_paneInput != null ? _paneInput.name + "/" + _paneInput.enabled : "null") +
+               ",equip:" + (_mgr != null ? _mgr.EquipState.ToString() : "-") +
+               ",supers:" + _supers + ",activations:" + _activations +
                " font=" + (_labels.Length > 0 && _labels[0] != null && _labels[0].font != null ? _labels[0].font.name : "-");
     }
 }
