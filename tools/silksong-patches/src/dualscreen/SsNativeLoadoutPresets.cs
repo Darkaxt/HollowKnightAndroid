@@ -3,7 +3,9 @@
 //
 // The pane's own "Change Crest" button is cloned beside it. Confirm on the clone
 // cycles preset 1 -> 2 -> 3: the loadout being left is kept in its preset first
-// (DsLoadoutPresets.SwitchTo). The game's own CanChangeEquips check runs before
+// (DsLoadoutPresets.SwitchTo). In Change Crest's place (one crest) Change Crest's own
+// key presses it too, and the cursor reaches it wherever it reached Change Crest.
+// The game's own CanChangeEquips check runs before
 // anything changes, so away from a bench the pane shows its own "rest at a bench"
 // message, and EQUIP ANYWHERE lifts it exactly as it does for crests.
 
@@ -34,6 +36,12 @@ public static class SsNativeLoadoutPresets
     static bool _beside;            // the game's own Change Crest button is shown: sit beside it, else in its place
     static string _last = "";
     static Vector2 _offset = new Vector2(6.5f, 0f);   // from the Change Crest prompt, pane-local; QA "preset pos"
+    static GameObject[] _glyphs = new GameObject[0];   // the cloned key glyph: Change Crest's own key (Super)
+    static Vector3 _labelAt, _labelBeside;              // label beside the glyph, or in its place
+    static InventoryPaneBase _pane;
+    static InventoryPaneInput _paneInput;
+    static bool _superHeld;
+    static int _navRefs;
 
     public static bool Built { get { return _btn != null; } }
 
@@ -46,6 +54,7 @@ public static class SsNativeLoadoutPresets
             bool beside = _orig != null && _orig.gameObject.activeInHierarchy;
             if (beside != _beside) { _beside = beside; Place(); }
             ShowActive(false);
+            PollSuper();
             return;
         }
         if (Time.unscaledTime < _next || !DsGameData.InGame) return;
@@ -99,18 +108,36 @@ public static class SsNativeLoadoutPresets
                 foreach (var t in go.GetComponentsInChildren<TMP_Text>(true))
                     if (t.name == "Text" || (t.transform.parent != null && t.transform.parent.name == "Text")) { one = t; break; }
             _labels = one != null ? new[] { one } : new TMP_Text[0];
-            // The clone keeps Change Crest's own key glyph, but ours is pressed with the menu's
-            // confirm like any other item: hide the glyph and let the label take its place.
-            foreach (var icon in go.GetComponentsInChildren<ActionButtonIconBase>(true))
+            // The clone keeps Change Crest's key glyph (the menu's Super action). In Change Crest's
+            // place (one crest) that key presses the preset, so the glyph stays; beside the game's
+            // own button the key is Change Crest's, so the glyph hides and the label takes its spot.
+            var icons = go.GetComponentsInChildren<ActionButtonIconBase>(true);
+            _glyphs = new GameObject[icons.Length];
+            for (int k = 0; k < icons.Length; k++) _glyphs[k] = icons[k].gameObject;
+            if (one != null)
             {
-                if (icon.label != null) icon.label.gameObject.SetActive(false);
-                if (one != null && one.transform.parent == icon.transform.parent)
-                {
-                    var lp = one.transform.localPosition;
-                    one.transform.localPosition = new Vector3(icon.transform.localPosition.x, lp.y, lp.z);
-                }
-                icon.gameObject.SetActive(false);
+                _labelAt = _labelBeside = one.transform.localPosition;
+                for (int k = 0; k < icons.Length; k++)
+                    if (one.transform.parent == icons[k].transform.parent)
+                        _labelBeside = new Vector3(icons[k].transform.localPosition.x, _labelAt.y, _labelAt.z);
             }
+            // Wherever the cursor leads to Change Crest, it also leads to the preset when Change Crest is hidden.
+            _navRefs = 0;
+            foreach (var d in m.GetComponentsInChildren<InventoryItemSelectableDirectional>(true))
+            {
+                if (d == orig || d == btn || d.Selectables == null || d.FallbackSelectables == null) continue;
+                for (int k = 0; k < d.Selectables.Length && k < d.FallbackSelectables.Length; k++)
+                {
+                    var fb = d.FallbackSelectables[k];
+                    bool refs = d.Selectables[k] == orig || (fb != null && fb.Selectables != null && fb.Selectables.Contains(orig));
+                    if (!refs) continue;
+                    if (fb == null) d.FallbackSelectables[k] = fb = new InventoryItemSelectableDirectional.SelectableList();
+                    if (fb.Selectables == null) fb.Selectables = new System.Collections.Generic.List<InventoryItemSelectable>();
+                    if (!fb.Selectables.Contains(btn)) { fb.Selectables.Add(btn); _navRefs++; }
+                }
+            }
+            _pane = m.GetComponentInParent<InventoryPaneBase>();
+            _paneInput = m.GetComponentInParent<InventoryPaneInput>();
             _mgr = m; _orig = orig; _btn = btn;
             _beside = orig.gameObject.activeInHierarchy;
             Place();
@@ -126,6 +153,23 @@ public static class SsNativeLoadoutPresets
         var p = _src.localPosition;
         var o = _beside ? _offset : Vector2.zero;
         _root.localPosition = new Vector3(p.x + o.x, p.y + o.y, p.z);
+        for (int k = 0; k < _glyphs.Length; k++) if (_glyphs[k] != null) _glyphs[k].SetActive(!_beside);
+        if (_labels.Length > 0 && _labels[0] != null) _labels[0].transform.localPosition = _beside ? _labelBeside : _labelAt;
+    }
+
+    /// <summary>In Change Crest's place its key (Super) presses the preset, as it would have changed crest.</summary>
+    static void PollSuper()
+    {
+        bool super = false;
+        if (!_beside && _mgr != null && _btn.gameObject.activeInHierarchy && !_mgr.IsActionsBlocked &&
+            _pane != null && _pane.IsPaneActive && _paneInput != null && _paneInput.enabled)
+        {
+            var gm = GameManager.instance;
+            super = gm != null && gm.inputHandler != null &&
+                    Platform.Current.GetMenuAction(gm.inputHandler.inputActions) == Platform.MenuActions.Super;
+        }
+        if (super && !_superHeld) Activate();
+        _superHeld = super;
     }
 
     static string PathFrom(Transform root, Transform t)
@@ -200,6 +244,10 @@ public static class SsNativeLoadoutPresets
             _offset = new Vector2(x, y);
             Place();
         }
+        else if (a.Length >= 2 && a[1] == "select" && _btn != null && _mgr != null)
+        {
+            _mgr.SetSelected(_btn, null);
+        }
         else if (a.Length >= 3 && a[1] == "step")
         {
             int d;
@@ -221,7 +269,8 @@ public static class SsNativeLoadoutPresets
                " orig=" + op.x.ToString("0.00") + "," + op.y.ToString("0.00") +
                " src=" + (_src != null ? _src.name : "-") + " parent=" + (_root.parent != null ? _root.parent.name : "-") +
                " shown=" + _btn.gameObject.activeInHierarchy + " origShown=" + (_orig != null && _orig.gameObject.activeInHierarchy) +
-               " labels=" + _labels.Length +
+               " labels=" + _labels.Length + " glyphs=" + _glyphs.Length + " navRefs=" + _navRefs +
+               " selected=" + (_mgr != null && _mgr.CurrentSelected == _btn) +
                " font=" + (_labels.Length > 0 && _labels[0] != null && _labels[0].font != null ? _labels[0].font.name : "-");
     }
 }
