@@ -2,7 +2,7 @@
 // Charms pane (the Start-menu inventory), replacing #56's lower-screen buttons.
 //
 // Adapted from Clazex's HollowKnight.CharmPreset and Osmi CharmUtil (MIT, see
-// NOTICE.md): one icon under the equipped row, drawn with the game's own notch
+// NOTICE.md): one icon right of the notches, drawn with the game's own preset
 // art for presets 1-3. Pressing down from the equipped row selects it; left,
 // right or confirm switch preset. Switching saves the current charms into the
 // preset being left, then equips the next one (an empty preset starts as a copy
@@ -24,7 +24,8 @@ namespace HollowKnightPatches.Lower
     public static class HkNativeCharmPresets
     {
         const string GroupName = "DualSouls Presets";
-        static Vector3 Position = new Vector3(0.6f, 1.4f, -3.33f);
+        // CharmPreset's world spot (0.6, 1.4), right of the notches, in the pane's own space (pane rests at -4.05, 7.55).
+        static Vector3 Position = new Vector3(4.65f, -6.15f, -3.33f);
 
         static GameObject _pane, _group;
         static FadeGroup _fade;

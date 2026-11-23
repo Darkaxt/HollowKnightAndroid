@@ -529,7 +529,7 @@ public partial class HKDualScreen : MonoBehaviour
         try { paused = gm.IsGamePaused() || (gm.ui != null && gm.ui.uiState == GlobalEnums.UIState.PAUSED); } catch { }
 
         bool invOpen = PollInventoryToggle(gc, paused);   // M : invBtn toggle + is-inventory-open
-        GameInventoryOpen = invOpen;                      // B8: HKTweaks charms-anywhere gates its atBench force on this
+        GameInventoryOpen = invOpen && !invClosing;       // B8: HKTweaks charms-anywhere gates its atBench force on this
         HollowKnightPatches.Lower.HkNativeCharmPresets.Tick(gc);   // #69: preset selector in the game's own Charms pane
         HollowKnightPatches.Lower.HkCollectibles.TickLivePins();   // #69: collectible pins on the game's own map
         PollCompanionCombo();                             // M : L3+R3 runtime companion toggle
@@ -605,9 +605,11 @@ public partial class HKDualScreen : MonoBehaviour
     // [M] Inventory: (a) toggle it from a chosen button — HK's openInventory (InControl Select/View/Back)
     // never reaches the Thor pad and HK exposes no rebind; (b) track whether it's open so the
     // bottom screen goes to black+logo (like pause) while it's up. Returns invOpen.
+    bool invClosing;   // the inventory FSM is on its way to Closed
     bool PollInventoryToggle(GameCameras gc, bool paused)
     {
         bool invOpen = false;
+        invClosing = false;
         try
         {
             var g = GameManager.instance;
@@ -616,6 +618,11 @@ public partial class HKDualScreen : MonoBehaviour
             {
                 string invState = invFsm.ActiveStateName;
                 invOpen = invState != "Closed";
+                // #69: the close path ("Regain Control" skips RegainControl while atBench is true), so
+                // EQUIP ANYWHERE must give atBench back as soon as the inventory starts closing.
+                invClosing = invState == "Can Close?" || invState == "Close" || invState == "Charm Equip Check?" ||
+                             invState == "Regain Control" || invState == "Regain Control 2" ||
+                             invState == "Damage Close" || invState == "R Lock Close";
                 if (gc != null && !paused && cfg.invBtn >= 0 && cfg.invBtn <= 19 &&
                     Input.GetKeyDown(HkStageHooks.JoyBtn(cfg.invBtn)))
                 {
