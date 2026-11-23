@@ -137,8 +137,6 @@ public static class SsNativeLoadoutPresets
                     if (!fb.Selectables.Contains(btn)) { fb.Selectables.Add(btn); _navRefs++; }
                 }
             }
-            _pane = m.GetComponentInParent<InventoryPaneBase>();
-            _paneInput = m.GetComponentInParent<InventoryPaneInput>();
             _mgr = m; _orig = orig; _btn = btn;
             _beside = orig.gameObject.activeInHierarchy;
             Place();
@@ -162,6 +160,9 @@ public static class SsNativeLoadoutPresets
     static void PollSuper()
     {
         bool super = false;
+        // Built while the inventory is closed: the pane is inactive then, so look it up (inactive included) here.
+        if (_pane == null && _mgr != null) _pane = _mgr.GetComponentInParent<InventoryPaneBase>(true);
+        if (_paneInput == null && _mgr != null) _paneInput = _mgr.GetComponentInParent<InventoryPaneInput>(true);
         if (!_beside && _mgr != null && _btn.gameObject.activeInHierarchy && !_mgr.IsActionsBlocked &&
             _pane != null && _pane.IsPaneActive && _paneInput != null && _paneInput.enabled)
         {
