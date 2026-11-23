@@ -101,8 +101,9 @@ public static class SsNativeLoadoutPresets
             _labels = one != null ? new[] { one } : new TMP_Text[0];
             // The clone keeps Change Crest's own key glyph, but ours is pressed with the menu's
             // confirm like any other item: hide the glyph and let the label take its place.
-            foreach (var icon in go.GetComponentsInChildren<ActionButtonIcon>(true))
+            foreach (var icon in go.GetComponentsInChildren<ActionButtonIconBase>(true))
             {
+                if (icon.label != null) icon.label.gameObject.SetActive(false);
                 if (one != null && one.transform.parent == icon.transform.parent)
                 {
                     var lp = one.transform.localPosition;
@@ -141,8 +142,10 @@ public static class SsNativeLoadoutPresets
         var tmp = t.GetComponent<TMP_Text>();
         if (tmp != null) sb.Append(" text=\"").Append(tmp.text).Append("\" font=").Append(tmp.font != null ? tmp.font.name : "-");
         if (t.GetComponent<SpriteRenderer>() != null) sb.Append(" sprite");
+        var abi = t.GetComponent<ActionButtonIconBase>();
+        if (abi != null) sb.Append(" glyph=").Append(abi.GetType().Name).Append(abi.label != null ? " label=" + abi.label.name : "");
         if (t.GetComponent<InventoryItemSelectable>() != null) sb.Append(" selectable");
-        if (depth < 3) foreach (Transform c in t) Tree(sb, c, depth + 1);
+        if (depth < 4) foreach (Transform c in t) Tree(sb, c, depth + 1);
     }
 
     static void ShowActive(bool force)
