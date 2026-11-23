@@ -140,8 +140,9 @@ can all be reset at once. The groups are:
   plus Godseeker in Hollow Knight).
 
 Loadout presets (three per save) live in each game's own Start-menu
-inventory: a selector under the equipped charms in the Hollow Knight Charms
-pane, and a Preset button beside Change Crest in the Silksong Tools pane.
+inventory: a selector beside the notches in the Hollow Knight Charms pane,
+drawn with the game's own art, and a Preset button beside Change Crest (or in
+its place, with one crest) in the Silksong Tools pane.
 Switching keeps the current loadout in the preset you leave, and follows the
 game's own bench rule (or EQUIP ANYWHERE).
 
